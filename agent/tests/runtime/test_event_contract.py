@@ -112,7 +112,7 @@ class TestLifecycleEvents:
             await app.master.handle_user_message("read")
             await settle(app)
             types = [e.type for _, e in app.log.read_after()]
-            # read_file on a missing path returns a "[失败]" text result (ok
+            # read_file on a missing path returns a failure-marked text result (ok
             # stays True at the pipeline level); a genuinely failing pipeline
             # outcome is exercised in the tools tests. Here we only assert the
             # lifecycle pairing holds.

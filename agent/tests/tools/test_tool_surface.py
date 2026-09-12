@@ -159,7 +159,7 @@ class TestLucienDomainActivation:
         llm = FakeLLM([LLMReply(text="Look at the tool surface first.")])
         app = _app(tmp_path, llm, _fake_notes_tools())
         # The keyword-hint table (agent.tools.core.activate) matches Chinese
-        # note keywords ("笔记"/"底纹"), so this fixture keeps the Chinese phrasing
+        # note keywords ("note"/"shading" in Chinese), so this fixture keeps the Chinese phrasing
         await app.master.handle_user_message("给这篇笔记加底纹")
         await settle(app)
         first = [s.name for s in llm.calls[0]["tools"]]

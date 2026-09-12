@@ -52,7 +52,7 @@ test.describe('notes page', () => {
     ]);
   });
 
-  /** Enter the notes page on the 当前 tab. */
+  /** Enter the notes page on the current tab. */
   async function openCurrentTab(page: Page): Promise<void> {
     await page.goto('/notes');
     await page.getByRole('tab', { name: '当前' }).click();

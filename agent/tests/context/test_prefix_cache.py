@@ -29,7 +29,7 @@ class _FakeMemory:
 
 def test_volatile_layers_stay_after_stable_prefix() -> None:
     """Changing the memory-card layer keeps the stable layers byte-identical:
-    the divergence point sits at the volatile 画像/记忆 layers, after skills."""
+    the divergence point sits at the volatile profile/memory layers, after skills."""
     from types import SimpleNamespace
 
     skills = SimpleNamespace(index=lambda: [{"name": "s1", "description": "d"}])
@@ -44,7 +44,7 @@ def test_volatile_layers_stay_after_stable_prefix() -> None:
     marker = "【用户画像】"
     head_a, head_b = sys_a.split(marker)[0], sys_b.split(marker)[0]
     assert head_a == head_b and "规则A" in head_a
-    # Volatile layers sit after the stable ones (skills before 画像)
+    # Volatile layers sit after the stable ones (skills before the profile)
     assert sys_a.index("【可用 skill】") < sys_a.index(marker)
 
 
