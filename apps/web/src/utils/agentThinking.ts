@@ -13,7 +13,15 @@
  * This module must not depend on UI-layer components.
  */
 
-/** Status/scaffold lines that must not be presented as real thinking. */
+/**
+ * Status/scaffold lines that must not be presented as real thinking.
+ *
+ * NOTE: these patterns are legacy RepoPilot status-line formats that arrived
+ * with the migrated frontend. The current agent backend never emits them
+ * (verified 2026-09-13, no emitter in agent/ or packages/); they remain as
+ * display heuristics against model-authored lines that happen to look like
+ * scaffolding. There is no live front<->backend text contract here.
+ */
 export function isStatusLine(ln: string): boolean {
   const t = ln.trim();
   if (!t) return true;

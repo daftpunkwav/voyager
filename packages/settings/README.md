@@ -1,5 +1,9 @@
 # settings
 
+> Not to be confused with `packages/platform/settings` (the settings *framework*:
+> store, schema registry, user_only enforcement). This package is the settings
+> *domain* on top of that framework.
+
 ## Purpose
 
 Settings domain: REST/bridge access to the shared settings store plus theme keys.

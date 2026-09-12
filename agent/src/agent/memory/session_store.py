@@ -120,7 +120,15 @@ CREATE TABLE IF NOT EXISTS session_meta (
 
 
 class SessionStore:
-    """SQLite-backed persistence for chat sessions (one row each)."""
+    """SQLite-backed persistence for chat sessions (one row each).
+
+    Threading discipline: the raw connection is created with
+    ``check_same_thread=False`` (sqlite3's flag, not an invitation), and all
+    access must stay on the event-loop thread - the same discipline as the
+    other agent stores; no worker thread may touch this class. Per-session
+    mutation ordering is provided upstream by MasterSessions.lock_for, not
+    here; if a future worker thread ever needs this store, add a lock first.
+    """
 
     def __init__(self, db_path: str | Path) -> None:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)

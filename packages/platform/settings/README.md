@@ -1,5 +1,8 @@
 # platform/settings — Settings framework
 
+> Not to be confused with `packages/settings` (the settings *domain*: REST/bridge
+> access and theme keys built on this framework).
+
 Each setting is defined by: `key / type / default / owning module / secret flag / description` (§7.9).
 
 - Each service declares its own settings in its `settings.py` and calls `register()` at startup;
