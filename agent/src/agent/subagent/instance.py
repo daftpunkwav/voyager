@@ -26,6 +26,7 @@ from agent.context.backoff import CompactionBackoff
 from agent.context.budgets import ContextBudget
 from agent.context.compressor import compress
 from agent.context.governor import ContextGovernor
+from agent.context.prefix_watch import PrefixWatch
 from agent.context.usage import (
     ContextWindow,
     UsageTracker,
@@ -144,6 +145,10 @@ class SubagentInstance:
     # Compaction-failure guard (per instance): after repeated failing editor
     # rounds, compaction takes the deterministic path instead of re-spending
     # the planner call; lives here because the governor is rebuilt per call
+    prefix_watch: PrefixWatch = field(default_factory=PrefixWatch)
+    # Prompt prefix stability sentinel (per instance): one debug line per
+    # changed head segment, for operators auditing provider prefix-cache
+    # behavior ("agent.context.prefix" logger)
     #: Optional lighter client for the context editor's planning call
     #: (context_planner purpose routing, injected by the spawner); None =
     #: share the chat client as before

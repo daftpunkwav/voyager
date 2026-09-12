@@ -81,6 +81,12 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
             inst.active,
             preactivate=tuple(preactivate),
         )
+    # Prefix-cache diagnostics: fold this turn's request head; a changed
+    # segment emits one debug line on the "agent.context.prefix" logger
+    inst.prefix_watch.observe(
+        system=str(messages[0].get("content") or "") if messages else "",
+        tools=belt.names(),
+    )
     await inst.events.emit(RuntimeEvent.RUN_STARTED, run_id=inst.state.run_id, subagent=inst.id)
     try:
         # Meta tools (context_status / compact_context) resolve the live
