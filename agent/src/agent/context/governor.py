@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from agent.context.backoff import CompactionBackoff
 from agent.context.editor import compact_transcript
 from agent.context.usage import (
     ContextWindow,
@@ -43,6 +44,7 @@ class ContextGovernor:
         tracker: UsageTracker,
         llm: LLMClient,
         planner: LLMClient | None = None,
+        guard: CompactionBackoff | None = None,
     ) -> None:
         self._window = window
         self._auto_compact_at = auto_compact_at
@@ -51,6 +53,7 @@ class ContextGovernor:
         self._tracker = tracker
         self._llm = llm
         self._planner = planner
+        self._guard = guard
 
     @property
     def window(self) -> ContextWindow:
@@ -91,14 +94,22 @@ class ContextGovernor:
         The editor's planning call runs on the injected planner client when
         the context_planner purpose is routed (a lighter model suffices: the
         planner only classifies and summarizes segments); without one it
-        shares the chat client as before."""
+        shares the chat client as before. The backoff guard suppresses the
+        LLM path after repeated failures - see agent.context.backoff."""
         planner = self._planner if self._planner is not None else self._llm
-        return await compact_transcript(
+        allow = self._guard.allow_llm() if self._guard is not None else True
+        report = await compact_transcript(
             messages,
             planner,
             target=target if target is not None else self.target_tokens(),
             fallback_budget=self._fallback_budget,
+            allow_llm=allow,
         )
+        if self._guard is not None and allow and report is not None:
+            # Only LLM attempts feed the guard; suppressed compactions ran
+            # mechanically and prove nothing about the planner
+            self._guard.record(plan_applied=report["mode"] == "plan")
+        return report
 
 
 __all__ = ["ContextGovernor"]

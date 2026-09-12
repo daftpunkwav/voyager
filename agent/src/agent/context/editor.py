@@ -215,6 +215,7 @@ async def compact_transcript(
     *,
     target: int,
     fallback_budget: int | None = None,
+    allow_llm: bool = True,
 ) -> dict[str, Any] | None:
     """Restructure the transcript in place under the target token estimate.
 
@@ -223,28 +224,33 @@ async def compact_transcript(
     (planner error, invalid plan, plan result still over target) falls back to
     deterministic compress, which itself is pair-safe - the loop never breaks
     because of a failed compaction.
+
+    allow_llm=False skips the planner call entirely (backoff policy owned by
+    the caller, see agent.context.backoff) and reports mode="mechanical";
+    "fallback" always means the planner was tried and its plan was rejected.
     """
     before = estimate_messages(messages)
     if before <= target:
         return None
     segments = iter_segments(messages)
     plan: dict[str, Any] | None = None
-    try:
-        # Prefix-cache friendly request: the conversation is replayed
-        # verbatim (the provider prefix cache built by the main conversation
-        # still hits) and the planning instruction rides one tail message --
-        # never a rewritten copy of the transcript.
-        reply = await llm.complete(
-            [
-                *messages,
-                {"role": "user", "content": _PLAN_PROMPT + render_segment_map(segments)},
-            ]
-        )
-        if not reply.degraded:
-            plan = parse_plan(reply.text or "")
-    except Exception:  # planner failure falls back, never crashes
-        log.warning("context editor planner call failed; falling back", exc_info=True)
-        plan = None
+    if allow_llm:
+        try:
+            # Prefix-cache friendly request: the conversation is replayed
+            # verbatim (the provider prefix cache built by the main conversation
+            # still hits) and the planning instruction rides one tail message --
+            # never a rewritten copy of the transcript.
+            reply = await llm.complete(
+                [
+                    *messages,
+                    {"role": "user", "content": _PLAN_PROMPT + render_segment_map(segments)},
+                ]
+            )
+            if not reply.degraded:
+                plan = parse_plan(reply.text or "")
+        except Exception:  # planner failure falls back, never crashes
+            log.warning("context editor planner call failed; falling back", exc_info=True)
+            plan = None
 
     if plan is not None and validate_plan(plan, segments, messages):
         candidate = apply_plan(messages, segments, plan)
@@ -266,7 +272,7 @@ async def compact_transcript(
     budget = fallback_budget if fallback_budget is not None else target
     messages[:] = compress(messages, budget=budget, prune=True)
     return _plan_report(
-        mode="fallback",
+        mode="mechanical" if not allow_llm else "fallback",
         before=before,
         after=estimate_messages(messages),
         target=target,

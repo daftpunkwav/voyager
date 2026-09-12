@@ -5,6 +5,7 @@ fallback, and the governor's threshold gating.
 
 import json
 
+from agent.context.backoff import CompactionBackoff
 from agent.context.editor import (
     SUMMARY_MARK,
     apply_plan,
@@ -222,6 +223,32 @@ class TestGovernor:
         assert report is not None and report["mode"] == "plan"
         assert len(planner.calls) == 1
         assert chat.calls == []
+
+    async def test_repeated_failures_take_the_mechanical_path(self) -> None:
+        """After two failing LLM compactions the guard suppresses the planner:
+        the next compact runs mechanically (mode="mechanical") and the planner
+        client is not called again."""
+
+        class _Boom:
+            async def complete(self, messages, tools=None):
+                raise RuntimeError("planner down")
+
+        gov = self._governor(FakeLLM(), planner=_Boom(), guard=CompactionBackoff())
+        msgs = _msgs()
+        for _ in range(2):
+            report = await gov.compact(msgs, target=10)
+            assert report is not None and report["mode"] == "fallback"
+        report = await gov.compact(msgs, target=10)
+        assert report is not None and report["mode"] == "mechanical"
+
+    async def test_no_attempt_records_nothing(self) -> None:
+        """A compact that no-ops (already within target) must not consume
+        backoff slots or count as a failure."""
+        guard = CompactionBackoff()
+        gov = self._governor(FakeLLM(), guard=guard)
+        msgs = [{"role": "user", "content": "tiny"}]
+        assert await gov.compact(msgs, target=100_000) is None
+        assert guard.allow_llm() is True
 
 
 class TestReactIntegration:

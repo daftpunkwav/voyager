@@ -22,6 +22,7 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any
 
+from agent.context.backoff import CompactionBackoff
 from agent.context.budgets import ContextBudget
 from agent.context.compressor import compress
 from agent.context.governor import ContextGovernor
@@ -139,6 +140,10 @@ class SubagentInstance:
     budget: ContextBudget = field(default_factory=ContextBudget)
     # Context budget (history bound + per-turn compaction budget); injected
     # by the spawner from settings so operators tune both without code
+    compaction_backoff: CompactionBackoff = field(default_factory=CompactionBackoff)
+    # Compaction-failure guard (per instance): after repeated failing editor
+    # rounds, compaction takes the deterministic path instead of re-spending
+    # the planner call; lives here because the governor is rebuilt per call
     #: Optional lighter client for the context editor's planning call
     #: (context_planner purpose routing, injected by the spawner); None =
     #: share the chat client as before
@@ -247,6 +252,7 @@ class SubagentInstance:
             tracker=self.usage,
             llm=self.llm,
             planner=self.planner_llm,
+            guard=self.compaction_backoff,
         )
 
     def feed(self, text: str) -> None:
