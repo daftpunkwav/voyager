@@ -20,6 +20,11 @@ def _fetch(monkeypatch, handler) -> Any:
         return orig(transport=httpx.MockTransport(handler), follow_redirects=False, **kw)
 
     monkeypatch.setattr(web_mod.httpx, "AsyncClient", factory)
+
+    async def _allow(_url: str) -> None:
+        return None  # DNS guard stub: hermetic tests, no system resolver
+
+    monkeypatch.setattr(web_mod, "resolve_public", _allow)
     policy = PolicyEngine(network=NetworkPolicy(mode="whitelist", domains=("github.com",)))
     return web_mod.web_fetch_tool(policy).handler
 

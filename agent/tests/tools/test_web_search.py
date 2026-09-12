@@ -1,8 +1,11 @@
 """Tests for web_search (DuckDuckGo backend).
 
-MockTransport throughout; the tests never touch the network (DNS failures are treated as
-allow, semantics unchanged). The parser is additionally tested as a pure function,
-covering uddg redirect-shell unwrapping and tag stripping.
+MockTransport throughout and the DNS guard (resolve_public) is stubbed, so no
+test touches the network or the system resolver - a polluted/intranet-resolving
+DNS answer must not flip the tool's early-reject path under a test (that made
+these tests fail on machines whose resolver returns an intranet-classified
+address for the search host). The parser is additionally tested as a pure
+function, covering uddg redirect-shell unwrapping and tag stripping.
 """
 
 import agent.tools.net.web_search as web_mod
@@ -36,6 +39,11 @@ def _client_factory(handler):
 
 def _search(monkeypatch, handler, domains=("duckduckgo.com",)):
     monkeypatch.setattr(web_mod.httpx, "AsyncClient", _client_factory(handler))
+
+    async def _allow(_url: str) -> None:
+        return None  # DNS guard stub: hermetic tests, no system resolver
+
+    monkeypatch.setattr(web_mod, "resolve_public", _allow)
     policy = PolicyEngine(network=NetworkPolicy(mode="whitelist", domains=domains))
     return web_mod.web_search_tool(policy).handler
 
