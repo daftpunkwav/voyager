@@ -683,6 +683,23 @@ class TestTerminalInstanceCap:
         finally:
             app.memory.close()
 
+    def test_trim_deletes_evicted_checkpoint_files(self, tmp_path) -> None:
+        """Eviction is semantic termination: the evicted run's checkpoint file
+        is deleted, not just the in-memory registry entry."""
+        app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
+        try:
+            terminal = self._spawn_many(app, TERMINAL_INSTANCE_CAP + 1, status=RunStatus.COMPLETED)
+            for inst in terminal:
+                app.checkpoints.save(inst.state)
+            evicted = app.spawner._trim_terminal_instances()
+            assert len(evicted) == 1
+            with pytest.raises(FileNotFoundError):
+                app.checkpoints.load(evicted[0])
+            kept = terminal[-1]  # newest terminal instance stays, checkpoint intact
+            assert app.checkpoints.load(kept.state.run_id).run_id == kept.state.run_id
+        finally:
+            app.memory.close()
+
     def test_trim_never_touches_pending_or_alive(self, tmp_path) -> None:
         """PENDING instances have not run yet in the scheduler queue and do not count as terminal."""
         app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())

@@ -259,7 +259,11 @@ class Spawner:
 
         Only COMPLETED / FAILED / CANCELLED are touched; alive
         (RUNNING/WAITING_INPUT/PAUSED) and PENDING (queued, not yet run) are
-        never evicted. Returns the evicted instance ids (for test assertions).
+        never evicted. Eviction is semantic termination: the evicted run's
+        checkpoint file is deleted too (terminal checkpoints are not
+        resumable - list_alive filters by status.alive - so the file would
+        only be dead weight). Returns the evicted instance ids (for test
+        assertions).
         """
         terminal_ids = [
             iid for iid, inst in self.instances.items() if inst.status in _TERMINAL_STATUSES
@@ -267,7 +271,9 @@ class Spawner:
         overflow = len(terminal_ids) - TERMINAL_INSTANCE_CAP
         evicted = terminal_ids[:overflow] if overflow > 0 else []
         for iid in evicted:
-            self.instances.pop(iid, None)
+            inst = self.instances.pop(iid, None)
+            if inst is not None and self._checkpoints is not None:
+                self._checkpoints.delete(inst.state.run_id)
         return evicted
 
     async def cancel(self, id_or_name: str) -> list[str]:
