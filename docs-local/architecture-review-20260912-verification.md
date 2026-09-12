@@ -37,6 +37,7 @@
 | `ecc7673` | F-109/F-110 注释与 README 互注;F-105 复核澄清注释 |
 | `4e4ea4a` / `3190491` | 测试插入位移修复 / 漏提交的打桩迁移 + 注释去品牌词 |
 | `f6185f7` | 存量:web_fetch/web_search 测试补 DNS 守卫打桩(密闭化) |
+| `ab2c196` | 自审加固:驱逐删 checkpoint 改 best-effort(Windows 锁文件不再污染 start/cancel 结果)、重试仅消耗于 TransportError 瞬态族、append 计数移入锁内 + rowcount 归一化 |
 
 ## 四、留给后续决策
 
