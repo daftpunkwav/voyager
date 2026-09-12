@@ -18,6 +18,7 @@ protocol is an external standard, not an internal domain concern.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -32,6 +33,42 @@ log = logging.getLogger("agent.llm_http")
 
 _DEGRADED_PREFIX = "[LLM error]"
 _DONE = "[DONE]"
+
+#: Transient retry parameters: bounded exponential backoff for 5xx / network
+#: blips / 429, mirroring the aggregate client's policy in packages/llm.
+#: Module-level constants so tests can zero them out. Retry-After is capped
+#: at 5s to avoid stalling agent loops.
+_RETRY_ATTEMPTS = 2
+_RETRY_BACKOFF = 0.5
+_RETRY_AFTER_CAP = 5.0
+
+#: No retry once the connection is established: the request may already have
+#: been accepted by the server, so retrying only stacks up waiting time.
+_NO_RETRY_NET = (httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout)
+
+
+def _retryable_status(status: int) -> bool:
+    """Transient server-side failures worth another attempt: 429 rate
+    limiting and 5xx provider errors. Other 4xx are request problems;
+    retrying is pointless."""
+    return status == 429 or status >= 500
+
+
+def _retry_after_seconds(resp: httpx.Response) -> float:
+    """Retry-After hint in seconds (0 when absent or unparseable)."""
+    try:
+        return max(0.0, float(resp.headers.get("Retry-After", "")))
+    except ValueError:
+        return 0.0
+
+
+def _backoff_delay(attempt: int, resp: httpx.Response | None) -> float:
+    """Exponential backoff for attempt n (0-based), raised to a client-hinted
+    Retry-After when present (capped)."""
+    delay = _RETRY_BACKOFF * (2**attempt)
+    if resp is not None:
+        delay = max(delay, min(_retry_after_seconds(resp), _RETRY_AFTER_CAP))
+    return delay
 
 
 @dataclass(frozen=True)
@@ -219,16 +256,33 @@ class HttpLLM:
         messages: list[dict[str, Any]],
         tools: list[ToolSpec] | None = None,
     ) -> LLMReply:
-        try:
-            resp = await self._client.post(
-                "/chat/completions", json=self._payload(messages, tools, stream=False)
-            )
-        except httpx.TimeoutException:
-            return LLMReply(text=f"{_DEGRADED_PREFIX} request timed out", degraded=True)
-        except httpx.HTTPError as exc:
+        body = self._payload(messages, tools, stream=False)
+        resp: httpx.Response | None = None
+        net_error: Exception | None = None
+        for attempt in range(_RETRY_ATTEMPTS + 1):
+            resp, net_error = None, None
+            try:
+                resp = await self._client.post("/chat/completions", json=body)
+                if not _retryable_status(resp.status_code):
+                    break
+            except _NO_RETRY_NET:
+                # Connection was established: the request may already have
+                # been accepted, so it is never retried.
+                return LLMReply(text=f"{_DEGRADED_PREFIX} request timed out", degraded=True)
+            except httpx.TimeoutException as exc:
+                net_error = exc  # connect-phase timeout: transient
+            except httpx.HTTPError as exc:
+                net_error = exc  # connect / DNS failure: transient
+            if attempt < _RETRY_ATTEMPTS:
+                await asyncio.sleep(_backoff_delay(attempt, resp))
+        if net_error is not None:
+            if isinstance(net_error, httpx.TimeoutException):
+                return LLMReply(text=f"{_DEGRADED_PREFIX} request timed out", degraded=True)
             return LLMReply(
-                text=f"{_DEGRADED_PREFIX} connection failed: {type(exc).__name__}", degraded=True
+                text=f"{_DEGRADED_PREFIX} connection failed: {type(net_error).__name__}",
+                degraded=True,
             )
+        assert resp is not None  # the loop exits only with a response or a net error
         if resp.status_code != 200:
             return LLMReply(
                 text=_error_text(resp.status_code),
@@ -254,65 +308,100 @@ class HttpLLM:
         """Drive one SSE request: parse lines, aggregate tool-call fragments,
         emit deltas and a single final block.
 
-        A 400 caused by stream_options (some compatible servers reject unknown
-        options) is retried once without the option.
+        The request-initiation phase retries bounded transient failures
+        (429 / 5xx / connect-phase errors) - safe because nothing has been
+        yielded yet; once deltas start flowing a dropped stream is terminal
+        (a retry would duplicate text). A 400 caused by stream_options (some
+        compatible servers reject unknown options) is retried once without
+        the option.
         """
         text_parts: list[str] = []
         calls_by_index: dict[int, dict[str, Any]] = {}
         usage: dict[str, Any] = {}
-        try:
-            async with self._client.stream("POST", "/chat/completions", json=body) as resp:
-                if resp.status_code == 400 and body.get("stream_options"):
-                    # Server rejected the option: retry once without it
-                    body = {k: v for k, v in body.items() if k != "stream_options"}
-                    async for ev in self._stream_events(body):
-                        yield ev
-                    return
-                if resp.status_code != 200:
-                    await resp.aread()
+        emitted = False
+        attempt = 0
+        while True:
+            retry_delay: float | None = None
+            try:
+                async with self._client.stream("POST", "/chat/completions", json=body) as resp:
+                    if resp.status_code == 400 and body.get("stream_options"):
+                        # Server rejected the option: retry once without it
+                        body = {k: v for k, v in body.items() if k != "stream_options"}
+                        continue
+                    if resp.status_code != 200:
+                        await resp.aread()
+                        if _retryable_status(resp.status_code) and attempt < _RETRY_ATTEMPTS:
+                            retry_delay = _backoff_delay(attempt, resp)
+                            attempt += 1
+                        else:
+                            yield StreamReply(
+                                final=LLMReply(
+                                    text=_error_text(resp.status_code),
+                                    degraded=True,
+                                    overflow=_is_context_overflow(
+                                        resp.status_code, resp.text[:2000]
+                                    ),
+                                )
+                            )
+                            return
+                    else:
+                        async for line in resp.aiter_lines():
+                            if not line.startswith("data:"):
+                                continue
+                            data_str = line[len("data:") :].strip()
+                            if not data_str or data_str == _DONE:
+                                continue
+                            try:
+                                chunk = json.loads(data_str)
+                            except ValueError:
+                                continue
+                            if chunk.get("usage"):
+                                usage = chunk["usage"]
+                            for choice in chunk.get("choices") or []:
+                                delta = choice.get("delta") or {}
+                                if delta.get("content"):
+                                    text_parts.append(delta["content"])
+                                    emitted = True
+                                    yield StreamReply(text_delta=delta["content"])
+                                for frag in delta.get("tool_calls") or []:
+                                    self._merge_tool_fragment(calls_by_index, frag)
+                        break
+            except _NO_RETRY_NET:
+                # Connection was established and the stream dropped: terminal,
+                # a retry would duplicate whatever was already emitted.
+                yield StreamReply(
+                    final=LLMReply(
+                        text=f"{_DEGRADED_PREFIX} request timed out",
+                        degraded=True,
+                    )
+                )
+                return
+            except httpx.TimeoutException:
+                # Connect-phase timeout: transient while the retry budget and
+                # the no-emission guarantee both hold.
+                if emitted or attempt >= _RETRY_ATTEMPTS:
                     yield StreamReply(
                         final=LLMReply(
-                            text=_error_text(resp.status_code),
+                            text=f"{_DEGRADED_PREFIX} request timed out",
                             degraded=True,
-                            overflow=_is_context_overflow(resp.status_code, resp.text[:2000]),
                         )
                     )
                     return
-                async for line in resp.aiter_lines():
-                    if not line.startswith("data:"):
-                        continue
-                    data_str = line[len("data:") :].strip()
-                    if not data_str or data_str == _DONE:
-                        continue
-                    try:
-                        chunk = json.loads(data_str)
-                    except ValueError:
-                        continue
-                    if chunk.get("usage"):
-                        usage = chunk["usage"]
-                    for choice in chunk.get("choices") or []:
-                        delta = choice.get("delta") or {}
-                        if delta.get("content"):
-                            text_parts.append(delta["content"])
-                            yield StreamReply(text_delta=delta["content"])
-                        for frag in delta.get("tool_calls") or []:
-                            self._merge_tool_fragment(calls_by_index, frag)
-        except httpx.TimeoutException:
-            yield StreamReply(
-                final=LLMReply(
-                    text=f"{_DEGRADED_PREFIX} request timed out",
-                    degraded=True,
-                )
-            )
-            return
-        except httpx.HTTPError as exc:
-            yield StreamReply(
-                final=LLMReply(
-                    text=f"{_DEGRADED_PREFIX} connection failed: {type(exc).__name__}",
-                    degraded=True,
-                )
-            )
-            return
+                retry_delay = _backoff_delay(attempt, None)
+                attempt += 1
+            except httpx.HTTPError as exc:
+                if emitted or attempt >= _RETRY_ATTEMPTS:
+                    yield StreamReply(
+                        final=LLMReply(
+                            text=f"{_DEGRADED_PREFIX} connection failed: {type(exc).__name__}",
+                            degraded=True,
+                        )
+                    )
+                    return
+                retry_delay = _backoff_delay(attempt, None)
+                attempt += 1
+            assert retry_delay is not None  # a retry branch always sets the delay
+            await asyncio.sleep(retry_delay)
         calls = tuple(
             ToolCall(
                 id=str(calls_by_index[i].get("id") or f"call_{i}"),

@@ -198,4 +198,128 @@ def test_overflow_heuristic() -> None:
     assert _is_context_overflow(400, "maximum context length exceeded")
     assert _is_context_overflow(400, "context_length_exceeded")
     assert not _is_context_overflow(400, "invalid model parameter")
+
+
+class TestTransientRetry:
+    """Bounded retry for transient failures (mirrors the aggregate client):
+    429 / 5xx / connect-phase errors retry; established-connection timeouts
+    and non-transient statuses never retry."""
+
+    @staticmethod
+    def _zero_backoff(monkeypatch) -> list[float]:
+        """Zero the backoff base and record sleep durations instead of really
+        sleeping; returns the recorded delays."""
+        sleeps: list[float] = []
+
+        async def _sleep(delay: float) -> None:
+            sleeps.append(delay)
+
+        monkeypatch.setattr("agent.llm_http._RETRY_BACKOFF", 0)
+        monkeypatch.setattr("agent.llm_http.asyncio.sleep", _sleep)
+        return sleeps
+
+    async def test_500_retried_then_succeeds(self, monkeypatch) -> None:
+        self._zero_backoff(monkeypatch)
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return httpx.Response(500, json={"error": {"message": "boom"}})
+            return httpx.Response(
+                200, json={"choices": [{"message": {"content": "ok"}}], "usage": {}}
+            )
+
+        reply = await _client(handler).complete(MSGS)
+        assert reply.text == "ok" and not reply.degraded
+        assert calls["n"] == 2
+
+    async def test_429_retry_after_hint_wins_over_backoff(self, monkeypatch) -> None:
+        sleeps = self._zero_backoff(monkeypatch)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                429,
+                headers={"Retry-After": "3"},
+                json={"error": {"message": "slow down"}},
+            )
+
+        reply = await _client(handler).complete(MSGS)
+        assert reply.degraded and "rate limited" in (reply.text or "")
+        assert sleeps == [3.0, 3.0]  # hint (capped at 5s) beats the zero backoff
+
+    async def test_500_exhaustion_degrades_provider_error(self, monkeypatch) -> None:
+        self._zero_backoff(monkeypatch)
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            return httpx.Response(503, json={"error": {"message": "down"}})
+
+        reply = await _client(handler).complete(MSGS)
+        assert reply.degraded and "provider server error" in (reply.text or "")
+        assert calls["n"] == 3  # 1 original + 2 retries
+
+    async def test_connect_error_retried_then_succeeds(self, monkeypatch) -> None:
+        self._zero_backoff(monkeypatch)
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise httpx.ConnectError("refused", request=request)
+            return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+        reply = await _client(handler).complete(MSGS)
+        assert reply.text == "ok"
+        assert calls["n"] == 2
+
+    async def test_read_timeout_never_retried(self, monkeypatch) -> None:
+        sleeps = self._zero_backoff(monkeypatch)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ReadTimeout("established then stalled", request=request)
+
+        reply = await _client(handler).complete(MSGS)
+        assert reply.degraded and "timed out" in (reply.text or "")
+        assert sleeps == []  # no retry once the connection was established
+
+    async def test_stream_500_before_first_delta_retried(self, monkeypatch) -> None:
+        self._zero_backoff(monkeypatch)
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return httpx.Response(502, json={"error": {"message": "bad gateway"}})
+            return httpx.Response(
+                200,
+                content=b'data: {"choices": [{"delta": {"content": "ok"}}]}\n\ndata: [DONE]\n\n',
+            )
+
+        deltas: list[str] = []
+        final = None
+        async for ev in _client(handler).complete_stream(MSGS):
+            if ev.final is not None:
+                final = ev.final
+            else:
+                deltas.append(ev.text_delta)
+        assert deltas == ["ok"]
+        assert final is not None and final.text == "ok"
+        assert calls["n"] == 2
+
+    async def test_stream_nontransient_status_not_retried(self, monkeypatch) -> None:
+        sleeps = self._zero_backoff(monkeypatch)
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            return httpx.Response(401, json={"error": {"message": "bad key"}})
+
+        final = None
+        async for ev in _client(handler).complete_stream(MSGS):
+            if ev.final is not None:
+                final = ev.final
+        assert final is not None and final.degraded and "authentication" in (final.text or "")
+        assert calls["n"] == 1 and sleeps == []
     assert not _is_context_overflow(500, "context length exceeded")
