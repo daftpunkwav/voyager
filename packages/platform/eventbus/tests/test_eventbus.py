@@ -2,9 +2,11 @@
 cursors.
 """
 
+import time
+
 import pytest
 from platform_contracts import ActorKind, ActorRef, DomainEvent, Event
-from platform_eventbus import CursorStore, EventBus, EventLog
+from platform_eventbus import CursorStore, EventBus, EventLog, Retention
 
 AGENT = ActorRef(kind=ActorKind.AGENT, id="agent.main")
 
@@ -100,6 +102,55 @@ class TestEventLog:
         assert [e.type for _, e in reader.read_after()] == ["graph.indexed"]
         writer.close()
         reader.close()
+
+
+class TestRetention:
+    """High-churn type retention: purge deletes only the given types older
+    than the cutoff; sweeps run at construction and every sweep_every
+    appends; message-level events are never touched."""
+
+    def test_purge_deletes_only_matching_type_and_age(self, tmp_path) -> None:
+        lg = EventLog(tmp_path / "events.db")
+        try:
+            old = time.time() - 10_000
+            lg.append(Event(type="agent.delta", actor=AGENT, payload={"n": 1}, ts=old))
+            lg.append(Event(type="agent.message", actor=AGENT, payload={"n": 2}, ts=old))
+            lg.append(Event(type="agent.delta", actor=AGENT, payload={"n": 3}))  # fresh
+            deleted = lg.purge(["agent.delta"], before_ts=time.time() - 5_000)
+            assert deleted == 1
+            rows = lg.read_after()
+            assert sorted(e.type for _, e in rows) == ["agent.delta", "agent.message"]
+        finally:
+            lg.close()
+
+    def test_construction_sweep_removes_stale_deltas(self, tmp_path) -> None:
+        lg = EventLog(tmp_path / "events.db")
+        lg.append(Event(type="agent.delta", actor=AGENT, payload={}, ts=time.time() - 10_000))
+        lg.append(Event(type="agent.message", actor=AGENT, payload={}, ts=time.time() - 10_000))
+        lg.close()
+        lg2 = EventLog(
+            tmp_path / "events.db",
+            retention=Retention(types=("agent.delta",), max_age_s=5_000),
+        )
+        try:
+            rows = lg2.read_after()
+            assert [e.type for _, e in rows] == ["agent.message"]
+        finally:
+            lg2.close()
+
+    def test_append_triggers_sweep_every_n(self, tmp_path) -> None:
+        lg = EventLog(
+            tmp_path / "events.db",
+            retention=Retention(types=("agent.delta",), max_age_s=1.0, sweep_every=2),
+        )
+        try:
+            lg.append(Event(type="agent.delta", actor=AGENT, payload={}, ts=time.time() - 10))
+            assert len(lg.read_after()) == 1  # sweep runs on multiples of 2 only
+            lg.append(Event(type="agent.message", actor=AGENT, payload={}))
+            rows = lg.read_after()
+            assert [e.type for _, e in rows] == ["agent.message"]  # stale delta swept
+        finally:
+            lg.close()
 
 
 class TestCursorStore:

@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from platform_contracts import DomainEvent
-from platform_eventbus import CursorStore, EventBus, EventLog
+from platform_eventbus import CursorStore, EventBus, EventLog, Retention
 from platform_settings import SettingsStore
 
 from agent.app import AgentApp
@@ -94,6 +94,14 @@ from agent.tools import (
 )
 from agent.tools.core.result_budget import bound_spill_dir, spill_result
 from agent.tools.core.self_capability import AuditSinks
+
+#: Retention for the shared event log: streaming deltas (one row per text
+#: chunk) are an ephemeral display stream - keep them for a day so brief SSE
+#: reconnects can replay, then reclaim the rows; message-level events are
+#: never purged. Defined here because both assembly roots (standalone agent
+#: and host aggregate) construct the log, and agent.delta is an agent-owned
+#: event type (review F-103).
+EVENTS_RETENTION = Retention(types=(DomainEvent.AGENT_DELTA,), max_age_s=24 * 3600.0)
 
 
 def _build_policy(
@@ -226,7 +234,7 @@ def build_agent(
         llm = FakeLLM()
     owns_log = bus is None
 
-    log = EventLog(data_dir / "events.db")
+    log = EventLog(data_dir / "events.db", retention=EVENTS_RETENTION)
     bus = bus or EventBus(log)
     cursors = CursorStore(log.conn, log.lock)
 

@@ -2,6 +2,6 @@
 
 from platform_eventbus.bus import EventBus, Subscription
 from platform_eventbus.cursor import CursorStore
-from platform_eventbus.log import EventLog
+from platform_eventbus.log import EventLog, Retention
 
-__all__ = ["CursorStore", "EventBus", "EventLog", "Subscription"]
+__all__ = ["CursorStore", "EventBus", "EventLog", "Retention", "Subscription"]

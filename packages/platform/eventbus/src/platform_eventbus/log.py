@@ -9,7 +9,9 @@ import fnmatch
 import json
 import sqlite3
 import threading
+import time
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
@@ -31,6 +33,27 @@ CREATE INDEX IF NOT EXISTS idx_events_ts   ON events(ts);
 
 #: fnmatch wildcards (same semantics as Subscription.matches: fnmatchcase)
 _GLOB_CHARS = frozenset("*?[")
+
+
+@dataclass(frozen=True)
+class Retention:
+    """Deletion policy for high-churn event types.
+
+    Streaming delta events (one row per text chunk) are an ephemeral display
+    stream; without a policy the log grows monotonically and replay slows
+    down. Callers name the types and the max age; the platform stays generic
+    and never hardcodes business event names. Sweeps run at construction
+    time and every ``sweep_every`` appends.
+
+    Cursors below the deleted range simply resume from the first surviving
+    seq. Deleted pages are reused by SQLite, so growth stops even though the
+    file does not shrink (run VACUUM manually if the file must shrink).
+    """
+
+    types: tuple[str, ...]
+    max_age_s: float
+    #: Appends between sweeps (sweeps are cheap but not free)
+    sweep_every: int = 500
 
 
 def _like_prefix(pattern: str) -> str:
@@ -86,12 +109,16 @@ class EventLog:
     db file may be shared across processes.
     """
 
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(self, db_path: str | Path, *, retention: Retention | None = None) -> None:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(_SCHEMA)
         self._lock = threading.Lock()
+        self._retention = retention
+        self._appends = 0
+        if retention is not None:
+            self._sweep()
 
     @property
     def conn(self) -> sqlite3.Connection:
@@ -104,6 +131,32 @@ class EventLog:
         """Callers sharing the connection (CursorStore etc.) must share this
         lock for all reads and writes."""
         return self._lock
+
+    def purge(self, types: Iterable[str], *, before_ts: float) -> int:
+        """Delete events of the given exact types older than before_ts.
+
+        Returns the number of deleted rows. Bounds growth of high-churn
+        event types; the public entry point so callers can sweep manually
+        (the retention policy does this automatically).
+        """
+        type_list = list(types)
+        if not type_list:
+            return 0
+        placeholders = ",".join("?" for _ in type_list)
+        with self._lock:
+            cur = self._conn.execute(
+                f"DELETE FROM events WHERE type IN ({placeholders}) AND ts < ?",
+                (*type_list, before_ts),
+            )
+            self._conn.commit()
+        return int(cur.rowcount or 0)
+
+    def _sweep(self) -> None:
+        """Apply the retention policy once (no-op without one)."""
+        if self._retention is None:
+            return
+        cutoff = time.time() - self._retention.max_age_s
+        self.purge(self._retention.types, before_ts=cutoff)
 
     def latest_seq(self) -> int:
         """Current maximum seq (0 for an empty table). Public read access for
@@ -130,7 +183,15 @@ class EventLog:
             self._conn.commit()
         if cur.lastrowid is None:  # unreachable: an INSERT always yields a rowid
             raise RuntimeError("event append produced no rowid")
-        return int(cur.lastrowid)
+        seq = int(cur.lastrowid)
+        self._appends += 1
+        if (
+            self._retention is not None
+            and self._retention.sweep_every > 0
+            and self._appends % self._retention.sweep_every == 0
+        ):
+            self._sweep()
+        return seq
 
     def read_after(
         self,

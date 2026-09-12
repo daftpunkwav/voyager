@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from agent.app import AgentApp
-from agent.build import build_agent
+from agent.build import EVENTS_RETENTION, build_agent
 from agent.contracts import Purpose
 from agent.llm import LLMClient
 from agent.runtime.jobs_view import JobsView
@@ -254,7 +254,7 @@ def build(
     data_root = Path(data_dir) if data_dir else ROOT / "data/runtime"
     data_root.mkdir(parents=True, exist_ok=True)
 
-    event_log = EventLog(data_root / "events.db")
+    event_log = EventLog(data_root / "events.db", retention=EVENTS_RETENTION)
     bus = EventBus(event_log)
     secrets = SecretStore(data_root / "secrets.db")
     settings_store = SettingsStore(data_root / "settings.db", bus)
