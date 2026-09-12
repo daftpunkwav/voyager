@@ -55,8 +55,10 @@ class Spawner:
         pages=None,  # PageContextRegistry: conversational instances preactivate tools per current page
         sync_digest=None,  # refreshes the DigestStore as steps happen; duck-typed
         budget_fn: Callable[[], ContextBudget] | None = None,  # hot-read context budget per spawn
+        planner_llm: LLMClient | None = None,  # context editor planning client; None = chat llm
     ) -> None:
         self._llm = llm
+        self._planner_llm = planner_llm
         self._toolbelt = toolbelt
         self._scheduler = scheduler
         self._events = events
@@ -100,6 +102,7 @@ class Spawner:
             task=task,
             toolbelt=toolbelt,
             llm=self._llm,
+            planner_llm=self._planner_llm,
             system_prompt=self._build_system(task, persona),
             events=self._events,
             state=RunState(task=task.goal),
@@ -220,6 +223,7 @@ class Spawner:
             task=task,
             toolbelt=self._narrowed_belt(task),
             llm=self._llm,
+            planner_llm=self._planner_llm,
             system_prompt=self._build_system(task, snap.persona),
             events=self._events,
             state=state,  # exactly as persisted: run_id / steps / started_ts / status all preserved

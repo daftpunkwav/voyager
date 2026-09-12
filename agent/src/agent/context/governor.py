@@ -42,6 +42,7 @@ class ContextGovernor:
         fallback_budget: int,
         tracker: UsageTracker,
         llm: LLMClient,
+        planner: LLMClient | None = None,
     ) -> None:
         self._window = window
         self._auto_compact_at = auto_compact_at
@@ -49,6 +50,7 @@ class ContextGovernor:
         self._fallback_budget = fallback_budget
         self._tracker = tracker
         self._llm = llm
+        self._planner = planner
 
     @property
     def window(self) -> ContextWindow:
@@ -84,10 +86,16 @@ class ContextGovernor:
         self, messages: list[dict[str, Any]], *, target: int | None = None
     ) -> dict[str, Any] | None:
         """Unconditional compaction attempt (proactive tool calls, overflow
-        recovery); None when already within target."""
+        recovery); None when already within target.
+
+        The editor's planning call runs on the injected planner client when
+        the context_planner purpose is routed (a lighter model suffices: the
+        planner only classifies and summarizes segments); without one it
+        shares the chat client as before."""
+        planner = self._planner if self._planner is not None else self._llm
         return await compact_transcript(
             messages,
-            self._llm,
+            planner,
             target=target if target is not None else self.target_tokens(),
             fallback_budget=self._fallback_budget,
         )

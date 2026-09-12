@@ -206,6 +206,23 @@ class TestGovernor:
         assert report is not None and report["mode"] == "plan"
         assert len(llm.calls) == 1  # exactly one planner call
 
+    async def test_planner_client_receives_the_editor_call(self) -> None:
+        """With the context_planner route injected, the planning call goes to
+        the routed (lighter) client and the chat client is never spent."""
+        plan = json.dumps({"keep": [0, 2], "summarize": [], "drop": [1]})
+        chat = FakeLLM()
+        planner = FakeLLM([LLMReply(text=plan)])
+        gov = self._governor(chat, planner=planner)
+        msgs = [
+            {"role": "system", "content": "s"},
+            {"role": "user", "content": "word " * 900},
+            {"role": "user", "content": "final question"},
+        ]
+        report = await gov.enforce(msgs)
+        assert report is not None and report["mode"] == "plan"
+        assert len(planner.calls) == 1
+        assert chat.calls == []
+
 
 class TestReactIntegration:
     async def test_threshold_triggers_editor_before_round(self) -> None:

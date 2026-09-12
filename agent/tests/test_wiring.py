@@ -3,8 +3,9 @@ and domain tool injection.
 """
 
 import asyncio
+import json
 
-from agent.llm import FakeLLM
+from agent.llm import FakeLLM, LLMReply
 from agent.main import build_agent
 from agent.subagent import Mode, TaskBook
 from agent.tools import AgentTool
@@ -151,5 +152,49 @@ class TestConductInSystem:
             assert "confirm before changing code" in orch.system_prompt
             recon = self._spawn(app, "recon")
             assert "【人格准则】" not in recon.system_prompt
+        finally:
+            app.close()
+
+
+class TestPurposeRouting:
+    """purpose_llms injection: the context_planner transport must drive the
+    context editor's planning call (build.py meters and forwards it; without a
+    route the chat client is shared)."""
+
+    @staticmethod
+    def _overbudget_msgs() -> list[dict]:
+        return [
+            {"role": "system", "content": "s"},
+            {"role": "user", "content": "word " * 900},
+            {"role": "user", "content": "final question"},
+        ]
+
+    async def test_context_planner_route_drives_the_editor_call(self, tmp_path) -> None:
+        plan = json.dumps({"keep": [0, 2], "summarize": [], "drop": [1]})
+        planner = FakeLLM([LLMReply(text=plan)])
+        app = build_agent(
+            data_dir=tmp_path / "rd",
+            workspace_dir=tmp_path / "ws",
+            llm=FakeLLM(),
+            purpose_llms={"context_planner": planner},
+        )
+        try:
+            inst = app.spawner.spawn(TaskBook(goal="test", mode=Mode.REACT))
+            assert inst.planner_llm is not None  # routed, not the shared chat client
+            report = await inst.governor().compact(self._overbudget_msgs(), target=100)
+            assert report is not None and report["mode"] == "plan"
+            assert len(planner.calls) == 1  # the planning call hit the routed client
+        finally:
+            app.close()
+
+    async def test_without_route_the_chat_client_drives_the_editor(self, tmp_path) -> None:
+        plan = json.dumps({"keep": [0, 2], "summarize": [], "drop": [1]})
+        chat = FakeLLM([LLMReply(text=plan)])
+        app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=chat)
+        try:
+            inst = app.spawner.spawn(TaskBook(goal="test", mode=Mode.REACT))
+            report = await inst.governor().compact(self._overbudget_msgs(), target=100)
+            assert report is not None and report["mode"] == "plan"
+            assert len(chat.calls) == 1  # fell back to the chat client
         finally:
             app.close()

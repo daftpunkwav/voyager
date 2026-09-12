@@ -139,6 +139,10 @@ class SubagentInstance:
     budget: ContextBudget = field(default_factory=ContextBudget)
     # Context budget (history bound + per-turn compaction budget); injected
     # by the spawner from settings so operators tune both without code
+    #: Optional lighter client for the context editor's planning call
+    #: (context_planner purpose routing, injected by the spawner); None =
+    #: share the chat client as before
+    planner_llm: LLMClient | None = None
     _turn_messages: list[dict[str, Any]] | None = field(default=None, init=False, repr=False)
     # Live reference to the in-turn ReAct messages (run_mode appends in place);
     # _on_step uses it to capture mid-turn snapshots, cleared when the turn ends
@@ -242,6 +246,7 @@ class SubagentInstance:
             fallback_budget=self.budget.compress_budget,
             tracker=self.usage,
             llm=self.llm,
+            planner=self.planner_llm,
         )
 
     def feed(self, text: str) -> None:

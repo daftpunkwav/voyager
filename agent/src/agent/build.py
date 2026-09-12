@@ -285,12 +285,14 @@ def build_agent(
 
     approval_store = ApprovalStore(data_dir / "approvals.db")
     chat_llm = _metered(llm)
-    # Purpose routing (phase 18): arbiter and distillation may run on lighter
-    # models resolved by the host routing layer; without an injected transport
-    # everything shares the chat model as before
+    # Purpose routing (phase 18): arbiter, distillation, and the context
+    # editor's planning call may run on lighter models resolved by the host
+    # routing layer; without an injected transport everything shares the chat
+    # model as before
     routes = purpose_llms or {}
     arbiter_llm = _metered(routes["arbiter"]) if "arbiter" in routes else chat_llm
     distiller_llm = _metered(routes["distill"]) if "distill" in routes else chat_llm
+    planner_llm = _metered(routes["context_planner"]) if "context_planner" in routes else chat_llm
     events = RuntimeEvents(bus)
 
     async def _confirm(prompt: str) -> bool:
@@ -486,6 +488,7 @@ def build_agent(
             # back to the standalone-run setting; unknown -> global defaults
             model_name=str(getattr(llm, "model", "") or settings.get("agent.llm.model") or ""),
         ),  # hot-read context budget
+        planner_llm=planner_llm,  # context editor planning client (may be routed)
     )
     subagent_registry = SubagentRegistry(data_dir / "subagents")
     # Chat session persistence: the main conversation survives restarts; a
