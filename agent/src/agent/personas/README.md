@@ -1,3 +1,5 @@
-# agent.personas — 人格预设(骨架)
+# agent.personas — Persona presets (skeleton)
 
-纯数据:名字/风格/能力面模板/默认模式(§9.3)。人格与风格(毒舌/热心…)正交叠加(§9.14)。
+Pure data: name/style/capability-surface template/default mode (§9.3).
+Personas and styles (sharp-tongued/warm-hearted...) compose orthogonally
+(§9.14).

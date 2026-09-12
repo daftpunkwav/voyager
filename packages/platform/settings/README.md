@@ -1,11 +1,11 @@
-# platform/settings — 设置项框架
+# platform/settings — Settings framework
 
-每个设置项的定义:`key / type / 默认值 / 所属模块 / secret 标记 / 描述`(§7.9)。
+Each setting is defined by: `key / type / default / owning module / secret flag / description` (§7.9).
 
-- 各服务在自己的 `settings.py` 声明本服务设置项,启动时 `register()`;
-- `set()` 校验类型/取值域;**secret 项仅 user 可写**(§8.8 隐私例外);
-- 变更发布 `settings.changed` 事件(secret 项 payload 不含值);
-- `list_schema()` 供设置页动态渲染:不硬编码任何设置项,secret 只回 `has_value`。
+- Each service declares its own settings in its `settings.py` and calls `register()` at startup;
+- `set()` validates type/value domain; **secret items are writable by the user only** (§8.8 privacy exception);
+- Changes publish a `settings.changed` event (secret item payloads carry no value);
+- `list_schema()` lets the settings page render dynamically: no setting is hardcoded, and secrets only return `has_value`.
 
 ---
 

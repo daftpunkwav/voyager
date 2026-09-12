@@ -1,28 +1,28 @@
-## Commit 提交规范
+## Commit conventions
 
-- 格式:`<type>(<scope>): <subject>`,如 `feat(auth): 新增登录接口`
-- type:feat / fix / refactor / chore / docs / test / perf
+- Format: `<type>(<scope>): <subject>`, e.g. `feat(auth): add login endpoint`
+- type: feat / fix / refactor / chore / docs / test / perf
 
-## 前端开发规范
+## Frontend conventions
 
-### Toast（底部胶囊）
+### Toast (bottom capsule)
 
-- 容器 `.toast-container` 负责水平居中（`left: 50%` + `translateX(-50%)`）。胶囊在容器内排版，入场只做竖直位移 / 透明度，**禁止**对胶囊做不含水平居中的 `translateX`。
-- **禁止**在后加载样式里重新定义同名 `@keyframes toast-in` / `toast-out`（会覆盖全局，首帧偏右再弹回居中）。
-- 语义色只走左侧 4px 色条：error 红、warning 橙、success 绿、info 蓝。Chrome（卡片 / 按钮 / 导航）不要复用这条左边线。
+- The `.toast-container` handles horizontal centering (`left: 50%` + `translateX(-50%)`). Capsules are laid out inside the container; entrance animation must only use vertical translate / opacity — **never** apply a `translateX` to a capsule that omits the horizontal centering.
+- **Never** redefine same-name `@keyframes toast-in` / `toast-out` in late-loaded styles (it overrides the global definition; the first frame sits off-center then snaps back).
+- Semantic color goes only through the 4px left color bar: error red, warning orange, success green, info blue. Chrome (cards / buttons / nav) must not reuse this left edge line.
 
-### 装饰与强调
+### Decoration & emphasis
 
-- 卡片、按钮、导航**不要**用左侧品牌色竖条（`::before` / `inset` 左边线 / 玻璃 `::after` 竖高光）表示选中、激活或置顶。
-- 置顶用右上角 pin 图标；导航激活用背景与字色。
-- 正文引用块（blockquote）的左边线属于内容排版，不是 Chrome。
+- Cards, buttons, and nav must **not** use a left brand-color vertical bar (`::before` / inset left edge / glass `::after` vertical highlight) to indicate selected / active / pinned state.
+- Pinned items use a top-right pin icon; nav active state uses background and text color.
+- A blockquote's left border belongs to content typography, not Chrome.
 
-### 笔记列表
+### Notes list
 
-- 卡片视图在同一密度下**等高**（`--notes-card-h` + `overflow: hidden`），不要随摘要长短把格子撑乱。
-- 宽松 / 紧凑用 CSS 变量过渡；主列 `scrollbar-gutter: stable`，避免切换时闪滚动条或网格横跳。
-- 批量操作栏入场 / 退场要拉高度 + 透明度，不要瞬间插入整条栏。
+- Card view must stay equal-height at a given density (`--notes-card-h` + `overflow: hidden`); do not let cells stretch with summary length.
+- Loose / compact density transitions via CSS variables; the main column keeps `scrollbar-gutter: stable` to avoid scrollbar flashes or grid jumps when switching.
+- The batch action bar enters / exits by animating height + opacity; never insert the whole bar instantly.
 
-### 危险操作
+### Dangerous actions
 
-- `.is-danger` 在深色主题下必须能压过通用按钮 `color`，使用 `var(--error)`。
+- `.is-danger` must override the generic button `color` in the dark theme; use `var(--error)`.

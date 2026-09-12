@@ -1,12 +1,12 @@
-# platform/health — 健康探测与统一错误(§7.10)
+# platform/health — Health probing and unified errors (§7.10)
 
-目标:**一个服务出问题,其他全部不受影响;出问题的那一个,报错清楚、可行动。**
+Goal: **when one service breaks, all the others stay unaffected; and the broken one reports errors that are clear and actionable.**
 
-- `HealthMonitor`:注册各服务探针,周期/按需探测;状态变化发布
-  `service.health.changed`(前端服务徽章、agent 都能感知);探针异常 = DOWN;
-- `unavailable()` / `queue_full()`:构造统一错误体的助手(`GRAPH.UNAVAILABLE` 503 等);
-- 进程监督(崩溃自动拉起)由 desktop/启动器兼任,不在本包;gateway 的周期探测复用
-  HealthMonitor,探针 = 打各服务 `/health`。
+- `HealthMonitor`: registers each service's probes, probing periodically/on demand; state changes publish
+  `service.health.changed` (both the frontend service badges and the agent can perceive it); a probe failure = DOWN;
+- `unavailable()` / `queue_full()`: helpers that build the unified error body (`GRAPH.UNAVAILABLE` 503 etc.);
+- Process supervision (auto-restart on crash) is handled by desktop/the launcher, not this package; the gateway's periodic probing reuses
+  HealthMonitor, with probes = hitting each service's `/health`.
 
 ---
 

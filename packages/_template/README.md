@@ -1,27 +1,27 @@
-# packages/_template — 新领域服务脚手架
+# packages/_template — New domain service scaffold
 
-复制本目录即得一个新服务(验收标准:不触碰任何其他目录,§13.1):
+Copy this directory and you have a new service (acceptance criterion: no other directory is touched, §13.1):
 
-1. `cp -r packages/_template packages/<domain>`,把 `src/_template/` 改名为
-   `src/<domain>/`,并全局替换 `_template` / `template` 为 `<domain>`
-   (pyproject 的 `name` 与 `packages = ["src/<domain>"]`、`service.json` 的
-   `name`、tests 里的导入);
-2. 在根 `pyproject.toml` 的 `tool.uv.workspace.members` 加入 `packages/<domain>`,
-   `dependencies` 与 `tool.uv.sources` 同步登记,然后 `uv sync`;
-3. 在 `src/<domain>/capabilities.py` 注册本领域能力(初始最小集,完整清单写进
-   本包 README);
-4. 长任务:handler 只入队返回 `JobRef`(§7.3),进度经事件流,见 `worker.py` 示例;
-5. 端口在 `service.json` 声明,向 gateway 登记(packages/README.md 端口表)。
+1. `cp -r packages/_template packages/<domain>`, rename `src/_template/` to
+   `src/<domain>/`, and globally replace `_template` / `template` with `<domain>`
+   (`name` and `packages = ["src/<domain>"]` in pyproject, `name` in
+   `service.json`, imports in tests);
+2. Add `packages/<domain>` to `tool.uv.workspace.members` in the root `pyproject.toml`,
+   register it in `dependencies` and `tool.uv.sources` too, then run `uv sync`;
+3. Register this domain's capabilities in `src/<domain>/capabilities.py` (minimal initial set; the full list goes into
+   this package's README);
+4. Long tasks: the handler only enqueues and returns a `JobRef` (§7.3); progress goes through the event stream — see the `worker.py` example;
+5. The port is declared in `service.json` and registered with the gateway (port table in packages/README.md).
 
-布局(src layout,决策见 docs-local/design/2026-09-10-packages-src-layout.md):
+Layout (src layout; decision in docs-local/design/2026-09-10-packages-src-layout.md):
 
 ```
 packages/<domain>/
-├── pyproject.toml      # hatchling;依赖只声明 platform-*
-├── service.json        # 模块卡
+├── pyproject.toml      # hatchling; dependencies declare platform-* only
+├── service.json        # module card
 ├── README.md
-├── src/<domain>/       # 六件套:capabilities / rest / mcp_server / worker / store / settings
-└── tests/              # 平铺,无 __init__.py
+├── src/<domain>/       # six-piece set: capabilities / rest / mcp_server / worker / store / settings
+└── tests/              # flat, no __init__.py
 ```
 
 ---

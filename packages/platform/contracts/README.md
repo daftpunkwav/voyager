@@ -1,28 +1,28 @@
-# platform/contracts — 契约包
+# platform/contracts — Contracts package
 
-跨模块共享的**纯类型**层:事件信封、capability 输入输出 DTO、统一错误码、协议版本。
+The **pure-type** layer shared across modules: event envelopes, capability input/output DTOs, unified error codes, protocol version.
 
-铁律(见 docs-local/design/architecture.md §7.1):
+Iron rules (see docs-local/design/architecture.md §7.1):
 
-- 纯类型,零逻辑,**零第三方依赖**;
-- 唯一直接被 apps / agent / services 三方引用的包;
-- 前端 TS 类型由本包生成,三方认知一致;
-- 协议变更升 `version.py` 中的 `PROTOCOL_VERSION`。
+- Pure types, zero logic, **zero third-party dependencies**;
+- The only package referenced directly by all three of apps / agent / services;
+- Frontend TS types are generated from this package so all three sides share one understanding;
+- Protocol changes bump `PROTOCOL_VERSION` in `version.py`.
 
-import 名为 `platform_contracts`(避免与标准库 `platform` 冲突)。
+The import name is `platform_contracts` (to avoid clashing with the standard-library `platform`).
 
-## 术语对照(一词一义,全仓共用)
+## Glossary (one term, one meaning; shared repo-wide)
 
-| 词 | 唯一含义 | 边界 |
-|---|---|---|
-| **capability** | 领域服务/agent 在注册表登记的能力(schema + handler + 元数据,§7.3),REST 与 MCP 均由注册表生成 | 只存在于 `Registry`,名字即 `service.json` 登记名 |
-| **tool(AgentTool)** | agent 侧 LLM 可调用的工具,挂在 Toolbelt 工具面 | 领域能力经 `host.bridge.make_domain_tools` 桥为 `<domain>__<capability>`;agent 内生工具(fs/shell/web/spawn…)不来自注册表 |
-| **skill** | SKILL.md 知识包,装载后进 system 上下文(§9.10) | 不是工具、不可执行,只注入提示 |
-| **MCP server** | 用户在设置页添加并批准的**外接** server,经 McpClientPool 挂进工具面 | 禁止用它把本仓 `services/*/mcp_server` 再灌一遍(单体下能力已桥入) |
+| Term                 | Sole meaning                                                                                                                                         | Boundary                                                                                                                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **capability**       | A capability a domain service/agent registers in the registry (schema + handler + metadata, §7.3); REST and MCP are both generated from the registry | Exists only in the `Registry`; its name is the name registered in `service.json`                                                                                                  |
+| **tool (AgentTool)** | An LLM-callable tool on the agent side, mounted on the Toolbelt tool surface                                                                         | Domain capabilities are bridged via `host.bridge.make_domain_tools` into `<domain>__<capability>`; the agent's built-in tools (fs/shell/web/spawn…) do not come from the registry |
+| **skill**            | A SKILL.md knowledge pack; once loaded it enters the system context (§9.10)                                                                          | Not a tool, not executable; it only injects prompts                                                                                                                               |
+| **MCP server**       | An **external** server the user adds and approves on the settings page, mounted into the tool surface via McpClientPool                              | Never use it to re-feed this repo's own `services/*/mcp_server` (in the monolith those capabilities are already bridged in)                                                       |
 
-同一次调用的能力名 `<name>` 处处一致,只是包装不同:
-HTTP `POST /api/<domain>/capabilities/<name>`;agent 工具名 `<domain>__<name>`;
-各服务自带 MCP server 的 tool 名为裸 `<name>`(域由 server 本身区分)。
+Within one call the capability name `<name>` is identical everywhere; only the wrapper differs:
+HTTP `POST /api/<domain>/capabilities/<name>`; agent tool name `<domain>__<name>`;
+each service's own MCP server exposes the tool under the bare `<name>` (the domain is disambiguated by the server itself).
 
 ---
 

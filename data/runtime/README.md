@@ -1,12 +1,12 @@
-# runtime-data — 运行期数据("它的脑",§5)
+# runtime-data — Runtime data ("its brain", §5)
 
-与 workspace("它的家")分离。内容为用户数据,**不入库**。
+Separated from the workspace ("its home"). Contents are user data, **not committed to the repo**.
 
-| 内容 | 用途 |
+| Contents | Purpose |
 |---|---|
-| events.db | 事件日志(事件流的持久化,§7.2) |
-| audit.db | 审计(§7.6) |
-| memory/ | agent 记忆库(四类记忆,§9.11) |
-| checkpoints/ | 任务断点(§9.17) |
-| logs/ | 结构化日志(§7.8) |
-| secrets/ | 本机密钥(machine.token 等,platform/actor、platform/secrets) |
+| events.db | Event log (persistence for the event stream, §7.2) |
+| audit.db | Audit (§7.6) |
+| memory/ | Agent memory store (four memory kinds, §9.11) |
+| checkpoints/ | Task checkpoints (§9.17) |
+| logs/ | Structured logs (§7.8) |
+| secrets/ | Local machine secrets (machine.token etc.; platform/actor, platform/secrets) |

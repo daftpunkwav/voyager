@@ -1,3 +1,3 @@
-# office/modules/_template — 新办公类型脚手架(骨架)
+# office/modules/_template — New office-type scaffold (skeleton)
 
-未来类型(sheets…)复制即用,自包含三件套,聚合层零改动(§8.6)。
+Future types (sheets…) copy and go: a self-contained three-piece set, zero changes in the aggregation layer (§8.6).

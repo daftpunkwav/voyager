@@ -1,63 +1,70 @@
 # Voyager
 
-本地优先的 agent 共生工作台：导入仓库/文档/网页，笔记与知识图谱，人和 agent 走同一套 capability。
+A local-first agent companion workbench: import repos / documents / web pages, take notes, build knowledge graphs — humans and agents drive the same capability layer.
 
-人格：常驻 orchestrator（显示名 Lucien）+ 4 个预设（侦察 / 讲解 / 整理 / 图谱向导）。品牌字符串只在仓库根 `brand.json`。
+Personas: a resident orchestrator (display name Lucien) plus 4 presets (recon / explainer / organizer / graph guide). Brand strings live only in the repo-root `brand.json`.
 
-**技术栈：** FastAPI + sqlite3 / React + TypeScript + Vite。默认单体装配（`packages/host/`）一进程跑 gateway + 领域包 + agent；图谱 C 引擎可作为 sidecar。
+**Stack:** FastAPI + sqlite3 / React + TypeScript + Vite. The default monolithic assembly (`packages/host/`) runs gateway + domain packages + agent in a single process; the graph C engine can also run as a sidecar.
 
-## 快速开始
+## Quick start
 
 ```bash
-uv sync        # Python 依赖（uv workspace）
-npm install    # Node 依赖（npm workspaces）
+uv sync        # Python dependencies (uv workspace)
+npm install    # Node dependencies (npm workspaces)
 ```
 
-配置 `SECRETS_ENCRYPTION_KEY` 或 `SECRET_KEY`（随机长串，不要用 `.env.example` 里的示例值）后启动；在设置页填入 LLM API Key（BYOK）。无 Key 时对话降级，资料库/笔记/图谱仍可用。
+Set `SECRETS_ENCRYPTION_KEY` or `SECRET_KEY` (a long random string — do not reuse the sample values from `.env.example`) before starting; enter the LLM API key on the settings page (BYOK). Without a key, chat degrades gracefully while sources / notes / graph stay usable.
 
-### 开发启动
+### Development
 
 ```bash
 uv run python -m host.dev    # gateway :8000 + Vite :5173
 ```
 
-质量门禁在本地执行:`npm run gate`（`gate:py` = ruff format/check、import-linter 层级脱耦合同、mypy、pytest;`gate:web` = tsc、eslint、vitest、i18n 键检查、prettier）。
+Quality gates run locally: `npm run gate` (`gate:py` = ruff format/check, import-linter layering contracts, mypy, pytest; `gate:web` = tsc, eslint, vitest, i18n key checks, prettier).
 
-## 端口
+## Ports
 
-| 服务 | 默认端口 | 覆盖变量 |
-|------|----------|----------|
-| Web（Vite dev） | 5173 | `VITE_PORT` |
-| gateway（uvicorn） | 8000 | — |
-| 图谱 C 引擎 sidecar | 8123 / 9750 | 见服务设置 |
+| Service                | Default port | Override             |
+| ---------------------- | ------------ | -------------------- |
+| Web (Vite dev)         | 5173         | `VITE_PORT`          |
+| gateway (uvicorn)      | 8000         | —                    |
+| Graph C engine sidecar | 8123 / 9750  | see service settings |
 
-完整环境变量清单见 `.env.example`。架构见 `docs-local/design/architecture.md`(本地设计稿,不入库)。
+The full environment variable list is in `.env.example`.
 
-## 目录结构
+## Repository layout
 
-三源码根（产品代码只认这三棵）：`agent/` · `apps/` · `packages/`。
+Three source roots (product code only recognizes these three trees): `agent/` · `apps/` · `packages/`.
 
 ```
-├── agent/             # ① 源码根:AI 编排层（零 import 领域实现;src/agent/ + tests/）
-├── apps/              # ② 源码根:前端（npm workspaces: apps/*）
-│   ├── web/           # React 主应用（只经 gateway）
-│   └── config/        # 共享 TS/eslint 配置
-├── packages/          # ③ 源码根:后端模块（uv 成员;每包 src/<name>/ + tests/）
-│   ├── platform/      # 横切机制（contracts / capability / eventbus / …）
-│   ├── gateway/       # 聚合 REST/SSE 壳
+├── agent/             # ① Source root: AI orchestration layer (zero imports of domain
+│                      #    implementations; src/agent/ + tests/)
+├── apps/              # ② Source root: frontend (npm workspaces: apps/*)
+│   ├── web/           # React main app (talks to gateway only)
+│   └── config/        # shared TS/eslint config
+├── packages/          # ③ Source root: backend modules (uv members; each package is
+│                      #    src/<name>/ + tests/)
+│   ├── platform/      # cross-cutting mechanisms (contracts / capability / eventbus / …)
+│   ├── gateway/       # aggregated REST/SSE shell
 │   ├── notes|sources|graph|llm|settings|office|browser|code_exec/
-│   └── host/          # 装配根:扫描 service.json 自动接入领域
-├── plugins/           # 声明式用户插件（plugin.json,禁止热执行）
-├── data/              # 本地数据根(gitignore)
-│   ├── workspace/     # 「家」:克隆、书籍、导出、沙箱
-│   └── runtime/       # 「脑」:events/audit/memory/checkpoints
-└── brand.json         # 品牌字符串唯一来源
+│   └── host/          # assembly root: discovers service.json to wire in domains
+├── plugins/           # declarative user plugins (plugin.json; no hot execution)
+├── data/              # local data root (gitignored)
+│   ├── workspace/     # "home": clones, books, exports, sandbox
+│   └── runtime/       # "brain": events/audit/memory/checkpoints
+└── brand.json         # single source of brand strings
 ```
 
-> **产品面说明**：`packages/office / browser / code_exec` 三域已实现且可独立运行
-> （各带 rest.py / mcp_server.py），模块卡 `enabled_by_default=false`,默认单体
-> 装配不挂载，产品界面暂不含这三域；经设置或 `ENABLE_DOMAINS` 环境变量显式打开。
->
-> **纯本地**：默认不依赖外网；LLM 走 BYOK / 本地兼容端点，无可用模型时 agent 降级。
+Each package documents its contract in its own `README.md` (purpose / config / extension points / tool surface / limits / deferred), starting from [packages/README.md](packages/README.md).
 
-工程规范见 `AGENTS.md`。
+> **Product surface**: the `packages/office / browser / code_exec` domains are implemented
+> and runnable standalone (each ships rest.py / mcp_server.py), but their module cards are
+> `enabled_by_default=false`, the default monolithic assembly does not mount them, and the
+> product UI does not include them yet. Enable explicitly via settings or the
+> `ENABLE_DOMAINS` environment variable.
+>
+> **Local-only**: no external network dependency by default; LLM access is BYOK or a
+> local OpenAI-compatible endpoint, and the agent degrades when no model is available.
+
+Engineering conventions: see [AGENTS.md](AGENTS.md).

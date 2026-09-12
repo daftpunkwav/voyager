@@ -1,5 +1,6 @@
-# agent.context — 上下文工程(骨架)
+# agent.context — Context engineering (skeleton)
 
-builder.py 装配(规则→人格→画像→任务书→摘要)、compressor.py 压缩/剪枝/重建(§9.12)、
-loader.py 按需加载器:skill/记忆/页面上下文(§9.20 索引常驻,全文按需)。
-全局规则原文在 rules.py(GLOBAL_RULES,phase-28)。
+builder.py assembles (rules → persona → profile → task brief → summary);
+compressor.py compresses/prunes/rebuilds (§9.12); loader.py is the on-demand
+loader: skill/memory/page context (§9.20 index resident, full text on demand).
+The global rules source text lives in rules.py (GLOBAL_RULES, phase-28).

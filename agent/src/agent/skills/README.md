@@ -1,4 +1,5 @@
-# agent.skills — Skill 体系(骨架)
+# agent.skills — Skill system (skeleton)
 
-loader.py:skill 索引常驻 + 全文按需(§9.20);
-organizer.py:自动整理——发现重复流程 → 提议入库(§9.13)。
+loader.py: skill index resident + full text on demand (§9.20);
+organizer.py: auto-organization — find duplicate workflows → propose adding
+them to the library (§9.13).

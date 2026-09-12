@@ -1,13 +1,12 @@
-# platform/eventbus — 事件流
+# platform/eventbus — Event stream
 
-形态:**持久化事件日志(SQLite 追加表)+ 游标订阅**(§7.2)。
+Shape: **a durable event log (SQLite append-only table) + cursor-based subscription** (§7.2).
 
-- 进程内:asyncio 队列直推(订阅者掉队标记 `lagged`,可经游标补读);
-- 跨进程:共享同一 `events.db`,消费方持游标轮询 `read_after` / `read_missed`;
-- 日志表同时是**审计主线与重放源**:重启从游标恢复,可重放任意区间。
+- In-process: direct push over asyncio queues (a subscriber that falls behind is flagged `lagged`, and can catch up via its cursor);
+- Cross-process: consumers share the same `events.db`, hold a cursor, and poll `read_after` / `read_missed`;
+- The log table is at once the **audit backbone and the replay source**: restarts recover from cursors, and any interval can be replayed.
 
-事件流自身故障是唯一"全局性"故障面,实现必须最保守:写入即落盘,订阅零丢失承诺
-由"游标补读"而非内存队列保证。
+The event stream's own failure is the only "global" failure surface, so its implementation must be maximally conservative: writes hit disk immediately, and the zero-loss subscription promise is upheld by "cursor catch-up" rather than in-memory queues.
 
 ---
 

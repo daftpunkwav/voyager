@@ -1,3 +1,3 @@
-# office/modules/doc — Word 类文档(骨架)
+# office/modules/doc — Word-style documents (skeleton)
 
-创建/编辑/导出;与工坊页 doc-editor 对应;agent 可经能力直接改稿(§10.6)。
+Create/edit/export; corresponds to the workshop page doc-editor; the agent can revise documents directly through capabilities (§10.6).
