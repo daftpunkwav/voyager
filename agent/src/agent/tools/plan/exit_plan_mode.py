@@ -1,6 +1,7 @@
 """exit_plan_mode tool: submit the plan for human review and leave plan mode
-on approval (rejected plans keep the gate open with the reviewer's
-feedback)."""
+on approval (rejected plans keep the gate open with the reviewer's feedback).
+An approved plan is echoed back in full as the tool result so execution can
+follow it step by step."""
 
 from __future__ import annotations
 
@@ -35,7 +36,15 @@ def exit_plan_mode_tool(gates: PlanGates, asker: AskUser) -> AgentTool:
         if verdict == _APPROVE:
             gate.active = False
             gate.plan = body
-            return "计划已获批准,已退出计划模式;请按计划开始执行。"
+            # The plan text must ride the tool result: the submission itself
+            # lives in tool_call arguments, which the turn-end history
+            # write-back drops - without this the model loses its own plan
+            # from context as soon as the turn ends.
+            return (
+                "计划已获批准,已退出计划模式。计划全文如下,请从第一步开始严格按计划执行"
+                "(后续轮次对照此计划逐项推进,已完成的步骤不再重复):\n\n"
+                f"{body}"
+            )
         feedback = ""
         if verdict == _KEEP_PLANNING:
             answer = await asker.ask(

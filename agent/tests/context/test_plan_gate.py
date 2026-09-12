@@ -41,6 +41,8 @@ async def test_approval_closes_gate_and_records_plan() -> None:
     gates.set("", True)
     out = await handler(plan="# step 1")
     assert "批准" in out
+    assert "# step 1" in out  # the plan text rides the result: it must stay
+    # in the transcript for execution after the turn's history write-back
     gate = gates.for_session("")
     assert gate.active is False
     assert gate.plan == "# step 1"
