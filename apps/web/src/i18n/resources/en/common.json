@@ -1,0 +1,20 @@
+{
+  "action.retry": "Retry",
+  "action.cancel": "Cancel",
+  "action.confirm": "Confirm",
+  "action.save": "Save",
+  "action.close": "Close",
+  "state.loading": "Loading…",
+  "state.empty": "Nothing here yet",
+  "dialog.confirm": "Confirm",
+  "lightbox.preview": "Image preview",
+  "errorBoundary.title": "Something went wrong",
+  "errorBoundary.description": "Please refresh the page or click the button below to retry.",
+  "markdown.copyCode": "Copy code",
+  "markdown.copy": "Copy",
+  "markdown.copied": "Copied",
+  "markdown.archDiagram": "Architecture layer diagram",
+  "markdown.wikiLinkTitle": "Internal link: {{target}}",
+  "app.pageExportMissing": "Missing page export: {{key}}",
+  "app.loadingPage": "Loading page…"
+}

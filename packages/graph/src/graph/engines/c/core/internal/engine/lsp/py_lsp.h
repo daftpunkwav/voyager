@@ -1,0 +1,196 @@
+#ifndef ENGINE_LSP_PY_LSP_H
+#define ENGINE_LSP_PY_LSP_H
+
+#include "type_rep.h"
+#include "scope.h"
+#include "type_registry.h"
+#include "../engine.h"
+#include "go_lsp.h" // EngineLSPDef, EngineResolvedCallArray reused across languages
+
+// Lambda body record. When a lambda is assigned to a name (`fn =
+// lambda x: x.method()`), we stash its parameter list + body so the
+// next call site (`fn(arg)`) can do call-site driven inference.
+typedef struct {
+    const char *name;   // bound name, e.g. "fn"
+    TSNode lambda_node; // the lambda AST node
+} EngineLambdaEntry;
+
+// Function-as-dict-value entry. When `funcs = {"a": foo, "b": bar}` is
+// seen, we record the per-key target QN so `funcs["a"]()` emits an
+// edge to foo.
+typedef struct {
+    const char *var_name;    // e.g. "funcs"
+    const char *literal_key; // e.g. "a"
+    const char *target_qn;   // e.g. "test.main.foo"
+} EngineDictLiteralEntry;
+
+// Memoization entry for py_eval_expr_type (issue #710). Keyed by the
+// tree-sitter node identity pointer (TSNode.id), which is unique per node
+// within one file's parse tree. NOT the start byte: every leftmost
+// descendant of a chained call expression shares the chain's start byte,
+// so byte-keyed entries would alias distinct nodes and silently corrupt
+// call resolution. `gen` snapshots the scope generation (see
+// py_scope_bind in py_lsp.c); entries from older generations are treated
+// as misses so scope rebinding can never serve a stale type.
+typedef struct {
+    const void *node_id;   // TSNode.id; NULL marks an empty slot
+    uint32_t gen;          // scope generation at insert time
+    const EngineType *result; // full-fidelity result, never NULL in a live entry
+} EnginePyTypeCacheEntry;
+
+// PyLSPContext holds state for one Python file's type evaluation.
+typedef struct {
+    EngineArena *arena;
+    const char *source;
+    int source_len;
+    const EngineTypeRegistry *registry;
+    EngineScope *current_scope;
+
+    // Import map: local_name -> module_qn (arena-allocated, NULL-terminated).
+    // Built from EngineFileResult.imports.
+    const char **import_local_names;
+    const char **import_module_qns;
+    unsigned char *import_kinds; // internal PyDirectImportKind, classified once from the AST
+    int import_count;
+
+    // Current function/class context for resolving `self`/`cls` and emitting
+    // caller QNs.
+    const char *enclosing_func_qn;
+    const char *enclosing_class_qn;
+    const char *module_qn;
+
+    // Output: resolved calls accumulate here.
+    EngineResolvedCallArray *resolved_calls;
+
+    // Syntactic-call list (result->calls), borrowed from the per-file
+    // extraction result. The downstream pipeline only turns a resolved_call
+    // into a CALLS edge when a *syntactic* EngineCall with the same
+    // (enclosing_func_qn, callee short-name) exists here. Operator/subscript
+    // dunder desugaring (`s[k]` -> T.__getitem__, `a + b` -> T.__add__) never
+    // appears in result->calls because a `subscript`/`binary_operator` is not
+    // a `call` node, so the syntactic extractor produced no call. When this is
+    // non-NULL, py_emit_dunder_call injects a matching synthetic EngineCall so the
+    // recovered dunder call becomes a real CALLS edge. Cross-file callers use
+    // a separate arena-owned output and merge it into the file result after
+    // resolution. Mirrors RustLSPContext.syn_calls.
+    EngineCallArray *syn_calls;
+
+    // Lambda registry: simple linear list, looked up by name.
+    EngineLambdaEntry *lambdas;
+    int lambda_count;
+    int lambda_cap;
+
+    // Dict-literal-as-dispatch-table tracking.
+    EngineDictLiteralEntry *dict_literals;
+    int dict_literal_count;
+    int dict_literal_cap;
+
+    // AST-walk recursion depth for py_resolve_calls_in (guards stack overflow on
+    // deeply-nested/cyclic files; see engine_lsp_max_walk_depth). Zero via memset.
+    int walk_depth;
+
+    // py_eval_expr_type memoization + guards (issues #710/#720; mirrors
+    // c_eval_expr_type's guard design in c_lsp.c). All zero via memset —
+    // each file starts with a cold cache and a full budget.
+    EnginePyTypeCacheEntry *type_cache; // open addressing, linear probe, arena-allocated
+    int type_cache_count;            // occupied slots (kept < 75% of cap)
+    int type_cache_cap;              // power-of-two capacity
+    uint32_t type_cache_gen;         // bumped on every scope mutation (O(1) flush)
+    int eval_depth;                  // evaluator recursion depth (PY_LSP_MAX_EVAL_DEPTH)
+    int eval_steps;                  // per-file work budget used (PY_EVAL_MAX_STEPS_PER_FILE)
+    uint32_t eval_truncations;       // depth/budget cutoff count — gates memo inserts
+
+    // Sticky fail-closed guard for exact callable-value proof. If a required
+    // scope/name/overlay allocation fails, later semantic passes must leave
+    // the syntactic occurrence as ordinary USAGE instead of consulting stale
+    // bindings and fabricating CALL_REFERENCE/CALLS edges.
+    bool callable_value_proof_disabled;
+
+    // Per-file instance-field OVERLAY. When the Tier-2 registry is shared + sealed
+    // (registry->read_only), `self.x = ...` / PEP-526 field discoveries made during
+    // resolve are recorded HERE instead of mutating the shared registry (which would
+    // bypass the add_* seal, race the other resolve workers, and leave the shared
+    // entry pointing into this file's arena once it is freed). py_lookup_field
+    // consults this overlay alongside the shared base, so same-file attribute-chain
+    // resolution is preserved with zero shared mutation. Arena-allocated (per-file
+    // lifetime); holds no pointer into the shared registry, and the shared registry
+    // holds none into it. Mutable per-file registries keep the direct write.
+    struct {
+        const char *class_qn;
+        const char *field_name;
+        const EngineType *field_type;
+    } *field_overlay;
+    int field_overlay_count;
+    int field_overlay_cap;
+
+    // Debug mode (ENGINE_LSP_DEBUG env, shared across all language LSPs).
+    bool debug;
+} PyLSPContext;
+
+// Initialize a PyLSPContext for processing one file.
+void py_lsp_init(PyLSPContext *ctx, EngineArena *arena, const char *source, int source_len,
+                 const EngineTypeRegistry *registry, const char *module_qn, EngineResolvedCallArray *out);
+
+// Add an import mapping (call once per EngineImport entry).
+void py_lsp_add_import(PyLSPContext *ctx, const char *local_name, const char *module_qn);
+
+// Bind every recorded import into the root scope. Idempotent. Called from
+// py_lsp_process_file before AST traversal. Exposed for unit tests that
+// don't need a tree-sitter parse.
+void py_lsp_bind_imports(PyLSPContext *ctx);
+
+// Test hook: lookup a name in the context's scope chain. Returns
+// engine_type_unknown() if not bound.
+const EngineType *py_lsp_lookup_in_scope(const PyLSPContext *ctx, const char *name);
+
+// Process all functions/classes in a file's AST, evaluating types and resolving calls.
+// root must be the tree-sitter Python `module` node.
+void py_lsp_process_file(PyLSPContext *ctx, TSNode root);
+
+// Entry point: build registry from file's own defs + run LSP resolution.
+// Mirrors engine_run_go_lsp / engine_run_c_lsp.
+void engine_run_py_lsp(EngineArena *arena, EngineFileResult *result, const char *source, int source_len,
+                    TSNode root);
+
+// Register Python stdlib types and functions into a registry.
+// Auto-generated by scripts/gen-py-stdlib.py from typeshed.
+// Phase 10 fills the body; Phase 2 ships a no-op so linkage works.
+void engine_python_stdlib_register(EngineTypeRegistry *reg, EngineArena *arena);
+
+// --- Cross-file LSP resolution ---
+
+void engine_run_py_lsp_cross(EngineArena *arena, const char *source, int source_len,
+                          const char *module_qn, EngineLSPDef *defs, int def_count,
+                          const char **import_names, const char **import_qns, int import_count,
+                          TSTree *cached_tree, // NULL = parse internally
+                          EngineResolvedCallArray *out, EngineCallArray *synthetic_calls);
+
+/* Tier 2: pre-built per-language registry (mirrors Go pilot).
+ * Filters all_defs to Python entries, builds + finalizes once. */
+EngineTypeRegistry *engine_py_build_cross_registry(EngineArena *arena, EngineLSPDef *defs, int def_count);
+
+void engine_run_py_lsp_cross_with_registry(EngineArena *arena, const char *source, int source_len,
+                                        const char *module_qn,
+                                        EngineTypeRegistry *reg, // pre-built, finalized, READ-ONLY
+                                        const char **import_names, const char **import_qns,
+                                        int import_count, TSTree *cached_tree,
+                                        EngineResolvedCallArray *out, EngineCallArray *synthetic_calls);
+
+// --- Batch cross-file LSP ---
+
+typedef struct {
+    const char *source;
+    int source_len;
+    const char *module_qn;
+    TSTree *cached_tree; // from TSTree caching (NULL = parse internally)
+    EngineLSPDef *defs;     // combined file-local + cross-file defs
+    int def_count;
+    const char **import_names; // parallel arrays, import_count long
+    const char **import_qns;
+    int import_count;
+} EngineBatchPyLSPFile;
+
+void engine_batch_py_lsp_cross(EngineArena *arena, EngineBatchPyLSPFile *files, int file_count,
+                            EngineResolvedCallArray *out);
+
+#endif // ENGINE_LSP_PY_LSP_H

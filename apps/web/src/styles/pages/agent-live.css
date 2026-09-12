@@ -1,0 +1,415 @@
+/*
+ * @file agent-live
+ * @description Live agent page visuals: persona avatar gradients, embed chat
+ * bubbles, stream renderer, and chat input styling.
+ */
+
+/* Live agent appearance fragments (extracted from the old agent.css)
+ * Only selectors still referenced in src/ are kept:
+ *  - .agent-avatar + persona gradients
+ *  - .embed-agent-chat / .embed-msg / .embed-send-btn
+ *  - .stream-renderer
+ *  - .degrade-tip
+ *  - .chat-input visual additions (does not override the shell.css flex layout)
+ */
+
+.agent-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.15s var(--ease);
+  box-shadow: var(--shadow-xs);
+  flex-shrink: 0;
+}
+.agent-avatar:hover {
+  transform: translateY(-1px);
+}
+.agent-avatar.active {
+  box-shadow:
+    0 0 0 2px var(--bg-50),
+    0 0 0 4px var(--brand-500);
+}
+.agent-orchestrator,
+.agent-hub,
+.agent-lucien {
+  background: linear-gradient(135deg, #4a3aff, #9d4edd);
+}
+.agent-recon,
+.agent-scout,
+.agent-navigator,
+.agent-iris {
+  background: linear-gradient(135deg, #ff9f0a, #ff6f00);
+}
+.agent-explainer,
+.agent-mentor,
+.agent-elio {
+  background: linear-gradient(135deg, #9d4edd, #c879ff);
+}
+.agent-organizer,
+.agent-curator,
+.agent-scribe,
+.agent-miyai {
+  background: linear-gradient(135deg, #34c759, #30d158);
+}
+.agent-graph_guide,
+.agent-atlas {
+  background: linear-gradient(135deg, #5ac8fa, #007aff);
+}
+
+[data-theme='dark'] .agent-avatar.active {
+  box-shadow:
+    0 0 0 2px var(--bg-100),
+    0 0 0 4px var(--brand-500);
+}
+
+/* ── Embedded agent (import modal / graph wizard) ── */
+.embed-agent-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.embed-agent-chat__head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--bg-300);
+}
+.embed-agent-chat__title {
+  font-size: 13px;
+  font-weight: 700;
+}
+.embed-agent-chat__sub {
+  font-size: 11px;
+  color: var(--text-500);
+}
+.embed-agent-chat__messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+  font-size: 12px;
+}
+.embed-msg {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  line-height: 1.5;
+}
+.embed-msg--assistant {
+  background: var(--bg-100);
+  border: 1px solid var(--bg-300);
+}
+.embed-msg--user {
+  background: var(--brand-50);
+  margin-left: 24px;
+}
+.embed-agent-chat__input {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--bg-300);
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(12px);
+}
+.embed-agent-chat__input textarea {
+  flex: 1;
+  min-height: 52px;
+  resize: none;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--text-800);
+  caret-color: var(--text-800);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.embed-agent-chat__input textarea::placeholder {
+  color: var(--text-400);
+  opacity: 1;
+}
+.embed-agent-chat__input textarea:focus {
+  outline: none;
+  border-color: rgba(0, 122, 255, 0.45);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.12);
+}
+.embed-send-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: linear-gradient(135deg, var(--brand-500), var(--brand-600, #0066d6));
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow:
+    0 4px 14px rgba(0, 122, 255, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition:
+    transform 0.15s var(--ease),
+    box-shadow 0.15s var(--ease),
+    opacity 0.15s;
+}
+.embed-send-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 122, 255, 0.36);
+}
+.embed-send-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+.embed-agent-chat__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  font-size: 10px;
+  color: var(--text-500);
+  border-top: 1px solid var(--bg-300);
+}
+.embed-agent-chat__hint {
+  color: var(--brand-500);
+  font-weight: 600;
+}
+.embed-msg--system {
+  background: rgba(0, 122, 255, 0.08);
+  border: 1px dashed rgba(0, 122, 255, 0.28);
+  color: var(--text-700);
+  font-size: 11.5px;
+}
+.embed-msg--typing {
+  opacity: 0.75;
+  font-style: italic;
+}
+.embed-msg--error {
+  background: rgba(255, 55, 95, 0.1);
+  border: 1px solid rgba(255, 55, 95, 0.28);
+  color: #ff375f;
+}
+
+[data-theme='dark'] .embed-agent-chat__input {
+  background: rgba(0, 0, 0, 0.2);
+}
+[data-theme='dark'] .embed-agent-chat__input textarea {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-800);
+  caret-color: var(--text-800);
+}
+[data-theme='dark'] .embed-agent-chat__input textarea::placeholder {
+  color: var(--text-400);
+}
+[data-theme='dark'] .embed-msg--system {
+  color: var(--text-700);
+}
+[data-theme='dark'] .embed-msg--user {
+  background: rgba(0, 122, 255, 0.14);
+}
+
+/* ── Streaming renderer ── */
+.stream-renderer__status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.stream-renderer__status-line {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-500);
+  line-height: 1.35;
+}
+.stream-renderer__thinking {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 12px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 122, 255, 0.16);
+  background: rgba(0, 122, 255, 0.04);
+  font-size: 12px;
+  color: var(--text-700);
+  overflow: hidden;
+  isolation: isolate;
+}
+.stream-renderer__thinking-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  color: var(--text-700);
+  text-align: left;
+}
+.stream-renderer__thinking-title {
+  letter-spacing: 0.01em;
+}
+.stream-renderer__thinking-caret {
+  color: var(--brand-500);
+  font-family: var(--font-mono);
+  width: 0.9em;
+  flex-shrink: 0;
+}
+.stream-renderer__thinking-hint {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-400);
+  flex-shrink: 0;
+}
+.stream-renderer__thinking-preview {
+  margin: 0;
+  padding: 0 12px 8px 28px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-500);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stream-renderer__thinking-body {
+  margin: 0;
+  padding: 12px 14px 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-600);
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  border-top: 1px solid rgba(0, 122, 255, 0.12);
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.12);
+}
+.stream-renderer__body--collapsed {
+  max-height: 28rem;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+}
+.stream-renderer__cursor {
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--brand-500);
+  animation: stream-cursor-blink 1s steps(1) infinite;
+}
+.stream-renderer__placeholder {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-500);
+}
+@keyframes stream-cursor-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+[data-theme='dark'] .stream-renderer__thinking {
+  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+[data-theme='dark'] .stream-renderer__thinking-toggle {
+  color: var(--text-700);
+}
+[data-theme='dark'] .stream-renderer__thinking-preview {
+  color: var(--text-500);
+}
+[data-theme='dark'] .stream-renderer__thinking-body {
+  color: var(--text-600);
+  border-top-color: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.28);
+}
+[data-theme='dark'] .stream-renderer__status-line {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Missing LLM key notice (ChatLlmMissingTip). Selectors were only extracted from the old agent.css; copy unchanged. */
+.degrade-tip {
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--warning-surface) 70%, rgba(255, 255, 255, 0.45));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 200, 120, 0.45);
+  border-radius: 14px;
+  color: #8a5410;
+  display: flex;
+  gap: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+.degrade-tip svg {
+  flex-shrink: 0;
+  color: #b8651b;
+}
+.degrade-tip a {
+  color: var(--brand-500);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+[data-theme='dark'] .degrade-tip {
+  background: rgba(255, 159, 10, 0.14);
+  color: #ffb84d;
+}
+
+/* Chat input bar glass look: layered on top of shell.css's display:flex; never write display here. */
+.chat-input {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 22px;
+  padding: 12px 16px;
+  box-shadow:
+    0 8px 24px rgba(30, 50, 90, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 0 16px rgba(255, 255, 255, 0.2);
+  transition:
+    border-color 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
+}
+.chat-input:focus-within {
+  border-color: rgba(0, 122, 255, 0.45);
+  box-shadow:
+    0 0 0 3px rgba(0, 122, 255, 0.12),
+    0 10px 28px rgba(0, 90, 200, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+[data-theme='dark'] .chat-input {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+[data-theme='dark'] .chat-input:focus-within {
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.25);
+}

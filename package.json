@@ -1,0 +1,56 @@
+{
+  "name": "app",
+  "private": true,
+  "version": "2.0.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "overrides": {
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "postcss": {
+      "nanoid": "^3.3.18"
+    }
+  },
+  "scripts": {
+    "dev:web": "npm run dev -w web",
+    "build:web": "npm run build -w web",
+    "preview:web": "npm run preview -w web",
+    "test:web": "npm run test -w web",
+    "lint:web": "npm run lint -w web",
+    "typecheck:web": "npm run typecheck -w web",
+    "lint:py": "uv run ruff format --check packages agent scripts && uv run ruff check packages agent scripts",
+    "lint:imports": "uv run lint-imports --config import-linter.ini",
+    "typecheck:py": "uv run mypy packages agent",
+    "test:py": "uv run pytest -q",
+    "audit:web": "npm audit --audit-level=high",
+    "eval": "uv run pytest agent/tests/eval -q",
+    "eval:update": "uv run python scripts/update_eval_baseline.py",
+    "graph": "uv run python scripts/gen_dep_graph.py",
+    "graph:check": "uv run python scripts/gen_dep_graph.py --check",
+    "gate:py": "npm run lint:py && npm run lint:imports && npm run typecheck:py && npm run test:py && npm run graph:check",
+    "gate:web": "npm run typecheck:web && npm run lint:web && npm run test:web && npm run i18n:web && npm run format:web",
+    "i18n:web": "npm run i18n:check -w web",
+    "format:web": "npm run format:check -w web",
+    "gate": "npm run gate:py && npm run gate:web"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0"
+  },
+  "lint-staged": {
+    "apps/web/src/**/*.{ts,tsx}": [
+      "prettier --write",
+      "eslint --max-warnings 0"
+    ],
+    ".env": [
+      "echo 'Error: the .env file must not be committed; remove it from the staging area first!' && exit 1"
+    ],
+    ".env.local": [
+      "echo 'Error: the .env.local file must not be committed; remove it from the staging area first!' && exit 1"
+    ],
+    ".env.*.local": [
+      "echo 'Error: local .env files must not be committed; remove them from the staging area first!' && exit 1"
+    ]
+  }
+}

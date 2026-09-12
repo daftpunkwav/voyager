@@ -1,0 +1,8 @@
+{
+  "loading": "Loading health status…",
+  "error.title": "Unable to fetch status",
+  "empty.title": "No data",
+  "overall": "Overall",
+  "services": "Services",
+  "lastProbe": "Last probe: {{time}}"
+}

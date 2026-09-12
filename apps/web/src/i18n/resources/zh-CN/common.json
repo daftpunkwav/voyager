@@ -1,0 +1,20 @@
+{
+  "action.retry": "重试",
+  "action.cancel": "取消",
+  "action.confirm": "确定",
+  "action.save": "保存",
+  "action.close": "关闭",
+  "state.loading": "加载中…",
+  "state.empty": "暂无内容",
+  "dialog.confirm": "确认",
+  "lightbox.preview": "图片预览",
+  "errorBoundary.title": "页面出错了",
+  "errorBoundary.description": "请刷新页面或点击下方按钮重试。",
+  "markdown.copyCode": "复制代码",
+  "markdown.copy": "复制",
+  "markdown.copied": "已复制",
+  "markdown.archDiagram": "架构层级图",
+  "markdown.wikiLinkTitle": "内链:{{target}}",
+  "app.pageExportMissing": "页面导出缺失: {{key}}",
+  "app.loadingPage": "载入页面…"
+}

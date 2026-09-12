@@ -1,0 +1,129 @@
+/*
+ * @file chat-sessions
+ * @description Chat session drawer: overlay switcher for multi-session chat.
+ * Masks stay transparent (shared overlay rule in pages/index.css); the panel
+ * is the only elevated surface. Active marking uses background/text tone only —
+ * no brand-colored bars. Danger actions go through .is-danger (var(--error)).
+ */
+
+.session-drawer-mask {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 64px 20px 20px;
+  z-index: var(--z-modal, 1000);
+}
+
+.session-drawer {
+  width: min(400px, 92vw);
+  max-height: min(70vh, 560px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.session-drawer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.session-drawer__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-800);
+}
+
+.session-drawer__head-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.session-drawer__list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.session-drawer__empty {
+  padding: 16px 8px;
+  text-align: center;
+}
+
+.session-drawer__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--bg-300);
+  background: var(--bg-50);
+}
+
+.session-drawer__row--active {
+  background: var(--bg-200);
+  border-color: var(--bg-400);
+}
+
+.session-drawer__row--active .session-drawer__name {
+  font-weight: 600;
+}
+
+.session-drawer__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 2px 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-800);
+  text-align: left;
+  cursor: pointer;
+}
+
+.session-drawer__name {
+  font-size: 13px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-drawer__rename {
+  flex: 1;
+  min-width: 0;
+}
+
+.session-drawer__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.session-drawer__badge {
+  font-size: 11px;
+  color: var(--text-600);
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--bg-400);
+}
+
+.session-drawer__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bg-300);
+}

@@ -1,0 +1,20 @@
+{
+  "scenarios": [
+    {
+      "scenario": "todo_plan",
+      "reply": "All steps completed and reported.",
+      "llm_calls": 3,
+      "plan_done": 2,
+      "plan_total": 2
+    },
+    {
+      "scenario": "memory_recall",
+      "reply": "User prefers Chinese.",
+      "llm_calls": 2
+    },
+    {
+      "scenario": "budget_wind_down",
+      "reply_prefix": "[预算]"
+    }
+  ]
+}

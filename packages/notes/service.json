@@ -1,0 +1,51 @@
+{
+  "name": "notes",
+  "version": "0.5.0",
+  "protocol": "0.1.0",
+  "port": 8020,
+  "capabilities": [
+    "create_note",
+    "update_note",
+    "edit_note_range",
+    "delete_note",
+    "restore_note",
+    "purge_note",
+    "empty_trash",
+    "list_notes",
+    "get_note",
+    "get_note_toc",
+    "resolve_links",
+    "import_note",
+    "link_note",
+    "get_backlinks",
+    "list_tags",
+    "rename_tag",
+    "notes_stats",
+    "list_versions",
+    "read_version",
+    "restore_version",
+    "export_note",
+    "batch_notes",
+    "add_asset",
+    "get_notes_view",
+    "set_notes_view",
+    "mark_note_span"
+  ],
+  "subscribes": [],
+  "publishes": [
+    "note.created",
+    "note.edited",
+    "note.deleted",
+    "note.restored",
+    "note.purged",
+    "notes.ui.changed"
+  ],
+  "status": "implemented",
+  "enabled_by_default": true,
+  "needs": [
+    "bus",
+    "settings_store",
+    "workspace"
+  ],
+  "depends_on": []
+}

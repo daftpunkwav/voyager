@@ -1,0 +1,47 @@
+{
+  "name": "graph",
+  "version": "0.1.0",
+  "protocol": "0.1.0",
+  "port": 8030,
+  "capabilities": [
+    "enqueue_index",
+    "enqueue_l0",
+    "l0_view",
+    "cancel_index",
+    "reorder_queue",
+    "list_index_jobs",
+    "set_node",
+    "set_relationship",
+    "graph_guide",
+    "query_graph",
+    "get_subgraph",
+    "graph_stats",
+    "list_projects",
+    "engine_info",
+    "drop_project_graph",
+    "expand_neighbors",
+    "find_path",
+    "set_nodes",
+    "set_relationships",
+    "merge_nodes",
+    "export_subgraph"
+  ],
+  "subscribes": [],
+  "publishes": [
+    "task.progress",
+    "task.completed",
+    "task.failed",
+    "graph.engine.fallback"
+  ],
+  "status": "implemented",
+  "enabled_by_default": true,
+  "needs": [
+    "bus",
+    "settings_store",
+    "workspace",
+    "call_sync"
+  ],
+  "depends_on": [
+    "sources"
+  ]
+}

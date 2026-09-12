@@ -1,0 +1,514 @@
+/*
+ * @file liquid-glass
+ * @description Liquid Glass standard implementation: single source, reused
+ * across the project; 1:1 with the glass-card reference instance. See
+ * docs/liquid-glass.md.
+ *
+ * Responsibilities:
+ * - Define the --lg-* glass tokens (tint, blur, border, shadows, edges, radii)
+ * - Provide the shared glass surface layers (cards, large panels, dialogs,
+ *   control buttons)
+ */
+
+:root {
+  /* --- glass-card standard parameters --- */
+  --lg-tint: rgba(255, 255, 255, 0.08);
+  --lg-blur: 12px;
+  --lg-border: rgba(255, 255, 255, 0.3);
+  --lg-shadow-outer: 0 8px 32px rgba(0, 0, 0, 0.1);
+  --lg-shadow-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --lg-shadow-inset-bottom: inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+  --lg-shadow-inset-glow: inset 0 0 4px 2px rgba(255, 255, 255, 0.2);
+  --lg-edge-top: rgba(255, 255, 255, 0.8);
+  --lg-edge-left-top: rgba(255, 255, 255, 0.8);
+  --lg-edge-left-mid: rgba(255, 255, 255, 0.3);
+  --lg-radius-card: 20px;
+
+  /* --- Brand tint (text color only; background keeps the glass-card low opacity) --- */
+  --lg-brand-tint: rgba(0, 122, 255, 0.08);
+  --lg-brand-border: rgba(255, 255, 255, 0.3);
+  --lg-brand-shadow-outer: 0 8px 32px rgba(0, 0, 0, 0.1);
+  --lg-brand-text: var(--brand-600);
+
+  /* --- Strong blur variant --- */
+  --lg-blur-strong: 16px;
+  --lg-tint-strong: rgba(255, 255, 255, 0.12);
+
+  /* --- Mid-layer large panels (hero / Agent cards) --- */
+  --lg-panel-tint: rgba(255, 255, 255, 0.4);
+  --lg-panel-blur: 5px;
+  --lg-panel-border: rgba(255, 255, 255, 0.3);
+  --lg-panel-shadow-outer: 0 8px 32px rgba(0, 0, 0, 0.1);
+  --lg-panel-shadow-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --lg-panel-shadow-inset-bottom: inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+  --lg-panel-inset-glow: inset 0 0 60px 30px rgba(255, 255, 255, 0.3);
+  --lg-panel-edge-top: rgba(255, 255, 255, 0.8);
+  --lg-panel-edge-left-top: rgba(255, 255, 255, 0.8);
+  --lg-panel-edge-left-mid: rgba(255, 255, 255, 0.3);
+
+  /* --- Dialogs · near-solid glass (no full-page dimming) --- */
+  --lg-dialog-tint: rgba(252, 252, 253, 0.96);
+  --lg-dialog-blur: 20px;
+  --lg-dialog-border: rgba(255, 255, 255, 0.7);
+  --lg-dialog-shadow-outer: 0 18px 50px rgba(15, 23, 42, 0.14), 0 2px 10px rgba(15, 23, 42, 0.06);
+  --lg-dialog-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  --lg-dialog-inset-bottom: inset 0 -1px 0 rgba(255, 255, 255, 0.22);
+  --lg-dialog-inset-glow: inset 0 0 22px 8px rgba(255, 255, 255, 0.22);
+  --lg-dialog-edge-top: rgba(255, 255, 255, 0.95);
+  --lg-dialog-edge-left-top: rgba(255, 255, 255, 0.82);
+  --lg-dialog-edge-left-mid: rgba(255, 255, 255, 0.2);
+
+  /* --- Top-layer controls (buttons) --- */
+  --lg-control-tint: rgba(255, 255, 255, 0.12);
+  --lg-control-blur: 15px;
+  --lg-control-inset-glow: inset 0 0 4px 2px rgba(255, 255, 255, 0.2);
+}
+
+[data-theme='dark'] {
+  --lg-tint: rgba(255, 255, 255, 0.06);
+  --lg-border: rgba(255, 255, 255, 0.18);
+  --lg-shadow-outer: 0 8px 32px rgba(0, 0, 0, 0.28);
+  --lg-shadow-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  --lg-shadow-inset-bottom: inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+  --lg-shadow-inset-glow: inset 0 0 4px 2px rgba(255, 255, 255, 0.08);
+  --lg-edge-top: rgba(255, 255, 255, 0.45);
+  --lg-edge-left-top: rgba(255, 255, 255, 0.45);
+  --lg-edge-left-mid: rgba(255, 255, 255, 0.14);
+
+  --lg-brand-tint: rgba(0, 122, 255, 0.1);
+  --lg-brand-border: rgba(255, 255, 255, 0.18);
+  --lg-brand-shadow-outer: 0 8px 32px rgba(0, 0, 0, 0.28);
+  --lg-brand-text: #66abff;
+
+  --lg-panel-tint: rgba(255, 255, 255, 0.22);
+  --lg-panel-blur: 5px;
+  --lg-panel-border: rgba(255, 255, 255, 0.18);
+  --lg-panel-shadow-outer: 0 8px 32px rgba(0, 0, 0, 0.28);
+  --lg-panel-shadow-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  --lg-panel-shadow-inset-bottom: inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+  --lg-panel-inset-glow: inset 0 0 60px 30px rgba(255, 255, 255, 0.12);
+  --lg-panel-edge-top: rgba(255, 255, 255, 0.45);
+  --lg-panel-edge-left-top: rgba(255, 255, 255, 0.45);
+  --lg-panel-edge-left-mid: rgba(255, 255, 255, 0.14);
+  --lg-control-tint: rgba(255, 255, 255, 0.1);
+  --lg-control-blur: 15px;
+  --lg-control-inset-glow: inset 0 0 4px 2px rgba(255, 255, 255, 0.08);
+
+  /* Dark dialogs use a solid black base: a gray tint + inner glow gets muddy on a #000 page. */
+  --lg-dialog-tint: #000;
+  --lg-dialog-blur: 0px;
+  --lg-dialog-border: rgba(255, 255, 255, 0.14);
+  --lg-dialog-shadow-outer: 0 16px 48px rgba(0, 0, 0, 0.55);
+  --lg-dialog-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --lg-dialog-inset-bottom: inset 0 -1px 0 rgba(0, 0, 0, 0.6);
+  --lg-dialog-inset-glow: inset 0 0 0 0 transparent;
+  --lg-dialog-edge-top: rgba(255, 255, 255, 0.16);
+  --lg-dialog-edge-left-top: rgba(255, 255, 255, 0.1);
+  --lg-dialog-edge-left-mid: rgba(255, 255, 255, 0.04);
+}
+
+/* --------------------------------------------------------------------------
+   glass-card · standard class names (same as the reference code)
+   -------------------------------------------------------------------------- */
+.glass-card,
+.liquid-glass,
+.glass,
+.modal,
+.ask-dialog,
+.import-agent-modal,
+.question-modal,
+.graph-index-modal {
+  position: relative;
+  overflow: hidden;
+  background: var(--lg-tint);
+  backdrop-filter: blur(var(--lg-blur));
+  -webkit-backdrop-filter: blur(var(--lg-blur));
+  border-radius: var(--lg-radius-card);
+  border: 1px solid var(--lg-border);
+  box-shadow:
+    var(--lg-shadow-outer), var(--lg-shadow-inset-top), var(--lg-shadow-inset-bottom),
+    var(--lg-shadow-inset-glow);
+}
+
+.glass-card::before,
+.liquid-glass::before,
+.glass::before,
+.modal::before,
+.ask-dialog::before,
+.import-agent-modal::before,
+.question-modal::before,
+.graph-index-modal::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--lg-edge-top), transparent);
+  pointer-events: none;
+}
+
+/* Cards/buttons do not use the left vertical highlight (easily mistaken for a brand color bar); dialogs keep it */
+.modal::after,
+.ask-dialog::after,
+.import-agent-modal::after,
+.question-modal::after,
+.graph-index-modal::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    var(--lg-edge-left-top),
+    transparent,
+    var(--lg-edge-left-mid)
+  );
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   Variants
+   -------------------------------------------------------------------------- */
+.liquid-glass--strong,
+.glass-strong {
+  --lg-tint: var(--lg-tint-strong);
+  --lg-blur: var(--lg-blur-strong);
+}
+
+/* Mid layer · large panel (1:1 with the reference .glass-card instance, no fixed width/height) */
+.glass-card--panel,
+.liquid-glass--panel {
+  --lg-tint: var(--lg-panel-tint);
+  --lg-blur: var(--lg-panel-blur);
+  --lg-border: var(--lg-panel-border);
+  --lg-shadow-outer: var(--lg-panel-shadow-outer);
+  --lg-shadow-inset-top: var(--lg-panel-shadow-inset-top);
+  --lg-shadow-inset-bottom: var(--lg-panel-shadow-inset-bottom);
+  --lg-shadow-inset-glow: var(--lg-panel-inset-glow);
+  --lg-edge-top: var(--lg-panel-edge-top);
+  --lg-edge-left-top: var(--lg-panel-edge-left-top);
+  --lg-edge-left-mid: var(--lg-panel-edge-left-mid);
+
+  position: relative;
+  overflow: hidden;
+  background: var(--lg-panel-tint);
+  backdrop-filter: blur(var(--lg-panel-blur));
+  -webkit-backdrop-filter: blur(var(--lg-panel-blur));
+  border-radius: var(--lg-radius-card);
+  border: 1px solid var(--lg-panel-border);
+  box-shadow:
+    var(--lg-panel-shadow-outer), var(--lg-panel-shadow-inset-top),
+    var(--lg-panel-shadow-inset-bottom), var(--lg-panel-inset-glow);
+}
+
+.glass-card--panel::before,
+.liquid-glass--panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--lg-panel-edge-top), transparent);
+  pointer-events: none;
+}
+
+.glass-card--panel::after,
+.liquid-glass--panel::after {
+  content: none;
+}
+
+/* Transparent mid layer · no base panel rendered, only the inner control glass remains */
+.glass-card--panel-clear,
+.liquid-glass--panel-clear {
+  --lg-tint: transparent;
+  --lg-panel-tint: transparent;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.glass-card--panel-clear::before,
+.glass-card--panel-clear::after,
+.liquid-glass--panel-clear::before,
+.liquid-glass--panel-clear::after {
+  display: none;
+}
+
+.glass-card--panel-clear.liquid-glass--interactive:hover,
+.liquid-glass--panel-clear.liquid-glass--interactive:hover {
+  box-shadow: none;
+  --lg-shadow-outer: none;
+}
+
+/* Dialogs · near-solid liquid glass */
+.glass-card--dialog,
+.liquid-glass--dialog,
+.modal,
+.ask-dialog,
+.import-agent-modal,
+.question-modal,
+.graph-index-modal,
+.notes-dialog {
+  --lg-tint: var(--lg-dialog-tint);
+  --lg-blur: var(--lg-dialog-blur);
+  --lg-border: var(--lg-dialog-border);
+  --lg-shadow-outer: var(--lg-dialog-shadow-outer);
+  --lg-shadow-inset-top: var(--lg-dialog-inset-top);
+  --lg-shadow-inset-bottom: var(--lg-dialog-inset-bottom);
+  --lg-shadow-inset-glow: var(--lg-dialog-inset-glow);
+  --lg-edge-top: var(--lg-dialog-edge-top);
+  --lg-edge-left-top: var(--lg-dialog-edge-left-top);
+  --lg-edge-left-mid: var(--lg-dialog-edge-left-mid);
+}
+
+/* Top layer · control buttons (more solid, stronger blur, inner glow) */
+.glass-card--control,
+.liquid-glass--control {
+  --lg-tint: var(--lg-control-tint);
+  --lg-blur: var(--lg-control-blur);
+  --lg-shadow-inset-glow: var(--lg-control-inset-glow);
+}
+
+.liquid-glass--brand,
+.glass-tinted-brand {
+  --lg-tint: var(--lg-brand-tint);
+  --lg-border: var(--lg-brand-border);
+  --lg-shadow-outer: var(--lg-brand-shadow-outer);
+  color: var(--lg-brand-text);
+  font-weight: 600;
+}
+
+.liquid-glass--rounded,
+.glass-rounded {
+  border-radius: var(--lg-radius-card);
+}
+
+.liquid-glass--pill,
+.glass-pill {
+  border-radius: var(--radius-btn);
+}
+
+.liquid-glass--square,
+.glass-square {
+  border-radius: var(--radius-2xs);
+}
+
+.liquid-glass-padded {
+  padding: 16px 18px;
+}
+
+/* Hover: only tweak the shadow, do not lift too much */
+.liquid-glass--interactive,
+.glass-hover {
+  transition:
+    transform 0.2s var(--ease),
+    box-shadow 0.2s var(--ease);
+}
+
+.liquid-glass--interactive:hover,
+.glass-hover:hover {
+  transform: translateY(-1px);
+  --lg-shadow-outer: 0 10px 36px rgba(0, 0, 0, 0.12);
+}
+
+.liquid-glass--brand.liquid-glass--interactive:hover,
+.glass-tinted-brand.glass-hover:hover {
+  --lg-shadow-outer: 0 10px 36px rgba(0, 0, 0, 0.12);
+}
+
+.liquid-glass--interactive:active {
+  transform: translateY(0);
+}
+
+/* Intermittent hop (Primary CTA) */
+.liquid-glass--pulse {
+  animation: liquid-glass-pulse 5s ease-in-out infinite;
+}
+
+.liquid-glass--pulse:hover {
+  animation-play-state: paused;
+}
+
+@keyframes liquid-glass-pulse {
+  0%,
+  88%,
+  100% {
+    transform: translateY(0);
+  }
+  91% {
+    transform: translateY(-3px);
+  }
+  95% {
+    transform: translateY(0);
+  }
+  97% {
+    transform: translateY(-1px);
+  }
+}
+
+.liquid-glass-btn {
+  height: 40px;
+  padding: 0 20px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liquid-glass--pulse {
+    animation: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Overview page layered variants · outer 0.05/blur10 · inner 0.1/blur50/inner glow 2px 1px (projects page panel-overview unaffected)
+   -------------------------------------------------------------------------- */
+.glass-card.glass-card--overview-outer {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: var(--lg-radius-card, 20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 0 0px 0px rgba(255, 255, 255, 0);
+}
+
+.glass-card.glass-card--overview-outer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+  pointer-events: none;
+}
+
+.glass-card.glass-card--overview-outer::after {
+  content: none;
+}
+
+.glass-card.glass-card--overview-inner {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(50px);
+  -webkit-backdrop-filter: blur(50px);
+  border-radius: var(--lg-radius-card, 20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 0 2px 1px rgba(255, 255, 255, 0.1);
+}
+
+.glass-card.glass-card--overview-inner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+  pointer-events: none;
+}
+
+.glass-card.glass-card--overview-inner::after {
+  content: none;
+}
+
+[data-theme='dark'] .glass-card.glass-card--overview-outer {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 0 0px 0px rgba(255, 255, 255, 0);
+}
+
+[data-theme='dark'] .glass-card.glass-card--overview-outer::before {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+}
+
+[data-theme='dark'] .glass-card.glass-card--overview-outer::after,
+[data-theme='dark'] .glass-card.glass-card--overview-inner::after {
+  content: none;
+}
+
+[data-theme='dark'] .glass-card.glass-card--overview-inner {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 0 2px 1px rgba(255, 255, 255, 0.04);
+}
+
+[data-theme='dark'] .glass-card.glass-card--overview-inner::before {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+}
+
+/* Projects page etc. keep the legacy soft-bright variant */
+.glass-card--panel.glass-card--panel-overview {
+  --lg-panel-tint: rgba(255, 255, 255, 0.25);
+  --lg-panel-blur: 11px;
+  --lg-panel-border: rgba(255, 255, 255, 0.22);
+  --lg-panel-inset-glow: inset 0 0 24px 12px rgba(255, 255, 255, 0.12);
+  --lg-panel-edge-top: rgba(255, 255, 255, 0.65);
+  --lg-panel-edge-left-top: rgba(255, 255, 255, 0.55);
+  --lg-panel-edge-left-mid: rgba(255, 255, 255, 0.2);
+}
+
+.glass-card--control.glass-card--control-overview {
+  --lg-tint: rgba(255, 255, 255, 0.58);
+  --lg-blur: 12px;
+  --lg-border: rgba(255, 255, 255, 0.6);
+  --lg-shadow-inset-glow: inset 0 0 4px 2px rgba(255, 255, 255, 0.28);
+  --lg-edge-top: rgba(255, 255, 255, 0.92);
+  --lg-edge-left-top: rgba(255, 255, 255, 0.85);
+  --lg-edge-left-mid: rgba(255, 255, 255, 0.35);
+}
+
+[data-theme='dark'] .glass-card--panel.glass-card--panel-overview {
+  --lg-panel-tint: rgba(255, 255, 255, 0.14);
+  --lg-panel-blur: 11px;
+  --lg-panel-border: rgba(255, 255, 255, 0.14);
+  --lg-panel-inset-glow: inset 0 0 24px 12px rgba(255, 255, 255, 0.06);
+  --lg-panel-edge-top: rgba(255, 255, 255, 0.38);
+  --lg-panel-edge-left-top: rgba(255, 255, 255, 0.32);
+  --lg-panel-edge-left-mid: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='dark'] .glass-card--control.glass-card--control-overview {
+  --lg-tint: rgba(255, 255, 255, 0.22);
+  --lg-blur: 12px;
+  --lg-border: rgba(255, 255, 255, 0.32);
+  --lg-shadow-inset-glow: inset 0 0 4px 2px rgba(255, 255, 255, 0.1);
+  --lg-edge-top: rgba(255, 255, 255, 0.5);
+  --lg-edge-left-top: rgba(255, 255, 255, 0.42);
+  --lg-edge-left-mid: rgba(255, 255, 255, 0.14);
+}
+
+/* With overflow:visible, disable the dialog left highlight to avoid a stray vertical line */
+.glass-card.glass-overflow-visible,
+.liquid-glass.glass-overflow-visible,
+.glass.glass-overflow-visible {
+  overflow: visible;
+}
+.glass-card.glass-overflow-visible::after,
+.liquid-glass.glass-overflow-visible::after,
+.glass.glass-overflow-visible::after,
+.glass-card.glass-overflow-visible.glass-card--overview-outer::after,
+.glass-card.glass-overflow-visible.glass-card--overview-inner::after,
+.glass-card.glass-overflow-visible.glass-card--panel::after,
+.glass-card.glass-overflow-visible.glass-card--dialog::after,
+.modal.glass-overflow-visible::after {
+  content: none;
+}

@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "example-search": {
+      "command": "npx",
+      "args": ["-y", "example-search-mcp"],
+      "note": "External MCP server config example; enabling requires per-item or whole-package user approval (§9.13)"
+    }
+  }
+}

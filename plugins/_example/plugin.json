@@ -1,0 +1,15 @@
+{
+  "name": "example",
+  "version": "0.1.0",
+  "description": "Minimal plugin example: one skill, one hook, and one external MCP config",
+  "permissions": {
+    "scopes": ["notes.write"],
+    "network": "off",
+    "fs": "none"
+  },
+  "contains": {
+    "skills": ["skills/daily-note"],
+    "hooks": ["hooks/on-note-created.json"],
+    "mcp": "mcp.json"
+  }
+}

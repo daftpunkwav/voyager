@@ -1,0 +1,19 @@
+[project]
+name = "notes"
+version = "0.5.0"
+description = "Notes domain service"
+requires-python = ">=3.11"
+dependencies = [
+    "platform-actor",
+    "platform-capability",
+    "platform-contracts",
+    "platform-eventbus",
+    "platform-settings",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/notes"]

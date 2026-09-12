@@ -1,0 +1,15 @@
+{
+  "name": "gateway",
+  "version": "0.1.0",
+  "protocol": "0.1.0",
+  "port": 8000,
+  "capabilities": [],
+  "subscribes": [],
+  "publishes": [
+    "user.message",
+    "user.activity",
+    "service.health.changed"
+  ],
+  "status": "implemented",
+  "role": "gateway"
+}

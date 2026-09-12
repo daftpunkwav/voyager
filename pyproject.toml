@@ -1,0 +1,157 @@
+[project]
+name = "app"
+version = "2.0.0"
+description = "AI-driven open source project learning platform (monorepo root)"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.0",
+    "httpx>=0.27.0",
+    "pypdfium2>=5.13.0",
+    "python-docx>=1.2.0",
+    "python-multipart>=0.0.32",
+    # Every workspace member is an editable install (src layout, see
+    # docs-local/design/2026-09-10-packages-src-layout.md). The root is the
+    # deployable aggregate: it lists the composition root plus every domain
+    # host may discover, since discovery is by module card, not by import.
+    "agent",
+    "host",
+    "gateway",
+    "browser",
+    "code-exec",
+    "graph",
+    "llm",
+    "notes",
+    "office",
+    "settings",
+    "sources",
+    "template",
+    "platform-contracts",
+    "platform-actor",
+    "platform-eventbus",
+    "platform-capability",
+    "platform-settings",
+    "platform-health",
+    "platform-secrets",
+    "platform-webguard",
+]
+
+[tool.uv.workspace]
+# Three source roots (docs-local/design/2026-09-06-three-source-roots.md):
+# agent/ + packages/ here; apps/ is the npm workspace. Every member is a real
+# package installed in editable mode with a src layout: domain/host code in
+# packages/<name>/src/<name>/, agent code in agent/src/agent/
+# (2026-09-10-packages-src-layout.md).
+members = [
+    "agent",
+    "packages/host",
+    "packages/gateway",
+    "packages/notes",
+    "packages/sources",
+    "packages/graph",
+    "packages/llm",
+    "packages/settings",
+    "packages/office",
+    "packages/browser",
+    "packages/code_exec",
+    "packages/_template",
+    "packages/platform/contracts",
+    "packages/platform/actor",
+    "packages/platform/eventbus",
+    "packages/platform/capability",
+    "packages/platform/settings",
+    "packages/platform/health",
+    "packages/platform/secrets",
+    "packages/platform/webguard",
+]
+
+[tool.uv.sources]
+agent = { workspace = true }
+host = { workspace = true }
+gateway = { workspace = true }
+browser = { workspace = true }
+code-exec = { workspace = true }
+graph = { workspace = true }
+llm = { workspace = true }
+notes = { workspace = true }
+office = { workspace = true }
+settings = { workspace = true }
+sources = { workspace = true }
+template = { workspace = true }
+platform-contracts = { workspace = true }
+platform-actor = { workspace = true }
+platform-eventbus = { workspace = true }
+platform-capability = { workspace = true }
+platform-settings = { workspace = true }
+platform-health = { workspace = true }
+platform-secrets = { workspace = true }
+platform-webguard = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "import-linter>=2.0",
+    "mypy>=1.13",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.8.0",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+extend-select = ["I"]  # also enforce import sorting
+
+[tool.ruff.lint.per-file-ignores]
+# Vendored/attached code (not hand-written for this service): the Python fallback
+# engine is a migrated legacy implementation, and the C engine scripts are bundled tooling
+"packages/graph/src/graph/engines/python/**" = ["BLE001", "S110", "S112", "SIM102", "SIM103", "SIM115", "UP031", "PERF102", "PERF402", "PIE810", "PLW1510", "RUF013", "RUF059", "ISC004", "RUF007"]
+"packages/graph/src/graph/engines/c/core/scripts/**" = ["BLE001", "S110", "S112", "SIM102", "SIM103", "SIM115", "UP031", "PERF102", "PERF402", "PIE810", "PLW1510", "RUF013", "RUF059", "ISC004", "RUF007", "E402"]
+
+[tool.mypy]
+python_version = "3.11"
+explicit_package_bases = true
+namespace_packages = true
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+# Every workspace src root is a module base: a file named on the command line
+# and the same file reached through an import then share one module name.
+# Without this, intra-package imports resolve to Any (the members ship no
+# py.typed) and the check is hollow.
+mypy_path = [
+    "agent/src",
+    "packages/browser/src",
+    "packages/code_exec/src",
+    "packages/gateway/src",
+    "packages/graph/src",
+    "packages/host/src",
+    "packages/llm/src",
+    "packages/notes/src",
+    "packages/office/src",
+    "packages/settings/src",
+    "packages/sources/src",
+    "packages/_template/src",
+    "packages/platform/actor/src",
+    "packages/platform/capability/src",
+    "packages/platform/contracts/src",
+    "packages/platform/eventbus/src",
+    "packages/platform/health/src",
+    "packages/platform/secrets/src",
+    "packages/platform/settings/src",
+]
+# Vendored graph engines are not hand-written for this repo (see ruff per-file-ignores)
+exclude = ["packages/graph/src/graph/engines/"]
+
+[tool.pytest.ini_options]
+# domain tests (including code_exec) are part of the default test run
+testpaths = ["packages", "agent"]
+# importlib mode: test modules are imported by rootdir-relative name, so
+# per-package tests/ directories need no __init__.py and may share basenames
+# (test_service_card.py in several domains) without sys.path games.
+addopts = ["--import-mode=importlib"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]
+# src trees hold no tests; a capability file such as llm/capabilities/test_connection.py
+# must never be collected as a test module (it would register twice)
+norecursedirs = ["data", "vendor", ".venv", "node_modules", "build", "dist", "src"]

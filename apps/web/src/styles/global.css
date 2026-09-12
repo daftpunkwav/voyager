@@ -1,0 +1,424 @@
+/*
+ * @file global
+ * @description Global styles shared by every page.
+ *
+ * Responsibilities:
+ * - Root/document-level element rules
+ * - Cross-page component refinements (glass cards, list fade-in, loading
+ *   spinner)
+ */
+
+/* Global additions: Toast, Loading, and other React components; page visuals follow design-system + pages/*.css */
+
+#root {
+  height: 100%;
+  min-height: 100%;
+}
+
+a {
+  color: inherit;
+}
+
+/* ---------- GlassCard refinement (global) ---------- */
+.glass-card,
+.glass-card--panel,
+.glass-card--panel-clear,
+.glass-card--control {
+  transition: all var(--dur-base, 250ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) !important;
+}
+.glass-card--panel:hover,
+.glass-card--panel-clear:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 12px 32px -8px rgba(0, 0, 0, 0.1),
+    0 4px 12px -4px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* ---------- List item fade-in (global) ---------- */
+@keyframes itemFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.list > *,
+.repo-card,
+.note-item,
+.session-item,
+.health-card,
+.persona-card {
+  animation: itemFadeIn var(--dur-base) var(--ease-apple) both;
+}
+.list > *:nth-child(2),
+.repo-card:nth-child(2),
+.note-item:nth-child(2),
+.session-item:nth-child(2),
+.health-card:nth-child(2),
+.persona-card:nth-child(2) {
+  animation-delay: 40ms;
+}
+.list > *:nth-child(3),
+.repo-card:nth-child(3),
+.note-item:nth-child(3),
+.session-item:nth-child(3),
+.health-card:nth-child(3),
+.persona-card:nth-child(3) {
+  animation-delay: 80ms;
+}
+.list > *:nth-child(4),
+.repo-card:nth-child(4),
+.note-item:nth-child(4),
+.session-item:nth-child(4),
+.health-card:nth-child(4),
+.persona-card:nth-child(4) {
+  animation-delay: 120ms;
+}
+.list > *:nth-child(5),
+.repo-card:nth-child(5),
+.note-item:nth-child(5),
+.session-item:nth-child(5),
+.health-card:nth-child(5),
+.persona-card:nth-child(5) {
+  animation-delay: 160ms;
+}
+.list > *:nth-child(6),
+.repo-card:nth-child(6),
+.note-item:nth-child(6),
+.session-item:nth-child(6),
+.health-card:nth-child(6),
+.persona-card:nth-child(6) {
+  animation-delay: 200ms;
+}
+
+/* ---------- Loading Spinner · page-centered ---------- */
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--sp) * 3);
+  padding: calc(var(--sp) * 4);
+  text-align: center;
+}
+.loading-spinner--fullscreen,
+.page-scaffold__state > .loading-spinner,
+.content > .loading-spinner {
+  flex: 1;
+  min-height: 50vh;
+}
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 2.5px solid var(--bg-300);
+  border-top-color: var(--brand-500);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.loading-spinner__label {
+  font-size: 13px;
+  color: var(--text-500);
+  font-weight: 500;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Toast visuals and entrance live in design-system.css; .toast / toast-in are not redefined here to avoid late-loaded overrides breaking centering */
+
+.modal-overlay,
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.drawer-overlay {
+  justify-content: flex-end;
+}
+.modal {
+  padding: 22px 24px 20px;
+  max-width: 440px;
+  width: min(440px, 100%);
+  border-radius: var(--lg-radius-card, var(--radius-lg));
+  box-sizing: border-box;
+}
+.modal--wide {
+  max-width: 560px;
+  width: min(560px, 100%);
+}
+.modal__title {
+  margin: 0 0 10px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-800);
+  line-height: 1.3;
+}
+.modal__message {
+  margin: 0 0 20px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-500);
+}
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.modal__title,
+.modal__message,
+.modal__actions {
+  position: relative;
+  z-index: 1;
+}
+.drawer {
+  width: 420px;
+  max-width: 90vw;
+  height: 100%;
+  padding: calc(var(--sp) * 5);
+  overflow-y: auto;
+}
+
+.markdown-body {
+  line-height: 1.6;
+  font-size: 0.9375rem;
+}
+.markdown-body pre {
+  background: var(--md-panel-bg);
+  color: var(--md-panel-fg);
+  padding: var(--md-panel-pad);
+  border-radius: var(--md-panel-radius);
+  overflow-x: auto;
+  border: 1px solid var(--md-panel-border);
+  box-shadow: var(--md-panel-shadow);
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+.markdown-body pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font-family: inherit;
+}
+.markdown-body code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+}
+.markdown-body blockquote {
+  margin: 12px 0;
+  border-radius: var(--md-panel-radius);
+  border: 1px solid var(--md-panel-border);
+  border-left: 3px solid var(--md-panel-accent);
+  background: var(--md-panel-bg);
+  box-shadow: var(--md-panel-shadow);
+  color: var(--md-panel-muted);
+  padding: 12px 16px 12px 14px;
+}
+
+/* ==========================================================================
+   Global interaction quality layer · focus ring / scrollbars / reduced motion
+   ========================================================================== */
+
+/* Focus ring visible for keyboard navigation only (not on mouse clicks; component-specific focus styles are unaffected) */
+:where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 4px rgba(0, 122, 255, 0.18));
+  border-radius: var(--radius-sm, 8px);
+}
+
+/* Search boxes embedded in existing containers: the focus ring is drawn on the shell, do not add another layer */
+:where(.topbar-search, .notes-rail-search, .notes-search) input:focus-visible {
+  box-shadow: none;
+  outline: none;
+  border-radius: 0;
+}
+
+/* Global refined scrollbars · light */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: var(--radius-pill);
+  border: 2.5px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.32);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.22);
+}
+[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.36);
+}
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.22) transparent;
+}
+[data-theme='dark'] * {
+  scrollbar-color: rgba(255, 255, 255, 0.26) transparent;
+}
+
+/* Respect the system "reduce motion" preference: skip decorative animations and transitions, keep necessary state changes */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   Global motion layer · entrance / press / overlays / theme switch (all animations are covered by reduced-motion)
+   ========================================================================== */
+
+/* -- Overlays · Apple sheet pop-in: overlay fades in + panel rises with scale (spring) -- */
+@keyframes overlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sheetIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes drawerIn {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.modal-overlay,
+.drawer-overlay {
+  animation: overlayIn var(--dur-fast, 150ms) var(--ease-apple) both;
+}
+.modal-overlay ~ .modal-overlay {
+  z-index: calc(var(--z-modal) + 8);
+}
+.modal {
+  animation: sheetIn var(--dur-base, 250ms) var(--ease-apple) both;
+}
+.drawer {
+  animation: drawerIn var(--dur-base, 250ms) var(--ease-apple) both;
+}
+
+/* -- Dropdown/menu pop-in -- */
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.chat-more-pop,
+.glass-select__menu,
+.filter-dropdown__menu {
+  animation: popIn var(--dur-fast, 150ms) var(--ease-apple) both;
+}
+
+/* -- Card grid entrance stagger (stat cards / health cards / team cards) -- */
+.stat-grid > *,
+.health-grid > *,
+.team-grid > * {
+  animation: contentFadeIn var(--dur-slow, 350ms) var(--ease-apple) both;
+}
+.stat-grid > :nth-child(2),
+.health-grid > :nth-child(2),
+.team-grid > :nth-child(2) {
+  animation-delay: 50ms;
+}
+.stat-grid > :nth-child(3),
+.health-grid > :nth-child(3),
+.team-grid > :nth-child(3) {
+  animation-delay: 100ms;
+}
+.stat-grid > :nth-child(4),
+.health-grid > :nth-child(4),
+.team-grid > :nth-child(4) {
+  animation-delay: 150ms;
+}
+
+/* -- Press micro-feedback: non-primary buttons shrink slightly (primary buttons already have color-step + shift semantics, not stacked) -- */
+.btn:active:not(.btn-primary) {
+  transform: scale(0.97);
+}
+.filter-chip:active,
+.page-btn:active,
+.icon-btn:active {
+  transform: scale(0.94);
+}
+
+/* -- Floating chat orb: entrance pop + hover lift; panel pops in -- */
+@keyframes floatIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.float-dot {
+  animation: floatIn var(--dur-slow, 350ms) var(--ease-spring) both;
+}
+.float-dot:hover {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 6px 20px rgba(0, 122, 255, 0.4);
+}
+.float-panel {
+  animation: sheetIn var(--dur-base, 250ms) var(--ease-spring) both;
+}
+
+/* -- Theme switch smooth transition (color properties only, to avoid backdrop-filter jitter) -- */
+body {
+  transition: background var(--dur-slow, 350ms) var(--ease-apple);
+}
+.card,
+.stat,
+.table,
+.filter-bar {
+  transition-property: background-color, border-color, box-shadow, color;
+  transition-duration: var(--dur-base, 250ms);
+  transition-timing-function: var(--ease-apple);
+}

@@ -1,0 +1,144 @@
+"""Streaming plumbing for per-round completions: delta coalescing, first-token
+timing and the stream-or-complete tiering.
+
+Pure in-memory timing shaping, unaware of the event channel; the caller
+creates a fresh coalescer per round. A stream cancelled mid-flight leaves a
+cancelled-anchor assistant entry in the live history: the user already saw
+the streamed prefix, so the next turn's request must contain it too.
+"""
+
+from __future__ import annotations
+
+import time
+from typing import Any
+
+from platform_contracts import CONTEXT_OVERFLOW_HINT, RuntimeEvent, ServiceError
+
+from agent.llm import LLMClient, LLMReply
+from agent.subagent.modes.base import DeltaCb, EventCb, noop_event
+
+#: Delta coalescing interval (seconds): token-level deltas are batched before
+#: the callback so event frequency stays bounded
+DELTA_FLUSH_INTERVAL = 0.12
+
+#: Suffix written onto a partial answer when the stream is cancelled mid-round;
+#: marks the boundary between what the user actually saw and the missing rest
+CANCEL_ANCHOR = "\n\n…[已中断]"
+
+
+class DeltaFlusher:
+    """Delta coalescer: accumulates token-level deltas and releases a batch
+    only when at least `interval` has passed since the last flush."""
+
+    def __init__(self, interval: float = DELTA_FLUSH_INTERVAL) -> None:
+        self._interval = interval
+        self._buf: list[str] = []
+        self._last = time.monotonic()
+
+    def add(self, text: str) -> str:
+        """Accumulate a chunk; on reaching the interval return the batch to send
+        (possibly empty), otherwise return an empty string."""
+        self._buf.append(text)
+        now = time.monotonic()
+        if now - self._last >= self._interval:
+            self._last = now
+            out = "".join(self._buf)
+            self._buf.clear()
+            return out
+        return ""
+
+    def flush(self) -> str:
+        out = "".join(self._buf)
+        self._buf.clear()
+        return out
+
+
+def delta_timer(
+    consumer: DeltaCb, *, on_event: EventCb = noop_event, round_n: int = 0
+) -> tuple[DeltaCb, list[float]]:
+    """Wrap a delta consumer with first-token timing: returns the wrapped
+    callback plus a one-slot box holding the first-chunk monotonic time
+    (empty when nothing streamed). The first chunk also raises LLMStreaming
+    once per round. Defined outside the round loop so no closure captures a
+    loop variable."""
+    first_at: list[float] = []
+
+    async def on_delta(round_no: int, text: str) -> None:
+        if not first_at:
+            first_at.append(time.perf_counter())
+            await on_event(RuntimeEvent.LLM_STREAMING, round=round_n or round_no)
+        await consumer(round_no, text)
+
+    return on_delta, first_at
+
+
+async def complete_streaming(
+    llm: LLMClient,
+    messages: list[dict[str, Any]],
+    specs: list | None,
+    on_delta: DeltaCb | None,
+    *,
+    round_n: int,
+) -> LLMReply:
+    """One completion round: when on_delta is available and the llm supports
+    streaming, stream and batch-callback deltas; otherwise fall back to a
+    single complete (capability tiering, not a silent downgrade - streaming
+    is an optional extension).
+
+    A ServiceError raised mid-stream (provider refused the call) folds into a
+    degraded final reply - same semantics as the aggregate adapter's complete
+    path - so overflow recovery sees a uniform reply shape.
+
+    Returns the round's final LLMReply, matching complete's return semantics.
+    """
+    if on_delta is None:
+        return await llm.complete(messages, specs)
+    stream_fn = getattr(llm, "complete_stream", None)
+    if not callable(stream_fn):
+        return await llm.complete(messages, specs)
+    flusher = DeltaFlusher()
+    final: LLMReply | None = None
+    emitted: list[str] = []  # batches actually handed to on_delta (what the user saw)
+    try:
+        async for ev in stream_fn(messages, specs):
+            if ev.final is not None:
+                final = ev.final
+            elif ev.text_delta:
+                batch = flusher.add(ev.text_delta)
+                if batch:
+                    emitted.append(batch)
+                    await on_delta(round_n, batch)
+    except ServiceError as exc:
+        tail = flusher.flush()
+        if tail:
+            await on_delta(round_n, tail)
+        return LLMReply(
+            text=f"(LLM call failed: {exc.body.message})",
+            degraded=True,
+            overflow=exc.body.hint == CONTEXT_OVERFLOW_HINT,
+        )
+    except BaseException:
+        # Cancellation/abort mid-stream: anchor the already-shown prefix into
+        # the live history before propagating, so the next turn's request
+        # contains the text the user saw instead of silently dropping it
+        partial = "".join(emitted)
+        if partial:
+            messages.append({"role": "assistant", "content": partial + CANCEL_ANCHOR})
+        raise
+    tail = flusher.flush()
+    if tail:
+        await on_delta(round_n, tail)
+    if final is None:
+        # Out-of-contract case (stream without a final block): end with an empty
+        # reply so the loop never hangs
+        final = LLMReply()
+    return final
+
+
+__all__ = [
+    "CANCEL_ANCHOR",
+    "DELTA_FLUSH_INTERVAL",
+    "DeltaFlusher",
+    "complete_streaming",
+    "delta_timer",
+]

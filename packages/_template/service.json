@@ -1,0 +1,9 @@
+{
+  "name": "template",
+  "version": "0.1.0",
+  "protocol": "0.1.0",
+  "port": 8090,
+  "capabilities": ["echo", "get_info", "submit_job"],
+  "subscribes": [],
+  "publishes": ["task.progress", "task.completed", "task.failed"]
+}

@@ -1,0 +1,15 @@
+{
+  "loading": "加载活动流中…",
+  "filter.aria": "筛选活动类型",
+  "filter.all": "全部",
+  "filter.userMessage": "用户消息",
+  "filter.agentMessage": "Agent 消息",
+  "filter.taskProgress": "任务进度",
+  "filter.noteCreated": "笔记",
+  "filter.sourceAdded": "资源",
+  "filter.settingsChanged": "设置",
+  "error.title": "加载失败",
+  "empty.title": "暂无活动",
+  "empty.description": "(此时间段内无事件)",
+  "probe.summary": "活动 · {{count}} 条"
+}

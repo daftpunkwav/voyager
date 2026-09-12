@@ -1,0 +1,2 @@
+# Enforce LF line endings for Python: prevents Windows editors saving CRLF, which creates whole-file diff noise (and destroys git blame)
+*.py text eol=lf

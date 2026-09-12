@@ -1,0 +1,130 @@
+/*
+ * @file glass-select
+ * @description GlassSelect shared component styles: trigger button and the
+ * portal-mounted dropdown menu visuals.
+ */
+
+/* GlassSelect: shared component; portal menus mount on document.body */
+
+.glass-select {
+  position: relative;
+  width: 100%;
+}
+.glass-select.is-open {
+  z-index: var(--z-dropdown);
+}
+.glass-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius-field);
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  color: var(--text-800);
+  font: 14px/1.2 var(--font-sans);
+  cursor: pointer;
+  transition:
+    border-color 0.18s var(--ease),
+    box-shadow 0.18s var(--ease);
+}
+.glass-select-trigger:hover {
+  border-color: rgba(0, 122, 255, 0.35);
+}
+.glass-select-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.glass-select.is-open .glass-select-trigger {
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.12);
+}
+.glass-select-value {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glass-select-chev {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-400);
+}
+.glass-select-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: var(--z-dropdown);
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+}
+/* Mounted on body: fixed positioning; above modals, otherwise dropdowns inside overlays get covered */
+.glass-select-menu--portal {
+  position: fixed;
+  top: auto;
+  right: auto;
+  z-index: calc(var(--z-modal) + 40);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+.glass-select-item {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-800);
+  font: 500 13px/1.35 var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s var(--ease);
+}
+.glass-select-item:hover {
+  background: rgba(0, 122, 255, 0.1);
+}
+.glass-select-item.is-selected {
+  background: rgba(0, 122, 255, 0.16);
+  color: var(--brand-700);
+}
+.glass-select--sm .glass-select-trigger {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.glass-select--sm .glass-select-item {
+  font-size: 12px;
+  padding: 7px 10px;
+}
+[data-theme='dark'] .glass-select-trigger {
+  background: rgba(44, 44, 46, 0.85);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+[data-theme='dark'] .glass-select-menu {
+  background: rgba(28, 28, 30, 0.98);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+}
+[data-theme='dark'] .glass-select-item:hover {
+  background: rgba(0, 122, 255, 0.18);
+}
+[data-theme='dark'] .glass-select-item.is-selected {
+  background: rgba(0, 122, 255, 0.24);
+  color: var(--brand-300);
+}

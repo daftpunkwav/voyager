@@ -1,0 +1,5 @@
+{
+  "on": "note.created",
+  "description": "After a note is created: add the todo tag if the title contains TODO (example, disabled by default)",
+  "enabled": false
+}

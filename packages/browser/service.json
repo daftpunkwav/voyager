@@ -1,0 +1,23 @@
+{
+  "name": "browser",
+  "version": "0.1.0",
+  "protocol": "0.1.0",
+  "port": 8060,
+  "capabilities": [
+    "navigate",
+    "click",
+    "type",
+    "read",
+    "screenshot"
+  ],
+  "subscribes": [],
+  "publishes": [],
+  "status": "implemented",
+  "enabled_by_default": false,
+  "needs": [
+    "workspace",
+    "bus",
+    "settings_store"
+  ],
+  "depends_on": []
+}

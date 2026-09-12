@@ -1,0 +1,363 @@
+"""REACT: the reasoning-acting loop and the only agent-loop implementation.
+
+When tool_calls come back, keep calling complete itself until the model
+produces a Final Answer. Plain text with no Action yet this turn is not
+treated as an ending (small talk excepted) - this is the loop's exit
+condition, not a scan for polite acknowledgments. specs are re-fetched
+before each complete (domain activation). Context management is LLM-driven:
+each round the governor checks usage against the auto-compact threshold and,
+past it, the editor restructures the transcript; without a governor a purely
+mechanical truncation of old tool text runs instead. Assistant(tool_calls)/
+tool pairs are never split on any path. Tool calls pass loop detection: the
+same signature repeating to a threshold within the sliding window trips an
+early circuit break instead of burning the budget to max_rounds.
+
+Lifecycle events (RuntimeEvent) are raised through on_event around every
+completion and tool call; the step trail (on_step) stays the UI contract.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import re
+import time
+from typing import Any
+
+from platform_contracts import RuntimeEvent
+
+from agent.context.compressor import COMPRESS_BUDGET, compress
+from agent.context.governor import ContextGovernor
+from agent.contracts import ToolRunner
+from agent.llm import LLMClient, ToolCall
+from agent.runtime.deadline import Deadline
+from agent.runtime.loop_advisory import LoopAdvisory
+from agent.runtime.loop_detection import LoopDetector
+from agent.runtime.trace import start_span
+from agent.subagent.modes.base import (
+    DeltaCb,
+    EventCb,
+    Mode,
+    ModeLimits,
+    StepCb,
+    noop_event,
+    tool_detail,
+)
+from agent.subagent.modes.registry import register_mode
+from agent.subagent.modes.streaming import complete_streaming, delta_timer
+
+# ReAct continuation: text with zero tool_calls is not a valid ending
+# (small talk excepted). This does not scan for polite acknowledgments -
+# those are model endings, not loop conditions.
+CONTINUE_MARK = "[react]"
+_CONTINUE_TEXT = (
+    f"{CONTINUE_MARK} Observation: 本回合尚未产生 tool call。"
+    "继续 Action:调用工具;若不需要工具,用一句话说明原因。"
+)
+CHITCHAT_RE = re.compile(
+    r"^(你好|嗨|哈喽|在吗|早上好|晚上好|谢谢|感谢|嗯+|ok|okay|好)$",
+    re.IGNORECASE,
+)
+
+
+def _emergency_truncate(messages: list[dict[str, Any]], budget: int) -> None:
+    """Overflow-recovery last resort: cap every non-system message's content so
+    even a single huge entry (a giant pasted input, an unspillable tool row)
+    cannot keep the transcript over budget. In-place; truncation is marked so
+    the model knows text is missing."""
+    cap = max(200, budget // 4)
+    for i, m in enumerate(messages):
+        if i == 0 and m.get("role") == "system":
+            continue
+        content = str(m.get("content") or "")
+        if len(content) > cap:
+            messages[i] = {
+                **m,
+                "content": content[:cap] + " …[上下文溢出截断]",
+            }
+
+
+def _last_user_text(messages: list[dict[str, Any]]) -> str:
+    for m in reversed(messages):
+        if m.get("role") != "user":
+            continue
+        content = str(m.get("content") or "")
+        if CONTINUE_MARK in content:
+            continue
+        return content.strip()
+    return ""
+
+
+def _should_continue_react(messages: list[dict[str, Any]], tool_calls_used: int) -> bool:
+    """Plain-text ending with no Action yet this turn -> continue the same
+    ReAct loop.
+
+    Does not read assistant wording (no polite-phrase matching). Small talk is
+    allowed to end with zero tools; once one continuation already happened, a
+    second plain text is respected (the model explicitly said no tools are
+    needed).
+    """
+    if tool_calls_used > 0:
+        return False
+    if any(CONTINUE_MARK in str(m.get("content") or "") for m in messages):
+        return False
+    user = _last_user_text(messages)
+    return not (not user or CHITCHAT_RE.match(user))
+
+
+def _tool_event(outcome: Any) -> str:
+    return RuntimeEvent.TOOL_COMPLETED if outcome.ok else RuntimeEvent.TOOL_FAILED
+
+
+async def _run_tool(
+    toolbelt: ToolRunner, call: ToolCall, on_event: EventCb, deadline: Deadline | None = None
+) -> tuple[Any, float]:
+    """One tool call bracketed by ToolStarted / ToolCompleted|ToolFailed; a
+    harness deadline backstops calls that declare no per-tool timeout."""
+    await on_event(RuntimeEvent.TOOL_STARTED, tool=call.name, tool_call_id=call.id)
+    start = time.perf_counter()
+    if deadline is not None:
+        outcome = await deadline.run_tool(lambda: toolbelt.call_detailed(call), tool=call.name)
+    else:
+        outcome = await toolbelt.call_detailed(call)
+    ms = round((time.perf_counter() - start) * 1000, 1)
+    await on_event(_tool_event(outcome), tool=call.name, tool_call_id=call.id, ms=ms)
+    return outcome, ms
+
+
+async def run_react(
+    llm: LLMClient,
+    toolbelt: ToolRunner | None,
+    messages: list[dict[str, Any]],
+    limits: ModeLimits,
+    on_step: StepCb,
+    *,
+    on_delta: DeltaCb | None = None,
+    on_event: EventCb = noop_event,
+    continue_if_idle: bool = False,
+    compress_budget: int = COMPRESS_BUDGET,
+    governor: ContextGovernor | None = None,
+    deadline: Deadline | None = None,
+) -> str:
+    tool_calls_used = 0
+    tokens_used = 0
+    loops = LoopDetector()
+    advisory = LoopAdvisory()  # one reminder round per invocation, then abort
+    # Answer produced before the idle-continue nudge: the nudge round is loop
+    # plumbing, and the "no tool needed" justification the model writes under it
+    # must never replace the real answer the user already saw streaming
+    pending_answer: str | None = None
+    # Context-overflow recovery: one aggressive compact + retry; a second
+    # overflow means even the compressed transcript cannot fit and the turn
+    # ends with an actionable message instead of a raw provider error
+    overflow_retried = False
+    for round_n in range(1, limits.max_rounds + 1):
+        specs = toolbelt.specs() if toolbelt is not None else None
+        if governor is not None:
+            await governor.enforce(messages)
+        else:
+            messages[:] = compress(messages, budget=compress_budget, prune=False)
+        # Round timing: wall latency always; TTFT only when the caller
+        # consumes deltas (streaming active) - otherwise there is no first
+        # token to time. The wrapper preserves the tiering: on_delta=None
+        # still means a plain complete() call.
+        round_start = time.perf_counter()
+        round_delta = None
+        first_delta_at: list[float] = []
+        if on_delta is not None:
+            round_delta, first_delta_at = delta_timer(on_delta, on_event=on_event, round_n=round_n)
+        await on_event(RuntimeEvent.LLM_STARTED, round=round_n, streaming=on_delta is not None)
+        with start_span(f"llm:round-{round_n}"):
+            if deadline is not None:
+                # default-arg binding: the loop variables must be frozen now,
+                # not whenever wait_for first calls the factory
+                reply = await deadline.run_round(
+                    lambda s=specs, r=round_delta, n=round_n: complete_streaming(
+                        llm, messages, s, r, round_n=n
+                    )
+                )
+            else:
+                reply = await complete_streaming(llm, messages, specs, round_delta, round_n=round_n)
+        round_ms = (time.perf_counter() - round_start) * 1000
+        tokens_used += reply.usage.input_tokens + reply.usage.output_tokens
+        if limits.max_tokens > 0 and tokens_used >= limits.max_tokens:
+            partial = f"部分结果:{reply.text}" if reply.text else "尚无最终文本产出"
+            return (
+                f"[预算] 已达 token 上限({limits.max_tokens}),本回合收尾。{partial};"
+                "可在设置提高 agent.rounds.max_tokens 后继续。"
+            )
+        await on_event(
+            RuntimeEvent.LLM_COMPLETED,
+            round=round_n,
+            ms=round(round_ms, 1),
+            input_tokens=reply.usage.input_tokens,
+            output_tokens=reply.usage.output_tokens,
+            degraded=bool(reply.degraded),
+            overflow=bool(reply.overflow),
+        )
+        if reply.overflow:
+            if overflow_retried:
+                return (
+                    "[中断] 上下文压缩后仍超出模型窗口;"
+                    "请缩短输入、清理会话或在设置提高 agent.context.compress_budget。"
+                )
+            overflow_retried = True
+            if governor is not None:
+                # Aggressive recovery: aim at the mechanical fallback budget,
+                # the smallest sane target, before the per-message truncate
+                await governor.compact(
+                    messages, target=min(governor.target_tokens(), compress_budget)
+                )
+            else:
+                messages[:] = compress(messages, budget=compress_budget, prune=False)
+            _emergency_truncate(messages, compress_budget)
+            continue
+        await on_step(
+            "llm",
+            f"round-{round_n}",
+            (reply.text or f"{len(reply.tool_calls)} 个工具调用")[:120],
+            {
+                "round": round_n,
+                "tool_calls": [c.name for c in reply.tool_calls],
+                "ms": round(round_ms, 1),
+                **(
+                    {"ttft_ms": round((first_delta_at[0] - round_start) * 1000, 1)}
+                    if first_delta_at
+                    else {}
+                ),
+                "input_tokens": reply.usage.input_tokens,
+                "output_tokens": reply.usage.output_tokens,
+            },
+        )
+        if reply.final:
+            text = reply.text or ""
+            # With tool_calls this branch is unreachable - the loop is still
+            # calling the API itself. Plain text = the model declared Final
+            # Answer. A non-chitchat round with no Action yet does not count as
+            # an ending: write the text back as a Thought and complete again.
+            if (
+                continue_if_idle
+                and round_n < limits.max_rounds
+                and _should_continue_react(messages, tool_calls_used)
+            ):
+                if text:
+                    pending_answer = text
+                messages.append({"role": "assistant", "content": text})
+                messages.append({"role": "user", "content": _CONTINUE_TEXT})
+                continue
+            if pending_answer is not None and tool_calls_used == 0:
+                # The continuation only confirmed "no tools needed": deliver the
+                # pre-nudge answer, not the forced justification
+                return pending_answer
+            return text
+        if toolbelt is None:
+            return reply.text or "[无工具可用] LLM 请求了工具但未授予"
+        # Tool-cap truncation: unexecuted calls stay out of assistant.tool_calls
+        # so "call without result" never triggers an endpoint 400
+        truncated = False
+        pending = list(reply.tool_calls)
+        if tool_calls_used + len(pending) > limits.max_tool_calls:
+            pending = pending[: limits.max_tool_calls - tool_calls_used]
+            truncated = True
+        if not pending:
+            return (
+                f"[中断] 已达工具调用上限({limits.max_tool_calls});"
+                "可在设置提高 agent.rounds.tool_max"
+            )
+        # Loop detection runs over the batch before anything executes: the
+        # calls up to (not including) the tripping one are the executable
+        # prefix; the assistant entry below carries only those, so the
+        # "every call has a result" pairing holds even on a mid-batch trip.
+        executable: list[ToolCall] = []
+        tripped: ToolCall | None = None
+        for call in pending:
+            if loops.record(call.name, call.arguments):
+                tripped = call
+                break
+            executable.append(call)
+        if tripped is not None and not executable:
+            return (
+                f"[中断] 疑似死循环:{tripped.name} 以相同参数在最近 "
+                f"{loops.window} 次调用中重复达 {loops.threshold} 次;"
+                "已停止执行。请换参数、换工具或先向用户说明。"
+            )
+        # Neutral back-fill: one assistant entry carrying this round's tool_calls
+        # (with ids), then one result entry per call carrying the same
+        # tool_call_id; wire formats per provider (OpenAI tool_call_id /
+        # Anthropic tool_use_id) are translated by the packages/llm client
+        messages.append(
+            {
+                "role": "assistant",
+                "content": reply.text or "",
+                "tool_calls": [
+                    {"id": call.id, "name": call.name, "arguments": call.arguments}
+                    for call in executable
+                ],
+            }
+        )
+        tool_calls_used += len(executable)
+        if len(executable) > 1 and all(toolbelt.concurrent_safe(c.name) for c in executable):
+            # Read-only batch: run in parallel, back-fill in call order so the
+            # transcript stays deterministic
+            batch_start = time.perf_counter()
+            results = await asyncio.gather(
+                *(_run_tool(toolbelt, c, on_event, deadline) for c in executable)
+            )
+            batch_ms = round((time.perf_counter() - batch_start) * 1000, 1)
+            for call, (outcome, _ms) in zip(executable, results):
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "name": call.name,
+                        "content": outcome.text,
+                    }
+                )
+                await on_step(
+                    "tool", call.name, outcome.text[:120], tool_detail(call, outcome, batch_ms)
+                )
+        else:
+            for call in executable:
+                outcome, call_ms = await _run_tool(toolbelt, call, on_event, deadline)
+                # The tool entry is appended before reporting: the mid-turn snapshot
+                # is captured inside on_step from messages and must see the just
+                # landed result; in multi-call rounds the tail at on_step time may
+                # still be a partial group - the snapshot side's _paired_messages
+                # rolls back to a paired boundary as a backstop.
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "name": call.name,
+                        "content": outcome.text,
+                    }
+                )
+                await on_step(
+                    "tool", call.name, outcome.text[:120], tool_detail(call, outcome, call_ms)
+                )
+        if tripped is not None or truncated:
+            if tripped is not None:
+                reminder = advisory.on_trip(
+                    tool=tripped.name, threshold=loops.threshold, window=loops.window
+                )
+                if reminder is not None:
+                    # Two-level guard: the first trip is a nudge, not an abort;
+                    # the next identical trip ends the turn in this same branch
+                    messages.append({"role": "user", "content": reminder})
+                    await on_step("llm", "loop-advisory", reminder[:120], {"advisory": True})
+                    continue
+                return (
+                    f"[中断] 疑似死循环:{tripped.name} 以相同参数在最近 "
+                    f"{loops.window} 次调用中重复达 {loops.threshold} 次;"
+                    "已停止执行。请换参数、换工具或先向用户说明。"
+                )
+            return (
+                f"[中断] 已达工具调用上限({limits.max_tool_calls});"
+                "可在设置提高 agent.rounds.tool_max"
+            )
+    return f"[中断] 已达 ReAct 轮数上限({limits.max_rounds});可在设置提高 agent.rounds.max"
+
+
+__all__ = ["CHITCHAT_RE", "CONTINUE_MARK", "run_react"]
+
+
+register_mode(Mode.REACT, run_react)

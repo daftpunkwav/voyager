@@ -1,0 +1,20 @@
+{
+  "productName": "Voyager",
+  "productTagline": "Agent 协作的本地工作台",
+  "storage": {
+    "uiStore": "ui-store",
+    "sessionDrawer": "agent-session-drawer",
+    "contextDrawer": "agent-context-drawer",
+    "pdfScale": "reader-pdf-scale",
+    "githubUsername": "github-username",
+    "l1Display": "l1-display-v4",
+    "legacy": {
+      "uiStore": "voyager-ui-store",
+      "sessionDrawer": "voyager_agent_session_drawer",
+      "contextDrawer": "voyager_agent_context_drawer",
+      "pdfScale": "voyager-pdf-scale",
+      "githubUsername": "voyager-github-username",
+      "l1Display": "rp-l1-display-v4"
+    }
+  }
+}

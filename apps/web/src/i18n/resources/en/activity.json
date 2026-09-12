@@ -1,0 +1,15 @@
+{
+  "loading": "Loading activity feed…",
+  "filter.aria": "Filter activity type",
+  "filter.all": "All",
+  "filter.userMessage": "User messages",
+  "filter.agentMessage": "Agent messages",
+  "filter.taskProgress": "Task progress",
+  "filter.noteCreated": "Notes",
+  "filter.sourceAdded": "Sources",
+  "filter.settingsChanged": "Settings",
+  "error.title": "Failed to load",
+  "empty.title": "No activity yet",
+  "empty.description": "(No events in this period)",
+  "probe.summary": "Activity · {{count}} entries"
+}

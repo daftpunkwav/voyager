@@ -1,0 +1,8 @@
+dist/
+node_modules/
+test-results/
+playwright-report/
+coverage/
+screenshots/
+preview.log
+tsconfig.tsbuildinfo

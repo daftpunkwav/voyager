@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <!--
+      Theme first-paint sync (§10.11):
+      before React hydrates, set data-theme from the localStorage-persisted theme or the system preference,
+      avoiding a first-paint flash in system mode.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored =
+            localStorage.getItem('%UI_STORE_KEY%') || localStorage.getItem('%UI_STORE_LEGACY_KEY%');
+          var theme = stored ? JSON.parse(stored).state?.theme : null;
+          if (theme === 'system' || !theme) {
+            theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+
+          // UI language first-paint sync: read the locale choice persisted by uiStore and set html[lang]
+          // (screen readers depend on it; for 'system'/missing, match via navigator with a zh-CN fallback, matching the backend SSOT default)
+          var state = stored ? JSON.parse(stored).state : null;
+          var locale = state ? state.locale : null;
+          if (locale !== 'zh-CN' && locale !== 'en' && locale !== 'system') {
+            locale = 'zh-CN';
+          }
+          if (locale === 'system') {
+            var langs =
+              navigator.languages && navigator.languages.length
+                ? navigator.languages
+                : [navigator.language];
+            locale = 'zh-CN';
+            for (var i = 0; i < langs.length; i++) {
+              var tag = (langs[i] || '').toLowerCase();
+              if (tag.indexOf('en') === 0) {
+                locale = 'en';
+                break;
+              }
+              if (tag.indexOf('zh') === 0) {
+                locale = 'zh-CN';
+                break;
+              }
+            }
+          }
+          document.documentElement.setAttribute('lang', locale);
+        } catch (e) {
+          // keep the default light + zh-CN in private mode / when localStorage is unavailable
+        }
+      })();
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="%PRODUCT_NAME% — %PRODUCT_TAGLINE%" />
+    <meta name="theme-color" content="#007aff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a2540" media="(prefers-color-scheme: dark)" />
+    <!--
+      Content Security Policy (§4.2 security):
+      - default-src 'self'   resources are same-origin by default
+      - script-src 'self' 'unsafe-inline'   Vite dev needs unsafe-inline (HMR); the production build has no inline scripts
+      - style-src 'self' 'unsafe-inline' fonts.googleapis.com   CSS allows inline (liquid-glass dynamic tokens) + Google Fonts
+      - font-src 'self' fonts.gstatic.com data:   woff2 + embedded fonts
+      - img-src 'self' data: https:   avatars/icons/external images
+      - connect-src 'self' ws: wss: http://127.0.0.1:8000   same-origin + WebSocket (SSE) + dev backend
+      - base-uri 'self'   prevents base href hijacking
+      - form-action 'self'   prevents cross-origin form submission
+      - frame-ancestors must be set via an HTTP header (browsers ignore the meta tag, per the W3C spec);
+        dev injects it via server.headers in vite.config.ts; prod adds it via the gateway response header
+        'Content-Security-Policy: ...; frame-ancestors \"none\"'.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        script-src 'self' 'unsafe-inline';
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+        font-src 'self' https://fonts.gstatic.com data:;
+        img-src 'self' data: https:;
+        connect-src 'self' ws: wss: http://127.0.0.1:8000;
+        base-uri 'self';
+        form-action 'self';
+      "
+    />
+    <title>%PRODUCT_NAME%</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

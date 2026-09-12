@@ -1,0 +1,102 @@
+# ===================== Languages & Build Artifacts =====================
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Node / Frontend (build/ is a global pattern matching any depth; already covers build artifacts of the C engine core/layout)
+node_modules/
+dist/
+build/
+.vite/
+*.tsbuildinfo
+.eslintcache
+# Test runner outputs (Playwright default results dir; vitest/istanbul coverage)
+test-results/
+coverage/
+
+# ===================== Data & Runtime =====================
+# data/: DB files + WAL/SHM, cache dirs, backups - none of them committed
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.json
+data/*.bak*
+data/repo-cache/
+data/graph-db/
+data/graph-engine-cache/
+# Directory anchor; .gitkeep stays committed (keep this line if later relaxed to data/*)
+!data/.gitkeep
+
+# Runtime data ("its brain", data/runtime/) and agent workspace ("its home", data/workspace/):
+# contents are user data, not committed; directory structure kept via git add -f so README survives
+data/runtime/
+data/workspace/
+
+# Default data dirs for per-domain standalone runtimes (SQLite / secrets / engine artifacts)
+packages/*/data/
+
+# ===================== Secrets & Temp Artifacts =====================
+.env
+.env.local
+.env.*.local
+
+# Local temp scripts / smoke-test artifacts (may contain secrets and screenshots; never commit)
+tmp/
+.zcode/
+
+# ===================== Logs =====================
+*.log
+npm-debug.log*
+
+# ===================== OS / IDE =====================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.obsidian/
+*.swp
+*.swoop
+
+# ===================== Local AI / Agent Tool State =====================
+.reasonix/
+.claude/
+# CodeGraph local index (generated artifact; rebuild anytime with codegraph init)
+.codegraph/
+# Mimosa security-scan artifacts (local finding ledger / hook state, incl. session-scoped cache)
+.mimosa/
+# Mimo tool session state (incl. cron-lock and plans; session-scoped, never commit)
+.mimocode/
+# Temporary reference repos (for graph dev; delete after review)
+vendor/
+
+# ===================== Screenshots & Browser Automation Artifacts =====================
+# Note: do NOT use a global *.png/*.jpg - it would also hit docs/ architecture diagrams and apps/web/public/ static assets,
+# only ignore the explicit artifact dirs:
+.playwright-cli/
+.playwright-mcp/
+screenshots/
+gui-test-screenshots/
+
+# ===================== Local Docs (not committed) =====================
+# Original docs fully localized: audit / collab / design / modules / phases are all not committed,
+# the new docs/ is the committed docs area; no ignore rules placed on it
+docs-local/
+# Local explainer/learning site and its generator scripts
+docs-site/
+
+# ===================== Migration-Period Backups =====================
+# Legacy page / widget / shell from the exploration phase, kept around but not committed (** matches zero or more directory levels)
+apps/web/src/**/_archived_*
+apps/web/src/_legacy_*
+
+# ===================== Misc =====================
+# Leftover from the initial commit (the §4.1.5 referenced by the original comment no longer exists in any doc; purpose unverified, kept for now)
+*.pkg

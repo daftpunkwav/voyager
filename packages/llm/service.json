@@ -1,0 +1,30 @@
+{
+  "name": "llm",
+  "version": "0.1.0",
+  "protocol": "0.1.0",
+  "port": 8070,
+  "capabilities": [
+    "list_builtin_providers",
+    "list_providers",
+    "get_provider_defaults",
+    "add_provider",
+    "update_provider",
+    "remove_provider",
+    "set_api_key",
+    "list_models",
+    "test_connection",
+    "complete",
+    "complete_stream",
+    "get_usage_stats",
+    "embed"
+  ],
+  "subscribes": [],
+  "publishes": [],
+  "status": "implemented",
+  "enabled_by_default": true,
+  "needs": [
+    "secrets",
+    "settings_store"
+  ],
+  "depends_on": []
+}

@@ -1,0 +1,25 @@
+{
+  "name": "code-exec",
+  "version": "0.1.0",
+  "protocol": "0.1.0",
+  "port": 8050,
+  "capabilities": [
+    "list_runtimes",
+    "run_snippet",
+    "run_file"
+  ],
+  "subscribes": [],
+  "publishes": [
+    "task.progress",
+    "task.completed",
+    "task.failed"
+  ],
+  "status": "implemented",
+  "enabled_by_default": false,
+  "needs": [
+    "workspace",
+    "bus",
+    "settings_store"
+  ],
+  "depends_on": []
+}

@@ -1,0 +1,23 @@
+[project]
+name = "host"
+version = "2.0.0"
+description = "Composition root: scans domain cards, wires shared facilities, mounts the gateway and the agent"
+requires-python = ">=3.11"
+dependencies = [
+    "agent",
+    "gateway",
+    "platform-actor",
+    "platform-capability",
+    "platform-contracts",
+    "platform-eventbus",
+    "platform-secrets",
+    "platform-webguard",
+    "platform-settings",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/host"]
