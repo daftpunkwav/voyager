@@ -285,6 +285,20 @@ class TestTransientRetry:
         assert reply.degraded and "timed out" in (reply.text or "")
         assert sleeps == []  # no retry once the connection was established
 
+    async def test_nontransport_http_error_folds_immediately(self, monkeypatch) -> None:
+        """HTTP-level but non-transient failures (e.g. redirect loops) must not
+        burn the retry budget."""
+        sleeps = self._zero_backoff(monkeypatch)
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            raise httpx.TooManyRedirects("loop", request=request)
+
+        reply = await _client(handler).complete(MSGS)
+        assert reply.degraded and "connection failed: TooManyRedirects" in (reply.text or "")
+        assert calls["n"] == 1 and sleeps == []
+
     async def test_stream_500_before_first_delta_retried(self, monkeypatch) -> None:
         self._zero_backoff(monkeypatch)
         calls = {"n": 0}

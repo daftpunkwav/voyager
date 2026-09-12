@@ -269,10 +269,16 @@ class HttpLLM:
                 # Connection was established: the request may already have
                 # been accepted, so it is never retried.
                 return LLMReply(text=f"{_DEGRADED_PREFIX} request timed out", degraded=True)
-            except httpx.TimeoutException as exc:
-                net_error = exc  # connect-phase timeout: transient
+            except httpx.TransportError as exc:
+                # Connect/DNS/timeout transport failures: transient.
+                net_error = exc
             except httpx.HTTPError as exc:
-                net_error = exc  # connect / DNS failure: transient
+                # Other HTTP-level request problems are not transient: fold
+                # immediately instead of burning the retry budget.
+                return LLMReply(
+                    text=f"{_DEGRADED_PREFIX} connection failed: {type(exc).__name__}",
+                    degraded=True,
+                )
             if attempt < _RETRY_ATTEMPTS:
                 await asyncio.sleep(_backoff_delay(attempt, resp))
         if net_error is not None:
@@ -309,11 +315,11 @@ class HttpLLM:
         emit deltas and a single final block.
 
         The request-initiation phase retries bounded transient failures
-        (429 / 5xx / connect-phase errors) - safe because nothing has been
-        yielded yet; once deltas start flowing a dropped stream is terminal
-        (a retry would duplicate text). A 400 caused by stream_options (some
-        compatible servers reject unknown options) is retried once without
-        the option.
+        (429 / 5xx statuses, transport errors) - safe because nothing has
+        been yielded yet; once deltas start flowing a dropped stream is
+        terminal (a retry would duplicate text). A 400 caused by
+        stream_options (some compatible servers reject unknown options) is
+        retried once without the option.
         """
         text_parts: list[str] = []
         calls_by_index: dict[int, dict[str, Any]] = {}
@@ -389,7 +395,9 @@ class HttpLLM:
                     return
                 retry_delay = _backoff_delay(attempt, None)
                 attempt += 1
-            except httpx.HTTPError as exc:
+            except httpx.TransportError as exc:
+                # Connect/DNS/network transport failure: same transient
+                # treatment while nothing has been emitted yet.
                 if emitted or attempt >= _RETRY_ATTEMPTS:
                     yield StreamReply(
                         final=LLMReply(
@@ -400,6 +408,16 @@ class HttpLLM:
                     return
                 retry_delay = _backoff_delay(attempt, None)
                 attempt += 1
+            except httpx.HTTPError as exc:
+                # Other HTTP-level request problems are not transient: fold
+                # immediately instead of burning the retry budget.
+                yield StreamReply(
+                    final=LLMReply(
+                        text=f"{_DEGRADED_PREFIX} connection failed: {type(exc).__name__}",
+                        degraded=True,
+                    )
+                )
+                return
             assert retry_delay is not None  # a retry branch always sets the delay
             await asyncio.sleep(retry_delay)
         calls = tuple(

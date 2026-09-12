@@ -15,6 +15,7 @@ tool is genuinely absent from the tool table.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 
 from platform_contracts import ErrorSuffix, RuntimeEvent, ServiceError
@@ -26,6 +27,8 @@ from agent.runtime.scheduler import Scheduler
 from agent.runtime.state import CheckpointStore, ResumeSnapshot, RunState, RunStatus
 from agent.subagent.instance import Mode, ModeLimits, SubagentInstance, TaskBook
 from agent.tools.core.base import Toolbelt
+
+log = logging.getLogger("agent.subagent.spawn")
 
 BuildSystemFn = Callable[[TaskBook, str], str]  # (task book, persona key) -> system prompt
 
@@ -272,8 +275,17 @@ class Spawner:
         evicted = terminal_ids[:overflow] if overflow > 0 else []
         for iid in evicted:
             inst = self.instances.pop(iid, None)
-            if inst is not None and self._checkpoints is not None:
+            if inst is None or self._checkpoints is None:
+                continue
+            try:
                 self._checkpoints.delete(inst.state.run_id)
+            except OSError as exc:
+                # Best effort (e.g. a file-locked JSON on Windows): registry
+                # eviction still stands; the orphan file is inert (never
+                # listed as resumable, never reloaded into the registry).
+                log.warning(
+                    "checkpoint delete failed for evicted run %s: %s", inst.state.run_id, exc
+                )
         return evicted
 
     async def cancel(self, id_or_name: str) -> list[str]:

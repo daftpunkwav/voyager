@@ -149,7 +149,7 @@ class EventLog:
                 (*type_list, before_ts),
             )
             self._conn.commit()
-        return int(cur.rowcount or 0)
+        return max(int(cur.rowcount or 0), 0)  # drivers may report -1 for unknown
 
     def _sweep(self) -> None:
         """Apply the retention policy once (no-op without one)."""
@@ -181,17 +181,18 @@ class EventLog:
                 ),
             )
             self._conn.commit()
+            self._appends += 1  # under the lock: publish fans appends out to threads
+            sweep_due = (
+                self._retention is not None
+                and self._retention.sweep_every > 0
+                and self._appends % self._retention.sweep_every == 0
+            )
         if cur.lastrowid is None:  # unreachable: an INSERT always yields a rowid
             raise RuntimeError("event append produced no rowid")
-        seq = int(cur.lastrowid)
-        self._appends += 1
-        if (
-            self._retention is not None
-            and self._retention.sweep_every > 0
-            and self._appends % self._retention.sweep_every == 0
-        ):
+        if sweep_due:
+            # Outside the append lock: purge re-acquires it (not reentrant).
             self._sweep()
-        return seq
+        return int(cur.lastrowid)
 
     def read_after(
         self,
