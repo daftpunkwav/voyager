@@ -198,6 +198,7 @@ def test_overflow_heuristic() -> None:
     assert _is_context_overflow(400, "maximum context length exceeded")
     assert _is_context_overflow(400, "context_length_exceeded")
     assert not _is_context_overflow(400, "invalid model parameter")
+    assert not _is_context_overflow(500, "context length exceeded")
 
 
 class TestTransientRetry:
@@ -322,4 +323,3 @@ class TestTransientRetry:
                 final = ev.final
         assert final is not None and final.degraded and "authentication" in (final.text or "")
         assert calls["n"] == 1 and sleeps == []
-    assert not _is_context_overflow(500, "context length exceeded")
