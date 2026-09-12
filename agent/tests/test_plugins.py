@@ -1619,7 +1619,7 @@ class TestInstallSemantics:
 
     async def test_copy_failure_leaves_no_half_install(self, app, tmp_path, monkeypatch) -> None:
         """A failure mid-write -> the destination directory is rolled back and emptied."""
-        import agent.plugins.manager as manager_mod
+        import agent.plugins.installer as installer_mod
 
         src = build_plugin_src(tmp_path)
         dest = tmp_path / "plugins" / "example"
@@ -1629,7 +1629,7 @@ class TestInstallSemantics:
             (target / "half.txt").write_text("half", encoding="utf-8")
             raise RuntimeError("disk exploded")
 
-        monkeypatch.setattr(manager_mod, "place_plugin", boom)
+        monkeypatch.setattr(installer_mod, "place_plugin", boom)
         with pytest.raises(RuntimeError):
             await _install(app, source_dir=str(src))
         assert not dest.exists()
