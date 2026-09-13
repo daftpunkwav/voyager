@@ -75,6 +75,7 @@ class TestRegistrySurface:
             "set_setting",
             "todo_read",
             "uninstall_plugin",
+            "wait_subagent",
         ]
 
 

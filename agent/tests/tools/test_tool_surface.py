@@ -166,13 +166,15 @@ class TestLucienDomainActivation:
         assert "notes__mark_note_span" in first
         app.memory.close()
 
-    async def test_dispatched_task_instance_not_graded(self, tmp_path) -> None:
+    async def test_dispatched_task_instance_not_graded(self, tmp_path, wait_until) -> None:
         """A dispatched task subagent (trimmed) hands the full specs to the model, no activation involved."""
         llm = FakeLLM(default="Done.")
         app = _app(tmp_path, llm, _fake_notes_tools())
         inst = await app.master.dispatch_task("organize", persona="organizer")
         assert inst.active is None  # tiering applies only to the chat instance
-        await asyncio.sleep(0.05)
+        # the dispatch runs in a background task: poll for its first completion
+        # instead of a fixed sleep (load-dependent scheduling)
+        await wait_until(lambda: bool(llm.calls))
         specs = llm.calls[0]["tools"]
         assert specs is not None and "notes__create_note" in [s.name for s in specs]
         app.memory.close()

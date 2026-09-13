@@ -18,6 +18,7 @@ from agent.capabilities.team.list_subagents import register as _list_subagents
 from agent.capabilities.team.pause_run import register as _pause_run
 from agent.capabilities.team.register_subagent import register as _register_subagent
 from agent.capabilities.team.resume_run import register as _resume_run
+from agent.capabilities.team.wait_subagent import register as _wait_subagent
 
 
 def register(reg: Registry, deps: CapabilityDeps) -> None:
@@ -28,3 +29,4 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
     _list_resumable_checkpoints(reg, deps)
     _abandon_resumable_checkpoint(reg, deps)
     _resume_run(reg, deps)
+    _wait_subagent(reg, deps)

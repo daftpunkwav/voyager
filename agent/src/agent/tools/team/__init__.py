@@ -21,6 +21,7 @@ from agent.tools.team.read_board import read_board_tool
 from agent.tools.team.register_subagent import register_subagent_tool
 from agent.tools.team.resume_run import resume_run_tool
 from agent.tools.team.spawn_subagent import DispatchFn, spawn_subagent_tool
+from agent.tools.team.wait_subagent import wait_subagent_tool
 from agent.tools.team.write_board import write_board_tool
 
 
@@ -43,6 +44,7 @@ def team_tools(
         register_subagent_tool(registry, audit),
         list_resumable_checkpoints_tool(registry, audit),
         abandon_resumable_checkpoint_tool(registry, audit),
+        wait_subagent_tool(registry, audit),
         *(
             (read_board_tool(blackboard), write_board_tool(blackboard))
             if blackboard is not None
