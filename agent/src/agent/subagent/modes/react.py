@@ -226,6 +226,7 @@ async def run_react(
                 ),
                 "input_tokens": reply.usage.input_tokens,
                 "output_tokens": reply.usage.output_tokens,
+                "cached_tokens": reply.usage.cached_tokens,
             },
         )
         if reply.final:

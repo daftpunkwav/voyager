@@ -52,6 +52,42 @@ class TestComplete:
         reply = await _client(handler).complete(MSGS)
         assert reply.text == "ok" and reply.final
         assert (reply.usage.input_tokens, reply.usage.output_tokens) == (3, 5)
+        assert reply.usage.cached_tokens == 0  # provider reported no cache fields
+
+    async def test_usage_parses_cached_tokens_both_dialects(self) -> None:
+        """prompt_tokens_details.cached_tokens (OpenAI) and
+        cache_read_input_tokens (Anthropic-style gateway) both land."""
+
+        def openai_style(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [{"message": {"content": "ok"}}],
+                    "usage": {
+                        "prompt_tokens": 100,
+                        "completion_tokens": 5,
+                        "prompt_tokens_details": {"cached_tokens": 80},
+                    },
+                },
+            )
+
+        def anthropic_style(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [{"message": {"content": "ok"}}],
+                    "usage": {
+                        "prompt_tokens": 100,
+                        "completion_tokens": 5,
+                        "cache_read_input_tokens": 64,
+                    },
+                },
+            )
+
+        reply = await _client(openai_style).complete(MSGS)
+        assert reply.usage.cached_tokens == 80
+        reply = await _client(anthropic_style).complete(MSGS)
+        assert reply.usage.cached_tokens == 64
 
     async def test_tool_calls_arguments_parsed(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:

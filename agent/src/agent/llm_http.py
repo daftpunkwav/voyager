@@ -450,9 +450,18 @@ class HttpLLM:
 
 
 def _parse_usage(usage: dict[str, Any]) -> Usage:
+    # Cached prompt tokens: OpenAI-compatible reports prompt_tokens_details.
+    # cached_tokens; Anthropic-style gateways report cache_read_input_tokens.
+    # A provider that reports neither stays 0 (never-warm, not broken).
+    cached = int(
+        (usage.get("prompt_tokens_details") or {}).get("cached_tokens")
+        or usage.get("cache_read_input_tokens")
+        or 0
+    )
     return Usage(
         input_tokens=int(usage.get("prompt_tokens") or 0),
         output_tokens=int(usage.get("completion_tokens") or 0),
+        cached_tokens=cached,
     )
 
 

@@ -37,12 +37,14 @@ def _memory_cards_tokens(system: str) -> int:
 
 def context_status(*, instance: SubagentInstance) -> dict[str, Any]:
     """Usage facts for one instance's live transcript (window, used, threshold)
-    plus the share taken by the resident memory cards."""
+    plus the share taken by the resident memory cards and the prefix-cache
+    health the instance's sentinel has accumulated."""
     status = instance.governor().status(instance.context_view())
     # The system prompt is rebuilt per turn and kept on the instance, so the
     # card share is measurable between turns too (the view then holds only
     # the cross-turn history)
     status["memory_cards_tokens"] = _memory_cards_tokens(str(instance.system_prompt or ""))
+    status["prefix_cache"] = instance.prefix_watch.health()
     return status
 
 

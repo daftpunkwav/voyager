@@ -238,7 +238,17 @@ async def on_step(
         inst.state.rounds += 1
         # Provider-reported input usage anchors the context status: the
         # estimate alone lags the real prefix size the provider saw
-        inst.usage.record(int((detail or {}).get("input_tokens") or 0))
+        detail = detail or {}
+        input_tokens = int(detail.get("input_tokens") or 0)
+        inst.usage.record(input_tokens)
+        # Prefix-cache health: every round reports what went out and what the
+        # provider cached; the watch turns cold-after-warm rounds into break
+        # signals (see agent.context.prefix_watch)
+        inst.prefix_watch.observe_round(
+            input_tokens=input_tokens,
+            cached_tokens=int(detail.get("cached_tokens") or 0),
+            messages=inst._turn_messages or [],
+        )
     elif kind == "tool":
         inst.state.tool_calls += 1
     # Steps go into the event stream (gateway _STREAM_TYPES agent.step) so

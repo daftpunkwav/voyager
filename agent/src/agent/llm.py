@@ -30,6 +30,10 @@ class ToolCall:
 class Usage:
     input_tokens: int = 0
     output_tokens: int = 0
+    #: Prompt tokens served from the provider's prefix cache (a subset of
+    #: input_tokens); 0 when the provider reports nothing - callers must
+    #: treat "never saw a warm round" separately from "cache broke"
+    cached_tokens: int = 0
 
 
 @dataclass(frozen=True)
