@@ -66,6 +66,7 @@ class TestRegistrySurface:
             "report_page_context",
             "resume_run",
             "revoke_approval",
+            "search_tools",
             "session_create",
             "session_fork",
             "session_list",
@@ -254,7 +255,18 @@ class TestSurface:
         )
         try:
             await app2.master.handle_user_message("look at the directory")
-            await asyncio.sleep(0.1)
+
+            async def _chat_has_step() -> bool:
+                out = await execute(app2.registry, "list_subagents", USER_CTX, {})
+                chat = next((r for r in out["running"] if r["name"] == "chat"), None)
+                return bool(chat and chat.get("last_step"))
+
+            # the turn runs in the background: poll for a step trail instead of
+            # a fixed sleep (load-dependent scheduling)
+            deadline = asyncio.get_running_loop().time() + 3.0
+            while not await _chat_has_step():
+                assert asyncio.get_running_loop().time() < deadline, "no step trail yet"
+                await asyncio.sleep(0.01)
             out = await execute(app2.registry, "list_subagents", USER_CTX, {})
             running = out["running"]
             assert running

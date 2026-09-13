@@ -18,6 +18,7 @@ from agent.tools.core.self_capability import AuditSinks
 from agent.tools.observe.get_resource_quota import get_resource_quota_tool
 from agent.tools.observe.list_tools import list_tools_tool
 from agent.tools.observe.read_events import read_events_tool
+from agent.tools.observe.search_tools import search_tools_tool
 from agent.tools.observe.session_search import session_search_tool
 from agent.tools.observe.session_trace import session_trace_tool
 
@@ -29,6 +30,7 @@ def observe_tools(
         read_events_tool(log),
         get_resource_quota_tool(registry, audit),
         list_tools_tool(registry, audit),
+        search_tools_tool(registry, audit),
     )
     return {t.name: t for t in tools}
 
