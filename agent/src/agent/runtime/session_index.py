@@ -95,16 +95,22 @@ class SessionIndex:
         return int(row[0]) if row else 0
 
     def catch_up(self) -> int:
-        """Fold conversation events past the cursor; returns rows added."""
+        """Fold indexable events past the cursor; returns rows added.
+
+        Skipped events (llm-round steps, empty text) still advance the
+        cursor - they are folded once and never re-read."""
         with self._lock:
             cursor = self._cursor()
             rows = self._log.read_after(cursor, types=_SOURCE_TYPES, limit=2000)
             added = 0
             for seq, event in rows:
                 payload = event.payload or {}
+                # Only tool steps fold in: llm-round steps restate the reply
+                # text that AGENT_MESSAGE already indexes, and indexing them
+                # would store every round twice
                 if event.type == DomainEvent.AGENT_STEP:
-                    # Tool steps make "what was done before" searchable; the
-                    # text is the tool name plus its one-line summary
+                    if str(payload.get("kind") or "") != "tool":
+                        continue
                     name = str(payload.get("name") or "")
                     summary = str(payload.get("summary") or "")
                     text = f"{name}: {summary}" if name else summary

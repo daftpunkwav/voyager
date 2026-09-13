@@ -40,6 +40,10 @@ def _load_all(directory: Path) -> dict[str, Persona]:
     out: dict[str, Persona] = {}
     for path in sorted(directory.glob("*.toml")):
         persona = _load_persona(path)
+        if persona.key in out:
+            # Two files claiming one structural ID is an authoring error, not
+            # a last-wins merge - fail at import while the mistake is fresh
+            raise ValueError(f"duplicate persona key {persona.key!r}: {path.name}")
         out[persona.key] = persona
     return out
 

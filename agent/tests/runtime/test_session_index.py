@@ -69,6 +69,33 @@ def test_tool_steps_are_searchable(tmp_path) -> None:
         log.close()
 
 
+def test_llm_round_steps_are_not_folded(tmp_path) -> None:
+    """llm-round steps restate reply text that AGENT_MESSAGE already indexes;
+    folding them would store every round twice. They are skipped once while
+    the cursor still advances (no re-read)."""
+    log = _fresh(tmp_path)
+    log.append(
+        Event(
+            type=DomainEvent.AGENT_STEP,
+            actor=ActorRef(kind=ActorKind.AGENT, id="agent"),
+            payload={
+                "name": "round-1",
+                "kind": "llm",
+                "session": "s1",
+                "summary": "中间轮回复文本",
+            },
+        )
+    )
+    index = SessionIndex(tmp_path / "idx.db", log)
+    try:
+        assert index.catch_up() == 0  # skipped, but cursor advanced
+        assert index.catch_up() == 0  # never re-read
+        assert index.search("中间轮") == []
+    finally:
+        index.close()
+        log.close()
+
+
 def test_deleted_index_rebuilds_from_log(tmp_path) -> None:
     log = _fresh(tmp_path)
     _append(log, DomainEvent.USER_MESSAGE, "s1", "周报草稿在哪")
