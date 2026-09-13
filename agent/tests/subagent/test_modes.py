@@ -6,7 +6,7 @@ import asyncio
 from typing import Any
 
 import pytest
-from agent.llm import FakeLLM, LLMReply, ToolCall
+from agent.llm import FakeLLM, LLMReply, ToolCall, Usage
 from agent.policy import PolicyEngine
 from agent.subagent import Mode, ModeLimits, run_mode
 from agent.tools import AgentTool, Toolbelt
@@ -214,6 +214,232 @@ class TestReAct:
 
 
 class TestOtherModes:
+    async def test_cot_plan_steps_synthesis(self) -> None:
+        """COT: plan -> per-step execution -> synthesis, one budget across
+        phases; the plan and each step ride the shared transcript."""
+        llm = FakeLLM(
+            [
+                LLMReply(text="1. 收集资料\n2. 撰写结论"),
+                LLMReply(text="资料在手"),
+                LLMReply(text="结论成立"),
+                LLMReply(text="最终答案:成立"),
+            ]
+        )
+        result = await run_mode(
+            Mode.COT, llm=llm, toolbelt=_belt(), messages=_msgs(), limits=ModeLimits()
+        )
+        assert result == "最终答案:成立"
+        assert len(llm.calls) == 4  # plan + 2 steps + synthesis
+        # plan request carries the reasoning hint
+        assert "逐步推理" in llm.calls[0]["messages"][0]["content"]
+        # steps addressed on the shared transcript
+        assert any("【步骤 1/2】" in str(m.get("content")) for m in llm.calls[1]["messages"])
+        assert any("【步骤 2/2】" in str(m.get("content")) for m in llm.calls[2]["messages"])
+
+    async def test_cot_unparseable_plan_degrades_to_one_step(self) -> None:
+        llm = FakeLLM(
+            [LLMReply(text="直接做完即可"), LLMReply(text="步骤结论"), LLMReply(text="做完了")]
+        )
+        result = await run_mode(
+            Mode.COT, llm=llm, toolbelt=_belt(), messages=_msgs(), limits=ModeLimits()
+        )
+        assert result == "做完了"
+        assert len(llm.calls) == 3  # plan + 1 (merged) step + synthesis
+
+    async def test_cot_token_budget_stops_steps_but_reports(self) -> None:
+        llm = FakeLLM(
+            [
+                LLMReply(text="1. 甲\n2. 乙", usage=Usage(input_tokens=900, output_tokens=100)),
+                LLMReply(text="甲完成", usage=Usage(input_tokens=900, output_tokens=100)),
+                LLMReply(text="乙完成", usage=Usage(input_tokens=900, output_tokens=100)),
+            ]
+        )
+        result = await run_mode(
+            Mode.COT,
+            llm=llm,
+            toolbelt=_belt(),
+            messages=_msgs(),
+            limits=ModeLimits(max_tokens=1500),
+        )
+        assert result.startswith("[预算]")
+        assert "1/2 步完成" in result
+
+    async def test_plan_execute_steps_and_report(self) -> None:
+        """PLAN_EXECUTE: plan persists to the transcript, steps execute in
+        order, the final report closes the invocation."""
+        llm = FakeLLM(
+            [
+                LLMReply(text="1. 第一步\n2. 第二步"),
+                LLMReply(text="第一步完成"),
+                LLMReply(text="第二步完成"),
+                LLMReply(text="全部完成"),
+            ]
+        )
+        result = await run_mode(
+            Mode.PLAN_EXECUTE, llm=llm, toolbelt=_belt(), messages=_msgs(), limits=ModeLimits()
+        )
+        assert result == "全部完成"
+        assert len(llm.calls) == 4
+        # the plan is fed back into the execute phase (assistant entry)
+        assert any(
+            m.get("role") == "assistant" and "第一步" in str(m.get("content"))
+            for m in llm.calls[1]["messages"]
+        )
+
+    async def test_plan_execute_replans_after_failed_step(self) -> None:
+        """A step whose slice aborts triggers one bounded replan that replaces
+        the remaining steps; the report still ships."""
+        llm = FakeLLM(
+            [
+                LLMReply(text="1. 会失败的步骤\n2. 旧计划步骤"),
+                # the step slice keeps asking for the same call; the third
+                # identical call trips the loop guard with an empty executable
+                # prefix, which aborts the slice immediately
+                LLMReply(tool_calls=(ToolCall("1", "echo_tool", {"x": "a"}),)),
+                LLMReply(tool_calls=(ToolCall("2", "echo_tool", {"x": "a"}),)),
+                LLMReply(tool_calls=(ToolCall("3", "echo_tool", {"x": "a"}),)),
+                LLMReply(text="1. 新方法"),  # replan
+                LLMReply(text="新方法完成"),
+                LLMReply(text="按新计划完成"),
+            ]
+        )
+        result = await run_mode(
+            Mode.PLAN_EXECUTE,
+            llm=llm,
+            toolbelt=_belt(),
+            messages=_msgs(),
+            limits=ModeLimits(max_rounds=20, max_tool_calls=40),
+        )
+        assert result == "按新计划完成"
+        # replan request saw the abort note and the remaining steps
+        assert any("剩余未执行步骤" in str(m.get("content")) for m in llm.calls[4]["messages"])
+
+    async def test_reflexion_revise_then_accept(self) -> None:
+        """REFLEXION: REVISE verdict retries with the lessons visible; the
+        final attempt is delivered without further review spend."""
+        llm = FakeLLM(
+            [
+                LLMReply(text="草稿"),
+                LLMReply(text="REVISE:缺少验证步骤\n1. 先验证"),
+                LLMReply(text="修订版"),
+            ]
+        )
+        result = await run_mode(
+            Mode.REFLEXION, llm=llm, toolbelt=_belt(), messages=_msgs(), limits=ModeLimits()
+        )
+        assert result == "修订版"
+        assert len(llm.calls) == 3  # draft + review + retry (no second review)
+        # the retry saw the reflection entry
+        assert any("【反思】" in str(m.get("content")) for m in llm.calls[2]["messages"])
+
+    async def test_reflexion_adequate_verdict_keeps_draft(self) -> None:
+        llm = FakeLLM([LLMReply(text="草稿"), LLMReply(text="ADEQUATE:已充分")])
+        result = await run_mode(
+            Mode.REFLEXION, llm=llm, toolbelt=_belt(), messages=_msgs(), limits=ModeLimits()
+        )
+        assert result == "草稿"
+        assert len(llm.calls) == 2
+
+    async def test_reflexion_unreadable_review_keeps_draft(self) -> None:
+        """An empty/unparseable review must not destroy a finished attempt."""
+        llm = FakeLLM([LLMReply(text="草稿"), LLMReply(text="嗯,看看再说")])
+        result = await run_mode(
+            Mode.REFLEXION, llm=llm, toolbelt=_belt(), messages=_msgs(), limits=ModeLimits()
+        )
+        assert result == "草稿"
+
+    async def test_tot_rank_expand_pick(self) -> None:
+        """TOT: 3 candidates ranked by JSON verdict, top-2 expanded, winner
+        picked, final answer streamed out."""
+        llm = FakeLLM(
+            [
+                LLMReply(text="候选A"),
+                LLMReply(text="候选B"),
+                LLMReply(text="候选C"),
+                LLMReply(text='{"ranking": ["B", "A", "C"]}'),
+                LLMReply(text="B 展开"),
+                LLMReply(text="A 展开"),
+                LLMReply(text='{"best": "A"}'),
+                LLMReply(text="最终答案"),
+            ]
+        )
+        result = await run_mode(
+            Mode.TOT, llm=llm, toolbelt=None, messages=_msgs(), limits=ModeLimits()
+        )
+        assert result == "最终答案"
+        assert len(llm.calls) == 8
+        # judge saw the lettered candidates
+        assert "[A]" in llm.calls[3]["messages"][-1]["content"]
+        # expansion used the ranked order (B first, then A)
+        assert "方案 B" in llm.calls[4]["messages"][0]["content"]
+        assert "方案 A" in llm.calls[5]["messages"][0]["content"]
+
+    async def test_tot_malformed_judge_falls_back_to_order(self) -> None:
+        llm = FakeLLM(
+            [
+                LLMReply(text="候选A"),
+                LLMReply(text="候选B"),
+                LLMReply(text="候选C"),
+                LLMReply(text="我觉得都行"),  # not JSON: original order wins
+                LLMReply(text="A 展开"),
+                LLMReply(text="B 展开"),
+                LLMReply(text='{"best": "B"}'),
+                LLMReply(text="最终"),
+            ]
+        )
+        result = await run_mode(
+            Mode.TOT, llm=llm, toolbelt=None, messages=_msgs(), limits=ModeLimits()
+        )
+        assert result == "最终"
+        assert "方案 A" in llm.calls[4]["messages"][0]["content"]  # A stays first
+
+    async def test_got_angles_aggregate_refine(self) -> None:
+        """GOT: fixed angle menu in parallel, explicit aggregation, one
+        refinement pass; the refined draft is the answer (no tools)."""
+        llm = FakeLLM(
+            [
+                LLMReply(text="正确性产出"),
+                LLMReply(text="完整性产出"),
+                LLMReply(text="风险产出"),
+                LLMReply(text="可行性产出"),
+                LLMReply(text="聚合稿"),
+                LLMReply(text="修订稿"),
+            ]
+        )
+        result = await run_mode(
+            Mode.GOT, llm=llm, toolbelt=None, messages=_msgs(), limits=ModeLimits()
+        )
+        assert result == "修订稿"
+        assert len(llm.calls) == 6
+        aggregate_input = llm.calls[4]["messages"][-1]["content"]
+        assert "【正确性与事实核查】" in aggregate_input
+        assert "【可行性与成本】" in aggregate_input
+        refine_input = llm.calls[5]["messages"]
+        assert any(
+            "聚合稿" == str(m.get("content")) for m in refine_input if m.get("role") == "assistant"
+        )
+
+    async def test_got_budget_collapse_still_delivers_aggregate(self) -> None:
+        """When the token budget is spent before aggregation, the first angle
+        output ships as best-so-far instead of an error."""
+        llm = FakeLLM(
+            [
+                LLMReply(text="角度1", usage=Usage(input_tokens=800, output_tokens=200)),
+                LLMReply(text="角度2", usage=Usage(input_tokens=800, output_tokens=200)),
+                LLMReply(text="角度3", usage=Usage(input_tokens=800, output_tokens=200)),
+                LLMReply(text="角度4", usage=Usage(input_tokens=800, output_tokens=200)),
+            ]
+        )
+        result = await run_mode(
+            Mode.GOT,
+            llm=llm,
+            toolbelt=None,
+            messages=_msgs(),
+            limits=ModeLimits(max_tokens=3000),
+        )
+        assert result.startswith("[预算]")
+        assert "角度1" in result
+
     async def test_direct_single_call(self) -> None:
         llm = FakeLLM([LLMReply(text="直答")])
         assert (
@@ -223,45 +449,6 @@ class TestOtherModes:
             == "直答"
         )
         assert len(llm.calls) == 1
-
-    async def test_cot_prefixes_reasoning_hint(self) -> None:
-        llm = FakeLLM([LLMReply(text="推理后结论")])
-        await run_mode(Mode.COT, llm=llm, toolbelt=None, messages=_msgs(), limits=ModeLimits())
-        assert "逐步推理" in llm.calls[0]["messages"][0]["content"]
-
-    async def test_plan_execute_two_phase(self) -> None:
-        llm = FakeLLM([LLMReply(text="计划:1..."), LLMReply(text="执行结果")])
-        result = await run_mode(
-            Mode.PLAN_EXECUTE, llm=llm, toolbelt=_belt(), messages=_msgs(), limits=ModeLimits()
-        )
-        assert result == "执行结果"
-        assert len(llm.calls) == 2
-        assert (
-            llm.calls[1]["messages"][1]["content"] == "计划:1..."
-        )  # plan fed back into the execute phase
-
-    async def test_reflexion_revises(self) -> None:
-        llm = FakeLLM([LLMReply(text="草稿"), LLMReply(text="修订版")])
-        result = await run_mode(
-            Mode.REFLEXION, llm=llm, toolbelt=_belt(), messages=_msgs(), limits=ModeLimits()
-        )
-        assert result == "修订版"
-
-    async def test_tot_branch_and_pick(self) -> None:
-        llm = FakeLLM([LLMReply(text=f"候选{i}") for i in range(3)] + [LLMReply(text="最优候选")])
-        result = await run_mode(
-            Mode.TOT, llm=llm, toolbelt=None, messages=_msgs(), limits=ModeLimits()
-        )
-        assert result == "最优候选"
-        assert len(llm.calls) == 4  # 3 candidates + 1 pick
-
-    async def test_got_joint(self) -> None:
-        llm = FakeLLM([LLMReply(text="角度A"), LLMReply(text="角度B"), LLMReply(text="合并")])
-        result = await run_mode(
-            Mode.GOT, llm=llm, toolbelt=None, messages=_msgs(), limits=ModeLimits()
-        )
-        assert result == "合并"
-        assert len(llm.calls) == 3  # 2 branches + 1 aggregate
 
     async def test_unknown_mode(self) -> None:
         with pytest.raises(ValueError, match="未知模式"):

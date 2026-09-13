@@ -15,6 +15,7 @@ from typing import Any
 from platform_contracts import CONTEXT_OVERFLOW_HINT, RuntimeEvent, ServiceError
 
 from agent.llm import LLMClient, LLMReply
+from agent.runtime.deadline import Deadline
 from agent.subagent.modes.base import DeltaCb, EventCb, noop_event
 
 #: Delta coalescing interval (seconds): token-level deltas are batched before
@@ -135,10 +136,47 @@ async def complete_streaming(
     return final
 
 
+async def run_phase(
+    label: str,
+    *,
+    llm: LLMClient,
+    messages: list[dict[str, Any]],
+    on_event: EventCb = noop_event,
+    deadline: Deadline | None = None,
+    round_n: int = 0,
+    on_delta: DeltaCb | None = None,
+) -> LLMReply:
+    """One phase completion for the composite modes: the standard event
+    bracket (LLM_STARTED / LLM_COMPLETED), the harness deadline backstop and
+    the stream-or-complete tiering. Intermediate phases pass on_delta=None -
+    their products never face the user; a mode's final synthesis may pass
+    the caller's on_delta so conversational runs still stream the answer."""
+    round_delta = None
+    if on_delta is not None:
+        round_delta, _first = delta_timer(on_delta, on_event=on_event, round_n=round_n)
+    await on_event(RuntimeEvent.LLM_STARTED, round=round_n, streaming=on_delta is not None)
+    if deadline is not None:
+        reply = await deadline.run_round(
+            lambda: complete_streaming(llm, messages, None, round_delta, round_n=round_n)
+        )
+    else:
+        reply = await complete_streaming(llm, messages, None, round_delta, round_n=round_n)
+    await on_event(
+        RuntimeEvent.LLM_COMPLETED,
+        round=round_n,
+        input_tokens=reply.usage.input_tokens,
+        output_tokens=reply.usage.output_tokens,
+        degraded=bool(reply.degraded),
+        overflow=bool(reply.overflow),
+    )
+    return reply
+
+
 __all__ = [
     "CANCEL_ANCHOR",
     "DELTA_FLUSH_INTERVAL",
     "DeltaFlusher",
     "complete_streaming",
     "delta_timer",
+    "run_phase",
 ]

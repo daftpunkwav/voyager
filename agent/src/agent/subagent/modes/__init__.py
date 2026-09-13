@@ -5,7 +5,6 @@ the shared vocabulary and the dispatcher."""
 from __future__ import annotations
 
 from agent.subagent.modes import (  # noqa: F401  # imported for runner registration
-    branching,
     cot,
     direct,
     got,

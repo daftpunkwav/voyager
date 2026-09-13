@@ -7,11 +7,18 @@ import time, so this base never imports the mode modules (no cycle) and
 run_mode dispatches through the registry. Rounds and tool calls are two
 independent caps (ModeLimits); hitting either stops gracefully with an
 explanation of how to raise it.
+
+The composite modes (cot / tot / got / plan_execute / reflexion) run several
+phases per invocation and delegate tool work to run_react slices. The shared
+machinery they need - one invocation-level budget across phases, a counting
+toolbelt view, step-list parsing, abort-prefix detection - lives here so the
+per-mode files stay about strategy, not accounting.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import Enum
@@ -20,7 +27,7 @@ from typing import Any
 from agent.context.compressor import COMPRESS_BUDGET
 from agent.context.governor import ContextGovernor
 from agent.contracts import ToolRunner
-from agent.llm import LLMClient, ToolCall
+from agent.llm import LLMClient, ToolCall, Usage
 from agent.runtime.deadline import Deadline
 from agent.subagent.modes.registry import runner_for
 
@@ -91,6 +98,145 @@ def tool_detail(call: ToolCall, outcome: Any, ms: float) -> dict[str, Any]:
     }
 
 
+# -- shared multi-phase mode machinery ----------------------------------------
+
+#: Result prefixes run_react produces when a slice cannot finish its work;
+#: composite modes treat any of them as a failed step/attempt, not an answer
+ABORT_PREFIXES = ("[中断]", "[预算]", "[无工具可用]")
+
+_STEP_LINE_RE = re.compile(r"^(?:\d{1,2}[、.):]|[-*•])\s*(\S.*)$")
+_CJK_STEP_RE = re.compile(r"^[一二三四五六七八九十]{1,3}、\s*(\S.*)$")
+
+
+def parse_steps(text: str) -> list[str]:
+    """Numbered steps from a planning reply (arabic / CJK ordinals / dashes).
+
+    A reply without any list shape degrades to one whole-text step: a plan
+    phase can never silently produce zero work. Blank lines and a trailing
+    "完成判定"-style prose block are dropped; each kept step is one line.
+    """
+    steps: list[str] = []
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        m = _STEP_LINE_RE.match(line) or _CJK_STEP_RE.match(line)
+        if m:
+            steps.append(m.group(1).strip())
+    if not steps:
+        whole = (text or "").strip()
+        return [whole] if whole else []
+    return steps
+
+
+def looks_aborted(result: str) -> bool:
+    """Whether a slice result is an abort/limit report rather than real work."""
+    return any(result.startswith(prefix) for prefix in ABORT_PREFIXES)
+
+
+class ModeBudget:
+    """Cross-phase accounting for one mode invocation.
+
+    Tokens (input+output), tool calls and rounds consumed so far, enforced
+    against the invocation's ModeLimits: composite modes hand every phase and
+    every run_react slice a budget slice, so hitting the invocation cap winds
+    the whole strategy down, not just the current phase.
+    """
+
+    def __init__(self, limits: ModeLimits) -> None:
+        self._limits = limits
+        self.tokens_used = 0
+        self.tool_calls_used = 0
+        self.rounds_used = 0
+
+    def add_usage(self, usage: Any) -> None:
+        self.tokens_used += usage.input_tokens + usage.output_tokens
+
+    def add_rounds(self, count: int) -> None:
+        self.rounds_used += count
+
+    def add_tool_calls(self, count: int) -> None:
+        self.tool_calls_used += count
+
+    def over_token_budget(self) -> bool:
+        return 0 < self._limits.max_tokens <= self.tokens_used
+
+    def tokens_left(self) -> int:
+        """Remaining token budget; 0 stays 0 = unlimited."""
+        if self._limits.max_tokens <= 0:
+            return 0
+        return max(0, self._limits.max_tokens - self.tokens_used)
+
+    def slice(self, *, rounds: int, tools: int | None = None) -> ModeLimits:
+        """A per-phase ModeLimits bounded by what the invocation has left.
+
+        rounds is the phase's own preference (e.g. a small per-step cap);
+        the effective value never exceeds the invocation remainder. Token
+        caps are deliberately NOT propagated: a slice would read the
+        invocation remainder as its own fresh cap and abort a single
+        oversized-but-legitimate round; the invocation token budget is
+        enforced by the mode between phases (over_token_budget) instead.
+        """
+        if self._limits.max_tool_calls > 0:
+            tool_room = max(0, self._limits.max_tool_calls - self.tool_calls_used)
+            if tools is not None:
+                tool_room = min(tool_room, tools)
+        else:
+            tool_room = tools if tools is not None else self._limits.max_tool_calls
+        round_room = min(rounds, max(1, self._limits.max_rounds - self.rounds_used))
+        return ModeLimits(
+            max_rounds=max(1, round_room),
+            max_tool_calls=max(0, tool_room),
+            max_tokens=0,
+        )
+
+
+class CountingToolbelt:
+    """Delegating tool-surface view that counts executed calls, so a mode
+    delegating to run_react slices keeps one invocation-level tool budget.
+    Forwards the full surface run_react touches (specs / call / call_detailed
+    / concurrent_safe / names)."""
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self.calls = 0
+
+    def specs(self) -> list[Any]:
+        return self._inner.specs()
+
+    def names(self) -> list[str]:
+        return self._inner.names()
+
+    def concurrent_safe(self, name: str) -> bool:
+        return self._inner.concurrent_safe(name)
+
+    async def call(self, call: ToolCall) -> str:
+        return await self._inner.call(call)
+
+    async def call_detailed(self, call: ToolCall) -> Any:
+        self.calls += 1
+        return await self._inner.call_detailed(call)
+
+
+def counting_step(on_step: StepCb, budget: ModeBudget) -> StepCb:
+    """Wrap a step sink so a ReAct slice's rounds and token usage land in the
+    invocation budget: react reports one "llm" step named round-N per round,
+    carrying its usage in the detail."""
+
+    async def wrapped(kind: str, name: str, summary: str, detail: dict[str, Any]) -> None:
+        if kind == "llm" and name.startswith("round-"):
+            budget.add_rounds(1)
+            budget.add_usage(
+                Usage(
+                    input_tokens=int((detail or {}).get("input_tokens") or 0),
+                    output_tokens=int((detail or {}).get("output_tokens") or 0),
+                )
+            )
+        await on_step(kind, name, summary, detail)
+
+    return wrapped
+
+
 async def run_mode(
     mode: Mode,
     *,
@@ -130,14 +276,20 @@ async def run_mode(
 
 
 __all__ = [
+    "ABORT_PREFIXES",
+    "CountingToolbelt",
     "DeltaCb",
     "EventCb",
     "Mode",
+    "ModeBudget",
     "ModeLimits",
     "StepCb",
     "capped_args",
+    "counting_step",
+    "looks_aborted",
     "noop_event",
     "noop_step",
+    "parse_steps",
     "run_mode",
     "sys_message",
     "tool_detail",
