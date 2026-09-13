@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     # package __init__, which reads this module (import-order cycle).
     from agent.master.digest import DigestStore
 
-from agent.llm import ToolCall, ToolSpec
+from agent.llm import LLMClient, ToolCall, ToolSpec
 
 # ---- Callback aliases (re-exported in tools/core/base to keep existing import paths) ----
 
@@ -139,6 +139,11 @@ class DispatchMaster(Protocol):
 
     @property
     def sessions(self) -> Any: ...  # SessionManager surface: active_id()
+
+    #: Chat client, reused for the completion-notice synthesis (see
+    #: agent.master.synthesize; metered like every chat path)
+    @property
+    def llm(self) -> LLMClient: ...
 
     def finish_task(self, name: str, *, ok: bool) -> None: ...
 

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from platform_contracts import ErrorSuffix, ServiceError
 
 from agent.contracts import DispatchMaster, SettingsReader
+from agent.master.synthesize import synthesize_result
 from agent.master.task_graph import DeferredTask  # noqa: F401  # re-exported type
 from agent.personas import resolve_persona
 from agent.policy import NetworkPolicy, PolicyEngine, narrow_network
@@ -176,7 +177,10 @@ async def dispatch_task(
             if inst.status.value == "paused":
                 await master.reply(f"[paused] {inst.name}", session=inst.task.session)
             else:
-                await master.reply(f"[done] {inst.name}: {result[:200]}", session=inst.task.session)
+                # Long results get one synthesis call so the notice carries the
+                # conclusions instead of a blind cut; failures fall back inside
+                summary = await synthesize_result(master.llm, inst.name, result)
+                await master.reply(f"[done] {inst.name}: {summary}", session=inst.task.session)
         finally:
             master.digests.upsert(inst)
             # Join point: a finished (or failed) task releases / blocks the

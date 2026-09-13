@@ -373,6 +373,12 @@ class Master:
         return self.sessions.instance_for(self.sessions.active_id())
 
     @property
+    def llm(self) -> LLMClient:
+        """Chat client for split-out modules (dispatch notice synthesis);
+        the same metered instance the master itself completes through."""
+        return self._llm
+
+    @property
     def digests(self) -> DigestStore:
         """Lets split-out modules read/write summary cards (without exposing
         private details)."""
