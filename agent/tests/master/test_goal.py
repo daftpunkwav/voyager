@@ -118,6 +118,31 @@ class TestGoalDriverFence:
         finally:
             app.close()
 
+    async def test_prestep_guard_failure_is_fail_closed(self, tmp_path, monkeypatch) -> None:
+        """A guard that explodes skips the wakeup (fail-closed): an
+        unverifiable fence never runs the turn."""
+        import asyncio
+
+        app = _app(tmp_path)
+        try:
+            app.master.sessions.create(session_id="s1", title="t")
+            started: list[str] = []
+
+            async def _start(inst, text):
+                started.append(text)
+
+            monkeypatch.setattr(app.spawner, "start", _start)
+
+            def _boom() -> bool:
+                raise RuntimeError("guard exploded")
+
+            await app.master.handle_notice("s1", "通知", guard=_boom)
+            while app.master._bg:
+                await asyncio.gather(*list(app.master._bg))
+            assert started == []
+        finally:
+            app.close()
+
     async def test_prestep_guard_carries_active_check(self, tmp_path, monkeypatch) -> None:
         """The notice rides with a guard closure that re-verifies the goal is
         still ACTIVE when the turn would actually start (pre-step barrier)."""

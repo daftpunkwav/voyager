@@ -10,7 +10,7 @@ one the winning draft is the answer.
 
 Budget: the invocation's ModeLimits cover every phase (ModeBudget) - N-way
 generation multiplies token spend, so between phases the tree collapses
-gracefully to best-so-far instead of blowing the cap.
+gracefully to best-so-far instead of blowing the cap (token or rounds).
 """
 
 from __future__ import annotations
@@ -31,11 +31,11 @@ from agent.subagent.modes.base import (
     ModeBudget,
     ModeLimits,
     StepCb,
-    counting_step,
+    budget_reason,
     noop_event,
     sys_message,
 )
-from agent.subagent.modes.react import run_react
+from agent.subagent.modes.react import run_step
 from agent.subagent.modes.registry import register_mode
 from agent.subagent.modes.streaming import run_phase
 
@@ -92,6 +92,11 @@ def _parse_best(text: str, width: int) -> int:
     return 0
 
 
+def _spent(limits: ModeLimits, budget: ModeBudget) -> bool:
+    """Whether any invocation cap is spent (phase gates collapse the tree)."""
+    return budget.over_token_budget() or budget.rounds_exhausted()
+
+
 async def run_tot(
     llm: LLMClient,
     toolbelt: ToolRunner | None,
@@ -119,14 +124,10 @@ async def run_tot(
     ]
     candidates = await asyncio.gather(
         *(
-            run_phase(
-                f"tot-generate-{i + 1}", llm=llm, messages=p, on_event=on_event, deadline=deadline
-            )
-            for i, p in enumerate(prompts)
+            run_phase(llm=llm, messages=p, on_event=on_event, deadline=deadline, budget=budget)
+            for p in prompts
         )
     )
-    for reply in candidates:
-        budget.add_usage(reply.usage)
     texts = [reply.text or "" for reply in candidates]
     await on_step(
         "llm",
@@ -136,11 +137,10 @@ async def run_tot(
     )
 
     # Judge: rank the candidates
-    if budget.over_token_budget() and limits.max_tokens > 0:
-        return _budget_report(limits.max_tokens, best=texts[0])
+    if _spent(limits, budget):
+        return _budget_report(limits, budget, best=texts[0])
     letters = "\n\n".join(f"[{chr(ord('A') + i)}]\n{t}" for i, t in enumerate(texts))
     judge = await run_phase(
-        "tot-judge",
         llm=llm,
         messages=[
             *messages,
@@ -148,8 +148,8 @@ async def run_tot(
         ],
         on_event=on_event,
         deadline=deadline,
+        budget=budget,
     )
-    budget.add_usage(judge.usage)
     order = _parse_ranking(judge.text or "", TOT_BRANCHES)
     await on_step(
         "llm",
@@ -159,8 +159,8 @@ async def run_tot(
     )
 
     # Level 2: expand the top K, in parallel
-    if budget.over_token_budget() and limits.max_tokens > 0:
-        return _budget_report(limits.max_tokens, best=texts[order[0]])
+    if _spent(limits, budget):
+        return _budget_report(limits, budget, best=texts[order[0]])
     expand_prompts = [
         [
             *sys_message(_EXPAND_PROMPT.format(letter=chr(ord("A") + i))),
@@ -171,34 +171,25 @@ async def run_tot(
     ]
     drafts = await asyncio.gather(
         *(
-            run_phase(
-                f"tot-expand-{chr(ord('A') + i)}",
-                llm=llm,
-                messages=p,
-                on_event=on_event,
-                deadline=deadline,
-            )
-            for i, p in zip(order[:TOT_KEEP], expand_prompts)
+            run_phase(llm=llm, messages=p, on_event=on_event, deadline=deadline, budget=budget)
+            for p in expand_prompts
         )
     )
-    for reply in drafts:
-        budget.add_usage(reply.usage)
     draft_texts = [reply.text or "" for reply in drafts]
     await on_step("llm", "tot-expand", f"{len(draft_texts)} 个方案展开完成", {"mode": "tot"})
 
     # Final judge: pick the winner
-    if budget.over_token_budget() and limits.max_tokens > 0:
-        return _budget_report(limits.max_tokens, best=draft_texts[0])
+    if _spent(limits, budget):
+        return _budget_report(limits, budget, best=draft_texts[0])
     if len(draft_texts) > 1:
         pair = "\n\n".join(f"[{chr(ord('A') + i)}]\n{t}" for i, t in enumerate(draft_texts))
         pick = await run_phase(
-            "tot-pick",
             llm=llm,
             messages=[*messages, {"role": "user", "content": _PICK_PROMPT + "\n\n" + pair}],
             on_event=on_event,
             deadline=deadline,
+            budget=budget,
         )
-        budget.add_usage(pick.usage)
         winner = _parse_best(pick.text or "", len(draft_texts))
         await on_step("llm", "tot-pick", f"选定 {chr(ord('A') + winner)}", {"mode": "tot"})
     else:
@@ -212,36 +203,34 @@ async def run_tot(
         messages.append(
             {"role": "user", "content": "按上面的选定方案执行该任务;需要外部信息就调用工具。"}
         )
-        before_calls = belt.calls
-        result = await run_react(
-            llm,
-            belt,
-            messages,
-            budget.slice(rounds=limits.max_rounds),
-            counting_step(on_step, budget),
+        return await run_step(
+            llm=llm,
+            toolbelt=toolbelt,
+            messages=messages,
+            on_step=on_step,
             on_event=on_event,
             continue_if_idle=continue_if_idle,
             compress_budget=compress_budget,
             governor=governor,
             deadline=deadline,
+            budget=budget,
+            belt=belt,
+            rounds=limits.max_rounds,
         )
-        budget.add_tool_calls(belt.calls - before_calls)
-        return result
     messages.append({"role": "assistant", "content": best})
     final = await run_phase(
-        "tot-final",
         llm=llm,
         messages=[*messages, {"role": "user", "content": "把选定方案整理为最终答案直接输出。"}],
         on_event=on_event,
         deadline=deadline,
         on_delta=on_delta,
+        budget=budget,
     )
-    budget.add_usage(final.usage)
     return final.text or best
 
 
-def _budget_report(max_tokens: int, best: str) -> str:
-    return f"[预算] 已达 token 上限({max_tokens}),树搜索提前收尾。当前最优:{best[:200]}"
+def _budget_report(limits: ModeLimits, budget: ModeBudget, best: str) -> str:
+    return f"[预算] 已达{budget_reason(limits, budget)},树搜索提前收尾。当前最优:{best[:200]}"
 
 
 __all__ = ["TOT_BRANCHES", "TOT_KEEP", "run_tot"]

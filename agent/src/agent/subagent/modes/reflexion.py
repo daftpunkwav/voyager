@@ -9,7 +9,10 @@ named for. An empty or unreadable review accepts the draft: a broken
 reflection must not destroy a finished attempt.
 
 Attempts are bounded (REFLEXION_MAX_ATTEMPTS) and share the invocation's
-one ModeBudget; the final attempt's result is delivered as-is.
+one ModeBudget; a spent cap skips the review and delivers the draft. The
+final attempt's result is delivered as-is. The review instruction rides a
+user-role message, not a mid-transcript system row: some gateways reject
+system entries after the conversation head.
 """
 
 from __future__ import annotations
@@ -29,11 +32,9 @@ from agent.subagent.modes.base import (
     ModeBudget,
     ModeLimits,
     StepCb,
-    counting_step,
     noop_event,
-    sys_message,
 )
-from agent.subagent.modes.react import run_react
+from agent.subagent.modes.react import run_step
 from agent.subagent.modes.registry import register_mode
 from agent.subagent.modes.streaming import run_phase
 
@@ -79,34 +80,20 @@ async def run_reflexion(
     for attempt in range(1, REFLEXION_MAX_ATTEMPTS + 1):
         # Attempt: one bounded ReAct slice on the shared transcript (the
         # previous attempt's transcript and lessons stay visible)
-        if governor is not None:
-            await governor.enforce(messages)
-        if toolbelt is not None and belt is not None:
-            before_calls = belt.calls
-            draft = await run_react(
-                llm,
-                belt,
-                messages,
-                budget.slice(rounds=max(1, limits.max_rounds // REFLEXION_MAX_ATTEMPTS)),
-                counting_step(on_step, budget),
-                on_event=on_event,
-                continue_if_idle=continue_if_idle,
-                compress_budget=compress_budget,
-                governor=governor,
-                deadline=deadline,
-            )
-            budget.add_tool_calls(belt.calls - before_calls)
-        else:
-            reply = await run_phase(
-                f"reflexion-draft-{attempt}",
-                llm=llm,
-                messages=messages,
-                on_event=on_event,
-                deadline=deadline,
-            )
-            budget.add_usage(reply.usage)
-            budget.add_rounds(1)
-            draft = reply.text or ""
+        draft = await run_step(
+            llm=llm,
+            toolbelt=toolbelt,
+            messages=messages,
+            on_step=on_step,
+            on_event=on_event,
+            continue_if_idle=continue_if_idle,
+            compress_budget=compress_budget,
+            governor=governor,
+            deadline=deadline,
+            budget=budget,
+            belt=belt,
+            rounds=max(1, limits.max_rounds // REFLEXION_MAX_ATTEMPTS),
+        )
         await on_step(
             "llm",
             f"reflexion-attempt-{attempt}",
@@ -115,19 +102,20 @@ async def run_reflexion(
         )
         if attempt == REFLEXION_MAX_ATTEMPTS:
             break  # last attempt: deliver as-is, no review spend
+        if budget.over_token_budget() or budget.rounds_exhausted():
+            break  # no budget for the review: the draft stands
         # Review: structured verdict (ADEQUATE ends the loop)
         review = await run_phase(
-            f"reflexion-review-{attempt}",
             llm=llm,
             messages=[
                 *messages,
                 {"role": "assistant", "content": draft},
-                *sys_message(_REVIEW_PROMPT),
+                {"role": "user", "content": _REVIEW_PROMPT},
             ],
             on_event=on_event,
             deadline=deadline,
+            budget=budget,
         )
-        budget.add_usage(review.usage)
         verdict = _verdict(review.text or "")
         await on_step(
             "llm",

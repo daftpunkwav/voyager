@@ -13,7 +13,9 @@ Phases:
 The invocation's ModeLimits are ONE budget across all phases (ModeBudget):
 a step slice gets what is left, a failed or aborted step is recorded and
 skipped rather than silently dropped, and the synthesis always runs unless
-the token budget is spent - a partial answer with step status beats silence.
+the token budget is spent - a partial answer with step status beats
+silence. Round exhaustion skips the remaining steps but never the closing
+summary: one grace completion to report is part of winding down.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ from agent.contracts import ToolRunner
 from agent.llm import LLMClient
 from agent.runtime.deadline import Deadline
 from agent.subagent.modes.base import (
+    MAX_PLAN_STEPS,
     CountingToolbelt,
     DeltaCb,
     EventCb,
@@ -33,76 +36,24 @@ from agent.subagent.modes.base import (
     ModeBudget,
     ModeLimits,
     StepCb,
-    counting_step,
+    budget_reason,
     looks_aborted,
     noop_event,
     parse_steps,
     sys_message,
 )
-from agent.subagent.modes.react import run_react
+from agent.subagent.modes.react import run_step
 from agent.subagent.modes.registry import register_mode
 from agent.subagent.modes.streaming import run_phase
 
-#: Rounds a step slice may use (tool work inside a step needs more than one)
-COT_STEP_ROUNDS = 4
-
-#: Upper bound on planned steps: a runaway list is truncated, not followed
-COT_MAX_STEPS = 8
-
 _PLAN_PROMPT = (
     "请先逐步推理,再给出结论。把完成该任务需要的推理过程拆成编号步骤"
-    f"(每行一步,动词开头,最多 {COT_MAX_STEPS} 步),不要调用工具。"
+    f"(每行一步,动词开头,最多 {MAX_PLAN_STEPS} 步),不要调用工具。"
 )
 
 _SYNTHESIS_PROMPT = (
     "以上按步骤完成了任务。综合所有步骤的结果给出最终答案:直接回答任务本身,标注未完成的步骤(如有)。"
 )
-
-
-async def _execute_step(
-    *,
-    llm: LLMClient,
-    toolbelt: ToolRunner | None,
-    messages: list[dict[str, Any]],
-    on_step: StepCb,
-    on_event: EventCb,
-    continue_if_idle: bool,
-    compress_budget: int,
-    governor: ContextGovernor | None,
-    deadline: Deadline | None,
-    budget: ModeBudget,
-    belt: CountingToolbelt | None,
-) -> str:
-    """One step on the shared transcript: a bounded ReAct slice when tools
-    are granted, a plain completion otherwise. Returns the step result text."""
-    if governor is not None:
-        await governor.enforce(messages)
-    if toolbelt is not None and belt is not None:
-        before_calls = belt.calls
-        result = await run_react(
-            llm,
-            belt,
-            messages,
-            budget.slice(rounds=COT_STEP_ROUNDS),
-            counting_step(on_step, budget),
-            on_event=on_event,
-            continue_if_idle=continue_if_idle,
-            compress_budget=compress_budget,
-            governor=governor,
-            deadline=deadline,
-        )
-        budget.add_tool_calls(belt.calls - before_calls)
-        return result
-    reply = await run_phase(
-        "cot-step",
-        llm=llm,
-        messages=messages,
-        on_event=on_event,
-        deadline=deadline,
-    )
-    budget.add_usage(reply.usage)
-    budget.add_rounds(1)
-    return reply.text or ""
 
 
 async def run_cot(
@@ -124,16 +75,14 @@ async def run_cot(
 
     # Phase 1: decompose into an inspectable plan
     plan_reply = await run_phase(
-        "cot-plan",
         llm=llm,
         messages=[*sys_message(_PLAN_PROMPT), *messages],
         on_event=on_event,
         deadline=deadline,
         round_n=1,
+        budget=budget,
     )
-    budget.add_usage(plan_reply.usage)
-    budget.add_rounds(1)
-    steps = parse_steps(plan_reply.text or "")[:COT_MAX_STEPS]
+    steps = parse_steps(plan_reply.text or "")[:MAX_PLAN_STEPS]
     await on_step(
         "llm",
         "cot-plan",
@@ -148,7 +97,7 @@ async def run_cot(
     # Phase 2: execute the steps, budget-permitting
     outcomes: list[tuple[str, bool]] = []  # (step, ok)
     for index, step in enumerate(steps, start=1):
-        if budget.over_token_budget():
+        if budget.over_token_budget() or budget.rounds_exhausted():
             outcomes.append((f"跳过:{step}", False))
             continue
         messages.append(
@@ -157,7 +106,7 @@ async def run_cot(
                 "content": f"【步骤 {index}/{len(steps)}】{step}\n完成本步骤;需要外部信息就调用工具。",
             }
         )
-        result = await _execute_step(
+        result = await run_step(
             llm=llm,
             toolbelt=toolbelt,
             messages=messages,
@@ -185,23 +134,37 @@ async def run_cot(
         )
 
     # Phase 3: synthesize (streamed when the caller consumes deltas); skipped
-    # only when the invocation's token budget is spent entirely
+    # only when the token budget is spent entirely - a rounds-exhausted
+    # invocation can still afford its one closing completion
     if budget.over_token_budget() and limits.max_tokens > 0:
         done = sum(1 for _, ok in outcomes if ok)
         return (
-            f"[预算] 已达 token 上限({limits.max_tokens}),链式推理中途收尾:"
-            f"{done}/{len(outcomes)} 步完成。可在设置提高 agent.rounds.max_tokens 后继续。"
+            f"[预算] 已达{budget_reason(limits, budget)},链式推理中途收尾:"
+            f"{done}/{len(outcomes)} 步完成。可在设置提高 agent.rounds.* 后继续。"
+        )
+    skipped = [
+        entry.removeprefix("跳过:")
+        for entry, ok in outcomes
+        if not ok and entry.startswith("跳过:")
+    ]
+    if skipped:
+        # Skipped steps never reached the transcript: the synthesis must be
+        # told explicitly, or it would report them as silently done
+        messages.append(
+            {
+                "role": "user",
+                "content": "因预算限制未执行的步骤:" + "; ".join(skipped),
+            }
         )
     messages.append({"role": "user", "content": _SYNTHESIS_PROMPT})
     final = await run_phase(
-        "cot-synthesis",
         llm=llm,
         messages=messages,
         on_event=on_event,
         deadline=deadline,
         on_delta=on_delta,
+        budget=budget,
     )
-    budget.add_usage(final.usage)
     await on_step(
         "llm",
         "cot-synthesis",
@@ -211,6 +174,6 @@ async def run_cot(
     return final.text or ""
 
 
-__all__ = ["COT_MAX_STEPS", "COT_STEP_ROUNDS", "run_cot"]
+__all__ = ["run_cot"]
 
 register_mode(Mode.COT, run_cot)

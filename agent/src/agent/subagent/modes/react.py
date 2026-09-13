@@ -34,16 +34,20 @@ from agent.runtime.loop_advisory import LoopAdvisory
 from agent.runtime.loop_detection import LoopDetector
 from agent.runtime.trace import start_span
 from agent.subagent.modes.base import (
+    STEP_ROUNDS,
+    CountingToolbelt,
     DeltaCb,
     EventCb,
     Mode,
+    ModeBudget,
     ModeLimits,
     StepCb,
+    counting_step,
     noop_event,
     tool_detail,
 )
 from agent.subagent.modes.registry import register_mode
-from agent.subagent.modes.streaming import complete_streaming, delta_timer
+from agent.subagent.modes.streaming import complete_streaming, delta_timer, run_phase
 
 # ReAct continuation: text with zero tool_calls is not a valid ending
 # (small talk excepted). This does not scan for polite acknowledgments -
@@ -358,7 +362,56 @@ async def run_react(
     return f"[中断] 已达 ReAct 轮数上限({limits.max_rounds});可在设置提高 agent.rounds.max"
 
 
-__all__ = ["CHITCHAT_RE", "CONTINUE_MARK", "run_react"]
+async def run_step(
+    *,
+    llm: LLMClient,
+    toolbelt: ToolRunner | None,
+    messages: list[dict[str, Any]],
+    on_step: StepCb,
+    on_event: EventCb,
+    continue_if_idle: bool,
+    compress_budget: int,
+    governor: ContextGovernor | None,
+    deadline: Deadline | None,
+    budget: ModeBudget,
+    belt: CountingToolbelt | None,
+    rounds: int | None = None,
+) -> str:
+    """One composite-mode step on the shared transcript: a bounded ReAct
+    slice when tools are granted (the slice's rounds/tool calls/token usage
+    fold into the invocation budget via the counting wrappers), a plain
+    completion otherwise. `rounds` overrides the default per-step cap.
+    Returns the step result text; abort reports flow through unchanged so
+    the caller can tell a failed step from real work."""
+    if governor is not None:
+        await governor.enforce(messages)
+    if toolbelt is not None and belt is not None:
+        before_calls = belt.calls
+        result = await run_react(
+            llm,
+            belt,
+            messages,
+            budget.slice(rounds=rounds if rounds is not None else STEP_ROUNDS),
+            counting_step(on_step, budget),
+            on_event=on_event,
+            continue_if_idle=continue_if_idle,
+            compress_budget=compress_budget,
+            governor=governor,
+            deadline=deadline,
+        )
+        budget.add_tool_calls(belt.calls - before_calls)
+        return result
+    reply = await run_phase(
+        llm=llm,
+        messages=messages,
+        on_event=on_event,
+        deadline=deadline,
+        budget=budget,
+    )
+    return reply.text or ""
+
+
+__all__ = ["CHITCHAT_RE", "CONTINUE_MARK", "run_react", "run_step"]
 
 
 register_mode(Mode.REACT, run_react)

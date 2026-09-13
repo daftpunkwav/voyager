@@ -16,7 +16,7 @@ from platform_contracts import CONTEXT_OVERFLOW_HINT, RuntimeEvent, ServiceError
 
 from agent.llm import LLMClient, LLMReply
 from agent.runtime.deadline import Deadline
-from agent.subagent.modes.base import DeltaCb, EventCb, noop_event
+from agent.subagent.modes.base import DeltaCb, EventCb, ModeBudget, noop_event
 
 #: Delta coalescing interval (seconds): token-level deltas are batched before
 #: the callback so event frequency stays bounded
@@ -137,7 +137,6 @@ async def complete_streaming(
 
 
 async def run_phase(
-    label: str,
     *,
     llm: LLMClient,
     messages: list[dict[str, Any]],
@@ -145,12 +144,15 @@ async def run_phase(
     deadline: Deadline | None = None,
     round_n: int = 0,
     on_delta: DeltaCb | None = None,
+    budget: ModeBudget | None = None,
 ) -> LLMReply:
     """One phase completion for the composite modes: the standard event
     bracket (LLM_STARTED / LLM_COMPLETED), the harness deadline backstop and
     the stream-or-complete tiering. Intermediate phases pass on_delta=None -
     their products never face the user; a mode's final synthesis may pass
-    the caller's on_delta so conversational runs still stream the answer."""
+    the caller's on_delta so conversational runs still stream the answer.
+    When a ModeBudget is given, the phase's usage and round land in the
+    invocation budget (single accounting site for every completion)."""
     round_delta = None
     if on_delta is not None:
         round_delta, _first = delta_timer(on_delta, on_event=on_event, round_n=round_n)
@@ -169,6 +171,9 @@ async def run_phase(
         degraded=bool(reply.degraded),
         overflow=bool(reply.overflow),
     )
+    if budget is not None:
+        budget.add_usage(reply.usage)
+        budget.add_rounds(1)
     return reply
 
 

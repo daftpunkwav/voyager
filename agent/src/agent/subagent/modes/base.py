@@ -104,6 +104,18 @@ def tool_detail(call: ToolCall, outcome: Any, ms: float) -> dict[str, Any]:
 #: composite modes treat any of them as a failed step/attempt, not an answer
 ABORT_PREFIXES = ("[中断]", "[预算]", "[无工具可用]")
 
+#: Rounds one composite-mode step slice may use (tool work inside a step
+#: needs more than one round)
+STEP_ROUNDS = 4
+
+#: Upper bound on planned steps: a runaway step list is truncated, not
+#: followed into an unbounded loop
+MAX_PLAN_STEPS = 8
+
+#: Tool room a slice falls back to when the invocation cap is unlimited
+#: (react reads max_tool_calls as a hard cap, so 0 must never be handed down)
+DEFAULT_TOOL_ROOM = 40
+
 _STEP_LINE_RE = re.compile(r"^(?:\d{1,2}[、.):]|[-*•])\s*(\S.*)$")
 _CJK_STEP_RE = re.compile(r"^[一二三四五六七八九十]{1,3}、\s*(\S.*)$")
 
@@ -161,11 +173,11 @@ class ModeBudget:
     def over_token_budget(self) -> bool:
         return 0 < self._limits.max_tokens <= self.tokens_used
 
-    def tokens_left(self) -> int:
-        """Remaining token budget; 0 stays 0 = unlimited."""
-        if self._limits.max_tokens <= 0:
-            return 0
-        return max(0, self._limits.max_tokens - self.tokens_used)
+    def rounds_exhausted(self) -> bool:
+        """Whether the invocation's round cap is spent (react slices shrink
+        toward one round before this trips; phases must gate on it so the
+        invocation-level cap is honored, not just the per-slice caps)."""
+        return 0 < self._limits.max_rounds <= self.rounds_used
 
     def slice(self, *, rounds: int, tools: int | None = None) -> ModeLimits:
         """A per-phase ModeLimits bounded by what the invocation has left.
@@ -182,7 +194,9 @@ class ModeBudget:
             if tools is not None:
                 tool_room = min(tool_room, tools)
         else:
-            tool_room = tools if tools is not None else self._limits.max_tool_calls
+            # Unlimited invocation cap: a slice is bounded only by its own
+            # preference (a literal 0 would read as a zero-call cap)
+            tool_room = tools if tools is not None else DEFAULT_TOOL_ROOM
         round_room = min(rounds, max(1, self._limits.max_rounds - self.rounds_used))
         return ModeLimits(
             max_rounds=max(1, round_room),
@@ -237,6 +251,14 @@ def counting_step(on_step: StepCb, budget: ModeBudget) -> StepCb:
     return wrapped
 
 
+def budget_reason(limits: ModeLimits, budget: ModeBudget) -> str:
+    """Which invocation cap is spent (caller has verified at least one);
+    names the limit so a wind-down report is actionable."""
+    if budget.over_token_budget() and limits.max_tokens > 0:
+        return f"token 上限({limits.max_tokens})"
+    return f"轮数上限({limits.max_rounds})"
+
+
 async def run_mode(
     mode: Mode,
     *,
@@ -277,6 +299,9 @@ async def run_mode(
 
 __all__ = [
     "ABORT_PREFIXES",
+    "DEFAULT_TOOL_ROOM",
+    "MAX_PLAN_STEPS",
+    "STEP_ROUNDS",
     "CountingToolbelt",
     "DeltaCb",
     "EventCb",
@@ -284,6 +309,7 @@ __all__ = [
     "ModeBudget",
     "ModeLimits",
     "StepCb",
+    "budget_reason",
     "capped_args",
     "counting_step",
     "looks_aborted",

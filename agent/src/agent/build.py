@@ -468,7 +468,7 @@ def build_agent(
         # having to call recall_memory. Episodic entries already shown by the
         # recent-cards layer are excluded, not duplicated.
         recall = ""
-        if query and memory is not None:
+        if query and cards.recall_facts > 0 and cards.recall_chars > 0 and memory is not None:
             exclude = {
                 str(e.get("summary") or "")
                 for e in memory.episodic.recent(limit=cards.memory_cards)

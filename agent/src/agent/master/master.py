@@ -54,6 +54,17 @@ def _last_assistant_text(history: list[dict[str, Any]]) -> str:
     return ""
 
 
+def _guard_allows(guard: Callable[[], bool], session: str) -> bool:
+    """Evaluate a notice turn's pre-step barrier. An exploding guard is
+    fail-closed: the wakeup is skipped, never run unverified - a fence that
+    cannot be checked must not be bypassed."""
+    try:
+        return bool(guard())
+    except Exception:
+        log.exception("pre-step guard failed (session %s); skipping the notice turn", session)
+        return False
+
+
 __all__ = ["CHAT_GOAL", "Master"]
 
 
@@ -276,7 +287,7 @@ class Master:
         async def _run() -> None:
             try:
                 async with self.sessions.lock_for(inst.session):
-                    if guard is not None and not guard():
+                    if guard is not None and not _guard_allows(guard, inst.session):
                         log.info(
                             "pre-step guard cancelled the notice turn (session %s)",
                             inst.session,
@@ -292,7 +303,9 @@ class Master:
                     inbox = self._session_inbox(inst.session)
                     while inbox:  # queued messages are handled in order
                         queued, queued_guard = inbox.popleft()
-                        if queued_guard is not None and not queued_guard():
+                        if queued_guard is not None and not _guard_allows(
+                            queued_guard, inst.session
+                        ):
                             log.info(
                                 "pre-step guard cancelled a queued notice (session %s)",
                                 inst.session,

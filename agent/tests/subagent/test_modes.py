@@ -264,6 +264,24 @@ class TestOtherModes:
         assert result.startswith("[预算]")
         assert "1/2 步完成" in result
 
+    async def test_cot_round_cap_skips_remaining_steps(self) -> None:
+        """The invocation round cap is honored across phases: plan + one step
+        spend max_rounds=2, the remaining step is skipped and named to the
+        closing synthesis (which still runs as the grace completion)."""
+        llm = FakeLLM(
+            [
+                LLMReply(text="1. 甲\n2. 乙"),
+                LLMReply(text="甲完成"),
+                LLMReply(text="综合收尾"),
+            ]
+        )
+        result = await run_mode(
+            Mode.COT, llm=llm, toolbelt=_belt(), messages=_msgs(), limits=ModeLimits(max_rounds=2)
+        )
+        assert result == "综合收尾"
+        synthesis_input = llm.calls[2]["messages"]
+        assert any("因预算限制未执行的步骤:乙" in str(m.get("content")) for m in synthesis_input)
+
     async def test_plan_execute_steps_and_report(self) -> None:
         """PLAN_EXECUTE: plan persists to the transcript, steps execute in
         order, the final report closes the invocation."""
