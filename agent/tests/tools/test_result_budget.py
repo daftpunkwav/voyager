@@ -48,6 +48,47 @@ def test_bound_spill_dir_fifo(tmp_path) -> None:
     assert bound_spill_dir(d / "missing", cap=3) == 0  # absent dir is a no-op
 
 
+def test_line_budget_triggers_spill(tmp_path) -> None:
+    result = "\n".join(f"l{i}" for i in range(500))
+    out = spill_result(result, tool="t", spill_dir=_spill_dir(tmp_path), limit=0, max_lines=100)
+    assert "已截断" in out
+    files = list(_spill_dir(tmp_path).glob("t-*.txt"))
+    assert len(files) == 1
+    assert files[0].read_text(encoding="utf-8") == result  # full output preserved
+
+
+def test_line_budget_zero_disables_dimension(tmp_path) -> None:
+    result = "line\n" * 10_000
+    out = spill_result(result, tool="t", spill_dir=_spill_dir(tmp_path), limit=0, max_lines=0)
+    assert out == result
+
+
+def test_either_dimension_spills(tmp_path) -> None:
+    d = _spill_dir(tmp_path)
+    out = spill_result("short\n" * 50, tool="t", spill_dir=d, limit=1_000_000, max_lines=10)
+    assert "已截断" in out
+    out = spill_result("x" * 50, tool="t", spill_dir=d, limit=10, max_lines=10_000)
+    assert "已截断" in out
+    assert len(list(d.glob("t-*.txt"))) == 2
+
+
+def test_bound_spill_dir_age_cleanup(tmp_path) -> None:
+    import os
+    import time
+
+    d = _spill_dir(tmp_path)
+    d.mkdir()
+    old = d / "t-old.txt"
+    new = d / "t-new.txt"
+    old.write_text("old", encoding="utf-8")
+    new.write_text("new", encoding="utf-8")
+    stale = time.time() - 8 * 24 * 3600
+    os.utime(old, (stale, stale))
+    removed = bound_spill_dir(d, cap=100, max_age_s=7 * 24 * 3600)
+    assert removed == 1
+    assert not old.exists() and new.exists()
+
+
 async def test_invoke_applies_result_budget(tmp_path) -> None:
     """End-to-end: a tool returning a huge string comes back truncated with
     the spill path, via the Toolbelt result_budget channel."""

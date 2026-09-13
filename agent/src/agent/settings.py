@@ -349,6 +349,15 @@ DEFS = [
         max=1_000_000,
         description="Per-tool-result character budget; larger results are truncated and spilled to workspace/spill/",
     ),
+    SettingDef(
+        key="agent.context.tool_result_max_lines",
+        module="agent",
+        type=SettingType.INT,
+        default=2000,
+        min=0,
+        max=1_000_000,
+        description="Per-tool-result line budget (either dimension spills); 0 disables the line dimension",
+    ),
     # Model context window (tokens): must match the model's real parameters.
     # Drives the usage status the LLM sees every turn and the auto-compact
     # threshold (usable = window - max_output).

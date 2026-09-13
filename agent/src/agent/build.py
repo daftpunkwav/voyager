@@ -93,7 +93,7 @@ from agent.tools import (
     todo_tools,
     web_tools,
 )
-from agent.tools.core.result_budget import bound_spill_dir, spill_result
+from agent.tools.core.result_budget import MAX_AGE_SECONDS, bound_spill_dir, spill_result
 from agent.tools.core.self_capability import AuditSinks
 
 #: Retention for the shared event log: streaming deltas (one row per text
@@ -355,11 +355,18 @@ def build_agent(
     def _spill_result(result: str, tool: str) -> str:
         """Oversized tool-result budget: truncate to a preview and spill the
         full output under workspace/spill/ (read_file can pull it back); the
-        limit hot-reads settings, 0 disables."""
+        dual dimensions (chars/lines) hot-read settings, 0 disables."""
         limit = int(settings.get("agent.context.tool_result_max") or 0)
-        text = spill_result(result, tool=tool, spill_dir=workspace / "spill", limit=limit)
+        max_lines = int(settings.get("agent.context.tool_result_max_lines") or 0)
+        text = spill_result(
+            result,
+            tool=tool,
+            spill_dir=workspace / "spill",
+            limit=limit,
+            max_lines=max_lines,
+        )
         if text is not result:
-            bound_spill_dir(workspace / "spill")
+            bound_spill_dir(workspace / "spill", max_age_s=MAX_AGE_SECONDS)
         return text
 
     # spawn_subagent is not assembled here: it calls back into

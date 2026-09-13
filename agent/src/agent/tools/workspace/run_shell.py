@@ -12,6 +12,13 @@ FileNotFoundError and there is no shell=True fallback. The subprocess cwd is
 pinned to the agent working directory supplied at assembly time, so relative
 paths land there; but this is not a chroot — absolute paths, `..`, and
 interpreters on PATH can still escape that directory.
+
+Output collection is bounded but lossless up to the global tool-result
+budget: the stream is read up to a large safety ceiling (memory bound) and
+anything beyond is drained and discarded while the process runs to
+completion (exit code stays truthful). The invoke-layer result budget does
+the truncation-with-spill, so the model can re-read the full output from
+the spill file instead of losing it at a tool-local cap.
 """
 
 from __future__ import annotations
@@ -24,7 +31,14 @@ from pathlib import Path
 
 from agent.tools.core.base import AgentTool
 
-_MAX_OUTPUT = 10_000
+#: In-memory safety ceiling for collected output (bytes); beyond it chunks
+#: are drained but discarded - the process still runs to completion so the
+#: exit code stays truthful. The result budget, not this cap, decides what
+#: the model sees.
+_MAX_COLLECT_BYTES = 1_000_000
+
+#: Read chunk size for the capped collector
+_CHUNK = 65_536
 
 # Explicit machine-level destructive commands (a blocklist is the last line of
 # defense, not a general parser; normal development commands never match)
@@ -41,6 +55,27 @@ _DESTRUCTIVE_RE = re.compile(
     r"|\bdel\s+/[sS]\s+/[qQ]\s+[cC]:\\",
     re.IGNORECASE,
 )
+
+
+async def _read_capped(stream: asyncio.StreamReader | None, cap: int) -> tuple[bytes, int]:
+    """Read the stream to EOF, keeping at most `cap` bytes; returns the kept
+    bytes and how many bytes were discarded beyond the cap."""
+    if stream is None:
+        return b"", 0
+    kept: list[bytes] = []
+    total = 0
+    discarded = 0
+    while True:
+        chunk = await stream.read(_CHUNK)
+        if not chunk:
+            return b"".join(kept), discarded
+        if total < cap:
+            keep = chunk[: cap - total]
+            kept.append(keep)
+            total += len(keep)
+            discarded += len(chunk) - len(keep)
+        else:
+            discarded += len(chunk)
 
 
 def run_shell_tool(cwd: str | Path) -> AgentTool:
@@ -83,23 +118,36 @@ def run_shell_tool(cwd: str | Path) -> AgentTool:
             # Race: the directory was moved away / became inaccessible after the
             # check; never fall back to the process cwd by omitting cwd
             return f"[失败] 工作目录不可用: {exc}"
+        reader = asyncio.ensure_future(_read_capped(proc.stdout, _MAX_COLLECT_BYTES))
+        timed_out = False
         try:
-            out, _ = await asyncio.wait_for(proc.communicate(), timeout)
+            await asyncio.wait_for(proc.wait(), timeout)
         except TimeoutError:
+            timed_out = True
             proc.kill()
             try:
                 await proc.wait()
             except Exception:  # noqa: BLE001, S110  # best-effort reaping; timeout semantics kept
                 pass
-            return f"[超时] {timeout}s 未结束,已终止"
+        out, discarded = await reader
         text = out.decode("utf-8", errors="replace")
-        if len(text) > _MAX_OUTPUT:
-            text = text[:_MAX_OUTPUT] + "\n…[截断]"
-        return f"exit={proc.returncode}\n{text}"
+        if discarded:
+            text += (
+                f"\n…[输出超出 {_MAX_COLLECT_BYTES} 字节安全上限,余量已丢弃"
+                f"({discarded} 字节);进程已正常运行结束]"
+            )
+        if timed_out:
+            body = f"\n{text}" if text else ""
+            return f"[超时] {timeout}s 未结束,已终止(已捕获输出如下){body}"
+        suffix = f"\n{text}" if text else ""
+        return f"exit={proc.returncode}{suffix}"
 
     return AgentTool(
         name="run_shell",
-        description="在 agent 工作目录执行命令(不经 shell;默认需用户确认;输出截断 1 万字)",
+        description=(
+            "在 agent 工作目录执行命令(不经 shell;默认需用户确认;"
+            "长输出会保存到文件供 read_file 分段查看)"
+        ),
         handler=run_shell,
         dimension="shell",
         write=True,

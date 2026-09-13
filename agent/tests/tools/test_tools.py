@@ -241,6 +241,29 @@ class TestShellGuard:
         out = await run_shell(f"{sys.executable} -c print(42)", timeout=5)
         assert "已拒绝" not in out and "42" in out
 
+    async def test_large_output_not_tool_truncated(self, tmp_path) -> None:
+        """Output beyond the old 10k tool-local cap comes back whole; the
+        invoke-layer result budget (spill) decides what the model sees."""
+        # a script file instead of -c quoting: nt-mode shlex keeps literal
+        # quotes, which turn a -c program into a bare string expression
+        script = tmp_path / "_big.py"
+        script.write_text("print('x' * 50000)", encoding="utf-8")
+        run_shell = shell_tools(tmp_path)["run_shell"].handler
+        out = await run_shell(f"{sys.executable} {script.name}", timeout=15)
+        assert out.startswith("exit=0\n")
+        assert "x" * 50000 in out
+        assert "截断" not in out
+
+    async def test_timeout_reports_captured_output(self, tmp_path) -> None:
+        script = tmp_path / "_slow.py"
+        script.write_text(
+            "import time\nprint('early', flush=True)\ntime.sleep(30)\n", encoding="utf-8"
+        )
+        run_shell = shell_tools(tmp_path)["run_shell"].handler
+        out = await run_shell(f"{sys.executable} {script.name}", timeout=1.5)
+        assert out.startswith("[超时]")
+        assert "early" in out
+
     async def test_missing_executable_does_not_fall_back_to_shell(self, tmp_path) -> None:
         run_shell = shell_tools(tmp_path)["run_shell"].handler
         # Not echo: /bin/echo really exists on Unix, which would mask the no-shell-fallback behavior
