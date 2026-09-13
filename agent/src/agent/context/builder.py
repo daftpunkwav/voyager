@@ -73,6 +73,7 @@ class ContextBuilder:
         memory_card_chars: int = 0,
         plan_section: str = "",
         recall_section: str = "",
+        mcp_section: str = "",
     ) -> str:
         layers: list[str] = []
         if self._rules:
@@ -135,6 +136,11 @@ class ContextBuilder:
             # Volatile layer stays last: per-turn review-phase state must not
             # bust the prefix cache for the stable layers above
             layers.append(plan_section)
+        if mcp_section:
+            # Server-declared instructions (volatile tail: servers connect and
+            # disconnect asynchronously, so this changes rarely but is not
+            # stable); content is pre-rendered by the caller, sorted by sid
+            layers.append(mcp_section)
         return "\n\n".join(layers)
 
     def messages(self, system: str, history: list[dict[str, Any]]) -> list[dict[str, Any]]:

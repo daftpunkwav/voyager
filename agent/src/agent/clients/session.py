@@ -50,6 +50,10 @@ class _McpProtocol:
 
     _ids = itertools.count(1)
 
+    def __init__(self) -> None:
+        self.server_capabilities: dict = {}  # from the initialize result
+        self.instructions: str = ""  # server-declared usage instructions (may be empty)
+
     async def connect(self) -> None:
         raise NotImplementedError
 
@@ -63,7 +67,7 @@ class _McpProtocol:
         raise NotImplementedError
 
     async def initialize(self) -> None:
-        await self._request(
+        result = await self._request(
             "initialize",
             {
                 "protocolVersion": PROTOCOL_VERSION,
@@ -71,6 +75,11 @@ class _McpProtocol:
                 "clientInfo": {"name": "agent", "version": "1.0"},
             },
         )
+        if isinstance(result, dict):
+            caps = result.get("capabilities")
+            self.server_capabilities = caps if isinstance(caps, dict) else {}
+            raw_instructions = result.get("instructions")
+            self.instructions = str(raw_instructions) if raw_instructions else ""
         await self._notify("notifications/initialized", {})
 
     async def list_remote_tools(self) -> list[dict]:
@@ -100,12 +109,45 @@ class _McpProtocol:
         text = "\n".join(p for p in parts if p)
         return text or json.dumps(result, ensure_ascii=False)
 
+    async def list_resources(self) -> list[dict]:
+        """Resource list for servers declaring the capability; each entry has
+        {uri, name, description?, mimeType?}."""
+        result = await self._request("resources/list", {})
+        resources = result.get("resources") or [] if isinstance(result, dict) else []
+        return [
+            {
+                "uri": str(r.get("uri") or ""),
+                "name": str(r.get("name") or ""),
+                "description": str(r.get("description") or ""),
+                "mimeType": str(r.get("mimeType") or ""),
+            }
+            for r in resources
+            if isinstance(r, dict) and r.get("uri")
+        ]
+
+    async def read_resource(self, uri: str) -> str:
+        """Read one resource; text contents are concatenated (non-text
+        contents render as a placeholder line)."""
+        result = await self._request("resources/read", {"uri": uri})
+        if not isinstance(result, dict):
+            return json.dumps(result, ensure_ascii=False)
+        parts: list[str] = []
+        for c in result.get("contents") or []:
+            if not isinstance(c, dict):
+                continue
+            if isinstance(c.get("text"), str):
+                parts.append(c["text"])
+            else:
+                parts.append(f"[non-text content: {c.get('mimeType') or c.get('uri') or '?'}]")
+        return "\n".join(p for p in parts if p) or json.dumps(result, ensure_ascii=False)
+
 
 class StdioMcpSession(_McpProtocol):
     """stdio subprocess session. command+args are exec'd directly
     (shell=False, never shell=True)."""
 
     def __init__(self, command: str, args: list[str], cwd: str | None = None) -> None:
+        super().__init__()
         self._command = command
         self._args = list(args)
         self._cwd = cwd
@@ -210,6 +252,7 @@ class UrlMcpSession(_McpProtocol):
     """
 
     def __init__(self, url: str, timeout: float = CALL_TIMEOUT) -> None:
+        super().__init__()
         self._url = url
         self._timeout = timeout
         self._client: httpx.AsyncClient | None = None

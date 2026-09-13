@@ -405,7 +405,13 @@ def build_agent(
     # External MCP: an empty pool is legal; the approve action registers into
     # the root registry via the capability layer (conversation copies from the
     # root next turn), start() only reconnects enabled+approved entries
-    mcp = McpClientPool(settings=settings, toolbelt=toolbelt, connect=mcp_connect, cwd=workspace)
+    mcp = McpClientPool(
+        settings=settings,
+        toolbelt=toolbelt,
+        connect=mcp_connect,
+        cwd=workspace,
+        auto_refresh=True,
+    )
 
     # Plugins: manifests are scannable (visible in list), loading is restricted
     # to the persisted approval list (union of bundle agent.plugins.approved and
@@ -470,6 +476,17 @@ def build_agent(
         scoped_rules=ScopedRules(workspace),  # workspace/AGENTS.md as a directory rule layer
     )
 
+    def _mcp_section() -> str:
+        """Server-declared usage instructions (connected, approved servers),
+        sorted by sid for stable bytes; omitted when none or disabled."""
+        if not settings.get("agent.mcp.instructions"):
+            return ""
+        entries = mcp.instructions_map()
+        if not entries:
+            return ""
+        blocks = [f"【MCP: {sid}】\n{text.strip()}" for sid, text in entries.items()]
+        return "\n\n".join(blocks)
+
     def _build_system(task, persona_key: str, query: str = "") -> str:
         persona = resolve_persona(persona_key) if persona_key else None
         # Guidelines are hot-read each turn like style: settings changes apply
@@ -512,6 +529,7 @@ def build_agent(
             memory_card_chars=cards.memory_card_chars,
             plan_section=plan_gates.section_for(getattr(task, "session", "")),
             recall_section=recall,
+            mcp_section=_mcp_section(),
         )
 
     spawner = Spawner(

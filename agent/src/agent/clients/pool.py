@@ -104,6 +104,7 @@ class McpClientPool:
         toolbelt: Toolbelt | None = None,  # root registry: register into it after approval
         connect: ConnectFn | None = None,  # test injection; defaults to session.default_connect
         cwd: str | Path | None = None,  # stdio subprocess working directory (= agent workdir)
+        auto_refresh: bool = False,  # periodic tools/list refresh loop (composition root enables it)
     ) -> None:
         self._settings = settings
         self._toolbelt = toolbelt
@@ -111,9 +112,12 @@ class McpClientPool:
         self._cwd = str(cwd) if cwd else None
         self._sessions: dict[str, McpSession] = {}
         self._previews: dict[str, list[dict]] = {}  # latest tools/list per server
+        self._instructions: dict[str, str] = {}  # server-declared instructions per sid
         self._errors: dict[str, str] = {}  # per-entry error from the last failed start/reconnect
         self._started = False
+        self._refresher: asyncio.Task | None = None  # periodic tools/list refresh (auto_refresh)
         self._close_tasks: set[asyncio.Task] = set()  # keeps close_best_effort tasks referenced
+        self._auto_refresh = auto_refresh
         self._connect_lock = (
             asyncio.Lock()
         )  # serialize connects per server: concurrent previews must not leak duplicate connections
@@ -184,6 +188,8 @@ class McpClientPool:
             raise ServiceError("agent", ErrorSuffix.UNAVAILABLE, message) from exc
         self._previews[sid] = tools
         self._errors.pop(sid, None)
+        raw_instructions = getattr(self._sessions[sid], "instructions", "")
+        self._instructions[sid] = str(raw_instructions) if raw_instructions else ""
         # Already approved: a successful tools/list remounts (so a server fixed
         # after a failed startup rejoins the tool surface via "refresh")
         approved = list(cfg.get("approved") or [])
@@ -228,6 +234,8 @@ class McpClientPool:
         Idempotent (repeat calls are no-ops); a per-server failure is recorded
         in the entry error and blocks neither startup nor other servers; dirty
         entries without an id (direct settings writes) are skipped the same way.
+        When auto_refresh is enabled (composition root), a periodic tools/list
+        refresh loop starts after the initial reconnect.
         """
         if self._started:
             return
@@ -243,6 +251,48 @@ class McpClientPool:
                 await self.preview(sid)
             except Exception as exc:  # noqa: BLE001  # per-server failure recorded for the settings page; startup continues
                 self._errors[sid] = str(exc)
+        if self._auto_refresh and self._refresher is None:
+            self._refresher = asyncio.create_task(self._refresh_loop())
+
+    async def _refresh_loop(self) -> None:
+        """Periodically re-list connected approved servers so remote tool
+        changes appear without a restart; interval hot-reads
+        agent.mcp.refresh_seconds (<=0 keeps the loop idle)."""
+        while True:
+            interval = 300.0
+            try:
+                if self._settings is not None:
+                    raw = self._settings.get("agent.mcp.refresh_seconds")
+                    interval = float(raw) if raw else 300.0
+            except (TypeError, ValueError):
+                interval = 300.0
+            await asyncio.sleep(interval if interval > 0 else 300.0)
+            if interval > 0:
+                await self.refresh_approved()
+
+    async def refresh_approved(self) -> None:
+        """Re-list every connected approved server (hot refresh): a changed
+        remote tool list remounts; a failure drops the session and records the
+        entry error, never raising."""
+        for cfg in self.configs():
+            sid = str(cfg.get("id") or "").strip()
+            if not sid or not cfg.get("enabled", True) or not cfg.get("approved"):
+                continue
+            if sid not in self._sessions:
+                continue
+            try:
+                await self.preview(sid)
+            except Exception as exc:  # noqa: BLE001  # recorded; other servers proceed
+                self._errors[sid] = str(exc)
+
+    def instructions_map(self) -> dict[str, str]:
+        """Server usage instructions keyed by sid (connected servers only),
+        sorted by sid for stable system-prompt bytes."""
+        return {
+            sid: self._instructions[sid]
+            for sid in sorted(self._instructions)
+            if self._instructions[sid]
+        }
 
     def list_state(self) -> list[dict]:
         """Settings-page data source: config + runtime state (connected / error /
@@ -265,6 +315,9 @@ class McpClientPool:
         ]
 
     async def aclose_sessions(self, sessions: list[McpSession] | None = None) -> None:
+        if self._refresher is not None:
+            self._refresher.cancel()
+            self._refresher = None
         targets = list(self._sessions.values()) if sessions is None else sessions
         for session in targets:
             try:
@@ -277,6 +330,9 @@ class McpClientPool:
     def close_best_effort(self) -> None:
         """Sync shutdown for AgentApp.close: schedule a task when a loop is
         running; otherwise kill synchronously on a best-effort basis."""
+        if self._refresher is not None:
+            self._refresher.cancel()
+            self._refresher = None
         sessions = list(self._sessions.values())
         self._sessions.clear()
         if not sessions:

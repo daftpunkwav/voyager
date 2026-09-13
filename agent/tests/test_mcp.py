@@ -570,3 +570,127 @@ class TestDomains:
         assert domain_prefixes([]) == ()
         assert "load_skill" in CORE_TOOLS  # must never leave CORE
         assert not [n for n in CORE_TOOLS if n.startswith("mcp__")]
+
+
+class ResourceSession(FakeSession):
+    """Fake server with the resources capability and declared instructions."""
+
+    TOOLS: ClassVar[list[dict]] = [
+        {"name": "search", "description": "Search", "schema": {"type": "object"}},
+    ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.server_capabilities: dict = {"tools": {}, "resources": {}}
+        self.instructions: str = "Always quote resource URIs verbatim."
+        self.reads: list[str] = []
+
+    async def list_resources(self) -> list[dict]:
+        return [
+            {"uri": "file:///docs/readme.md", "name": "readme", "description": "The readme"},
+            {
+                "uri": "file:///data/blob.bin",
+                "name": "blob",
+                "mimeType": "application/octet-stream",
+            },
+        ]
+
+    async def read_resource(self, uri: str) -> str:
+        self.reads.append(uri)
+        if uri == "file:///data/blob.bin":
+            return "[non-text content: application/octet-stream]"
+        return "hello from resource"
+
+
+def resource_connect(sessions: dict[str, FakeSession]):
+    async def connect(cfg: dict) -> FakeSession:
+        session = ResourceSession()
+        sessions[cfg["id"]] = session
+        return session
+
+    return connect
+
+
+class TestHotRefreshAndResources:
+    @pytest.fixture()
+    def rapp(self, tmp_path):
+        sessions: dict[str, FakeSession] = {}
+        app = build_agent(
+            data_dir=tmp_path / "rd",
+            workspace_dir=tmp_path / "ws",
+            llm=FakeLLM(),
+            mcp_connect=resource_connect(sessions),
+        )
+        app.sessions = sessions
+        yield app
+        app.memory.close()
+
+    async def _mount_all(self, app) -> None:
+        await _add(app, id="demo", kind="url", url="https://mcp.example.test")
+        await execute(
+            app.registry,
+            "approve_mcp_tools",
+            USER_CTX,
+            {"id": "demo", "names": ["*"]},
+        )
+        await app.mcp.preview("demo")
+
+    async def test_resource_tools_mounted_under_star_approval(self, rapp) -> None:
+        await self._mount_all(rapp)
+        names = rapp.mcp._toolbelt.names()
+        assert "mcp__demo__list_resources" in names
+        assert "mcp__demo__read_resource" in names
+        out = await rapp.mcp._toolbelt.call(
+            ToolCall("1", "mcp__demo__read_resource", {"uri": "file:///docs/readme.md"})
+        )
+        assert "hello from resource" in out
+        out = await rapp.mcp._toolbelt.call(ToolCall("2", "mcp__demo__list_resources", {}))
+        assert "file:///docs/readme.md" in out
+
+    async def test_resource_tools_absent_without_coverage(self, rapp) -> None:
+        await _add(rapp, id="demo", kind="url", url="https://mcp.example.test")
+        await execute(
+            rapp.registry,
+            "approve_mcp_tools",
+            USER_CTX,
+            {"id": "demo", "names": ["search"]},  # explicit tool, no resource coverage
+        )
+        await rapp.mcp.preview("demo")
+        names = rapp.mcp._toolbelt.names()
+        assert "mcp__demo__search" in names
+        assert "mcp__demo__list_resources" not in names
+        assert "mcp__demo__read_resource" not in names
+
+    async def test_instructions_captured_and_sorted(self, rapp) -> None:
+        assert rapp.mcp.instructions_map() == {}
+        await self._mount_all(rapp)
+        assert rapp.mcp.instructions_map() == {"demo": "Always quote resource URIs verbatim."}
+
+    async def test_refresh_picks_up_new_remote_tools(self, rapp) -> None:
+        await self._mount_all(rapp)
+        assert "mcp__demo__fresh" not in rapp.mcp._toolbelt.names()
+        rapp.sessions["demo"].TOOLS.append({"name": "fresh", "description": "New tool"})
+        await rapp.mcp.refresh_approved()
+        assert "mcp__demo__fresh" in rapp.mcp._toolbelt.names()
+
+    async def test_refresh_failure_records_error_keeps_session_dropped(self, rapp) -> None:
+        await self._mount_all(rapp)
+
+        # make the re-list fail: refresh records the error and drops the session
+        async def _boom():
+            raise RuntimeError("remote exploded")
+
+        rapp.sessions["demo"].list_remote_tools = _boom
+        await rapp.mcp.refresh_approved()
+        state = {s["id"]: s for s in rapp.mcp.list_state()}
+        assert state["demo"]["error"] != ""
+        assert "demo" not in rapp.mcp._sessions  # session dropped on failed refresh
+        # the mount lingers (existing pool semantics on connection loss)
+
+    def test_builder_renders_mcp_section(self) -> None:
+        from agent.context.builder import ContextBuilder
+
+        builder = ContextBuilder(rules=["r1"])
+        text = builder.system(mcp_section="【MCP: a】\nuse it well")
+        assert "【MCP: a】" in text and "use it well" in text
+        assert "【MCP" not in builder.system()

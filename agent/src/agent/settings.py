@@ -370,6 +370,22 @@ DEFS = [
             "models without a price stay in the unknown bucket"
         ),
     ),
+    SettingDef(
+        key="agent.mcp.refresh_seconds",
+        module="agent",
+        type=SettingType.INT,
+        default=300,
+        min=0,
+        max=86_400,
+        description="Interval for hot-refreshing connected MCP servers' tool lists; 0 disables the refresh loop",
+    ),
+    SettingDef(
+        key="agent.mcp.instructions",
+        module="agent",
+        type=SettingType.BOOL,
+        default=True,
+        description="Inject connected MCP servers' declared usage instructions into the system prompt",
+    ),
     # Model context window (tokens): must match the model's real parameters.
     # Drives the usage status the LLM sees every turn and the auto-compact
     # threshold (usable = window - max_output).
