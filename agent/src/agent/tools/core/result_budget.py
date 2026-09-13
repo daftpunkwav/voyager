@@ -15,6 +15,7 @@ root is needed, and the agent's existing fs policy applies unchanged.
 from __future__ import annotations
 
 import time
+import uuid
 from pathlib import Path
 
 #: Preview length kept in the tool message when a result is spilled
@@ -53,7 +54,10 @@ def spill_result(
     if not (over_chars or over_lines):
         return result
     spill_dir.mkdir(parents=True, exist_ok=True)
-    path = spill_dir / f"{_safe_name(tool)}-{time.time_ns()}.txt"
+    # time_ns keeps names sortable; the uuid fragment guards against Windows
+    # clock granularity, where two spills in the same tick would otherwise
+    # collide and the first spill file would be silently overwritten
+    path = spill_dir / f"{_safe_name(tool)}-{time.time_ns()}-{uuid.uuid4().hex[:6]}.txt"
     path.write_text(result, encoding="utf-8")
     head = result[:preview]
     return (
