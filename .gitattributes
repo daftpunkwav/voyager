@@ -1,2 +1,5 @@
 # Enforce LF line endings for Python: prevents Windows editors saving CRLF, which creates whole-file diff noise (and destroys git blame)
 *.py text eol=lf
+# Same for TOML data files (persona definitions embed multi-line prompts: a
+# stray CRLF inside the heredoc strings would change the system prompt bytes)
+*.toml text eol=lf
