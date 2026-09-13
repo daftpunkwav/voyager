@@ -13,6 +13,7 @@ ToolResult for tracing and UI layers (same pipeline, same text).
 from __future__ import annotations
 
 import asyncio
+import difflib
 import inspect
 import time
 from typing import Any
@@ -181,10 +182,14 @@ async def invoke_detailed(view: ToolbeltView, call: ToolCall) -> ToolResult:
     """
     tool = view.tool(call.name)
     if tool is None:
+        # Repair hint: name-similar tools from the current roster, so a typo
+        # or a bridged-name guess costs one corrected call instead of a stall
+        candidates = difflib.get_close_matches(call.name, view.tools, n=3, cutoff=0.5)
+        hint = f";最接近的工具: {', '.join(candidates)}" if candidates else ""
         return ToolResult(
             name=call.name,
             ok=False,
-            text=f"[未知工具] {call.name}(可能未授予本 subagent)",
+            text=f"[未知工具] {call.name}(可能未授予本 subagent 或名称有误){hint}",
             title=call.name,
         )
     invalid = validate_arguments(tool, call.arguments)

@@ -134,6 +134,18 @@ class TestTrim:
         out = await belt.call(ToolCall("1", "write_file", {"path": "a", "content": "b"}))
         assert "[未知工具]" in out
 
+    async def test_unknown_tool_suggests_closest_names(self, workdir) -> None:
+        """A typo'd or ungranted name gets the roster's nearest matches, so
+        the model can self-correct in one call."""
+        belt = _belt(workdir)
+        out = await belt.call(ToolCall("1", "read_fiel", {"path": "a"}))
+        assert "[未知工具]" in out
+        assert "read_file" in out
+        # a name with no roster neighbour gets no hint segment
+        out = await belt.call(ToolCall("1", "zzzQQQ", {}))
+        assert "[未知工具]" in out
+        assert "最接近的工具" not in out
+
     def test_trimmed_prefix_expand_relative_to_belt(self, workdir) -> None:
         """Prefix grants expand against the current roster; new prefix names outside the allowlist never enter."""
         belt = _belt(workdir)

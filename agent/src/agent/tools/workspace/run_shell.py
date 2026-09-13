@@ -138,7 +138,10 @@ def run_shell_tool(cwd: str | Path) -> AgentTool:
             )
         if timed_out:
             body = f"\n{text}" if text else ""
-            return f"[超时] {timeout}s 未结束,已终止(已捕获输出如下){body}"
+            return (
+                f"[超时] {timeout}s 未结束,已终止(已捕获输出如下);"
+                f"若命令需要更久,可加大 timeout 参数重试{body}"
+            )
         suffix = f"\n{text}" if text else ""
         return f"exit={proc.returncode}{suffix}"
 
