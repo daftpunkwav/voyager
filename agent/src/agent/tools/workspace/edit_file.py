@@ -15,11 +15,15 @@ from __future__ import annotations
 import os
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent.tools.core.base import AgentTool
 from agent.tools.workspace.edit_matchers import locate, reindent
 from agent.tools.workspace.jail import Jail
+from agent.tools.workspace.write_journal import safe_capture, safe_finalize
+
+if TYPE_CHECKING:
+    from agent.tools.workspace.write_journal import WriteJournal
 
 
 def _to_file_newlines(text: str, new_text: str) -> str:
@@ -42,7 +46,14 @@ def _atomic_write(target: Path, updated: str) -> None:
     os.replace(tmp, target)
 
 
-def _fuzzy_edit(jail: Jail, target: Path, text: str, old_text: str, new_text: str) -> Any:
+def _fuzzy_edit(
+    jail: Jail,
+    target: Path,
+    text: str,
+    old_text: str,
+    new_text: str,
+    journal: WriteJournal | None = None,
+) -> Any:
     """Apply the degradation chain after the exact pass found nothing."""
     result = locate(text, old_text)
     if result.span is None:
@@ -59,12 +70,14 @@ def _fuzzy_edit(jail: Jail, target: Path, text: str, old_text: str, new_text: st
     if result.consumed_eol and not replacement.endswith(("\n", "\r\n")):
         # the span swallowed the line break old_text ended with: keep one
         replacement += "\r\n" if "\r\n" in text else "\n"
+    entry = safe_capture(journal, target, intent="write")
     updated = text[:start] + _to_file_newlines(text, replacement) + text[end:]
     _atomic_write(target, updated)
+    safe_finalize(journal, entry, target)
     return {"edited": jail.display(target), "replacements": 1, "matched_by": result.level}
 
 
-def edit_file_tool(jail: Jail) -> AgentTool:
+def edit_file_tool(jail: Jail, journal: WriteJournal | None = None) -> AgentTool:
     def edit_file(path: str, old_text: str, new_text: str, count: int = 1) -> Any:
         """Atomic string replacement: the exact match must be unique (default
         count=1) so a short old_text never rewrites the wrong place; when the
@@ -87,15 +100,17 @@ def edit_file_tool(jail: Jail) -> AgentTool:
         text = raw.decode("utf-8", errors="replace")
         found = text.count(old_text)
         if found == 0 and count == 1:
-            return _fuzzy_edit(jail, target, text, old_text, new_text)
+            return _fuzzy_edit(jail, target, text, old_text, new_text, journal)
         if found == 0:
             return "[失败] 未找到匹配: 请用 read_file/grep 先看原文"
         if found > count:
             return (
                 f"[失败] 匹配 {found} 处,超过 count={count}: 请加长 old_text 使其唯一,或增大 count"
             )
+        entry = safe_capture(journal, target, intent="write")
         updated = text.replace(old_text, _to_file_newlines(text, new_text), found)
         _atomic_write(target, updated)
+        safe_finalize(journal, entry, target)
         return {"edited": jail.display(target), "replacements": found, "matched_by": "exact"}
 
     return AgentTool(

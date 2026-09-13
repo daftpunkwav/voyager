@@ -98,6 +98,7 @@ class TestAssemblyRosterParity:
                 "write_file",
                 "list_dir",
                 "delete_file",
+                "undo_writes",
                 "edit_file",
                 "exit_plan_mode",
                 "session_search",

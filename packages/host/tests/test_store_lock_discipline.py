@@ -30,6 +30,7 @@ _STORE_FILES = [
     "agent/src/agent/runtime/queue_store.py",
     "agent/src/agent/runtime/trajectory.py",
     "agent/src/agent/runtime/session_index.py",
+    "agent/src/agent/tools/workspace/write_journal.py",
     "packages/platform/capability/src/platform_capability/audit_db.py",
     "packages/platform/eventbus/src/platform_eventbus/log.py",
     "packages/platform/secrets/src/platform_secrets/store.py",

@@ -96,6 +96,7 @@ from agent.tools import (
 )
 from agent.tools.core.result_budget import MAX_AGE_SECONDS, bound_spill_dir, spill_result
 from agent.tools.core.self_capability import AuditSinks
+from agent.tools.workspace.write_journal import WriteJournal
 
 #: Retention for the shared event log: streaming deltas (one row per text
 #: chunk) are an ephemeral display stream - keep them for a day so brief SSE
@@ -147,6 +148,7 @@ def _build_tools(
     read_roots: tuple[str, ...],
     write_roots: tuple[str, ...],
     provide_context: Any,
+    write_journal: Any = None,
     extra_tools: dict[str, AgentTool] | None = None,
 ) -> ToolRegistry:
     """Assemble the builtin tool roster through named sources.
@@ -177,6 +179,7 @@ def _build_tools(
                 write_root_list,
                 read_roots_fn=_read_roots_fn,
                 write_roots_fn=_write_roots_fn,
+                journal=write_journal,
             ),
         )
     )
@@ -334,6 +337,9 @@ def build_agent(
         """Master side of request_context: summaries only, never full context."""
         return {"need": need, "profile": memory.profile.render(), "subagents": digests.render()}
 
+    # Write journal: content-addressed backups behind the fs write tools,
+    # enabling undo_writes; lives under data_dir, outside the workspace jail
+    write_journal = WriteJournal(data_dir / "write_journal")
     tool_registry = _build_tools(
         settings,
         workspace,
@@ -343,6 +349,7 @@ def build_agent(
         read_roots,
         write_roots,
         _provide_context,
+        write_journal=write_journal,
         extra_tools=extra_tools,
     )
     tools = tool_registry.build()
@@ -688,6 +695,7 @@ def build_agent(
         scheduler=scheduler,
         checkpoints=checkpoints,
         approvals=approval_store,
+        write_journal=write_journal,
         owns_settings=owns_settings,
         owns_log=owns_log,
     )

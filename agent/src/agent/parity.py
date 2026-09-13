@@ -62,6 +62,7 @@ AGENT_ONLY_TOOLS: dict[str, str] = {
     "edit_file": "workspace hand",
     "list_dir": "workspace hand",
     "delete_file": "workspace hand",
+    "undo_writes": "workspace hand (rollback of the agent's own writes)",
     "grep": "workspace hand",
     "glob": "workspace hand",
     "run_shell": "workspace hand",

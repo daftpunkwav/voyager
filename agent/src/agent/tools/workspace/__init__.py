@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agent.tools.core.base import AgentTool
 from agent.tools.workspace.delete_file import delete_file_tool
@@ -22,8 +23,12 @@ from agent.tools.workspace.run_shell import run_shell_tool
 from agent.tools.workspace.todo_read import todo_read_tool
 from agent.tools.workspace.todo_store import TodoStore, read_plan
 from agent.tools.workspace.todo_write import todo_write_tool
+from agent.tools.workspace.undo_writes import undo_writes_tool
 from agent.tools.workspace.workdir import DEFAULT_CATEGORIES, ensure_workdir
 from agent.tools.workspace.write_file import write_file_tool
+
+if TYPE_CHECKING:
+    from agent.tools.workspace.write_journal import WriteJournal
 
 
 def _jail(
@@ -49,17 +54,24 @@ def fs_tools(
     *,
     read_roots_fn: Callable[[], list[str | Path]] | None = None,
     write_roots_fn: Callable[[], list[str | Path]] | None = None,
+    journal: WriteJournal | None = None,
 ) -> dict[str, AgentTool]:
-    """Jailed fs tool group (read/write/edit/list/delete) sharing one Jail."""
+    """Jailed fs tool group (read/write/edit/list/delete/undo_writes) sharing
+    one Jail; a write journal adds rollback to the write tools and mounts the
+    undo_writes tool (absent without a journal - nothing is journaled)."""
     jail = _jail(roots, read_roots, write_roots, read_roots_fn, write_roots_fn)
     tools = (
         read_file_tool(jail),
-        write_file_tool(jail),
-        edit_file_tool(jail),
+        write_file_tool(jail, journal),
+        edit_file_tool(jail, journal),
         list_dir_tool(jail),
-        delete_file_tool(jail),
+        delete_file_tool(jail, journal),
     )
-    return {t.name: t for t in tools}
+    mapping = {t.name: t for t in tools}
+    if journal is not None:
+        undo = undo_writes_tool(journal)
+        mapping[undo.name] = undo
+    return mapping
 
 
 def search_tools(
