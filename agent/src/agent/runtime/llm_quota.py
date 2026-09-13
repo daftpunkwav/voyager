@@ -93,6 +93,7 @@ def metered_llm(
                         ms=ms,
                         input_tokens=usage.input_tokens,
                         output_tokens=usage.output_tokens,
+                        cached_tokens=usage.cached_tokens,
                         ok=ok,
                     )
                 )
@@ -130,6 +131,7 @@ def metered_llm(
                         ms=ms,
                         input_tokens=usage.input_tokens,
                         output_tokens=usage.output_tokens,
+                        cached_tokens=usage.cached_tokens,
                         ok=ok,
                     )
                 )

@@ -66,7 +66,12 @@ class TestQuotaAndRoster:
                 MeterRecord(kind="llm", name="t", ms=1.0, input_tokens=5, output_tokens=5)
             )
             quota = json.loads(await belt.call(ToolCall("1", "get_resource_quota", {})))
-            assert quota == {"tokens_used_today": 10, "daily_tokens": 0}
+            assert quota == {
+                "tokens_used_today": 10,
+                "daily_tokens": 0,
+                "cost_usd": 0.0,
+                "cost_unknown_models": ["t"],  # unknown model: surfaced, not priced
+            }
             roster = json.loads(await belt.call(ToolCall("2", "list_tools", {})))
             names = {t["name"] for t in roster}
             assert {"read_file", "cancel_run", "read_events"} <= names

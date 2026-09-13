@@ -14,6 +14,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
+from agent.runtime import pricing
 from agent.runtime.meter_store import MeterStore
 
 
@@ -24,6 +25,7 @@ class MeterRecord:
     ms: float
     input_tokens: int = 0
     output_tokens: int = 0
+    cached_tokens: int = 0  # cached share of input (llm rows; pricing uses it)
     ok: bool = True
     ts: float = field(default_factory=time.time)
 
@@ -42,10 +44,17 @@ class Meter:
     #: for debugging and keep memory bounded
     _RECORDS_CAP = 4096
 
-    def __init__(self, sink: Any = None, store: MeterStore | None = None) -> None:
+    def __init__(
+        self,
+        sink: Any = None,
+        store: MeterStore | None = None,
+        *,
+        pricing_overrides_fn: Any = None,
+    ) -> None:
         self.records: deque[MeterRecord] = deque(maxlen=self._RECORDS_CAP)
         self._sink = sink
         self._store = store
+        self._pricing_overrides_fn = pricing_overrides_fn
 
     def record(self, rec: MeterRecord) -> None:
         self.records.append(rec)
@@ -60,6 +69,16 @@ class Meter:
                 calls=1,
                 ts=rec.ts,
             )
+            if rec.kind == "llm":
+                # per-model accumulation behind the cost view (pricing needs
+                # the model dimension, the quota does not)
+                self._store.add_model(
+                    rec.name,
+                    rec.input_tokens,
+                    rec.output_tokens,
+                    cached_tokens=rec.cached_tokens,
+                    ts=rec.ts,
+                )
         if self._sink is not None:
             self._sink(rec)
 
@@ -87,6 +106,48 @@ class Meter:
         return sum(
             r.input_tokens + r.output_tokens for r in self.records if time.gmtime(r.ts)[:3] == today
         )
+
+    def cost_today(self, *, now: float | None = None) -> dict:
+        """Today's USD cost view: {"cost_usd": float, "unknown": [model
+        names]}. Unknown models are surfaced explicitly, never folded into a
+        zero. With a store, per-model day rows are priced; otherwise the
+        in-memory window (best effort, window eviction shows)."""
+        overrides = None
+        if self._pricing_overrides_fn is not None:
+            try:
+                overrides = self._pricing_overrides_fn() or None
+            except Exception:  # noqa: BLE001  # dirty overrides fall back to the table
+                overrides = None
+        current = time.time() if now is None else now
+        today = time.gmtime(current)[:3]
+        cost = 0.0
+        unknown: set[str] = set()
+        if self._store is not None:
+            rows = self._store.models_today(now=now)
+        else:
+            rows = [
+                (
+                    r.name,
+                    r.input_tokens,
+                    r.output_tokens,
+                    r.cached_tokens,
+                )
+                for r in self.records
+                if r.kind == "llm" and time.gmtime(r.ts)[:3] == today
+            ]
+        for name, in_tok, out_tok, cached_tok in rows:
+            price = pricing.cost_of(
+                name,
+                input_tokens=in_tok,
+                output_tokens=out_tok,
+                cached_tokens=cached_tok,
+                overrides=overrides,
+            )
+            if price is None:
+                unknown.add(name)
+            else:
+                cost += price
+        return {"cost_usd": round(cost, 6), "unknown": sorted(unknown)}
 
     def tool_calls_today(self, *, now: float | None = None) -> int:
         """Tool-call count today: the persisted kind='tool' row when a store is

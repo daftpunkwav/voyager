@@ -280,7 +280,10 @@ def build_agent(
     # Startup library maintenance: purge daily rows older than 90 days so
     # meter.db does not grow with dates
     meter_store.purge_older_than_days(90)
-    meter = Meter(store=meter_store)
+    meter = Meter(
+        store=meter_store,
+        pricing_overrides_fn=lambda: settings.get("agent.pricing.overrides"),
+    )
 
     # Daily token quota (resource dimension): the main conversation, dispatches,
     # and the arbitration judge all go through the same

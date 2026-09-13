@@ -163,12 +163,18 @@ class TestSettingsParity:
 
 
 class TestResourceQuota:
-    """get_resource_quota (resource dimension): read-only view of today usage and the quota limit."""
+    """get_resource_quota (resource dimension): read-only view of today usage,
+    the estimated cost, and the quota limit."""
 
     async def test_empty_meter_defaults(self, app) -> None:
-        """Empty meter: usage 0; daily_tokens reads the settings default of 0 (= unlimited)."""
+        """Empty meter: usage 0, no cost, no unknown models; daily_tokens reads the settings default of 0 (= unlimited)."""
         result = await execute(app.registry, "get_resource_quota", USER_CTX, {})
-        assert result == {"tokens_used_today": 0, "daily_tokens": 0}
+        assert result == {
+            "tokens_used_today": 0,
+            "daily_tokens": 0,
+            "cost_usd": 0.0,
+            "cost_unknown_models": [],
+        }
 
     async def test_reports_usage_and_limit(self, app) -> None:
         """Pre-seeded today records plus a limit: the reply matches Meter / settings (records default to ts=today)."""
@@ -182,7 +188,12 @@ class TestResourceQuota:
             {"key": "agent.resource.daily_tokens", "value": 1000},
         )
         result = await execute(app.registry, "get_resource_quota", USER_CTX, {})
-        assert result == {"tokens_used_today": 370, "daily_tokens": 1000}
+        assert result == {
+            "tokens_used_today": 370,
+            "daily_tokens": 1000,
+            "cost_usd": 0.0,
+            "cost_unknown_models": ["test"],  # unknown model: surfaced, never priced at zero
+        }
 
     async def test_agent_can_read_own_quota(self, app) -> None:
         """Parity: the agent can query its own quota (intended use: checking how much allowance is left)."""
@@ -198,7 +209,12 @@ class TestResourceQuota:
             AGENT_CTX,
             {},
         )
-        assert result == {"tokens_used_today": 0, "daily_tokens": 500}
+        assert result == {
+            "tokens_used_today": 0,
+            "daily_tokens": 500,
+            "cost_usd": 0.0,
+            "cost_unknown_models": [],
+        }
 
 
 class TestSurface:

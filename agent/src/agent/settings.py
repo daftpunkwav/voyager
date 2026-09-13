@@ -358,6 +358,18 @@ DEFS = [
         max=1_000_000,
         description="Per-tool-result line budget (either dimension spills); 0 disables the line dimension",
     ),
+    SettingDef(
+        key="agent.pricing.overrides",
+        module="agent",
+        type=SettingType.JSON,
+        default={},
+        user_only=True,
+        description=(
+            "Per-model price overrides (USD per Mtok) for the cost view: "
+            '{"<model>": {"input": 1.0, "output": 2.0, "cache_read": 0.1}}; '
+            "models without a price stay in the unknown bucket"
+        ),
+    ),
     # Model context window (tokens): must match the model's real parameters.
     # Drives the usage status the LLM sees every turn and the auto-compact
     # threshold (usable = window - max_output).

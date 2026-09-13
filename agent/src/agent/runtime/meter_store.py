@@ -26,6 +26,14 @@ CREATE TABLE IF NOT EXISTS meter_tokens (
     calls         INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (day_utc, kind)
 );
+CREATE TABLE IF NOT EXISTS meter_models (
+    day_utc       TEXT NOT NULL,   -- 'YYYY-MM-DD' UTC calendar day
+    model         TEXT NOT NULL,   -- model name as metered
+    input_tokens  INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cached_tokens INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day_utc, model)
+);
 """
 
 
@@ -80,6 +88,29 @@ class MeterStore:
             )
             self._conn.commit()
 
+    def add_model(
+        self,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        *,
+        cached_tokens: int = 0,
+        ts: float | None = None,
+    ) -> None:
+        """Accumulate per-model usage into the UTC day of ts (cost view)."""
+        day = _utc_day(time.time() if ts is None else ts)
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO meter_models (day_utc, model, input_tokens, output_tokens, cached_tokens)"
+                " VALUES (?, ?, ?, ?, ?)"
+                " ON CONFLICT(day_utc, model) DO UPDATE SET"
+                " input_tokens = input_tokens + excluded.input_tokens,"
+                " output_tokens = output_tokens + excluded.output_tokens,"
+                " cached_tokens = cached_tokens + excluded.cached_tokens",
+                (day, model, int(input_tokens), int(output_tokens), int(cached_tokens)),
+            )
+            self._conn.commit()
+
     def calls_today(self, *, now: float | None = None, kind: str = "tool") -> int:
         """Today's call count for one kind (tool by default)."""
         day = _utc_day(time.time() if now is None else now)
@@ -101,17 +132,31 @@ class MeterStore:
             ).fetchone()
         return (row[0] + row[1]) if row else 0
 
+    def models_today(self, *, now: float | None = None) -> list[tuple[str, int, int, int]]:
+        """Today's per-model (name, input, output, cached) rows behind the
+        cost view; empty when nothing was metered today."""
+        day = _utc_day(time.time() if now is None else now)
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT model, input_tokens, output_tokens, cached_tokens FROM meter_models"
+                " WHERE day_utc = ?",
+                (day,),
+            ).fetchall()
+        return [(str(r[0]), int(r[1]), int(r[2]), int(r[3])) for r in rows]
+
     def purge_older_than_days(self, days: int, *, now: float | None = None) -> int:
         """Delete day rows older than today_utc - days (strictly less), returning the
         number of rows removed.
 
-        Startup-time maintenance: keeps meter_tokens from accumulating unboundedly across
-        dates. Day boundaries match tokens_used_today (time.gmtime, UTC calendar days).
+        Startup-time maintenance: keeps meter_tokens/meter_models from
+        accumulating unboundedly across dates. Day boundaries match
+        tokens_used_today (time.gmtime, UTC calendar days).
         """
         base = time.time() if now is None else now
         cutoff = time.strftime("%Y-%m-%d", time.gmtime(base - days * 86400))
         with self._lock:
             cur = self._conn.execute("DELETE FROM meter_tokens WHERE day_utc < ?", (cutoff,))
+            self._conn.execute("DELETE FROM meter_models WHERE day_utc < ?", (cutoff,))
             self._conn.commit()
             return cur.rowcount
 
