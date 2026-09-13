@@ -29,6 +29,7 @@ TOOL_MECHANISMS: dict[str, str] = {
     "workspace/jail.py": "path jail shared by every fs/search tool (inner defense layer)",
     "workspace/workdir.py": "default working-directory layout used by assembly",
     "workspace/todo_store.py": "todo.json persistence + read_plan projection shared by tool and capability",
+    "workspace/edit_matchers.py": "fuzzy match chain (uniqueness-guarded degradation ladder) behind edit_file",
     "interact/question_broker.py": "ask/answer Future broker behind ask_user and answer_question",
 }
 

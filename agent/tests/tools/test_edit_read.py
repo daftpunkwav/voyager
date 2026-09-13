@@ -192,3 +192,98 @@ class TestEditFile:
         )
         assert json.loads(out)["replacements"] == 1
         assert target.read_bytes() == b"hello there\r\nsecond\r\n"
+
+    async def test_exact_result_reports_matched_by(self, workdir) -> None:
+        (workdir / "repo" / "a.txt").write_text("hello world\n", encoding="utf-8")
+        out = await _belt(workdir, confirm=_yes).call(
+            ToolCall(
+                "1", "edit_file", {"path": "repo/a.txt", "old_text": "world", "new_text": "there"}
+            )
+        )
+        assert json.loads(out)["matched_by"] == "exact"
+
+    async def test_fuzzy_line_trim_reindents(self, workdir) -> None:
+        target = workdir / "repo" / "code.py"
+        target.write_text("def f():\n    return 1 \n", encoding="utf-8")
+        out = await _belt(workdir, confirm=_yes).call(
+            ToolCall(
+                "1",
+                "edit_file",
+                {"path": "repo/code.py", "old_text": "return 1\n", "new_text": "return 2"},
+            )
+        )
+        body = json.loads(out)
+        assert body["matched_by"] == "line_trimmed"
+        # the matched line's indentation is carried onto the replacement
+        assert target.read_text(encoding="utf-8") == "def f():\n    return 2\n"
+
+    async def test_fuzzy_whitespace_lf_old_on_crlf_file(self, workdir) -> None:
+        target = workdir / "repo" / "win.txt"
+        target.write_bytes(b"a\r\nb\r\nc\r\n")
+        out = await _belt(workdir, confirm=_yes).call(
+            ToolCall(
+                "1", "edit_file", {"path": "repo/win.txt", "old_text": "a\nb", "new_text": "x\ny"}
+            )
+        )
+        body = json.loads(out)
+        assert body["matched_by"] == "line_trimmed"
+        # new_text is aligned to the file's CRLF convention
+        assert target.read_bytes() == b"x\r\ny\r\nc\r\n"
+
+    async def test_fuzzy_block_anchor_rescues_typo(self, workdir) -> None:
+        target = workdir / "repo" / "blk.txt"
+        target.write_text("head\none\ntwo\nthree\ntail\n", encoding="utf-8")
+        out = await _belt(workdir, confirm=_yes).call(
+            ToolCall(
+                "1",
+                "edit_file",
+                {
+                    "path": "repo/blk.txt",
+                    "old_text": "head\none\ntwo!\nthree\ntail",
+                    "new_text": "head\none\ntwo\nthree\ntail!",
+                },
+            )
+        )
+        body = json.loads(out)
+        assert body["matched_by"] == "block_anchor"
+        assert target.read_text(encoding="utf-8") == "head\none\ntwo\nthree\ntail!\n"
+
+    async def test_fuzzy_ambiguous_fails_unchanged(self, workdir) -> None:
+        body = "a b\na b\n"
+        (workdir / "repo" / "amb.txt").write_text(body, encoding="utf-8")
+        out = await _belt(workdir, confirm=_yes).call(
+            ToolCall(
+                "1", "edit_file", {"path": "repo/amb.txt", "old_text": "a\tb", "new_text": "z"}
+            )
+        )
+        assert out.startswith("[失败]")
+        assert "候选" in out
+        assert (workdir / "repo" / "amb.txt").read_text(encoding="utf-8") == body
+
+    async def test_fuzzy_escape_level(self, workdir) -> None:
+        target = workdir / "repo" / "esc.txt"
+        target.write_text("line1\nline2\n", encoding="utf-8")
+        out = await _belt(workdir, confirm=_yes).call(
+            ToolCall(
+                "1",
+                "edit_file",
+                {"path": "repo/esc.txt", "old_text": "line1\\nline2", "new_text": "oneline"},
+            )
+        )
+        body = json.loads(out)
+        assert body["matched_by"] == "escape"
+        assert target.read_text(encoding="utf-8") == "oneline\n"
+
+    async def test_fuzzy_count_is_exact_only(self, workdir) -> None:
+        # count > 1 keeps the strict literal semantics; the fuzzy ladder
+        # never silently replaces several sites
+        (workdir / "repo" / "cnt.txt").write_text("a \nb\n", encoding="utf-8")
+        out = await _belt(workdir, confirm=_yes).call(
+            ToolCall(
+                "1",
+                "edit_file",
+                {"path": "repo/cnt.txt", "old_text": "a\nb", "new_text": "z", "count": 2},
+            )
+        )
+        assert out.startswith("[失败]")
+        assert (workdir / "repo" / "cnt.txt").read_text(encoding="utf-8") == "a \nb\n"
