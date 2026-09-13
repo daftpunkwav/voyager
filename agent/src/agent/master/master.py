@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import deque
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from platform_contracts import DomainEvent, Event, ServiceError
@@ -93,8 +94,9 @@ class Master:
         self._distiller = distiller
         self._organizer = organizer
         self._wake_budget = wake_budget
-        self._goal_driver = goal_driver
         self.goal_driver = goal_driver  # public: build attaches after construction
+        # (single attribute: _start_turn reads this one, so a driver attached
+        # post-construction via build.py is honored)
         self.task_graph = task_graph
         self.blackboard = blackboard
         # Strong references to background dispatch tasks: prevent the GC from
@@ -102,7 +104,7 @@ class Master:
         self._bg: set[asyncio.Task] = set()
         # Per-session arbitration queues (feed/queue decisions land here while
         # that session's turn is running)
-        self._inboxes: dict[str, deque] = {}
+        self._inboxes: dict[str, deque[tuple[str, Callable[[], bool] | None]]] = {}
         self.sessions = SessionManager(
             spawner=spawner,
             sink_fn=self._session_sink,
@@ -199,26 +201,37 @@ class Master:
                 # the instance resolved above instead of dropping the message
                 self._start_turn(current if current is not None else inst, text, trace_id)
                 return
-            self._session_inbox(sid).append(text)
+        if inst.status is RunStatus.RUNNING:
+            self._session_inbox(sid).append((text, None))
             if decision.action == "enqueue_notify":
                 await self._reply(f"[Queued] {decision.reason}", trace_id=trace_id, session=sid)
             return
         self._start_turn(inst, text, trace_id)
 
-    async def handle_notice(self, session: str, text: str, *, trace_id: str = "") -> None:
+    async def handle_notice(
+        self,
+        session: str,
+        text: str,
+        *,
+        trace_id: str = "",
+        guard: Callable[[], bool] | None = None,
+    ) -> None:
         """Internal wakeup: one turn driven by a system notice (background job
         completion, goal continuation). The notice rides the user-role channel
         with an explicit marker; it is not user speech, so working memory,
         hooks and the arbiter stay out of the path. A running turn simply
         queues the notice - notices never preempt and never start a second
-        turn on the same session."""
+        turn on the same session. `guard` is the sender's pre-step barrier:
+        re-checked when the queued or admitted turn would actually start, so
+        state that changed between reservation and start cancels the wakeup
+        instead of running a stale continuation."""
         inst = self.sessions.resolve(session)
         if inst.status is RunStatus.RUNNING:
-            self._session_inbox(inst.session).append(text)
+            self._session_inbox(inst.session).append((text, guard))
             return
-        self._start_turn(inst, text, trace_id)
+        self._start_turn(inst, text, trace_id, guard=guard)
 
-    def _session_inbox(self, session_id: str) -> deque[str]:
+    def _session_inbox(self, session_id: str) -> deque[tuple[str, Callable[[], bool] | None]]:
         box = self._inboxes.get(session_id)
         if box is None:
             box = deque()
@@ -246,24 +259,50 @@ class Master:
 
         self.track_background(asyncio.create_task(_run()))
 
-    def _start_turn(self, inst: SubagentInstance, text: str, trace_id: str) -> None:
+    def _start_turn(
+        self,
+        inst: SubagentInstance,
+        text: str,
+        trace_id: str,
+        *,
+        guard: Callable[[], bool] | None = None,
+    ) -> None:
         """Run the turn in the background: the entry returns immediately; the
         per-session lock guarantees only one turn writes that session at a
         time (different sessions may run concurrently within the scheduler's
-        global cap)."""
+        global cap). `guard` is re-evaluated once the lock is held (pre-step
+        barrier): a False result cancels the turn before any LLM work."""
 
         async def _run() -> None:
             try:
                 async with self.sessions.lock_for(inst.session):
+                    if guard is not None and not guard():
+                        log.info(
+                            "pre-step guard cancelled the notice turn (session %s)",
+                            inst.session,
+                        )
+                        return
                     await self._turn(inst, text, trace_id)
+                    # Re-arm the goal continuation after every turn (primary
+                    # and queued alike): an active goal keeps advancing until
+                    # the agent marks it done/blocked; the driver's fence and
+                    # daily round budget bound the loop.
+                    if self.goal_driver is not None:
+                        self.goal_driver.maybe_schedule(inst.session)
                     inbox = self._session_inbox(inst.session)
                     while inbox:  # queued messages are handled in order
-                        queued = inbox.popleft()
+                        queued, queued_guard = inbox.popleft()
+                        if queued_guard is not None and not queued_guard():
+                            log.info(
+                                "pre-step guard cancelled a queued notice (session %s)",
+                                inst.session,
+                            )
+                            continue
                         if self._memory is not None:
                             self._memory.working.add("user", queued)
                         await self._turn(inst, queued, trace_id)
-                        if self._goal_driver is not None:
-                            self._goal_driver.maybe_schedule(inst.session)
+                        if self.goal_driver is not None:
+                            self.goal_driver.maybe_schedule(inst.session)
             except Exception as exc:
                 # The turn is backgrounded: the EventLoop no longer awaits the
                 # whole turn, so a failure must not become "Task exception was

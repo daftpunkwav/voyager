@@ -72,10 +72,21 @@ class GoalDriver:
         # session whose persistence lags its live state
         self._master.sessions.persist(session)
         self._goals.record_round(session)
+
+        # Pre-step barrier: the goal state is re-verified when the turn would
+        # actually start (after the session lock), not only at job admission -
+        # a pause/clear/done landing in between cancels the wakeup instead of
+        # running a stale continuation. The daily round budget is NOT
+        # re-checked here: this round is already accounted.
+        def _still_active() -> bool:
+            current = self._goals.get(session)
+            return current is not None and current.status == ACTIVE
+
         await self._master.handle_notice(
             session,
             f"[目标续跑] 目标「{goal.text}」:继续推进。"
             "若目标已完成,用 goal_write 标记 done;受阻则标记 blocked 并说明原因。",
+            guard=_still_active,
         )
 
 

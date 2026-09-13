@@ -68,7 +68,7 @@ class TestGoalDriverFence:
             goals.set_status("s1", PAUSED)
             seen: list[str] = []
 
-            async def _notice(session, text):
+            async def _notice(session, text, guard=None):
                 seen.append(session)
 
             monkeypatch.setattr(app.master, "handle_notice", _notice)
@@ -90,7 +90,7 @@ class TestGoalDriverFence:
             goals.create("s1", "keep going")
             seen: list[str] = []
 
-            async def _notice(session, text):
+            async def _notice(session, text, guard=None):
                 seen.append(session)
 
             monkeypatch.setattr(app.master, "handle_notice", _notice)
@@ -109,12 +109,63 @@ class TestGoalDriverFence:
                 goals.record_round("s1")  # MAX_ROUNDS_PER_DAY = 2
             seen: list[str] = []
 
-            async def _notice(session, text):
+            async def _notice(session, text, guard=None):
                 seen.append(session)
 
             monkeypatch.setattr(app.master, "handle_notice", _notice)
             await app.master.goal_driver._run_goal_job({"session": "s1"})
             assert seen == []
+        finally:
+            app.close()
+
+    async def test_prestep_guard_carries_active_check(self, tmp_path, monkeypatch) -> None:
+        """The notice rides with a guard closure that re-verifies the goal is
+        still ACTIVE when the turn would actually start (pre-step barrier)."""
+        app = _app(tmp_path)
+        try:
+            from types import SimpleNamespace
+
+            monkeypatch.setattr(
+                app.master.goal_driver, "_settings", SimpleNamespace(get=lambda k: "")
+            )
+            goals = app.master.goal_driver._goals
+            goals.create("s1", "keep going")
+            received: dict[str, object] = {}
+
+            async def _notice(session, text, guard=None):
+                received["guard"] = guard
+
+            monkeypatch.setattr(app.master, "handle_notice", _notice)
+            await app.master.goal_driver._run_goal_job({"session": "s1"})
+            guard = received["guard"]
+            assert callable(guard) and guard() is True
+            goals.set_status("s1", PAUSED)
+            assert guard() is False  # a pause landing between admission and start cancels
+        finally:
+            app.close()
+
+
+class TestGoalRearm:
+    async def test_primary_user_turn_rearms_goal(self, tmp_path, monkeypatch) -> None:
+        """An active goal is re-armed after a primary user turn, not only
+        after queued drain turns - otherwise the continuation driver stays
+        dormant on the common path."""
+        import asyncio
+
+        app = _app(tmp_path)
+        try:
+            goals = app.master.goal_driver._goals
+            goals.create("s1", "ship it")
+            armed: list[str] = []
+            monkeypatch.setattr(
+                app.master.goal_driver,
+                "maybe_schedule",
+                lambda session: armed.append(session),
+            )
+            await app.master.handle_user_message("推进一下", session_id="s1")
+            while app.master._bg:
+                await asyncio.gather(*list(app.master._bg))
+            assert armed == ["s1"]
         finally:
             app.close()
 
