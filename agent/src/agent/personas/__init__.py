@@ -1,27 +1,66 @@
-"""Persona presets (pure data): structural IDs named by responsibility;
-display names stay in Persona.display_name.
+"""Persona presets (pure data, loaded from definitions/*.toml): structural
+IDs named by responsibility; display names stay in Persona.display_name.
 
-Legacy keys (lucien/iris/hub/scout/...) resolve to responsibility IDs via
-ALIASES so persisted sessions can migrate.
+The built-in roles are data files (one TOML per role, codex builtins shape)
+rather than code: adding or tuning a role never touches the loader. Legacy
+keys (lucien/iris/hub/scout/...) resolve to responsibility IDs via ALIASES
+so persisted sessions can migrate.
 """
 
+from __future__ import annotations
+
+import tomllib
+from pathlib import Path
+
 from agent.personas.base import Persona
-from agent.personas.explainer import EXPLAINER
-from agent.personas.graph_guide import GRAPH_GUIDE
-from agent.personas.orchestrator import ORCHESTRATOR
-from agent.personas.organizer import ORGANIZER
-from agent.personas.recon import RECON
+
+_DEFINITIONS_DIR = Path(__file__).parent / "definitions"
+
+#: Public alias: where the built-in role files live (data, not code)
+DEFINITIONS_DIR = _DEFINITIONS_DIR
+
+
+def _load_persona(path: Path) -> Persona:
+    """One definition file -> one Persona; a missing key field fails loudly
+    (a broken role file is an assembly error, not a silent skip)."""
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    tool_allow = data.get("tool_allow")
+    return Persona(
+        key=str(data["key"]),
+        display_name=str(data["display_name"]),
+        style=str(data["style"]),
+        system_prompt=str(data["system_prompt"]),
+        default_mode=str(data.get("default_mode", "react")),
+        tool_allow=tuple(str(t) for t in tool_allow) if tool_allow is not None else None,
+    )
+
+
+def _load_all(directory: Path) -> dict[str, Persona]:
+    out: dict[str, Persona] = {}
+    for path in sorted(directory.glob("*.toml")):
+        persona = _load_persona(path)
+        out[persona.key] = persona
+    return out
+
+
+_PERSONAS = _load_all(_DEFINITIONS_DIR)
 
 # Display-name constant aliases (tests and old imports); .key is the structural ID
+ORCHESTRATOR = _PERSONAS["orchestrator"]
+RECON = _PERSONAS["recon"]
+EXPLAINER = _PERSONAS["explainer"]
+ORGANIZER = _PERSONAS["organizer"]
+GRAPH_GUIDE = _PERSONAS["graph_guide"]
+
+# Legacy python-module names kept importable (removed data modules)
 LUCIEN = ORCHESTRATOR
 IRIS = RECON
 ELIO = EXPLAINER
 MIYAI = ORGANIZER
 ATLAS = GRAPH_GUIDE
 
-PERSONAS: dict[str, Persona] = {
-    p.key: p for p in (ORCHESTRATOR, RECON, EXPLAINER, ORGANIZER, GRAPH_GUIDE)
-}
+PERSONAS: dict[str, Persona] = dict(_PERSONAS)
 
 #: Legacy structural IDs / frontend seven-role names -> responsibility IDs
 ALIASES: dict[str, str] = {

@@ -7,8 +7,7 @@ checkpoint resume without regaining write tools.
 import pytest
 from agent.llm import FakeLLM, LLMReply, ToolCall
 from agent.main import build_agent
-from agent.personas import resolve_persona
-from agent.personas.orchestrator import ORCHESTRATOR
+from agent.personas import ORCHESTRATOR, resolve_persona
 from agent.policy import FsPolicy, PolicyEngine
 from agent.runtime.state import RunStatus
 from agent.subagent import Mode, TaskBook

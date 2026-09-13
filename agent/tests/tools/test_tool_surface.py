@@ -11,12 +11,10 @@ persona, and tool step visibility.
 """
 
 import asyncio
-from pathlib import Path
 
-import agent.personas.organizer as organizer_mod
 from agent.llm import FakeLLM, LLMReply, ToolCall
 from agent.main import build_agent
-from agent.personas import resolve_persona
+from agent.personas import DEFINITIONS_DIR, resolve_persona
 from agent.subagent.instance import page_preactivate
 from agent.tools import AgentTool
 
@@ -67,7 +65,7 @@ class TestPrefixGrant:
 
     def test_persona_file_does_not_enumerate_expansion(self) -> None:
         """The persona file grants a prefix, not an enumerated expansion (no bridge tool names hardcoded)."""
-        src = Path(organizer_mod.__file__).read_text(encoding="utf-8")
+        src = (DEFINITIONS_DIR / "organizer.toml").read_text(encoding="utf-8")
         assert "notes__*" in src
         assert "notes__create_note" not in src
         assert "mark_note_span" not in src
