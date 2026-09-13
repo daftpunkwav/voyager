@@ -17,7 +17,7 @@ from agent.policy.decision import Decision
 from agent.policy.fs import FsPolicy, decide_fs
 from agent.policy.levels import Level
 from agent.policy.network import NetworkPolicy, decide_network, narrow_network
-from agent.policy.shell import decide_shell
+from agent.policy.shell import ShellPolicy, decide_shell
 
 
 @dataclass(frozen=True)
@@ -48,6 +48,7 @@ class PolicyEngine:
         app: AppPolicy | None = None,
         resource: ResourcePolicy | None = None,
         shell_level: Level = Level.L2_CONFIRM,
+        shell: ShellPolicy | None = None,
         settings=None,  # optional settings handle (anything with get(key)); decisions hot-read it
     ) -> None:
         self.network = network or NetworkPolicy()
@@ -55,6 +56,9 @@ class PolicyEngine:
         self.app = app or AppPolicy()
         self.resource = resource or ResourcePolicy()
         self.shell_level = shell_level
+        # shell prefix rules default to the snapshot level; a bare shell_level
+        # argument keeps working (BC) as ShellPolicy(level=shell_level)
+        self.shell = shell or ShellPolicy(level=shell_level)
         self._settings = settings
 
     def decide(self, action: Action) -> Decision:
@@ -140,8 +144,31 @@ class PolicyEngine:
     def _decide_app(self, action: Action) -> Decision:
         return decide_app(self._app_policy(), action)
 
+    def _shell_policy(self) -> ShellPolicy:
+        """The shell dimension policy: prefix rules hot-read with a settings
+        handle (same discipline as app/fs); the level stays at the assembly
+        snapshot. Invalid values fall back to the snapshot wholesale."""
+        if self._settings is None:
+            return self.shell
+        try:
+            allowed_raw = self._settings.get("agent.shell.allowed")
+            denied_raw = self._settings.get("agent.shell.denied")
+            allowed = list(allowed_raw) if isinstance(allowed_raw, (list, tuple, set)) else None
+            denied = list(denied_raw) if isinstance(denied_raw, (list, tuple, set)) else None
+            if (
+                allowed is None
+                or denied is None
+                or not all(isinstance(x, str) for x in allowed + denied)
+            ):
+                return self.shell
+            return ShellPolicy(
+                level=self.shell.level, allowed=frozenset(allowed), denied=frozenset(denied)
+            )
+        except Exception:  # noqa: BLE001  # on settings errors fall back to the snapshot
+            return self.shell
+
     def _decide_shell(self, action: Action) -> Decision:
-        return decide_shell(self._fs_policy(), self.shell_level, action)
+        return decide_shell(self._fs_policy(), self._shell_policy(), action)
 
 
 __all__ = [
@@ -152,5 +179,6 @@ __all__ = [
     "NetworkPolicy",
     "PolicyEngine",
     "ResourcePolicy",
+    "ShellPolicy",
     "narrow_network",
 ]

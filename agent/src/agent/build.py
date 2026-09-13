@@ -47,6 +47,7 @@ from agent.personas import canonical_persona_key, resolve_persona
 from agent.plugins import PluginManager
 from agent.policy import AppPolicy, FsPolicy, NetworkPolicy, PolicyEngine
 from agent.policy.approvals import ApprovalStore
+from agent.policy.shell import ShellPolicy
 from agent.runtime import EventLoop, Meter, MeterStore, RuntimeEvents, Scheduler, metered_llm
 from agent.runtime.jobs_view import JobsView
 from agent.runtime.queue_store import QueueStore
@@ -127,6 +128,10 @@ def _build_policy(
         app=AppPolicy(
             allowed=frozenset(settings.get("agent.app.allowed")),
             denied=frozenset(settings.get("agent.app.denied")),
+        ),
+        shell=ShellPolicy(
+            allowed=frozenset(settings.get("agent.shell.allowed")),
+            denied=frozenset(settings.get("agent.shell.denied")),
         ),
         settings=settings,
     )

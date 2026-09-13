@@ -446,6 +446,27 @@ DEFS = [
         user_only=True,
         description="In-app capability denylist (deny wins; user-writable only)",
     ),
+    # Shell command-prefix rules: an allow hit skips the L2 confirm only for
+    # commands with no write intent (verbs/redirection); deny always rejects.
+    # Patterns are token prefixes: `git status` matches exactly; a trailing
+    # `*` (`git diff *`) matches the head plus any remaining arguments.
+    # user_only: widening the confirm envelope is the user's prerogative.
+    SettingDef(
+        key="agent.shell.allowed",
+        module="agent",
+        type=SettingType.JSON,
+        default=[],
+        user_only=True,
+        description="Shell command prefix allowlist (skips L2 for read-only commands; user-writable only)",
+    ),
+    SettingDef(
+        key="agent.shell.denied",
+        module="agent",
+        type=SettingType.JSON,
+        default=[],
+        user_only=True,
+        description="Shell command prefix denylist (deny wins over allow; user-writable only)",
+    ),
     # Daily token quota (resource dimension): hot-read before each complete of
     # the main-conversation LLM; once the current UTC day's input+output total
     # reaches the cap, real calls are refused; 0 = unlimited.

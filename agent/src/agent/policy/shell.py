@@ -7,6 +7,7 @@ command execution is confirmed by a human unless a remembered approval
 from __future__ import annotations
 
 import re
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -57,10 +58,20 @@ _SHELL_ABS_PATH_RE = re.compile(r"[A-Za-z]:[/\\][^\s|;&\"']*|/[^\s|;&\"']*")
 
 @dataclass(frozen=True)
 class ShellPolicy:
-    """Shell dimension is level-driven (L2 by default); the dataclass exists
-    so the engine carries one snapshot like every other dimension."""
+    """Shell dimension: default level (L2 confirms every command), plus
+    command-prefix allow/deny rules.
+
+    Rules are token prefixes of the parsed command: `git status` matches only
+    exactly that command; a trailing `*` (`git diff *`) matches the head plus
+    any remaining arguments; the bare `*` matches everything. Deny wins over
+    allow. An allow hit still falls back to the default level when the
+    command carries write intent (verbs / redirection) - prefix rules are a
+    convenience for read-only commands, never a write bypass.
+    """
 
     level: Level = Level.L2_CONFIRM
+    allowed: frozenset[str] = frozenset()
+    denied: frozenset[str] = frozenset()
 
 
 def _targets_skills_write(cmd: str) -> bool:
@@ -99,19 +110,59 @@ def _targets_read_root_write(
     return False
 
 
-def decide_shell(fs, shell_level: Level, action) -> Decision:
+def command_tokens(cmd: str) -> tuple[str, ...]:
+    """Parse a command into tokens for prefix matching; an unparseable
+    command yields no tokens, so it can never match a rule (falls back to
+    the default level). posix=False everywhere: matching is best-effort and
+    platform-consistent, not execution (run_shell owns execution)."""
+    try:
+        return tuple(shlex.split(cmd or "", posix=False))
+    except ValueError:
+        return ()
+
+
+def _matches_prefix(tokens: tuple[str, ...], pattern: str) -> bool:
+    parts = pattern.split()
+    if not parts:
+        return False
+    if parts == ["*"]:
+        return True
+    if parts[-1] == "*":
+        head = parts[:-1]
+        return len(tokens) >= len(head) and tokens[: len(head)] == tuple(head)
+    return tokens == tuple(parts)
+
+
+def _matches_any(tokens: tuple[str, ...], patterns: frozenset[str]) -> bool:
+    return any(_matches_prefix(tokens, p) for p in patterns)
+
+
+def decide_shell(fs, shell: ShellPolicy, action) -> Decision:
+    cmd = action.target or ""
     # skills subtree must not be rewritten via shell: reject before L2 (as the fs check does)
-    if (action.write or action.irreversible) and _targets_skills_write(action.target):
+    if (action.write or action.irreversible) and _targets_skills_write(cmd):
         return Decision(False, reason="skill directory cannot be modified via shell")
     # Read-only additional roots must not be rewritten via shell (closing a shell bypass):
     # likewise rejected before L2; paths inside write_roots are not blocked (consistent
     # with the fs dimension, still L2). Additional roots are hot-read, sharing the same
     # source as fs decisions.
     if (action.write or action.irreversible) and _targets_read_root_write(
-        action.target, fs.read_roots, fs.write_roots
+        cmd, fs.read_roots, fs.write_roots
     ):
         return Decision(False, reason="read-only additional roots cannot be modified via shell")
-    return Decision(True, shell_level, "Command execution requires confirmation by default")
+    tokens = command_tokens(cmd)
+    if tokens:  # unparseable/empty commands never match a rule: fall to L2
+        if _matches_any(tokens, shell.denied):
+            return Decision(False, reason=f"command matches a shell deny rule: {cmd.split()[0]}…")
+        if (
+            _matches_any(tokens, shell.allowed)
+            and not _SHELL_WRITE_INTENT_RE.search(cmd)
+            and ">" not in cmd
+        ):
+            return Decision(
+                True, Level.L0_SILENT, "allowed by shell prefix rule: read-only command"
+            )
+    return Decision(True, shell.level, "Command execution requires confirmation by default")
 
 
 __all__ = ["ShellPolicy", "decide_shell"]
