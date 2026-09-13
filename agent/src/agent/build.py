@@ -40,6 +40,7 @@ from agent.master.proactive import ProactiveEngine
 from agent.master.task_graph import TaskGraph
 from agent.memory import Memory
 from agent.memory.distill import Distiller
+from agent.memory.read_policy import render_relevant_recall
 from agent.memory.recorder import EpisodeRecorder
 from agent.memory.session_store import SessionStore
 from agent.personas import canonical_persona_key, resolve_persona
@@ -447,7 +448,7 @@ def build_agent(
         scoped_rules=ScopedRules(workspace),  # workspace/AGENTS.md as a directory rule layer
     )
 
-    def _build_system(task, persona_key: str) -> str:
+    def _build_system(task, persona_key: str, query: str = "") -> str:
         persona = resolve_persona(persona_key) if persona_key else None
         # Guidelines are hot-read each turn like style: settings changes apply
         # on the next turn
@@ -462,6 +463,23 @@ def build_agent(
             else ""
         )
         cards = budget_from_settings(settings)
+        # Resident relevance layer (memory read policy): memory hits for the
+        # current input, so long-term knowledge surfaces without the model
+        # having to call recall_memory. Episodic entries already shown by the
+        # recent-cards layer are excluded, not duplicated.
+        recall = ""
+        if query and memory is not None:
+            exclude = {
+                str(e.get("summary") or "")
+                for e in memory.episodic.recent(limit=cards.memory_cards)
+            }
+            recall = render_relevant_recall(
+                memory,
+                query,
+                limit=cards.recall_facts,
+                max_chars=cards.recall_chars,
+                exclude_summaries=exclude,
+            )
         return builder.system(
             persona=persona,
             task=task,
@@ -471,6 +489,7 @@ def build_agent(
             memory_cards=cards.memory_cards,
             memory_card_chars=cards.memory_card_chars,
             plan_section=plan_gates.section_for(getattr(task, "session", "")),
+            recall_section=recall,
         )
 
     spawner = Spawner(

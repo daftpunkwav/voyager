@@ -72,6 +72,7 @@ class ContextBuilder:
         memory_cards: int = 0,
         memory_card_chars: int = 0,
         plan_section: str = "",
+        recall_section: str = "",
     ) -> str:
         layers: list[str] = []
         if self._rules:
@@ -118,6 +119,12 @@ class ContextBuilder:
             if task.done_when:
                 block += f"\n完成判定: {task.done_when}"
             layers.append(block)
+        if recall_section:
+            # Resident relevance layer (memory read policy): memory hits for
+            # the current input. Sits after the per-instance task layer and
+            # before the more volatile digest/page layers - it re-renders per
+            # turn with the input, so it belongs in the volatile tail.
+            layers.append(recall_section)
         if self._digests is not None:
             rendered = self._digests.render()
             if rendered:

@@ -42,8 +42,9 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
         )
     if inst.build_system is not None:
         # Rebuild the system prompt every turn so style/profile/page/digest
-        # changes never go stale across turns
-        inst.system_prompt = inst.build_system(inst.task, inst.persona)
+        # changes never go stale across turns; the turn's input rides along
+        # as the memory read policy's recall query (resident relevance layer)
+        inst.system_prompt = inst.build_system(inst.task, inst.persona, user_text or "")
     if inst.resume_messages:
         # Mid-turn resume: pending_messages already contains system /
         # history / this turn's tool entries, so skip history rebuild and

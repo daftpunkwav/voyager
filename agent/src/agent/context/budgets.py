@@ -30,6 +30,13 @@ HISTORY_MAX = 60
 MEMORY_CARDS = 5
 MEMORY_CARD_CHARS = 600
 
+#: Resident relevance layer defaults (memory read policy): how many recall
+#: hits the system prompt carries for the current input and the character cap
+#: of the layer (0 = off). Bounded so the relevance layer never crowds out
+#: the transcript itself.
+RECALL_FACTS = 4
+RECALL_CHARS = 600
+
 
 @dataclass(frozen=True)
 class ContextBudget:
@@ -48,6 +55,8 @@ class ContextBudget:
     compact_target: int = 0  # post-compact target; 0 = auto (40% of usable window)
     memory_cards: int = MEMORY_CARDS  # recent episodic cards resident in the system layer
     memory_card_chars: int = MEMORY_CARD_CHARS  # character cap of that layer
+    recall_facts: int = RECALL_FACTS  # relevance-layer hits for the current input
+    recall_chars: int = RECALL_CHARS  # character cap of that layer
 
 
 def budget_from_settings(settings: SettingsReader, model_name: str = "") -> ContextBudget:
@@ -83,7 +92,16 @@ def budget_from_settings(settings: SettingsReader, model_name: str = "") -> Cont
         compact_target=_int("agent.context.compact_target", 0),
         memory_cards=_int_or_zero("agent.memory.context_cards", MEMORY_CARDS),
         memory_card_chars=_int_or_zero("agent.memory.context_card_chars", MEMORY_CARD_CHARS),
+        recall_facts=_int_or_zero("agent.memory.recall_facts", RECALL_FACTS),
+        recall_chars=_int_or_zero("agent.memory.recall_chars", RECALL_CHARS),
     )
 
 
-__all__ = ["MEMORY_CARDS", "MEMORY_CARD_CHARS", "ContextBudget", "budget_from_settings"]
+__all__ = [
+    "MEMORY_CARDS",
+    "MEMORY_CARD_CHARS",
+    "RECALL_CHARS",
+    "RECALL_FACTS",
+    "ContextBudget",
+    "budget_from_settings",
+]

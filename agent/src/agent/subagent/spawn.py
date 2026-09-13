@@ -30,7 +30,15 @@ from agent.tools.core.base import Toolbelt
 
 log = logging.getLogger("agent.subagent.spawn")
 
-BuildSystemFn = Callable[[TaskBook, str], str]  # (task book, persona key) -> system prompt
+# (task book, persona key, turn input) -> system prompt; the third argument
+# is the text driving the current turn ("" at spawn/resume time) and feeds
+# the memory read policy's resident relevance layer
+BuildSystemFn = Callable[[TaskBook, str, str], str]
+
+
+def _default_build_system(task: TaskBook, persona: str, query: str = "") -> str:
+    return task.goal
+
 
 #: Resident cap for terminal instances (runtime hygiene): when COMPLETED /
 #: FAILED / CANCELLED instances exceed this count, the oldest by insertion
@@ -63,7 +71,7 @@ class Spawner:
         self._scheduler = scheduler
         self._events = events
         self._checkpoints = checkpoints
-        self._build_system = build_system or (lambda task, persona: task.goal)
+        self._build_system = build_system or _default_build_system
         self._pages = pages
         self._sync_digest = sync_digest
         self._budget_fn = budget_fn
@@ -103,7 +111,7 @@ class Spawner:
             toolbelt=toolbelt,
             llm=self._llm,
             planner_llm=self._planner_llm,
-            system_prompt=self._build_system(task, persona),
+            system_prompt=self._build_system(task, persona, ""),
             events=self._events,
             state=RunState(task=task.goal),
             reply_sink=reply_sink,
@@ -224,7 +232,7 @@ class Spawner:
             toolbelt=self._narrowed_belt(task),
             llm=self._llm,
             planner_llm=self._planner_llm,
-            system_prompt=self._build_system(task, snap.persona),
+            system_prompt=self._build_system(task, snap.persona, ""),
             events=self._events,
             state=state,  # exactly as persisted: run_id / steps / started_ts / status all preserved
             reply_sink=None,
