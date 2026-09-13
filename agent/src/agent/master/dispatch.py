@@ -153,6 +153,13 @@ async def dispatch_task(
         len(allowed_tools) if allowed_tools is not None else "full",
     )
     inst = spawner.spawn(task, persona=spawn_key, name=name or goal[:16])
+    # Parent linkage for the cancel cascade: the spawn_subagent tool runs
+    # inside the dispatching instance's turn, where current_instance is set;
+    # a background dispatch (goal/queue) has no turn context and stays top-level
+    _parent = current_instance.get(None)
+    _parent_id = getattr(_parent, "id", "") if _parent is not None else ""
+    if _parent_id and _parent_id != inst.id:
+        inst.parent_run_id = _parent_id
     inst.state.delegation_depth = depth
     if custom is not None and custom.network_mode:
         inst.rebind_toolbelt(
@@ -176,6 +183,9 @@ async def dispatch_task(
         else:
             if inst.status.value == "paused":
                 await master.reply(f"[paused] {inst.name}", session=inst.task.session)
+            elif inst.status is RunStatus.CANCELLED:
+                # a cancelled run is not a done: dependents read this notice
+                await master.reply(f"[cancelled] {inst.name}", session=inst.task.session)
             else:
                 # Long results get one synthesis call so the notice carries the
                 # conclusions instead of a blind cut; failures fall back inside

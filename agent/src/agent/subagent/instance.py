@@ -121,6 +121,7 @@ class SubagentInstance:
         None  # tool activation set for conversational instances (kept across turns)
     )
     persona: str = ""  # persona key captured at spawn; needed for per-turn system rebuild
+    parent_run_id: str = ""  # dispatching instance's id (cancel cascade); "" = top-level
     build_system: Callable[[TaskBook, str, str], str] | None = None
     # (task, persona key, turn input) -> system prompt; the third argument
     # feeds the memory read policy's resident relevance layer

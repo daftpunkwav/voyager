@@ -302,17 +302,26 @@ class Spawner:
 
     async def cancel(self, id_or_name: str) -> list[str]:
         """Emergency stop: cancel alive instances by id or name (conversational
-        chat included).
+        chat included), cascading down the spawn tree to the target's running
+        descendants (instances it dispatched, transitively).
 
         The CANCELLED status is set before interrupting the underlying task -
         CancelledError inside run_turn is a BaseException, so an
         ``except Exception`` cannot swallow it and rewrite the status. Returns
-        the stopped instance ids; empty list when nothing matched.
+        the stopped instance ids (target first, then descendants); empty list
+        when nothing matched.
         """
         hits = [
             i for i in self.instances.values() if i.status.alive and id_or_name in (i.id, i.name)
         ]
-        for inst in hits:
+        stopped: list[SubagentInstance] = []
+        stopped_ids: set[str] = set()
+        queue = list(hits)
+        while queue:
+            inst = queue.pop(0)
+            if inst.id in stopped_ids:
+                continue
+            stopped_ids.add(inst.id)
             inst.cancel()
             await self._events.emit(
                 RuntimeEvent.AGENT_CANCELLED,
@@ -320,11 +329,20 @@ class Spawner:
                 subagent=inst.id,
                 name=inst.name,
             )
-        for inst in hits:
-            await self._scheduler.cancel(inst.id)
+            stopped.append(inst)
+            # cascade: everything still running under this instance
+            queue.extend(
+                other
+                for other in self.instances.values()
+                if other.status.alive
+                and other.id not in stopped_ids
+                and other.parent_run_id == inst.id
+            )
+        for sid in stopped_ids:
+            await self._scheduler.cancel(sid)
         # Emergency stop lands in CANCELLED: evict oldest terminal instances when over the cap
         self._trim_terminal_instances()
-        return [i.id for i in hits]
+        return [i.id for i in stopped]
 
 
 __all__ = ["Mode", "Spawner", "SubagentInstance", "TaskBook"]

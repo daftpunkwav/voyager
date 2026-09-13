@@ -89,3 +89,43 @@ class TestHardCancel:
         with pytest.raises(asyncio.CancelledError):
             await asyncio.wait_for(task, timeout=1)
         assert inst.state.status is RunStatus.CANCELLED
+
+
+class TestCancelCascade:
+    """Cancelling a target also stops its running descendants (spawn tree)."""
+
+    async def test_cascade_stops_child_and_grandchild(self, tmp_path) -> None:
+        app = _app(tmp_path)
+        parent = app.spawner.spawn(TaskBook(goal="parent"), name="parent")
+        child = app.spawner.spawn(TaskBook(goal="child"), name="child")
+        child.parent_run_id = parent.id
+        grandchild = app.spawner.spawn(TaskBook(goal="grandchild"), name="grand")
+        grandchild.parent_run_id = child.id
+        outsider = app.spawner.spawn(TaskBook(goal="unrelated"), name="other")
+        # spawn alone leaves a pre-run status: mark the tree alive like a
+        # running dispatch would
+        for inst in (parent, child, grandchild, outsider):
+            inst.state.status = RunStatus.RUNNING
+
+        out = await execute(
+            app.registry, "cancel_run", ActorContext(actor=LOCAL_USER), {"id_or_name": "parent"}
+        )
+        assert set(out["cancelled"]) == {parent.id, child.id, grandchild.id}
+        assert parent.state.status is RunStatus.CANCELLED
+        assert child.state.status is RunStatus.CANCELLED
+        assert grandchild.state.status is RunStatus.CANCELLED
+        assert outsider.state.status is RunStatus.RUNNING  # untouched
+
+    async def test_cascade_does_not_loop_on_cycles(self, tmp_path) -> None:
+        app = _app(tmp_path)
+        a = app.spawner.spawn(TaskBook(goal="a"), name="a")
+        b = app.spawner.spawn(TaskBook(goal="b"), name="b")
+        a.parent_run_id = b.id  # stale cycle in the linkage must not hang cancel
+        b.parent_run_id = a.id
+        a.state.status = RunStatus.RUNNING
+        b.state.status = RunStatus.RUNNING
+
+        out = await execute(
+            app.registry, "cancel_run", ActorContext(actor=LOCAL_USER), {"id_or_name": "a"}
+        )
+        assert set(out["cancelled"]) == {a.id, b.id}
