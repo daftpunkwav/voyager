@@ -13,6 +13,7 @@ from agent.tools.interact.question_broker import AskUser, Question
 _APPROVE = "批准执行"
 _KEEP_PLANNING = "继续计划"
 _TIMEOUT_S = 600.0
+_APPROVED_MARK = "【已批准计划】"
 
 
 def exit_plan_mode_tool(gates: PlanGates, asker: AskUser) -> AgentTool:
@@ -36,10 +37,17 @@ def exit_plan_mode_tool(gates: PlanGates, asker: AskUser) -> AgentTool:
         if verdict == _APPROVE:
             gate.active = False
             gate.plan = body
-            # The plan text must ride the tool result: the submission itself
-            # lives in tool_call arguments, which the turn-end history
-            # write-back drops - without this the model loses its own plan
-            # from context as soon as the turn ends.
+            # The plan must survive the turn: the tool result carries it through
+            # the rest of this turn (the submission lives in tool_call arguments,
+            # which the turn-end history write-back drops), and the history
+            # entry keeps it available to every later turn. Both surfaces get
+            # the entry because the turn end either keeps history as-is (normal
+            # path) or rebuilds it from the live messages (summary path).
+            if inst is not None:
+                entry = {"role": "user", "content": f"{_APPROVED_MARK}\n{body}"}
+                inst.history.append(entry)
+                if inst._turn_messages is not None:
+                    inst._turn_messages.append(dict(entry))
             return (
                 "计划已获批准,已退出计划模式。计划全文如下,请从第一步开始严格按计划执行"
                 "(后续轮次对照此计划逐项推进,已完成的步骤不再重复):\n\n"
