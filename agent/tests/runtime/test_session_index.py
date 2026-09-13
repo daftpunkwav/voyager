@@ -41,6 +41,34 @@ def test_catch_up_and_search_roundtrip(tmp_path) -> None:
         log.close()
 
 
+def test_tool_steps_are_searchable(tmp_path) -> None:
+    """agent.step tool events fold in as role="step" rows keyed by tool name
+    plus summary, so past actions are retrievable, not just conversation."""
+    log = _fresh(tmp_path)
+    log.append(
+        Event(
+            type=DomainEvent.AGENT_STEP,
+            actor=ActorRef(kind=ActorKind.AGENT, id="agent"),
+            payload={
+                "name": "run_shell",
+                "kind": "tool",
+                "session": "s1",
+                "summary": "pytest -q 全量测试通过",
+            },
+        )
+    )
+    index = SessionIndex(tmp_path / "idx.db", log)
+    try:
+        assert index.catch_up() == 1
+        hits = index.search("run_shell")
+        assert hits and hits[0]["role"] == "step"
+        assert "pytest" in hits[0]["snippet"]
+        assert index.search("全量测试")
+    finally:
+        index.close()
+        log.close()
+
+
 def test_deleted_index_rebuilds_from_log(tmp_path) -> None:
     log = _fresh(tmp_path)
     _append(log, DomainEvent.USER_MESSAGE, "s1", "周报草稿在哪")

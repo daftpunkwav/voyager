@@ -1,17 +1,20 @@
 """Tests for the wait_subagent capability: immediate return for terminal
 instances, polling to completion, the timeout path, and NOT_FOUND for
-unknown ids."""
+unknown ids. The spawner is duck-typed (only .instances is read), matching
+the capability's real dependency surface."""
 
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from agent.capabilities.team.wait_subagent import wait_subagent
 from agent.runtime.state import RunStatus
+from agent.subagent.spawn import Spawner
 from platform_contracts import ServiceError
 
 
-def _spawner_with(inst) -> SimpleNamespace:
-    return SimpleNamespace(instances={inst.id: inst})
+def _spawner_with(inst) -> Spawner:
+    return cast(Spawner, SimpleNamespace(instances={inst.id: inst}))
 
 
 def _inst(status: RunStatus, result: str = "") -> SimpleNamespace:
@@ -83,5 +86,5 @@ async def test_timeout_is_capped_and_malformed_falls_back(monkeypatch) -> None:
     monkeypatch.setattr(mod, "DEFAULT_TIMEOUT_S", 0.2)
     inst = _inst(RunStatus.RUNNING)
     for bad in (10**9, "not-a-number"):
-        out = await wait_subagent(_spawner_with(inst), "abc123", timeout_s=bad)
+        out = await wait_subagent(_spawner_with(inst), "abc123", timeout_s=cast(float, bad))
         assert out["timed_out"] is True

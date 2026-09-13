@@ -37,11 +37,16 @@ CREATE VIRTUAL TABLE IF NOT EXISTS hits USING fts5(
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
 
-_SOURCE_TYPES = (DomainEvent.USER_MESSAGE, DomainEvent.AGENT_MESSAGE)
+_SOURCE_TYPES = (
+    DomainEvent.USER_MESSAGE,
+    DomainEvent.AGENT_MESSAGE,
+    DomainEvent.AGENT_STEP,
+)
 
 _ROLE_BY_TYPE = {
     DomainEvent.USER_MESSAGE: "user",
     DomainEvent.AGENT_MESSAGE: "assistant",
+    DomainEvent.AGENT_STEP: "step",
 }
 
 #: A CJK ideograph, or a run of ascii letters/digits (tokenization units)
@@ -97,7 +102,16 @@ class SessionIndex:
             added = 0
             for seq, event in rows:
                 payload = event.payload or {}
-                text = str(payload.get("content") or "")
+                if event.type == DomainEvent.AGENT_STEP:
+                    # Tool steps make "what was done before" searchable; the
+                    # text is the tool name plus its one-line summary
+                    name = str(payload.get("name") or "")
+                    summary = str(payload.get("summary") or "")
+                    text = f"{name}: {summary}" if name else summary
+                    role = _ROLE_BY_TYPE[event.type]
+                else:
+                    text = str(payload.get("content") or "")
+                    role = _ROLE_BY_TYPE[event.type]
                 session = str(payload.get("session") or "")
                 if not text:
                     continue
@@ -106,7 +120,7 @@ class SessionIndex:
                     (
                         session,
                         seq,
-                        _ROLE_BY_TYPE[event.type],
+                        role,
                         event.ts,
                         text,
                         normalize(text),
