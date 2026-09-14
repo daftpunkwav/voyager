@@ -52,6 +52,7 @@ const TRAIL_STEPS = [
     inputTokens: 33600,
     outputTokens: 1100,
     ttftMs: 350,
+    text: '完整的思考内容:先读文件,再判断格式,最后落笔。',
   },
   {
     seq: 3,
@@ -164,5 +165,13 @@ describe('live trace detail', () => {
     render(<LiveTurnTrace />);
     fireEvent.click(screen.getByText('读取文件'));
     expect(screen.getByText('{"path":"a.txt"}')).toBeTruthy();
+  });
+
+  it('expands a think row to the full round text', () => {
+    reset({ steps: TRAIL_STEPS, lastSteps: [] });
+    render(<LiveTurnTrace />);
+    fireEvent.click(screen.getByText('思考'));
+    expect(screen.getByText('思考内容')).toBeTruthy();
+    expect(screen.getByText(/完整的思考内容/)).toBeTruthy();
   });
 });

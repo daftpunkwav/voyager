@@ -7,6 +7,7 @@
 
 import { useTranslation } from 'react-i18next';
 import { toolLabel } from '@/widgets/chat/TurnTrace';
+import { ChatMarkdown } from '@/widgets/chat/ChatMarkdown';
 import type { TurnStep } from '@/stores/chatStore';
 import { formatCompactCount } from '@/utils/trajectory';
 
@@ -60,6 +61,17 @@ export function StepDetail({ step }: { step: TurnStep }) {
         <>
           {typeof step.round === 'number' ? (
             <Row k={t('chat:traj.round')} v={String(step.round)} />
+          ) : null}
+          {step.text ? (
+            <div className="chat-stepdetail__thinkwrap">
+              <span className="chat-stepdetail__key muted">{t('chat:traj.thinking')}</span>
+              <div className="chat-stepdetail__think chat-md">
+                <ChatMarkdown content={step.text} />
+              </div>
+              {step.textTruncated ? (
+                <div className="chat-stepdetail__note muted">{t('chat:traj.thinkTruncated')}</div>
+              ) : null}
+            </div>
           ) : null}
           {step.toolCalls && step.toolCalls.length > 0 ? (
             <Row

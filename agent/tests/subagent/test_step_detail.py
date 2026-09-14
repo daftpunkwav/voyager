@@ -161,8 +161,39 @@ class TestLlmStepDetail:
         assert first["round"] == 1 and first["tool_calls"] == ["list_dir"]
         assert first["ms"] >= 0 and "ttft_ms" not in first  # FakeLLM does not stream
         assert (first["input_tokens"], first["output_tokens"]) == (120, 30)
+        assert "text" not in first  # empty round text stays absent, not ""
         second = rounds[1][3]
         assert (second["input_tokens"], second["output_tokens"]) == (60, 10)
+        assert second["text"] == "done"
+
+    async def test_round_detail_carries_full_text_capped(self, tmp_path) -> None:
+        root = ensure_workdir(tmp_path / "ws")
+        big = "想" * 9000
+        llm = FakeLLM(
+            [
+                LLMReply(
+                    text="先看一下目录。",
+                    tool_calls=(ToolCall("c-1", "list_dir", {"path": "."}),),
+                ),
+                LLMReply(text=big),
+            ]
+        )
+        seen, on_step = _collector()
+        await run_mode(
+            Mode.REACT,
+            llm=llm,
+            toolbelt=_belt(root),
+            messages=[{"role": "user", "content": "think hard"}],
+            limits=ModeLimits(),
+            on_step=on_step,
+        )
+        rounds = [s for s in seen if s[0] == "llm" and s[1].startswith("round-")]
+        assert rounds[0][3]["text"] == "先看一下目录。"
+        second = rounds[1][3]
+        assert second["text_truncated"] is True
+        assert len(second["text"]) == 8000
+        # the 120-char summary stays a preview; the full text lives in detail
+        assert len(rounds[1][2]) <= 120
 
 
 class TestStepPersistenceShape:

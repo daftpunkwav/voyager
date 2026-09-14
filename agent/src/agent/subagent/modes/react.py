@@ -44,6 +44,7 @@ from agent.subagent.modes.base import (
     StepCb,
     counting_step,
     noop_event,
+    round_text_detail,
     tool_detail,
 )
 from agent.subagent.modes.registry import register_mode
@@ -231,6 +232,9 @@ async def run_react(
                 "input_tokens": reply.usage.input_tokens,
                 "output_tokens": reply.usage.output_tokens,
                 "cached_tokens": reply.usage.cached_tokens,
+                # Full round output so the chat UI can show the complete
+                # thinking text, not just the 120-char summary prefix
+                **round_text_detail(reply.text or ""),
             },
         )
         if reply.final:

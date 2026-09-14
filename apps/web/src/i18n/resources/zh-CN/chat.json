@@ -244,6 +244,8 @@
   "traj.tabChat": "对话",
   "traj.tabTrajectory": "轨迹",
   "traj.tabsLabel": "对话视图切换",
+  "traj.thinking": "思考内容",
+  "traj.thinkTruncated": "思考过长,仅保留前 8000 字",
   "traj.tokens": "用量",
   "traj.tool": "工具",
   "traj.toolName": "工具",

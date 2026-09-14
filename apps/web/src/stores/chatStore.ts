@@ -108,6 +108,9 @@ export interface TurnStep {
   inputTokens?: number;
   outputTokens?: number;
   ttftMs?: number;
+  /** LLM round steps: full round output (backend-capped) for the thinking block. */
+  text?: string;
+  textTruncated?: boolean;
 }
 
 /** Streaming typing for agent.delta: holds only the current delta of the main
@@ -210,6 +213,8 @@ export function toTurnStep(ev: ChatEvent): TurnStep {
     inputTokens: num(detail.input_tokens),
     outputTokens: num(detail.output_tokens),
     ttftMs: num(detail.ttft_ms),
+    text: str(detail.text),
+    textTruncated: detail.text_truncated === true ? true : undefined,
   };
 }
 

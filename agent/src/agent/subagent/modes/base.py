@@ -85,6 +85,19 @@ def capped_args(arguments: Any) -> str:
     return text
 
 
+_MAX_ROUND_TEXT_CHARS = 8000
+
+
+def round_text_detail(text: str) -> dict[str, Any]:
+    """Full round output for the UI thinking block; capped like capped_args so
+    an unusually long round never bloats the trajectory DB / SSE frames."""
+    if not text:
+        return {}
+    if len(text) > _MAX_ROUND_TEXT_CHARS:
+        return {"text": text[:_MAX_ROUND_TEXT_CHARS], "text_truncated": True}
+    return {"text": text}
+
+
 def tool_detail(call: ToolCall, outcome: Any, ms: float) -> dict[str, Any]:
     """Structured facts for one tool step (single construction site for the
     parallel and serial execution paths so the two never drift)."""
@@ -316,6 +329,7 @@ __all__ = [
     "noop_event",
     "noop_step",
     "parse_steps",
+    "round_text_detail",
     "run_mode",
     "sys_message",
     "tool_detail",
