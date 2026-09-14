@@ -30,7 +30,6 @@ function reset() {
     steps: [],
     trails: [],
     lastSteps: [],
-    stepsOpen: false,
     streaming: null,
   });
 }

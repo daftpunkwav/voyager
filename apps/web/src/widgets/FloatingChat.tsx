@@ -13,8 +13,8 @@
  * Responsibilities:
  * - Toggle between the collapsed dot (with unread count) and the chat panel
  * - Reuse the chat stream hooks so the conversation persists across navigation
- * - Compose ProcessTimeline, MessageList, AskDialog, ChatComposer and the
- *   LLM-missing tip
+ * - Compose MessageList (with inline execution traces), AskDialog,
+ *   ChatComposer and the LLM-missing tip
  * - Close on Escape only when no global modal sits above (modalDepth guard)
  */
 
@@ -29,7 +29,6 @@ import { useChatStream } from '@/hooks/useChatStream';
 import { useChatSend } from '@/hooks/useChatSend';
 import { interruptInstance } from '@/bridge/chatSend';
 import { MessageList, TaskCards } from '@/widgets/chat/MessageList';
-import { ProcessTimeline } from '@/widgets/chat/ProcessTimeline';
 import { ChatLlmMissingTip } from '@/widgets/chat/ChatLlmMissingTip';
 import { AskDialog } from '@/widgets/chat/AskDialog';
 import { ChatComposer } from '@/widgets/chat/ChatComposer';
@@ -115,7 +114,6 @@ export function FloatingChat() {
       </div>
       <div className="float-panel__body" ref={listRef}>
         <MessageList />
-        <ProcessTimeline />
         <TaskCards />
       </div>
       {llmMissing ? <ChatLlmMissingTip /> : null}

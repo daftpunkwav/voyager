@@ -1,65 +1,45 @@
 /**
  * @file MessageList
- * @description Renders the chat message stream: user/agent bubbles (Markdown +
- * highlight), system notices, task progress cards and the thinking state.
+ * @description Renders the chat message stream as a mainstream-agent-style
+ * timeline: user bubbles, plain agent output (no chrome), and inline execution
+ * traces between them — a closed turn renders its collapsed trail right above
+ * the answer it produced, the live turn's trace sits under the newest user
+ * message and auto-collapses when output text starts streaming.
  *
  * Shared by the chat page and the persistent floating window; lives in the
  * widgets layer so page-private components are never depended on in reverse.
  *
  * Responsibilities:
- * - Render user / agent bubbles with sanitized Markdown and highlighting
- * - Render system notices, task progress cards and the streaming indicator
+ * - Render user / agent messages with sanitized Markdown and highlighting
+ * - Render inline turn traces (closed trails + live trace), system notices,
+ *   task progress cards and the streaming indicator
  * - Load older history on scroll-to-top (backward paging), keeping the
  *   viewport anchored while rows are prepended
  * - Expand note artifact cards inline with on-demand note fetches
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, Fragment } from 'react';
 import { flushSync } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import ReactMarkdown, { type Components } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
-import type { Options as SanitizeOptions } from 'rehype-sanitize';
-import { type ChatMessage, type NoteArtifact, useChatStore } from '@/stores/chatStore';
+import {
+  type ChatMessage,
+  type NoteArtifact,
+  useChatStore,
+} from '@/stores/chatStore';
 import { fetchChatHistoryBefore } from '@/bridge/chatSend';
 import { ServiceError } from '@/bridge/client';
 import { getNote } from '@/api/notes';
 import { routes } from '@/utils/routes';
-import { safeHttpUrl, safeInternalPath } from '@/utils/safeUrl';
+import { ChatMarkdown } from '@/widgets/chat/ChatMarkdown';
+import { ClosedTurnTrace, LiveTurnTrace } from '@/widgets/chat/TurnTrace';
 import { i18n } from '@/i18n';
-
-/** class names highlight.js may inject; same allowlist line as MarkdownRenderer (defense in depth). */
-const sanitizeSchema: SanitizeOptions = {
-  ...defaultSchema,
-  attributes: {
-    ...defaultSchema.attributes,
-    code: [...(defaultSchema.attributes?.code ?? []), ['className']],
-    span: [...(defaultSchema.attributes?.span ?? []), ['className']],
-    pre: [...(defaultSchema.attributes?.pre ?? []), ['className']],
-  },
-};
-
-const mdComponents: Components = {
-  a({ href, children }) {
-    const internal = safeInternalPath(href);
-    if (internal) return <a href={internal}>{children}</a>;
-    const http = safeHttpUrl(href);
-    if (http) {
-      return (
-        <a href={http} target="_blank" rel="noopener noreferrer">
-          {children}
-        </a>
-      );
-    }
-    return <span>{children}</span>;
-  },
-};
 
 /** Scroll-top distance that arms the backward-history load. */
 const LOAD_TRIGGER_PX = 80;
+
+/** Follow live-trace growth only when the viewport is this close to the bottom. */
+const FOLLOW_MARGIN_PX = 240;
 
 /** Nearest scroll container around this element, INCLUDING the element itself:
  *  on the chat page the scroller is .chat-stream itself (ancestors are
@@ -81,9 +61,11 @@ export function MessageList() {
   const thinking = useChatStore((s) => s.thinking);
   const streaming = useChatStore((s) => s.streaming);
   const artifacts = useChatStore((s) => s.artifacts);
+  const trails = useChatStore((s) => s.trails);
+  const steps = useChatStore((s) => s.steps);
   const historyLoading = useChatStore((s) => s.historyLoading);
-  const bottomRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const firstSeqRef = useRef<number | null>(null);
   const anchoredRef = useRef(false);
 
@@ -166,11 +148,31 @@ export function MessageList() {
     const reduce =
       typeof window !== 'undefined' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    bottomRef.current?.scrollIntoView({
-      behavior: reduce ? 'auto' : 'smooth',
-      block: 'end',
-    });
+    bottomRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'end' });
   }, [firstSeq, messages.length, thinking, artifacts.length, streaming]);
+
+  // Live-trace growth follows the output only when the user is already near
+  // the bottom; reading history mid-turn must not be yanked back down.
+  useEffect(() => {
+    const el = streamRef.current;
+    const scroller = el ? getScrollParent(el) : null;
+    if (!scroller || steps.length === 0) return;
+    const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    if (distance > FOLLOW_MARGIN_PX) return;
+    bottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
+  }, [steps.length]);
+
+  // Closed trails keyed by their closing message seq: the trace renders right
+  // above the answer it produced.
+  const trailBySeq = new Map(trails.map((tr) => [tr.msgSeq, tr]));
+  // An interrupted turn closes under a synthetic negative key (no closing
+  // message); keep its trace visible at the tail while that turn is the newest.
+  const tailTrail = trails.length ? trails[trails.length - 1] : null;
+  const lastMsg = messages[messages.length - 1];
+  const showInterrupted =
+    !thinking && steps.length === 0 && !!tailTrail && tailTrail.msgSeq < 0
+      ? !lastMsg || (lastMsg.role === 'user' && tailTrail.userText === lastMsg.content)
+      : false;
 
   return (
     <div className="chat-stream" ref={streamRef}>
@@ -179,16 +181,24 @@ export function MessageList() {
           {t('chat:history.loadingOlder')}
         </div>
       ) : null}
-      {messages.map((m) => (
-        <Bubble key={`${m.seq}-${m.role}`} msg={m} />
-      ))}
+      {messages.map((m) => {
+        const trail = m.role === 'agent' ? trailBySeq.get(m.seq) : undefined;
+        return (
+          <Fragment key={`${m.seq}-${m.role}`}>
+            {trail ? <ClosedTurnTrace steps={trail.steps} /> : null}
+            <Bubble msg={m} />
+          </Fragment>
+        );
+      })}
+      <LiveTurnTrace />
+      {showInterrupted && tailTrail ? <ClosedTurnTrace steps={tailTrail.steps} /> : null}
       {artifacts.map((a) => (
         <NoteArtifactCard key={a.seq} artifact={a} />
       ))}
       {streaming?.text ? (
-        // Streaming typing bubble: same agent-bubble styling with a caret indicating
-        // generation in progress; the final content arrives via agent.message, this
-        // slot is transient display only
+        // Streaming typing paragraph: same agent-text styling with a caret
+        // indicating generation in progress; the final content arrives via
+        // agent.message, this slot is transient display only
         <div className="chat-bubble chat-bubble--agent">
           <div className="chat-md">
             <ChatMarkdown content={streaming.text} />
@@ -198,7 +208,7 @@ export function MessageList() {
           </div>
         </div>
       ) : null}
-      {thinking ? (
+      {thinking && !streaming?.text && steps.length === 0 ? (
         <div
           className="chat-bubble chat-bubble--agent chat-typing"
           aria-label={t('chat:typing.aria')}
@@ -210,19 +220,6 @@ export function MessageList() {
       ) : null}
       <div ref={bottomRef} />
     </div>
-  );
-}
-
-/** In-chat Markdown rendering (GFM + highlight + allowlist sanitize); bubbles and artifact previews share the same pipeline. */
-function ChatMarkdown({ content }: { content: string }) {
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeHighlight, [rehypeSanitize, sanitizeSchema]]}
-      components={mdComponents}
-    >
-      {content}
-    </ReactMarkdown>
   );
 }
 
@@ -318,7 +315,7 @@ function NoteArtifactCard({ artifact }: { artifact: NoteArtifact }) {
   );
 }
 
-/** Task progress card area (rendered above the composer, with completed/failed final states). */
+/** Task progress card area (rendered in the side panel, with completed/failed final states). */
 export function TaskCards() {
   const { t } = useTranslation('chat');
   const cards = useChatStore((s) => s.cards);

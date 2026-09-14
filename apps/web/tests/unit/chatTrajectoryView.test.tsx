@@ -23,7 +23,7 @@ vi.mock('@/bridge/stream', () => ({ subscribe: subscribeMock }));
 
 import { ChatPage } from '@/pages/chat/ChatPage';
 import { TrajectoryView } from '@/widgets/chat/TrajectoryView';
-import { ProcessTimeline } from '@/widgets/chat/ProcessTimeline';
+import { LiveTurnTrace } from '@/widgets/chat/TurnTrace';
 import { useChatStore } from '@/stores/chatStore';
 import { initI18n } from '@/i18n';
 
@@ -82,7 +82,6 @@ function reset(state: Record<string, unknown> = {}) {
     steps: [],
     trails: [],
     lastSteps: [],
-    stepsOpen: false,
     streaming: null,
     ...state,
   });
@@ -159,10 +158,10 @@ describe('ChatPage tabs', () => {
   });
 });
 
-describe('ProcessTimeline detail', () => {
+describe('live trace detail', () => {
   it('expands a row to the call fact sheet', () => {
     reset({ steps: TRAIL_STEPS, lastSteps: [] });
-    render(<ProcessTimeline />);
+    render(<LiveTurnTrace />);
     fireEvent.click(screen.getByText('读取文件'));
     expect(screen.getByText('{"path":"a.txt"}')).toBeTruthy();
   });

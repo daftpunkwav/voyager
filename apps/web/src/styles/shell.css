@@ -436,18 +436,26 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 10px 14px;
+  padding: 10px 14px 14px;
+}
+/* Mainstream-agent layout: the whole conversation column keeps a comfortable
+   reading measure and centers inside the space left of the side panel. */
+.chat-main > * {
+  width: 100%;
+  max-width: 820px;
+  margin-left: auto;
+  margin-right: auto;
 }
 .chat-side {
-  flex: 0 0 300px;
-  width: 300px;
+  flex: 0 0 312px;
+  width: 312px;
   min-height: 0;
   overflow-y: auto;
   border-left: 1px solid var(--bg-200);
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 4px;
 }
 @media (max-width: 1100px) {
   .chat-side {
@@ -457,144 +465,316 @@
 .chat-side__section {
   min-width: 0;
 }
+.chat-side__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 6px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+.chat-side__head:hover {
+  background: var(--bg-200);
+}
+.chat-side__chev {
+  flex: 0 0 auto;
+  transform: rotate(-90deg);
+  transition: transform 0.18s var(--ease);
+  color: var(--text-400);
+}
+.chat-side__chev--open {
+  transform: rotate(0deg);
+}
 .chat-side__title {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--text-600);
 }
+.chat-side__meta {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-400);
+  font-variant-numeric: tabular-nums;
+}
+.chat-side__body {
+  min-width: 0;
+  padding: 2px 2px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 .chat-side__todos,
-.chat-side__agents {
+.chat-side__agents,
+.chat-side__artifacts {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
 }
 .chat-side__todo {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 8px;
-  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-700);
+}
+.chat-side__todo--in_progress {
+  background: var(--bg-200);
 }
 .chat-side__mark {
   flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  color: var(--text-400);
+}
+.chat-side__mark--done {
+  color: var(--success);
+}
+.chat-side__mark--doing {
+  color: var(--brand-500);
+  animation: tracePulse 1.2s ease-in-out infinite;
 }
 .chat-side__todo--done .chat-side__content {
   text-decoration: line-through;
-  color: var(--text-500);
-}
-.chat-side__todo--in_progress .chat-side__mark {
-  color: var(--accent, var(--text-700));
+  color: var(--text-400);
 }
 .chat-side__content {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 .chat-side__empty {
-  margin: 0;
+  margin: 2px 6px;
 }
 .chat-side__agent {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 9px;
   width: 100%;
-  padding: 6px 10px;
+  padding: 7px 9px;
   border: 1px solid var(--bg-300);
-  border-radius: 8px;
-  background: var(--bg-100);
+  border-radius: 10px;
+  background: var(--bg-50);
   cursor: pointer;
   text-align: left;
 }
 .chat-side__agent:hover {
   border-color: var(--error);
 }
+.chat-side__pulse {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  animation: tracePulse 1.2s ease-in-out infinite;
+}
+.chat-side__agentmain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
 .chat-side__agent-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-800);
+}
+.chat-side__agent-goal {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--text-500);
+}
+.chat-side__agent-elapsed {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-400);
 }
 .chat-side__agent-stop {
   flex: 0 0 auto;
+  font-size: 11.5px;
+  color: var(--error);
+  visibility: hidden;
 }
 .chat-side__agent:hover .chat-side__agent-stop {
-  color: var(--error);
+  visibility: visible;
 }
-
-/* Process timeline: live steps expanded while the turn runs, collapsed to a
-   one-line summary when it ends. */
-.chat-proc {
-  min-width: 0;
-}
-.chat-proc__head {
-  display: inline-flex;
+.chat-side__artifact {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 4px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--text-600);
-}
-.chat-proc__caret {
-  font-size: 10px;
-}
-.chat-proc__list {
-  list-style: none;
-  margin: 4px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 220px;
-  overflow-y: auto;
-}
-/* Process rows stack the toggle button over the collapsed fact sheet. */
-.chat-proc__row {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
   gap: 8px;
+  padding: 5px 6px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 12.5px;
+  color: var(--text-700);
+}
+.chat-side__artifact:hover {
+  background: var(--bg-200);
+  color: var(--text-800);
+}
+.chat-side__artifact-icon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: var(--text-400);
+}
+.chat-side__artifact-title {
   min-width: 0;
-}
-.chat-proc__icon {
-  flex: 0 0 auto;
-  font-size: 11px;
-}
-.chat-proc__row--tool .chat-proc__icon {
-  color: var(--text-500);
-}
-.chat-proc__label {
-  flex: 0 0 auto;
-}
-.chat-proc__dur {
-  flex: 0 0 auto;
-}
-.chat-proc__summary {
-  min-width: 0;
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.chat-proc__expand {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
+
+/* Inline execution trace: collapsible round groups under (and above) the
+   output text, mainstream-agent style. The rail is neutral content
+   typography — never a brand-color active indicator. */
+.chat-trace {
+  align-self: stretch;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chat-trace__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   width: 100%;
-  padding: 0;
-  background: none;
+  padding: 5px 8px;
   border: none;
+  background: none;
+  border-radius: 8px;
   cursor: pointer;
-  color: inherit;
-  font: inherit;
+  color: var(--text-500);
+  font-size: 12.5px;
   text-align: left;
+}
+.chat-trace__head:hover {
+  background: var(--bg-200);
+  color: var(--text-700);
+}
+.chat-trace__headtext {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.chat-trace__caret {
+  flex: 0 0 auto;
+  transform: rotate(-90deg);
+  transition: transform 0.18s var(--ease);
+  opacity: 0.8;
+}
+.chat-trace__caret--open {
+  transform: rotate(0deg);
+}
+.chat-trace__livebadge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--brand-500);
+  font-weight: 600;
+}
+.chat-trace__pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--brand-500);
+  animation: tracePulse 1.2s ease-in-out infinite;
+}
+@keyframes tracePulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.chat-trace__list {
+  list-style: none;
+  margin: 2px 0 6px 13px;
+  padding: 0 0 0 6px;
+  border-left: 1px solid var(--bg-300);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.chat-trace__row {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.chat-trace__rowbtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-600);
+  font-size: 12.5px;
+  text-align: left;
+}
+.chat-trace__rowbtn:hover {
+  background: var(--bg-200);
+}
+.chat-trace__rowicon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-500);
+}
+.chat-trace__label {
+  flex: 0 0 auto;
+  font-weight: 500;
+  color: var(--text-700);
+}
+.chat-trace__rowsummary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-500);
+}
+.chat-trace__dur {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-400);
+}
+.chat-turntext {
+  padding: 0 2px;
 }
 /* Chat tabs (conversation / trajectory) + session-log shortcut. */
 .chat-tabs {
@@ -722,6 +902,11 @@
   flex: 0 0 auto;
   font-weight: 600;
 }
+.chat-traj__caret {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--text-400);
+}
 /* Step fact sheet (shared by the timeline and the trajectory view). */
 .chat-stepdetail {
   display: flex;
@@ -779,33 +964,34 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 4px 2px;
+  gap: 14px;
+  padding: 8px 2px 12px;
 }
 .chat-history-loader {
   text-align: center;
   padding: 2px 0;
 }
 .chat-bubble {
-  max-width: min(72ch, 86%);
-  padding: 10px 14px;
-  border-radius: 14px;
-  font-size: 14px;
-  line-height: 1.55;
+  max-width: 100%;
+  font-size: 14.5px;
+  line-height: 1.7;
   position: relative;
 }
 .chat-bubble--user {
   align-self: flex-end;
+  max-width: min(72ch, 86%);
+  padding: 9px 14px;
+  border-radius: 16px;
   background: var(--brand-500);
   color: #fff;
   border-bottom-right-radius: 4px;
 }
+/* Agent output reads as document text on the canvas (no chrome), the
+   execution trace and user bubble provide the contrast around it. */
 .chat-bubble--agent {
-  align-self: flex-start;
-  background: var(--bg-100);
-  border: 1px solid var(--bg-300);
+  align-self: stretch;
+  padding: 0 2px;
   color: var(--text-800);
-  border-bottom-left-radius: 4px;
 }
 .chat-md > :first-child {
   margin-top: 0;
@@ -814,8 +1000,8 @@
   margin-bottom: 0;
 }
 .chat-md pre {
-  background: var(--bg-900);
-  color: var(--bg-100);
+  background: var(--md-panel-bg);
+  color: var(--md-panel-fg);
   padding: 10px 12px;
   border-radius: 8px;
   overflow: auto;
@@ -837,7 +1023,7 @@
   display: flex;
   gap: 4px;
   align-items: center;
-  padding: 14px 16px;
+  padding: 6px 10px;
 }
 .chat-typing span {
   width: 6px;
@@ -936,25 +1122,45 @@ a.chat-card:hover {
   background: var(--brand-500);
   transition: width 0.3s var(--ease);
 }
-.chat-input {
+/* Composer: one rounded card holding the textarea and the send/stop control
+   (shared shape with the floating window's input). */
+.chat-input,
+.float-panel__input {
   display: flex;
   gap: 8px;
   align-items: flex-end;
+  padding: 6px 6px 6px 4px;
+  border: 1px solid var(--bg-300);
+  border-radius: 16px;
+  background: var(--bg-50);
+  box-shadow: var(--shadow-xs);
+  transition: border-color 0.15s var(--ease);
 }
-.chat-input textarea {
+.chat-input:focus-within,
+.float-panel__input:focus-within {
+  border-color: var(--brand-300);
+}
+.chat-input textarea,
+.float-panel__input textarea {
   flex: 1;
+  min-width: 0;
+  max-height: 180px;
   font: inherit;
   font-size: 14px;
-  padding: 9px 12px;
-  border-radius: var(--radius);
-  border: 1px solid var(--bg-300);
-  background: var(--bg-50);
+  line-height: 1.55;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
   color: var(--text-800);
   resize: none;
 }
-.chat-input textarea:focus {
-  outline: 2px solid var(--brand-300);
-  outline-offset: -1px;
+.chat-input textarea:focus,
+.float-panel__input textarea:focus {
+  outline: none;
+}
+.chat-input .btn,
+.float-panel__input .btn {
+  border-radius: 12px;
 }
 
 /* ask_user dialog */
@@ -2243,24 +2449,6 @@ a.chat-card:hover {
 .float-panel__body .chat-stream {
   flex: 1;
   overflow: visible;
-}
-.float-panel__input {
-  display: flex;
-  gap: 8px;
-  padding: 10px;
-  border-top: 1px solid var(--bg-200);
-  align-items: flex-end;
-}
-.float-panel__input textarea {
-  flex: 1;
-  resize: none;
-  font: inherit;
-  font-size: 13px;
-  padding: 8px 10px;
-  border-radius: var(--radius);
-  border: 1px solid var(--bg-300);
-  background: var(--bg-100);
-  color: var(--text-800);
 }
 .float-panel .ask-dialog {
   position: absolute;

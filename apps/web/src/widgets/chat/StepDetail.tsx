@@ -6,7 +6,7 @@
  */
 
 import { useTranslation } from 'react-i18next';
-import { toolLabel } from '@/widgets/chat/ProcessTimeline';
+import { toolLabel } from '@/widgets/chat/TurnTrace';
 import type { TurnStep } from '@/stores/chatStore';
 import { formatCompactCount } from '@/utils/trajectory';
 

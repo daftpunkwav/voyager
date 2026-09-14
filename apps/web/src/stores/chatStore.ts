@@ -119,6 +119,14 @@ export interface StreamingText {
   subagent: string;
 }
 
+/** Lead-in text of an already-finished round (agent.delta, frozen when the
+ *  next round starts). Kept for the live turn only so the inline trace can
+ *  interleave paragraphs and tool groups like a mainstream agent UI. */
+export interface RoundText {
+  round: number;
+  text: string;
+}
+
 /** Common shape of SSE frames / history rows (Event.to_dict + seq). */
 export interface ChatEvent {
   seq: number;
@@ -234,8 +242,8 @@ interface ChatState {
   trails: TurnTrail[];
   /** Trajectory of the previous finished turn, shown collapsed by the timeline. */
   lastSteps: TurnStep[];
-  /** User expand/collapse override for the process timeline. */
-  stepsOpen: boolean;
+  /** Frozen lead-in texts of finished rounds of the live turn (round -> text). */
+  roundTexts: RoundText[];
   /** Current streaming typing (agent.delta); cleared by agent.message, restarted on round change */
   streaming: StreamingText | null;
   /** History API messages (user.message/agent.message) -> message stream; does not trigger the thinking indicator.
@@ -260,8 +268,6 @@ interface ChatState {
   /** Round end (hard-stop / send failure / subtask wrap-up) clears the thinking and typing
    *  slots; besides appendLocal/dispatch this is the only other write path to thinking. */
   clearThinking: () => void;
-  /** User expand/collapse of the process timeline. */
-  toggleSteps: (open: boolean) => void;
   /** Session list from the capability; switches the active lane when the
    *  backend's active session differs from the currently open one. */
   setSessions: (rows: SessionRow[], activeId: string) => void;
@@ -345,7 +351,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   steps: [],
   trails: [],
   lastSteps: [],
-  stepsOpen: false,
+  roundTexts: [],
   streaming: null,
 
   setSessions: (rows, activeId) => {
@@ -374,12 +380,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       trails: lane.trails,
       steps: lane.steps,
       lastSteps: lane.lastSteps,
+      roundTexts: [],
       streaming: lane.streaming,
       thinking: lane.thinking,
       activeLoaded: lane.loaded,
       // Per-turn visual slots reset on a switch; per-session state stays
       currentStep: null,
-      stepsOpen: false,
     });
     return lane.loaded;
   },
@@ -496,8 +502,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           currentStep: null,
           streaming: null,
           lastSteps: prevSteps,
+          roundTexts: [],
           steps: [],
-          stepsOpen: false,
           trails,
           messages: [
             ...get().messages,
@@ -582,12 +588,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       case 'agent.delta': {
         // Streaming typing: accumulate within the same round; a round change (a new
-        // round after tool rounds) restarts — lead-in text of intermediate rounds
+        // round after tool rounds) freezes the finished round's lead-in text for the
+        // inline trace and restarts the slot — lead-in text of intermediate rounds
         // never carries into the final round, agent.message is the authoritative message
         const round = Number(p.round ?? 1);
         const prev = get().streaming;
         const same = prev !== null && prev.round === round;
+        const roundTexts =
+          !same && prev && prev.text
+            ? [...get().roundTexts, { round: prev.round, text: prev.text }].slice(-20)
+            : get().roundTexts;
         set({
+          roundTexts,
           streaming: {
             text: (same ? prev.text : '') + String(p.text ?? ''),
             round,
@@ -665,9 +677,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({
       thinking: false,
       streaming: null,
+      roundTexts: [],
       lastSteps: s.steps.length ? s.steps : s.lastSteps,
       steps: [],
-      stepsOpen: false,
       trails:
         s.steps.length > 0
           ? upsertTrail(s.trails, {
@@ -677,5 +689,4 @@ export const useChatStore = create<ChatState>((set, get) => ({
             })
           : s.trails,
     })),
-  toggleSteps: (open) => set({ stepsOpen: open }),
 }));

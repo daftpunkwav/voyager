@@ -37,7 +37,6 @@ beforeEach(() => {
     steps: [],
     trails: [],
     lastSteps: [],
-    stepsOpen: false,
     streaming: null,
   });
 });

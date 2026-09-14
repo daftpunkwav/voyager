@@ -1,11 +1,13 @@
 /**
  * @file chatProcessPanel
- * @description Chat redesign (2026-09): the execution timeline (expand while
- * running, auto-collapse on turn end), the composer's send -> stop morph, and
- * the right panel's plan/agents sections.
+ * @description Chat redesign (2026-09, inline traces): the live turn's trace
+ * stays expanded while tool steps stream in, auto-collapses when output text
+ * starts flowing, and closed turns render their collapsed trail above the
+ * answer; the composer's send -> stop morph; the right panel's plan / agents /
+ * deliverables sections.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -27,7 +29,7 @@ vi.mock('@/api/agent', async (importOriginal) => ({
 }));
 
 import { ChatComposer } from '@/widgets/chat/ChatComposer';
-import { ProcessTimeline } from '@/widgets/chat/ProcessTimeline';
+import { MessageList } from '@/widgets/chat/MessageList';
 import { RightPanel } from '@/widgets/chat/RightPanel';
 import { type ChatEvent, useChatStore } from '@/stores/chatStore';
 import { initI18n } from '@/i18n';
@@ -47,8 +49,9 @@ function resetStore() {
     connected: true,
     currentStep: null,
     steps: [],
+    trails: [],
     lastSteps: [],
-    stepsOpen: false,
+    roundTexts: [],
     streaming: null,
   });
 }
@@ -77,44 +80,73 @@ beforeEach(() => {
   listSubagentsMock.mockReset().mockResolvedValue({ running: [] });
 });
 
-describe('ProcessTimeline', () => {
+function renderStream() {
+  return render(
+    <MemoryRouter>
+      <MessageList />
+    </MemoryRouter>
+  );
+}
+
+describe('inline live trace (MessageList)', () => {
   it('stays expanded while the turn runs: think rows and localized tool labels', () => {
     const { dispatch } = useChatStore.getState();
+    useChatStore.setState({ thinking: true });
     dispatch(stepEvent('llm', 'round-1', '我先查一下', 100));
     dispatch(stepEvent('tool', 'notes__create_note', 'created', 103));
-    render(<ProcessTimeline />);
-    expect(screen.getByText('执行过程')).toBeTruthy();
+    const { container } = renderStream();
+    expect(container.querySelector('.chat-trace--live')).not.toBeNull();
     expect(screen.getByText('思考')).toBeTruthy();
     expect(screen.getByText('创建笔记')).toBeTruthy();
     expect(screen.queryByText('notes__create_note')).toBeNull(); // display layer humanizes
+    // the group header summarizes the round
+    expect(screen.getByText(/思考 1 次/)).toBeTruthy();
+    expect(screen.getByText(/工具 1 次/)).toBeTruthy();
   });
 
-  it('agent.message folds the trajectory into a collapsed one-line summary', () => {
+  it('auto-collapses when output text starts streaming; rows come back via the header', () => {
     const { dispatch } = useChatStore.getState();
+    useChatStore.setState({ thinking: true });
+    dispatch(stepEvent('llm', 'round-1', 'a', 100));
+    dispatch(stepEvent('tool', 'notes__create_note', 'b', 103));
+    const { container } = renderStream();
+    act(() => {
+      dispatch({
+        seq: 2000,
+        type: 'agent.delta',
+        payload: { round: 1, text: '答案是', subagent: 'chat' },
+      });
+    });
+    // collapsed: the step rows are hidden, the writing badge shows
+    expect(screen.getByText('答案是')).toBeTruthy();
+    expect(screen.queryByText('创建笔记')).toBeNull();
+    expect(screen.getByText(/正在输出/)).toBeTruthy();
+    // manual reopen shows the rows again
+    fireEvent.click(screen.getByText(/工具 1 次/));
+    expect(screen.getByText('创建笔记')).toBeTruthy();
+    expect(container.querySelector('.chat-caret')).not.toBeNull();
+  });
+
+  it('agent.message folds the closed trail above the answer; collapsed by default', () => {
+    const { dispatch } = useChatStore.getState();
+    useChatStore.setState({ thinking: true });
     dispatch(stepEvent('llm', 'round-1', 'a', 100));
     dispatch(stepEvent('tool', 'notes__create_note', 'b', 103));
     dispatch({ seq: 2000, type: 'agent.message', payload: { content: 'done' } });
-    render(<ProcessTimeline />);
-    // collapsed: the summary line replaces the step list
+    const { container } = renderStream();
+    expect(screen.getByText('done')).toBeTruthy();
+    expect(container.querySelector('.chat-trace--live')).toBeNull();
+    // collapsed: the one-line summary replaces the step list
     expect(screen.getByText(/已执行 2 步 · 1 次工具/)).toBeTruthy();
     expect(screen.queryByText('创建笔记')).toBeNull();
     // reopening shows the steps again
-    fireEvent.click(screen.getByRole('button'));
+    fireEvent.click(screen.getByText(/已执行 2 步/));
     expect(screen.getByText('创建笔记')).toBeTruthy();
   });
 
-  it('hard stop (clearThinking) also folds the live trajectory', () => {
-    const { dispatch } = useChatStore.getState();
-    dispatch(stepEvent('tool', 'notes__create_note', 'b', 103));
-    useChatStore.setState({ thinking: true });
-    useChatStore.getState().clearThinking();
-    render(<ProcessTimeline />);
-    expect(screen.getByText(/已执行 1 步 · 1 次工具/)).toBeTruthy();
-  });
-
-  it('renders nothing without steps', () => {
-    const { container } = render(<ProcessTimeline />);
-    expect(container.querySelector('.chat-proc')).toBeNull();
+  it('renders no trace without steps', () => {
+    const { container } = renderStream();
+    expect(container.querySelector('.chat-trace')).toBeNull();
   });
 });
 
@@ -152,7 +184,7 @@ describe('ChatComposer send -> stop morph', () => {
 });
 
 describe('RightPanel', () => {
-  it('renders plan todos with status styling and running subagents', async () => {
+  it('renders plan todos with status styling and running subagents with elapsed time', async () => {
     listTodosMock.mockResolvedValue({
       items: [
         { content: '查资料', status: 'done' },
@@ -162,7 +194,9 @@ describe('RightPanel', () => {
       total: 2,
     });
     listSubagentsMock.mockResolvedValue({
-      running: [{ id: 'r1', name: 'indexer', status: 'running', goal: '建索引', started_ts: 1 }],
+      running: [
+        { id: 'r1', name: 'indexer', status: 'running', goal: '建索引', started_ts: Date.now() / 1000 - 65 },
+      ],
     });
     render(
       <MemoryRouter>
@@ -172,6 +206,8 @@ describe('RightPanel', () => {
     await waitFor(() => expect(screen.getByText('查资料')).toBeTruthy());
     expect(screen.getByText('写笔记')).toBeTruthy();
     expect(screen.getByText('indexer')).toBeTruthy();
+    expect(screen.getByText('1/2')).toBeTruthy(); // plan counter
+    expect(screen.getByText(/1 分/)).toBeTruthy(); // elapsed runtime
     expect(screen.queryByText(/暂无计划/)).toBeNull();
     expect(screen.queryByText(/没有正在运行/)).toBeNull();
   });

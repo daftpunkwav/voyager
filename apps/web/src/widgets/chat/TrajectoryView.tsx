@@ -12,7 +12,7 @@
 
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toolLabel } from '@/widgets/chat/ProcessTimeline';
+import { toolLabel, StepTraceIcon } from '@/widgets/chat/TurnTrace';
 import { StepDetail } from '@/widgets/chat/StepDetail';
 import { useChatStore, type TurnStep } from '@/stores/chatStore';
 import { formatCompactCount, formatDurationSec, summarizeTurn } from '@/utils/trajectory';
@@ -67,7 +67,7 @@ function TurnCard({
           })}
           {stats.ttftMs !== null ? ` | ${t('chat:traj.statTtft', { t: `${stats.ttftMs}ms` })}` : ''}
         </span>
-        <span className="chat-proc__caret" aria-hidden>
+        <span className="chat-traj__caret" aria-hidden>
           {open ? '▾' : '▸'}
         </span>
       </button>
@@ -94,8 +94,8 @@ function TurnCard({
                     aria-label={`${label} ${t('chat:traj.detailToggle')}`}
                     onClick={() => toggle(s.seq)}
                   >
-                    <span className="chat-proc__icon" aria-hidden>
-                      {isTool ? '▪' : '✦'}
+                    <span className="chat-trace__rowicon" aria-hidden>
+                      <StepTraceIcon step={s} />
                     </span>
                     <span className="chat-traj__label">{label}</span>
                     {s.ok === false ? (
@@ -105,11 +105,11 @@ function TurnCard({
                     ) : null}
                     {typeof s.ms === 'number' ? <span className="muted">{s.ms}ms</span> : null}
                     {s.summary ? (
-                      <span className="chat-proc__summary muted" title={s.summary}>
+                      <span className="chat-trace__rowsummary" title={s.summary}>
                         {s.summary}
                       </span>
                     ) : null}
-                    <span className="chat-proc__caret" aria-hidden>
+                    <span className="chat-traj__caret" aria-hidden>
                       {show ? '▾' : '▸'}
                     </span>
                   </button>

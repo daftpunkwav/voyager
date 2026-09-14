@@ -9,10 +9,10 @@
  *
  * Responsibilities:
  * - Wire the SSE stream with navigation raised to react-router
- * - Tab between the conversation (message list, process timeline, ask
- *   dialog, composer) and the full trajectory view (per-turn execution
+ * - Tab between the conversation (message list with inline execution traces,
+ *   ask dialog, composer) and the full trajectory view (per-turn execution
  *   detail rebuilt from persisted rows), with a session-log shortcut
- * - Host the right panel: plan (todos + task cards) and running subagents
+ * - Host the right panel: plan (todos), running subagents and deliverables
  */
 
 import { useCallback, useState } from 'react';
@@ -23,7 +23,6 @@ import { useChatStream } from '@/hooks/useChatStream';
 import { useChatSend } from '@/hooks/useChatSend';
 import { interruptInstance } from '@/bridge/chatSend';
 import { MessageList } from '@/widgets/chat/MessageList';
-import { ProcessTimeline } from '@/widgets/chat/ProcessTimeline';
 import { TrajectoryView } from '@/widgets/chat/TrajectoryView';
 import { RightPanel } from '@/widgets/chat/RightPanel';
 import { TaskCards } from '@/widgets/chat/MessageList';
@@ -87,7 +86,6 @@ export function ChatPage() {
         {view === 'chat' ? (
           <>
             <MessageList />
-            <ProcessTimeline />
             {llmMissing ? <ChatLlmMissingTip /> : null}
             <ChatComposer
               composer={composer}
