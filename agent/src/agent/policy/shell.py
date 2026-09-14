@@ -15,8 +15,20 @@ from agent.policy.decision import Decision
 from agent.policy.levels import Level
 
 # Copy/move/delete verb list, shared by the skills guard and the read-only-roots guard so
-# the two cannot drift
-_SHELL_WRITE_VERBS = r"cp|mv|move|copy|xcopy|rm|del|erase|rd|rmdir|unlink|touch|tee"
+# the two cannot drift. dd/chmod/chown/truncate/rsync are write-shaped the same way; they
+# are rare in read-only commands, so their false-positive cost is an L2 fallback only.
+_SHELL_WRITE_VERBS = (
+    r"cp|mv|move|copy|xcopy|rm|del|erase|rd|rmdir|unlink|touch|tee|dd|chmod|chown|truncate|rsync"
+)
+
+# Write-capable flags: a prefix allow rule may cover a command whose WRITE
+# side happens entirely in a flag (`git diff --output=x`, `find -delete`,
+# `sort -o out`, `dd of=`) - none of these carry a verb or a `>` character.
+# The allow gate refuses these tokens so "read-only convenience" rules cannot
+# launder flag-carried writes; false positives (e.g. `grep -o`) only fall
+# back to the default L2 confirm, never to a denial.
+_WRITE_FLAG_EXACT = frozenset({"-o", "-O", "-delete", "--backup", "--in-place", "-inplace"})
+_WRITE_FLAG_PREFIXES = ("--output", "of=", "--out-file")
 
 # Shell-dimension skills write ban (closing a shell bypass): a conservative regex that spots
 # literals clearly writing into / deleting from the skills subtree, without full shell
@@ -137,6 +149,16 @@ def _matches_any(tokens: tuple[str, ...], patterns: frozenset[str]) -> bool:
     return any(_matches_prefix(tokens, p) for p in patterns)
 
 
+def _has_write_flag(tokens: tuple[str, ...]) -> bool:
+    """Whether any non-command token is a known write-capable flag; see the
+    gate comment at _WRITE_FLAG_EXACT for why this exists."""
+    for tok in tokens[1:]:
+        t = tok.lower()
+        if t in _WRITE_FLAG_EXACT or t.startswith(_WRITE_FLAG_PREFIXES):
+            return True
+    return False
+
+
 def decide_shell(fs, shell: ShellPolicy, action) -> Decision:
     cmd = action.target or ""
     # skills subtree must not be rewritten via shell: reject before L2 (as the fs check does)
@@ -158,6 +180,7 @@ def decide_shell(fs, shell: ShellPolicy, action) -> Decision:
             _matches_any(tokens, shell.allowed)
             and not _SHELL_WRITE_INTENT_RE.search(cmd)
             and ">" not in cmd
+            and not _has_write_flag(tokens)
         ):
             return Decision(
                 True, Level.L0_SILENT, "allowed by shell prefix rule: read-only command"

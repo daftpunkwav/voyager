@@ -72,3 +72,32 @@ class TestWriteIntentGate:
         engine = _engine(shell=ShellPolicy(allowed=frozenset({"*"})))
         decision = engine.decide(_shell_cmd("echo x > skills/keep/SKILL.md"))
         assert decision.allow is False
+
+
+class TestWriteFlagGate:
+    """A prefix allow rule must not launder flag-carried writes
+    (`git diff --output=x`, `find -delete`, `sort -o out`)."""
+
+    def _allow_engine(self, pattern: str) -> PolicyEngine:
+        return _engine(shell=ShellPolicy(allowed=frozenset({pattern})))
+
+    def test_output_flag_falls_back_to_confirm(self) -> None:
+        engine = self._allow_engine("git diff *")
+        decision = engine.decide(_shell_cmd("git diff HEAD --output=/tmp/x.patch"))
+        assert decision.level == Level.L2_CONFIRM
+
+    def test_delete_flag_falls_back_to_confirm(self) -> None:
+        engine = self._allow_engine("find *")
+        assert engine.decide(_shell_cmd("find . -name tmp -delete")).level == Level.L2_CONFIRM
+
+    def test_short_output_flag_falls_back_to_confirm(self) -> None:
+        engine = self._allow_engine("sort *")
+        assert engine.decide(_shell_cmd("sort -o out.txt in.txt")).level == Level.L2_CONFIRM
+
+    def test_dd_verb_counts_as_write_intent(self) -> None:
+        engine = self._allow_engine("dd *")
+        assert engine.decide(_shell_cmd("dd if=a of=/dev/sda")).level == Level.L2_CONFIRM
+
+    def test_read_only_flags_still_allowed(self) -> None:
+        engine = self._allow_engine("grep *")
+        assert engine.decide(_shell_cmd("grep -n -i pattern file")).level == Level.L0_SILENT
