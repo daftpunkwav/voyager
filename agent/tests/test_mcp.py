@@ -666,12 +666,32 @@ class TestHotRefreshAndResources:
         await self._mount_all(rapp)
         assert rapp.mcp.instructions_map() == {"demo": "Always quote resource URIs verbatim."}
 
-    async def test_refresh_picks_up_new_remote_tools(self, rapp) -> None:
+    async def test_refresh_mounts_only_consented_tools(self, rapp) -> None:
+        """Approval covers the previewed list, not the future: a remote tool
+        added later waits in new_tools until an explicit preview re-consents;
+        existing tools keep refreshing."""
         await self._mount_all(rapp)
         assert "mcp__demo__fresh" not in rapp.mcp._toolbelt.names()
         rapp.sessions["demo"].TOOLS.append({"name": "fresh", "description": "New tool"})
         await rapp.mcp.refresh_approved()
+        names = rapp.mcp._toolbelt.names()
+        assert "mcp__demo__fresh" not in names  # not auto-mounted
+        assert "mcp__demo__search" in names  # consented tools still refreshed
+        state = {entry["id"]: entry for entry in rapp.mcp.list_state()}
+        assert state["demo"]["new_tools"] == ["fresh"]
+        # an explicit preview is the consent point: now it mounts
+        await rapp.mcp.preview("demo")
         assert "mcp__demo__fresh" in rapp.mcp._toolbelt.names()
+        state = {entry["id"]: entry for entry in rapp.mcp.list_state()}
+        assert state["demo"]["new_tools"] == []
+
+    async def test_refresh_reconnects_dropped_server_with_consent_gate(self, rapp) -> None:
+        await self._mount_all(rapp)
+        await rapp.mcp.drop_session("demo")
+        await rapp.mcp.refresh_approved()
+        assert "demo" in rapp.mcp._sessions  # reconnected by the refresh cycle
+        assert "mcp__demo__search" in rapp.mcp._toolbelt.names()
+        assert rapp.mcp.instructions_map().get("demo")  # instructions re-captured
 
     async def test_refresh_failure_records_error_keeps_session_dropped(self, rapp) -> None:
         await self._mount_all(rapp)

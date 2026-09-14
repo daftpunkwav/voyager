@@ -113,6 +113,8 @@ class McpClientPool:
         self._sessions: dict[str, McpSession] = {}
         self._previews: dict[str, list[dict]] = {}  # latest tools/list per server
         self._instructions: dict[str, str] = {}  # server-declared instructions per sid
+        self._seen_tools: dict[str, set[str]] = {}  # consent snapshot: names OK'd via preview
+        self._new_tools: dict[str, list[str]] = {}  # refresh-discovered names awaiting consent
         self._errors: dict[str, str] = {}  # per-entry error from the last failed start/reconnect
         self._started = False
         self._refresher: asyncio.Task | None = None  # periodic tools/list refresh (auto_refresh)
@@ -190,6 +192,11 @@ class McpClientPool:
         self._errors.pop(sid, None)
         raw_instructions = getattr(self._sessions[sid], "instructions", "")
         self._instructions[sid] = str(raw_instructions) if raw_instructions else ""
+        # User consent point: the previewed list is what approval covers; the
+        # hot-refresh path mounts only these names (new remote tools wait for
+        # the next explicit preview)
+        self._seen_tools[sid] = {str(t.get("name") or "") for t in tools}
+        self._new_tools.pop(sid, None)
         # Already approved: a successful tools/list remounts (so a server fixed
         # after a failed startup rejoins the tool surface via "refresh")
         approved = list(cfg.get("approved") or [])
@@ -208,15 +215,16 @@ class McpClientPool:
 
     # ---- Mounting (into the Toolbelt surface; implementation in mount.py) ----
 
-    def remount(self, sid: str, approved: list[str]) -> list[str]:
+    def remount(self, sid: str, approved: list[str], tools: list[dict] | None = None) -> list[str]:
         """Mount per the approved list (["*"] = everything from preview); the old
         mount is removed first so stale names cannot linger.
 
-        Requires a preview to be present (call preview() first); returns the
-        tool names mounted this time.
+        Requires a preview to be present (call preview() first) unless an
+        explicit `tools` list is passed (the hot-refresh path mounts a
+        consent-filtered subset); returns the tool names mounted this time.
         """
         session = self._sessions.get(sid)
-        remote_tools = self._previews.get(sid) or []
+        remote_tools = tools if tools is not None else (self._previews.get(sid) or [])
         cfg = self.find_config(sid) or {"id": sid, "name": sid}
         return remount(self._toolbelt, cfg, session, remote_tools, approved)
 
@@ -257,33 +265,78 @@ class McpClientPool:
     async def _refresh_loop(self) -> None:
         """Periodically re-list connected approved servers so remote tool
         changes appear without a restart; interval hot-reads
-        agent.mcp.refresh_seconds (<=0 keeps the loop idle)."""
+        agent.mcp.refresh_seconds (<=0 keeps the loop idle). One cycle failing
+        must not kill the loop: settings read errors and per-server faults are
+        contained, the task has no one to await its exception."""
         while True:
-            interval = 300.0
             try:
-                if self._settings is not None:
-                    raw = self._settings.get("agent.mcp.refresh_seconds")
-                    interval = float(raw) if raw else 300.0
-            except (TypeError, ValueError):
                 interval = 300.0
-            await asyncio.sleep(interval if interval > 0 else 300.0)
-            if interval > 0:
-                await self.refresh_approved()
+                try:
+                    if self._settings is not None:
+                        raw = self._settings.get("agent.mcp.refresh_seconds")
+                        interval = float(raw) if raw else 300.0
+                except (TypeError, ValueError):
+                    interval = 300.0
+                await asyncio.sleep(interval if interval > 0 else 300.0)
+                if interval > 0:
+                    await self.refresh_approved()
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001  # a cycle failure must not end the loop
+                log.exception("MCP refresh cycle failed; continuing")
 
     async def refresh_approved(self) -> None:
-        """Re-list every connected approved server (hot refresh): a changed
-        remote tool list remounts; a failure drops the session and records the
-        entry error, never raising."""
+        """Hot refresh: re-list approved servers (reconnecting dropped ones)
+        and remount the consent-filtered tool set. Newly appeared remote tools
+        are NOT mounted automatically - approval covers the previewed list,
+        not the future; new names land in list_state['new_tools'] and wait
+        for the next explicit preview. Never raises."""
         for cfg in self.configs():
             sid = str(cfg.get("id") or "").strip()
             if not sid or not cfg.get("enabled", True) or not cfg.get("approved"):
                 continue
-            if sid not in self._sessions:
-                continue
             try:
-                await self.preview(sid)
+                await self._refresh_one(sid, cfg)
             except Exception as exc:  # noqa: BLE001  # recorded; other servers proceed
                 self._errors[sid] = str(exc)
+
+    async def _refresh_one(self, sid: str, cfg: dict) -> None:
+        """Re-list one server and remount the consent-filtered subset; a
+        dropped session is reconnected (mounting stays seen-tools gated)."""
+        if sid not in self._sessions:
+            try:
+                async with self._connect_lock:
+                    if sid not in self._sessions:
+                        self._sessions[sid] = await asyncio.wait_for(
+                            self._connect({**cfg, "cwd": self._cwd}), CONNECT_TIMEOUT
+                        )
+            except Exception as exc:
+                self._errors[sid] = f"MCP '{cfg['name']}' reconnect failed: {exc}"
+                return
+        session = self._sessions[sid]
+        try:
+            tools = await asyncio.wait_for(session.list_remote_tools(), CONNECT_TIMEOUT)
+        except Exception as exc:
+            self._errors[sid] = f"MCP '{cfg['name']}' refresh failed: {exc}"
+            await self.drop_session(sid)
+            return
+        self._previews[sid] = tools
+        self._errors.pop(sid, None)
+        raw_instructions = getattr(session, "instructions", "")
+        self._instructions[sid] = str(raw_instructions) if raw_instructions else ""
+        seen = self._seen_tools.get(sid)
+        if seen is None:
+            # approved-but-never-previewed entry (e.g. hand-written settings):
+            # this list becomes the consent baseline
+            self._seen_tools[sid] = {str(t.get("name") or "") for t in tools}
+        else:
+            fresh = sorted({str(t.get("name") or "") for t in tools} - seen)
+            if fresh:
+                self._new_tools[sid] = fresh
+        mounted = [t for t in tools if str(t.get("name") or "") in self._seen_tools[sid]]
+        approved = list(cfg.get("approved") or [])
+        if approved:
+            self.remount(sid, approved, tools=mounted)
 
     def instructions_map(self) -> dict[str, str]:
         """Server usage instructions keyed by sid (connected servers only),
@@ -308,6 +361,7 @@ class McpClientPool:
                 "connected": sid in self._sessions,
                 "error": self._errors.get(sid, ""),
                 "preview": self._previews.get(sid, []),
+                "new_tools": self._new_tools.get(sid, []),  # refresh-discovered, awaiting consent
                 "mounted": [n for n in mounted_all if n.startswith(f"mcp__{sid}__")],
             }
             for cfg in self.configs()
