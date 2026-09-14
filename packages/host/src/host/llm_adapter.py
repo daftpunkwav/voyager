@@ -63,6 +63,7 @@ class ServiceLLM:
         if not usable:
             return None
         default_id = ""
+        default_model = ""
         try:
             item = await self._call(
                 self._settings_domain,
@@ -71,13 +72,28 @@ class ServiceLLM:
             )
             if isinstance(item, dict):
                 default_id = str(item.get("value") or "")
+            item = await self._call(
+                self._settings_domain,
+                "get_setting",
+                {"key": "llm.default_model"},
+            )
+            if isinstance(item, dict):
+                default_model = str(item.get("value") or "")
         except ServiceError:
             pass  # settings unavailable must not block chat; treat as unset
+        provider = None
         if default_id:
             for p in usable:
                 if p.get("id") == default_id:
-                    return p
-        return usable[0]
+                    provider = p
+                    break
+        provider = provider or usable[0]
+        # llm.default_model (composer model picker) wins over the provider's
+        # own default; an explicit constructor model still wins over both
+        return {
+            **provider,
+            "default_model": self._model or default_model or provider.get("default_model", ""),
+        }
 
     def _tool_payload(self, tools: list[ToolSpec] | None) -> list[dict] | None:
         if not tools:

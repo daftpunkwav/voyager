@@ -15,6 +15,7 @@ from llm.capabilities.common import (
     require_provider,
     service_error_for,
 )
+from llm.capabilities.complete import configured_reasoning_effort
 from llm.client import ProviderError
 from llm.stream import complete_stream as llm_stream
 
@@ -68,6 +69,7 @@ async def complete_stream(
                 max_tokens=max_tokens,
                 temperature=temperature,
                 tools=tools,
+                reasoning_effort=configured_reasoning_effort(),
             ):
                 if chunk.get("type") == "final":
                     usage = chunk.get("usage") or {}

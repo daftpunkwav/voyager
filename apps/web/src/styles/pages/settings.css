@@ -1180,6 +1180,92 @@
   padding: 0 2px;
   line-height: 1;
 }
+.llm-model-chip__main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  font-family: var(--font-mono);
+  text-align: left;
+}
+.llm-model-chip__main:hover .llm-model-chip__name {
+  color: var(--brand-600);
+  text-decoration: underline;
+}
+.llm-model-chip__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.llm-model-chip__badge {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-family: var(--font-sans);
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-100);
+  border: 1px solid var(--bg-300);
+  color: var(--text-500);
+}
+/* Model edit dialog (per-model capabilities + token budgets). */
+.llm-model-dialog {
+  width: min(520px, 92vw);
+  max-height: 86vh;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.llm-model-dialog__title {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-800);
+  overflow-wrap: anywhere;
+}
+.llm-model-dialog__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 560px) {
+  .llm-model-dialog__grid {
+    grid-template-columns: 1fr;
+  }
+}
+.llm-model-dialog__toggles {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.llm-model-toggle {
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--bg-300);
+  background: var(--bg-50);
+  color: var(--text-600);
+  cursor: pointer;
+  font-size: 13px;
+}
+.llm-model-toggle.is-on {
+  border-color: var(--brand-400);
+  background: var(--brand-50);
+  color: var(--text-800);
+  font-weight: 600;
+}
+.llm-model-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
 .llm-model-add {
   display: flex;
   gap: 8px;

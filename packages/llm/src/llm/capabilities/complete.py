@@ -16,6 +16,19 @@ from llm.capabilities.common import (
 from llm.client import ProviderError
 from llm.client import complete as llm_complete
 
+#: Values accepted for llm.reasoning_effort; anything else degrades to unset
+#: so a typo never silently rewrites every request.
+_REASONING_EFFORTS = ("", "low", "medium", "high")
+
+
+def configured_reasoning_effort() -> str:
+    """Hot-read llm.reasoning_effort; unknown/missing values mean unset."""
+    deps = require_deps()
+    if deps.settings is None:
+        return ""
+    value = str(deps.settings.get("llm.reasoning_effort") or "")
+    return value if value in _REASONING_EFFORTS else ""
+
 
 @capability(
     registry,
@@ -47,6 +60,7 @@ async def complete(
             max_tokens=max_tokens,
             temperature=temperature,
             tools=tools,
+            reasoning_effort=configured_reasoning_effort(),
         )
     except ProviderError as exc:  # classified mapping; still metered on failure (ok=0)
         deps.store.record_usage(

@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS providers (
     base_url     TEXT NOT NULL,
     api_format   TEXT NOT NULL,
     models       TEXT NOT NULL DEFAULT '[]',
+    models_meta  TEXT NOT NULL DEFAULT '{}',
     default_model TEXT NOT NULL DEFAULT '',
     enabled      INTEGER NOT NULL DEFAULT 1,
     custom       INTEGER NOT NULL DEFAULT 0,
@@ -56,6 +57,7 @@ _COLS = (
     "base_url",
     "api_format",
     "models",
+    "models_meta",
     "default_model",
     "enabled",
     "custom",
@@ -98,6 +100,12 @@ class ProviderStore:
                 "ALTER TABLE usage ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0"
             )
             self._conn.commit()
+        pcols = {row[1] for row in self._conn.execute("PRAGMA table_info(providers)")}
+        if "models_meta" not in pcols:
+            self._conn.execute(
+                "ALTER TABLE providers ADD COLUMN models_meta TEXT NOT NULL DEFAULT '{}'"
+            )
+            self._conn.commit()
 
     def upsert(self, p: dict[str, Any]) -> str:
         pid = p.get("id") or uuid.uuid4().hex[:12]
@@ -105,11 +113,12 @@ class ProviderStore:
         with self._lock:
             self._conn.execute(
                 "INSERT INTO providers (id, display_name, preset_id, base_url, api_format,"
-                " models, default_model, enabled, custom, created_ts, updated_ts)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                " models, models_meta, default_model, enabled, custom, created_ts, updated_ts)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 " ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,"
                 " base_url=excluded.base_url, api_format=excluded.api_format,"
-                " models=excluded.models, default_model=excluded.default_model,"
+                " models=excluded.models, models_meta=excluded.models_meta,"
+                " default_model=excluded.default_model,"
                 " enabled=excluded.enabled, updated_ts=excluded.updated_ts",
                 (
                     pid,
@@ -118,6 +127,7 @@ class ProviderStore:
                     p["base_url"],
                     p["api_format"],
                     json.dumps(p.get("models", []), ensure_ascii=False),
+                    json.dumps(p.get("models_meta", {}), ensure_ascii=False),
                     p.get("default_model", ""),
                     int(p.get("enabled", True)),
                     int(p.get("custom", False)),
@@ -313,6 +323,7 @@ class ProviderStore:
 def _row(r: tuple) -> dict[str, Any]:
     d = dict(zip(_COLS, r))
     d["models"] = json.loads(d["models"])
+    d["models_meta"] = json.loads(d["models_meta"])
     d["enabled"] = bool(d["enabled"])
     d["custom"] = bool(d["custom"])
     return d

@@ -122,6 +122,7 @@ export function FloatingChat() {
         className="float-panel__input"
         running={thinking}
         onStop={() => void interruptInstance('chat')}
+        onManageModels={() => navigate('/settings')}
         placeholder={
           llmMissing ? t('chat:composer.llmMissingPlaceholder') : t('chat:float.placeholder')
         }

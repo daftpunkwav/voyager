@@ -231,6 +231,18 @@ export interface ContextStatus {
   used_pct: number;
   auto_compact_at_pct: number;
   entries?: number;
+  /** Extra usage_status breakdown fields (optional: absent in degraded shapes) */
+  estimate_tokens?: number;
+  reported_tokens?: number;
+  memory_cards_tokens?: number;
+  prefix_cache?: {
+    turns?: number;
+    warm_rounds?: number;
+    cold_rounds?: number;
+    unexplained_misses?: number;
+    head_changes?: number;
+    last_break?: number | null;
+  };
 }
 
 export function getContextStatus(sessionId = ''): Promise<ContextStatus> {

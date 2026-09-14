@@ -10,6 +10,7 @@ from llm.capabilities.common import (
     registry,
     require_deps,
     require_provider,
+    valid_models_meta,
     validate_base_url,
     with_key_flag,
 )
@@ -25,6 +26,7 @@ def update_provider(
     base_url: str | None = None,
     api_format: str | None = None,
     models: list[str] | None = None,
+    models_meta: dict | None = None,
     default_model: str | None = None,
     enabled: bool | None = None,
     _actor: ActorRef | None = None,
@@ -49,6 +51,13 @@ def update_provider(
             ErrorSuffix.INVALID_INPUT,
             f"api_format only supports chat / anthropic: {api_format}",
         )
+    if models_meta is not None and not valid_models_meta(models_meta):
+        raise ServiceError(
+            DOMAIN,
+            ErrorSuffix.INVALID_INPUT,
+            "models_meta must be {model_id: {image_input|audio_input|video_input|thinking: bool, "
+            "context_window|max_output_tokens: int>0}}",
+        )
     merged = {
         **current,
         **{
@@ -58,6 +67,7 @@ def update_provider(
                 "base_url": base_url,
                 "api_format": api_format,
                 "models": models,
+                "models_meta": models_meta,
                 "default_model": default_model,
                 "enabled": enabled,
             }.items()

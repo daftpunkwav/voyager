@@ -1139,13 +1139,12 @@ a.chat-card:hover {
   background: var(--brand-500);
   transition: width 0.3s var(--ease);
 }
-/* Composer: one rounded card holding the textarea and the send/stop control
-   (shared shape with the floating window's input). */
+/* Composer: one rounded card holding the textarea and the bottom bar
+   (context ring / model / reasoning / send), shared with the floating window. */
 .chat-input,
 .float-panel__input {
   display: flex;
-  gap: 8px;
-  align-items: flex-end;
+  flex-direction: column;
   padding: 6px 6px 6px 4px;
   border: 1px solid var(--bg-300);
   border-radius: 16px;
@@ -1159,7 +1158,7 @@ a.chat-card:hover {
 }
 .chat-input textarea,
 .float-panel__input textarea {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   max-height: 180px;
   font: inherit;
@@ -1175,9 +1174,207 @@ a.chat-card:hover {
 .float-panel__input textarea:focus {
   outline: none;
 }
-.chat-input .btn,
-.float-panel__input .btn {
+.composer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px 4px 8px;
+}
+.composer-bar__spacer {
+  flex: 1;
+}
+.chat-send {
+  width: 36px;
+  height: 36px;
+  padding: 0;
   border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.chat-stop {
+  flex: 0 0 auto;
+  border-radius: 12px;
+}
+
+/* Composer bar dropdowns (model / reasoning). */
+.composer-dd {
+  position: relative;
+  min-width: 0;
+}
+.composer-dd__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: none;
+  background: none;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--text-600);
+  font-size: 12.5px;
+  font-weight: 500;
+  min-width: 0;
+}
+.composer-dd__trigger:hover:not(:disabled) {
+  background: var(--bg-200);
+  color: var(--text-800);
+}
+.composer-dd__trigger:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.composer-dd__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+.composer-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--success);
+}
+.composer-dd__pop {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  min-width: 230px;
+  max-width: 300px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 6px;
+  z-index: var(--z-dropdown, 100);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.composer-dd__group-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-500);
+  padding: 6px 8px 2px;
+}
+.composer-dd__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-700);
+  text-align: left;
+}
+.composer-dd__item:hover {
+  background: var(--bg-200);
+}
+.composer-dd__item[aria-selected='true'] {
+  color: var(--text-800);
+  font-weight: 600;
+}
+.composer-dd__badge {
+  margin-left: auto;
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-200);
+  color: var(--text-500);
+  flex: 0 0 auto;
+}
+.composer-dd__item--manage {
+  border-top: 1px solid var(--bg-200);
+  margin-top: 2px;
+  color: var(--text-500);
+}
+
+/* Context-usage ring + detail popover. */
+.ctx-ring {
+  position: relative;
+  flex: 0 0 auto;
+}
+.ctx-ring__btn {
+  display: flex;
+  padding: 2px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 50%;
+}
+.ctx-ring__btn:hover {
+  background: var(--bg-200);
+}
+.ctx-ring__pop {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  width: 288px;
+  padding: 12px 14px;
+  z-index: var(--z-dropdown, 100);
+}
+.ctx-ring__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--text-800);
+}
+.ctx-ring__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.ctx-ring__list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ctx-ring__key {
+  color: var(--text-500);
+  flex: 0 0 auto;
+}
+.ctx-ring__val {
+  color: var(--text-800);
+  min-width: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.ctx-ring__bar {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-300);
+  margin-top: 12px;
+}
+.ctx-ring__fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s var(--ease);
+}
+.ctx-ring__mark {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 10px;
+  background: var(--text-400);
+  border-radius: 1px;
+}
+.ctx-ring__empty {
+  margin: 4px 0 2px;
 }
 
 /* ask_user dialog */

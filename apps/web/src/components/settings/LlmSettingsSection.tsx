@@ -100,7 +100,13 @@ export function LlmSettingsSection() {
     patch: Partial<
       Pick<
         LlmProvider,
-        'display_name' | 'base_url' | 'api_format' | 'models' | 'default_model' | 'enabled'
+        | 'display_name'
+        | 'base_url'
+        | 'api_format'
+        | 'models'
+        | 'models_meta'
+        | 'default_model'
+        | 'enabled'
       >
     >
   ) => updateProvider(id, patch).then(() => reload());

@@ -39,7 +39,15 @@ def stub_llm_client(monkeypatch):
     hits: list[str] = []
 
     async def fake_complete(
-        provider, *, api_key, model, messages, max_tokens=4096, temperature=0.7, tools=None
+        provider,
+        *,
+        api_key,
+        model,
+        messages,
+        max_tokens=4096,
+        temperature=0.7,
+        tools=None,
+        reasoning_effort="",
     ):
         hits.append(model)
         return CompleteResult(
@@ -47,7 +55,15 @@ def stub_llm_client(monkeypatch):
         )
 
     def fake_stream(
-        provider, *, api_key, model, messages, max_tokens=4096, temperature=0.7, tools=None
+        provider,
+        *,
+        api_key,
+        model,
+        messages,
+        max_tokens=4096,
+        temperature=0.7,
+        tools=None,
+        reasoning_effort="",
     ):
         async def _gen():
             hits.append(model)

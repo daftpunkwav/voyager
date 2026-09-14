@@ -38,6 +38,17 @@ DEFS = [
         description="Embedding model for the embed capability and memory vector recall (empty = lexical recall only)",
     ),
     SettingDef(
+        key="llm.reasoning_effort",
+        module="llm",
+        type=SettingType.STR,
+        default="",
+        description=(
+            "Reasoning effort injected into supported wire formats "
+            "(empty = not sent; low / medium / high). chat maps to "
+            "reasoning_effort, anthropic maps to a thinking budget."
+        ),
+    ),
+    SettingDef(
         key="llm.temperature",
         module="llm",
         type=SettingType.FLOAT,

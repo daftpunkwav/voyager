@@ -43,7 +43,13 @@ export function updateProvider(
   patch: Partial<
     Pick<
       LlmProvider,
-      'display_name' | 'base_url' | 'api_format' | 'models' | 'default_model' | 'enabled'
+      | 'display_name'
+      | 'base_url'
+      | 'api_format'
+      | 'models'
+      | 'models_meta'
+      | 'default_model'
+      | 'enabled'
     >
   >
 ): Promise<unknown> {

@@ -10,8 +10,10 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { LlmApiFormat, LlmProvider, LlmTestOutcome } from '@/api/types';
+import { callCapability } from '@/bridge/client';
+import type { LlmApiFormat, LlmModelMeta, LlmProvider, LlmTestOutcome } from '@/api/types';
 import { GlassSelect } from '@/components/common/GlassSelect';
+import { LlmModelEditDialog } from '@/components/settings/llm/LlmModelEditDialog';
 import { LLM_API_FORMAT_OPTIONS } from '@/constants/llmConfig';
 import { GLASS_INNER } from '@/constants/glassTokens';
 
@@ -24,7 +26,13 @@ interface LlmProviderDetailProps {
     patch: Partial<
       Pick<
         LlmProvider,
-        'display_name' | 'base_url' | 'api_format' | 'models' | 'default_model' | 'enabled'
+        | 'display_name'
+        | 'base_url'
+        | 'api_format'
+        | 'models'
+        | 'models_meta'
+        | 'default_model'
+        | 'enabled'
       >
     >
   ) => Promise<unknown>;
@@ -58,6 +66,7 @@ export function LlmProviderDetail({
   const [apiKeyDraft, setApiKeyDraft] = useState('');
   const [newModel, setNewModel] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
+  const [editModel, setEditModel] = useState<string | null>(null);
 
   // Sync values coming back from the external reload into local drafts (after switching providers or remote changes)
   useEffect(() => {
@@ -110,6 +119,38 @@ export function LlmProviderDetail({
     if (!key) return;
     setApiKeyDraft('');
     run(() => onSaveKey(key));
+  };
+
+  /** Mirror the model's token budgets into agent.context.model_profiles so the
+   *  agent's context budget uses the real window without manual settings edits;
+   *  clearing both budgets removes the profile. */
+  const saveModelMeta = async (model: string, meta: LlmModelMeta) => {
+    await onPatch({ models_meta: { ...(provider.models_meta ?? {}), [model]: meta } });
+    const profiles: Record<string, { window_tokens?: number; max_output_tokens?: number }> = {};
+    try {
+      const item = await callCapability<{ value?: unknown }>('settings', 'get_setting', {
+        key: 'agent.context.model_profiles',
+      });
+      const v = item?.value;
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        Object.assign(profiles, v);
+      }
+    } catch {
+      // unset key starts a fresh profile map
+    }
+    if (meta.context_window || meta.max_output_tokens) {
+      profiles[model] = {
+        window_tokens: meta.context_window ?? profiles[model]?.window_tokens,
+        max_output_tokens: meta.max_output_tokens ?? profiles[model]?.max_output_tokens,
+      };
+    } else {
+      delete profiles[model];
+    }
+    await callCapability('settings', 'set_setting', {
+      key: 'agent.context.model_profiles',
+      value: profiles,
+    });
+    setEditModel(null);
   };
 
   const activeModel = provider.default_model || provider.models[0] || '';
@@ -257,21 +298,41 @@ export function LlmProviderDetail({
       <div className="form-row">
         <label>{t('llm.provider.modelList')}</label>
         <ul className="llm-model-list">
-          {provider.models.map((m) => (
-            <li key={m} className={`llm-model-chip ${GLASS_INNER}`}>
-              <span>{m}</span>
-              {m === provider.default_model ? (
-                <span className="llm-model-chip__default">{t('llm.provider.defaultTag')}</span>
-              ) : null}
-              <button
-                type="button"
-                aria-label={t('llm.provider.removeModelAria', { model: m })}
-                onClick={() => removeModel(m)}
-              >
-                ×
-              </button>
-            </li>
-          ))}
+          {provider.models.map((m) => {
+            const meta = provider.models_meta?.[m];
+            const badges: string[] = [];
+            if (meta?.image_input) badges.push(t('llm.modelEdit.image'));
+            if (meta?.audio_input) badges.push(t('llm.modelEdit.audio'));
+            if (meta?.video_input) badges.push(t('llm.modelEdit.video'));
+            if (meta?.thinking) badges.push(t('llm.modelEdit.thinkingBadge'));
+            return (
+              <li key={m} className={`llm-model-chip ${GLASS_INNER}`}>
+                <button
+                  type="button"
+                  className="llm-model-chip__main"
+                  title={t('llm.modelEdit.openAria', { model: m })}
+                  onClick={() => setEditModel(m)}
+                >
+                  <span className="llm-model-chip__name">{m}</span>
+                  {m === provider.default_model ? (
+                    <span className="llm-model-chip__default">{t('llm.provider.defaultTag')}</span>
+                  ) : null}
+                  {badges.map((b) => (
+                    <span key={b} className="llm-model-chip__badge">
+                      {b}
+                    </span>
+                  ))}
+                </button>
+                <button
+                  type="button"
+                  aria-label={t('llm.provider.removeModelAria', { model: m })}
+                  onClick={() => removeModel(m)}
+                >
+                  ×
+                </button>
+              </li>
+            );
+          })}
         </ul>
         <div className="llm-model-add">
           <input
@@ -291,6 +352,15 @@ export function LlmProviderDetail({
           </button>
         </div>
       </div>
+
+      {editModel ? (
+        <LlmModelEditDialog
+          model={editModel}
+          meta={provider.models_meta?.[editModel] ?? {}}
+          onSave={(meta) => saveModelMeta(editModel, meta)}
+          onClose={() => setEditModel(null)}
+        />
+      ) : null}
 
       <div className="llm-test-panel">
         <button

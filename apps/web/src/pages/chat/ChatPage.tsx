@@ -92,6 +92,7 @@ export function ChatPage() {
               className="chat-input"
               running={thinking}
               onStop={() => void interruptInstance('chat')}
+              onManageModels={() => navigate('/settings')}
               placeholder={
                 llmMissing
                   ? t('chat:composer.llmMissingPlaceholder')

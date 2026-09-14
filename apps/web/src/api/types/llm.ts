@@ -10,6 +10,18 @@
 /** Authoritative API formats: only these two remain; the legacy openai/google/ollama enum is retired. */
 export type LlmApiFormat = 'chat' | 'anthropic';
 
+/** Per-model metadata (llm provider models_meta): capability flags decide
+ *  composer affordances (attachments / thinking picker), the token budgets
+ *  feed the agent's context budget via agent.context.model_profiles. */
+export interface LlmModelMeta {
+  image_input?: boolean;
+  audio_input?: boolean;
+  video_input?: boolean;
+  thinking?: boolean;
+  context_window?: number;
+  max_output_tokens?: number;
+}
+
 /** Provider shape returned by the llm service list_providers capability.
  *  Keys are never returned (pages read has_api_key); writing a key goes only
  *  through llm.set_api_key. */
@@ -20,6 +32,7 @@ export interface LlmProvider {
   base_url: string;
   api_format: LlmApiFormat;
   models: string[];
+  models_meta: Record<string, LlmModelMeta>;
   default_model: string;
   enabled: boolean;
   custom: boolean;

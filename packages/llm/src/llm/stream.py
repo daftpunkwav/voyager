@@ -47,6 +47,7 @@ from .client import (
     _raise_typed_text,
     _resolve_tool_messages,
     _split_system,
+    reasoning_fields,
 )
 
 
@@ -71,6 +72,7 @@ async def complete_stream(
     max_tokens: int = 4096,
     temperature: float = 0.7,
     tools: list[dict[str, Any]] | None = None,
+    reasoning_effort: str = "",
 ) -> AsyncIterator[dict[str, Any]]:
     """Streaming completion: yields text deltas and a final aggregate chunk."""
     fmt = provider["api_format"]
@@ -91,6 +93,10 @@ async def complete_stream(
         }
         if tools:
             body["tools"] = _anthropic_tools(tools)
+        body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
+        # Anthropic forbids temperature when extended thinking is enabled
+        if "thinking" in body:
+            body.pop("temperature", None)
         url = f"{base}/v1/messages"
         headers = {
             "x-api-key": api_key,
@@ -112,6 +118,7 @@ async def complete_stream(
         }
         if tools:
             body["tools"] = _chat_tools(tools)
+        body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
         url = f"{base}/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}"}
         parser = _chat_sse

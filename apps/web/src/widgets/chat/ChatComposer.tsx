@@ -1,20 +1,30 @@
 /**
  * @file ChatComposer
- * @description Shared chat composer: textarea plus send/stop button, used by the
- * chat page and the persistent floating window. Each surface owns its own
- * useChatSend instance (drafts stay per surface by design) and passes it in.
+ * @description Shared chat composer: textarea plus a bottom bar holding the
+ * context-usage ring, the model picker, the reasoning-effort picker and the
+ * send/stop control (left to right, mainstream-agent layout). Used by the
+ * chat page and the persistent floating window; each surface owns its own
+ * useChatSend instance.
  *
  * Responsibilities:
  * - Bind the draft and disable on sending / llmMissing / empty draft
  * - Enter sends, Shift+Enter inserts a newline, IME composition never sends
- * - While the agent is running (thinking) the button morphs into the stop
- *   button that interrupts the current turn — one control, mode-dependent
- * - Render the surface-provided placeholder (the llmMissing copy is chosen
- *   by the caller, which already holds the flag for its degrade tip)
+ * - While the agent is running the button morphs into stop (interrupt)
+ * - Model picker writes llm.default_provider + llm.default_model so the next
+ *   turn routes to the selection; grouped by provider with a settings entry
+ * - Reasoning picker writes llm.reasoning_effort (off/low/medium/high); the
+ *   backend injects it into supported wire formats. Disabled unless the
+ *   selected model declares thinking support in its models_meta
+ * - ContextRing shows the active session's window usage (own polling)
  */
 
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { callCapability } from '@/bridge/client';
+import type { LlmProvider } from '@/api/types';
+import { listProviders } from '@/api/llm';
 import type { UseChatSendReturn } from '@/hooks/useChatSend';
+import { ContextRing } from '@/widgets/chat/ContextRing';
 
 interface ChatComposerProps {
   /** Send state from the surface-owned useChatSend instance */
@@ -27,6 +37,103 @@ interface ChatComposerProps {
   running?: boolean;
   /** Interrupt the current turn (required when running is passed) */
   onStop?: () => void;
+  /** Test seam: providers injected instead of fetched from the llm service */
+  providers?: LlmProvider[];
+  /** "Manage models" entry; omitted (e.g. in tests) hides the entry */
+  onManageModels?: () => void;
+}
+
+/** One dropdown in the composer bar: trigger button + popup list, closes on
+ *  outside click / Escape. */
+function BarDropdown({
+  label,
+  ariaLabel,
+  disabled,
+  children,
+}: {
+  label: React.ReactNode;
+  ariaLabel: string;
+  disabled?: boolean;
+  children: (close: () => void) => React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="composer-dd" ref={ref}>
+      <button
+        type="button"
+        className="composer-dd__trigger"
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen(!open)}
+      >
+        {label}
+        <svg
+          width={10}
+          height={10}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {open ? (
+        <div className="composer-dd__pop glass-card glass-card--dialog" role="listbox">
+          {children(() => setOpen(false))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Reasoning levels (stored value -> label key); "" means do not send. */
+const THINKING_LEVELS: Array<{ value: string; labelKey: string }> = [
+  { value: '', labelKey: 'chat:thinking.off' },
+  { value: 'low', labelKey: 'chat:thinking.low' },
+  { value: 'medium', labelKey: 'chat:thinking.medium' },
+  { value: 'high', labelKey: 'chat:thinking.high' },
+];
+
+function BrainIcon() {
+  return (
+    <svg
+      width={13}
+      height={13}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M12 4.5a3.5 3.5 0 0 0-3.5 3.5v.4A3.2 3.2 0 0 0 6 11.4a3.3 3.3 0 0 0 1.6 2.9A3.2 3.2 0 0 0 9 19.5h3V4.5z" />
+      <path d="M12 4.5A3.5 3.5 0 0 1 15.5 8v.4a3.2 3.2 0 0 1 2.5 3 3.3 3.3 0 0 1-1.6 2.9A3.2 3.2 0 0 1 15 19.5h-3" />
+    </svg>
+  );
 }
 
 export function ChatComposer({
@@ -35,10 +142,73 @@ export function ChatComposer({
   className,
   running = false,
   onStop,
+  providers: providersProp,
+  onManageModels,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
   const { draft, setDraft, sending, llmMissing, send } = composer;
   const stopping = running && Boolean(onStop);
+
+  const [providers, setProviders] = useState<LlmProvider[]>(providersProp ?? []);
+  const [providerId, setProviderId] = useState('');
+  const [model, setModel] = useState('');
+  const [reasoning, setReasoning] = useState('');
+
+  // Load the catalog + the persisted selection once; test injections skip the fetch.
+  useEffect(() => {
+    if (providersProp) {
+      setProviders(providersProp);
+      return;
+    }
+    let alive = true;
+    listProviders()
+      .then((ps) => {
+        if (alive) setProviders(ps.filter((p) => p.enabled && p.has_api_key));
+      })
+      .catch(() => {}); // picker degrades to disabled; composing still works
+    const keys: Array<[string, (v: string) => void]> = [
+      ['llm.default_provider', setProviderId],
+      ['llm.default_model', setModel],
+      ['llm.reasoning_effort', setReasoning],
+    ];
+    for (const [key, apply] of keys) {
+      callCapability<{ value?: unknown }>('settings', 'get_setting', { key })
+        .then((item) => {
+          if (alive && item && typeof item.value === 'string') apply(item.value);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      alive = false;
+    };
+  }, [providersProp]);
+
+  const currentProvider = providers.find((p) => p.id === providerId) ?? null;
+  const selectedModel = model || currentProvider?.default_model || '';
+  const meta = currentProvider?.models_meta?.[selectedModel];
+  const thinkingSupported = meta ? meta.thinking === true : false;
+
+  const pickModel = (p: LlmProvider, m: string) => {
+    setProviderId(p.id);
+    setModel(m);
+    void callCapability('settings', 'set_setting', { key: 'llm.default_provider', value: p.id })
+      .catch(() => {})
+      .then(() =>
+        callCapability('settings', 'set_setting', { key: 'llm.default_model', value: m })
+      )
+      .catch(() => {});
+  };
+
+  const pickReasoning = (value: string) => {
+    setReasoning(value);
+    void callCapability('settings', 'set_setting', { key: 'llm.reasoning_effort', value }).catch(
+      () => {}
+    );
+  };
+
+  const reasoningLabel =
+    THINKING_LEVELS.find((l) => l.value === reasoning)?.labelKey ?? 'chat:thinking.off';
+
   return (
     <div className={className}>
       <textarea
@@ -54,20 +224,122 @@ export function ChatComposer({
           }
         }}
       />
-      {stopping ? (
-        <button type="button" className="btn btn-danger chat-stop" onClick={onStop}>
-          {t('chat:composer.stop')}
-        </button>
-      ) : (
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={sending || llmMissing || !draft.trim()}
-          onClick={() => void send()}
+      <div className="composer-bar">
+        <ContextRing />
+        <span className="composer-bar__spacer" />
+        <BarDropdown
+          label={
+            <>
+              <span className="composer-dot" aria-hidden />
+              <span className="composer-dd__text">
+                {selectedModel || t('chat:composer.modelNone')}
+              </span>
+            </>
+          }
+          ariaLabel={t('chat:composer.modelAria')}
+          disabled={providers.length === 0}
         >
-          {t('chat:composer.send')}
-        </button>
-      )}
+          {(close) => (
+            <>
+              {providers.map((p) => (
+                <div key={p.id} className="composer-dd__group">
+                  <div className="composer-dd__group-title">{p.display_name || p.id}</div>
+                  {p.models.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      role="option"
+                      aria-selected={p.id === providerId && m === selectedModel}
+                      className="composer-dd__item"
+                      onClick={() => {
+                        pickModel(p, m);
+                        close();
+                      }}
+                    >
+                      {m}
+                      {p.models_meta?.[m]?.image_input ? (
+                        <span className="composer-dd__badge">
+                          {t('chat:composer.badgeImage')}
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              ))}
+              {onManageModels ? (
+                <button
+                  type="button"
+                  className="composer-dd__item composer-dd__item--manage"
+                  onClick={() => {
+                    close();
+                    onManageModels();
+                  }}
+                >
+                  {t('chat:composer.manageModels')}
+                </button>
+              ) : null}
+            </>
+          )}
+        </BarDropdown>
+        <BarDropdown
+          label={
+            <>
+              <BrainIcon />
+              <span className="composer-dd__text">{t(reasoningLabel)}</span>
+            </>
+          }
+          ariaLabel={t('chat:thinking.aria')}
+          disabled={!thinkingSupported}
+        >
+          {(close) => (
+            <>
+              {THINKING_LEVELS.map((level) => (
+                <button
+                  key={level.value}
+                  type="button"
+                  role="option"
+                  aria-selected={level.value === reasoning}
+                  className="composer-dd__item"
+                  onClick={() => {
+                    pickReasoning(level.value);
+                    close();
+                  }}
+                >
+                  {t(level.labelKey)}
+                  {level.value === reasoning ? <span aria-hidden>✓</span> : null}
+                </button>
+              ))}
+            </>
+          )}
+        </BarDropdown>
+        {stopping ? (
+          <button type="button" className="btn btn-danger chat-stop" onClick={onStop}>
+            {t('chat:composer.stop')}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-primary chat-send"
+            disabled={sending || llmMissing || !draft.trim()}
+            onClick={() => void send()}
+            aria-label={t('chat:composer.send')}
+          >
+            <svg
+              width={16}
+              height={16}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M12 19V5M5 12l7-7 7 7" />
+            </svg>
+          </button>
+        )}
+      </div>
     </div>
   );
 }

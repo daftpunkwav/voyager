@@ -180,6 +180,39 @@ class TestSecretBoundary:
         assert out["display_name"] == "new name"
         assert out["base_url"] == "https://api.test/v1"
 
+    async def test_models_meta_round_trips_and_validates(self, deps) -> None:
+        """Per-model metadata saves and reads back; malformed shapes are rejected."""
+        pid = await _add_sample()
+        out = await execute(
+            registry,
+            "update_provider",
+            USER_CTX,
+            {
+                "provider_id": pid,
+                "models_meta": {
+                    "m": {"image_input": True, "thinking": True, "context_window": 200000}
+                },
+            },
+        )
+        assert out["models_meta"]["m"]["thinking"] is True
+        store, _ = deps
+        assert store.get(pid)["models_meta"]["m"]["context_window"] == 200000
+
+        for bad in (
+            {"m": {"image_input": "yes"}},  # bool fields take booleans only
+            {"m": {"context_window": -1}},  # budgets are positive ints
+            {"m": {"nonsense": True}},  # unknown fields are rejected, not ignored
+            {"": {"thinking": True}},  # empty model id
+        ):
+            with pytest.raises(ServiceError) as exc:
+                await execute(
+                    registry,
+                    "update_provider",
+                    USER_CTX,
+                    {"provider_id": pid, "models_meta": bad},
+                )
+            assert exc.value.body.code == "LLM.INVALID_INPUT"
+
     async def test_user_changes_base_url_ok(self, deps) -> None:
         pid = await _add_sample()
         out = await execute(

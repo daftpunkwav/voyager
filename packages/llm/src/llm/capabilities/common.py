@@ -35,6 +35,32 @@ DOMAIN = "llm"
 registry = Registry(DOMAIN)
 
 
+#: Per-model metadata fields (models_meta): booleans are capability flags,
+#: ints are positive token budgets. Unknown keys are rejected so typos never
+#: silently disable a feature the user believes is on.
+_MODEL_META_BOOL_FIELDS = ("image_input", "audio_input", "video_input", "thinking")
+_MODEL_META_INT_FIELDS = ("context_window", "max_output_tokens")
+
+
+def valid_models_meta(meta: Any) -> bool:
+    """Shape check for the models_meta map: {model_id: {field: value}}."""
+    if not isinstance(meta, dict):
+        return False
+    for model, fields in meta.items():
+        if not model or not isinstance(model, str) or not isinstance(fields, dict):
+            return False
+        for k, v in fields.items():
+            if k in _MODEL_META_BOOL_FIELDS:
+                if not isinstance(v, bool):
+                    return False
+            elif k in _MODEL_META_INT_FIELDS:
+                if not isinstance(v, int) or isinstance(v, bool) or v <= 0:
+                    return False
+            else:
+                return False
+    return True
+
+
 def service_error_for(exc: ProviderError) -> ServiceError:
     """Map ProviderError subclasses to ServiceError suffixes.
 
@@ -159,6 +185,7 @@ __all__ = [
     "require_deps",
     "require_provider",
     "service_error_for",
+    "valid_models_meta",
     "validate_base_url",
     "with_key_flag",
 ]
