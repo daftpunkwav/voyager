@@ -180,9 +180,7 @@ async def dispatch_task(
             # Best effort - shutdown may already be tearing the channel down.
             if inst.status is RunStatus.CANCELLED:
                 with suppress(Exception):
-                    await master.reply(
-                        f"[cancelled] {inst.name}", session=inst.task.session
-                    )
+                    await master.reply(f"[cancelled] {inst.name}", session=inst.task.session)
             raise
         except Exception as exc:  # run_turn already recorded the state; notify + server-side log
             log.exception("background dispatch failed: %s", inst.name)

@@ -143,7 +143,7 @@ class TestCancelNoticeAndPending:
                 await asyncio.Event().wait()
 
         app = _app(tmp_path, HangingLLM())
-        inst = await app.master.dispatch_task("long analysis", name="slowjob")
+        await app.master.dispatch_task("long analysis", name="slowjob")
         await app.spawner.cancel("slowjob")
         await wait_until(
             lambda: any("[cancelled]" in r and "slowjob" in r for r in agent_replies(app))
@@ -171,8 +171,6 @@ class TestCancelNoticeAndPending:
         assert child.state.status is RS.CANCELLED
 
     async def test_parent_link_survives_snapshot_roundtrip(self, tmp_path) -> None:
-        from agent.runtime.state import RunStatus as RS
-
         app = _app(tmp_path)
         inst = app.spawner.spawn(TaskBook(goal="x"), name="snap")
         inst.parent_run_id = "parent123"

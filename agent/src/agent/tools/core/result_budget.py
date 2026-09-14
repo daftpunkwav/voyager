@@ -77,13 +77,13 @@ def bound_spill_dir(
         return 0
     now = time.time()
     files = sorted(
-        (p for p in spill_dir.iterdir() if p.is_file()),
-        key=lambda p: p.stat().st_mtime,
+        ((p, p.stat()) for p in spill_dir.iterdir() if p.is_file()),
+        key=lambda t: t[1].st_mtime,
     )
     removed = 0
-    for index, path in enumerate(files):
+    for index, (path, stat) in enumerate(files):
         over_cap = index < len(files) - cap if cap > 0 else True
-        over_age = max_age_s is not None and now - path.stat().st_mtime > max_age_s
+        over_age = max_age_s is not None and now - stat.st_mtime > max_age_s
         if not (over_cap or over_age):
             break  # sorted by mtime: once one file is in bounds, the rest are
         try:

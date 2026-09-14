@@ -124,10 +124,13 @@ def cost_of(
     if price is None:
         return None
     cached = max(0, min(cached_tokens, input_tokens))
-    billable_input = input_tokens - cached
-    return (
-        billable_input * price.input + cached * price.cache_read + output_tokens * price.output
+    billable_input = max(0, input_tokens - cached)
+    cost = (
+        billable_input * max(0.0, price.input)
+        + cached * max(0.0, price.cache_read)
+        + output_tokens * max(0.0, price.output)
     ) / 1_000_000
+    return max(0.0, cost)
 
 
 __all__ = ["ModelPrice", "cost_of", "lookup", "normalize_model"]

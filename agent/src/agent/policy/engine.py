@@ -10,6 +10,7 @@ points; the engine only provides the limits (ResourcePolicy).
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from agent.policy.app import AppPolicy, decide_app
@@ -69,6 +70,13 @@ class PolicyEngine:
             "shell": self._decide_shell,
         }.get(action.dimension)
         if handler is None:
+            # none/resource/unknown dimensions are intentionally allowed at L0;
+            # log once so a dimension wiring slip does not disappear silently.
+            logging.getLogger(__name__).info(
+                "policy fallback: allowing unknown dimension %s for %s",
+                action.dimension,
+                action.target,
+            )
             return Decision(allow=True)  # none/resource and the like: L0
         return handler(action)
 
