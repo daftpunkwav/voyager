@@ -326,72 +326,90 @@ function buildSegments(steps: TurnStep[], roundTexts: RoundText[]): TraceSegment
   return segments;
 }
 
-/** The live turn's inline trace. Auto behavior: expanded while steps stream
- *  in, auto-collapses when output text starts flowing (any round), reopens on
- *  the next tool step; a header click pins that group until the turn ends. */
+/** The live turn's inline trace — ONE stable collapsible unit sitting between
+ *  the user's message and the final output. Position never moves: the block
+ *  only grows downward inside a fixed-height, internally-scrolling body, so
+ *  streaming output below is never pushed around. Auto behavior: expanded
+ *  while tool steps stream in, collapsed to the summary line while output
+ *  text flows; a header click pins the state until the turn ends. */
 export function LiveTurnTrace() {
   const { t } = useTranslation('chat');
   const steps = useChatStore((s) => s.steps);
   const roundTexts = useChatStore((s) => s.roundTexts);
   const streaming = useChatStore((s) => s.streaming);
-  const [manual, setManual] = useState<Record<string, boolean>>({});
+  const [manual, setManual] = useState<boolean | null>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const hadStepsRef = useRef(false);
 
-  // Auto behavior: the tail group is open while tool steps stream in and
-  // yields to the output text as soon as a round's deltas start flowing; the
-  // next tool step reopens it. A header click pins that group until turn end.
   const running = steps.length > 0;
-  const autoOpen = running && !streaming?.text;
-
+  // "Text is the latest activity": output yields the trace only while text
+  // started flowing after the most recent step; the next tool step (or its
+  // llm marker) flips activity back to the trace and it reopens. State, not
+  // a ref, so the flip itself re-renders even when nothing else changed.
+  const [textSinceStep, setTextSinceStep] = useState(false);
   useEffect(() => {
-    if (hadStepsRef.current && steps.length === 0) setManual({});
+    setTextSinceStep(false);
+  }, [steps.length]);
+  useEffect(() => {
+    if (streaming?.text) setTextSinceStep(true);
+  }, [streaming?.text]);
+  const autoOpen = running && !textSinceStep;
+  const open = manual ?? autoOpen;
+
+  // Reset the manual pin when the turn ends so the next turn starts fresh.
+  useEffect(() => {
+    if (hadStepsRef.current && steps.length === 0) setManual(null);
     hadStepsRef.current = steps.length > 0;
   }, [steps.length]);
 
+  // Follow the action inside the fixed-height body only: the page layout
+  // below (streaming output) is never scrolled or resized by trace growth.
+  useEffect(() => {
+    if (!open) return;
+    const el = bodyRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [open, steps.length, streaming?.text]);
+
   if (!running) return null;
   const segments = buildSegments(steps, roundTexts);
+  const summary = groupSummary(steps, t);
 
   return (
     <div className="chat-trace chat-trace--live">
-      {segments.map((seg, i) => {
-        const isLast = i === segments.length - 1;
-        const key = seg.key;
-        const open = key in manual ? manual[key] : isLast && autoOpen;
-        const summary = groupSummary(seg.steps, t);
-        return (
-          <Fragment key={key}>
-            {seg.text ? (
-              <div className="chat-bubble chat-bubble--agent chat-turntext">
-                <div className="chat-md">
+      <button
+        type="button"
+        className="chat-trace__head"
+        aria-expanded={open}
+        onClick={() => setManual(!open)}
+      >
+        <Chevron open={open} />
+        <span className="chat-trace__headtext">{summary}</span>
+        {autoOpen ? (
+          <span className="chat-trace__livebadge">
+            <span className="chat-trace__pulse" aria-hidden />
+            {t('chat:trace.working')}
+          </span>
+        ) : streaming?.text ? (
+          <span className="chat-trace__livebadge">
+            <span className="chat-trace__pulse" aria-hidden />
+            {t('chat:trace.outputting')}
+          </span>
+        ) : null}
+      </button>
+      {open ? (
+        <div className="chat-trace__body" ref={bodyRef}>
+          {segments.map((seg) => (
+            <Fragment key={seg.key}>
+              {seg.text ? (
+                <div className="chat-turntext chat-md">
                   <ChatMarkdown content={seg.text} />
                 </div>
-              </div>
-            ) : null}
-            <button
-              type="button"
-              className="chat-trace__head"
-              aria-expanded={open}
-              onClick={() => setManual((prev) => ({ ...prev, [key]: !open }))}
-            >
-              <Chevron open={open} />
-              <span className="chat-trace__headtext">{summary}</span>
-              {isLast && !autoOpen && streaming?.text ? (
-                <span className="chat-trace__livebadge">
-                  <span className="chat-trace__pulse" aria-hidden />
-                  {t('chat:trace.outputting')}
-                </span>
               ) : null}
-              {isLast && autoOpen ? (
-                <span className="chat-trace__livebadge">
-                  <span className="chat-trace__pulse" aria-hidden />
-                  {t('chat:trace.working')}
-                </span>
-              ) : null}
-            </button>
-            {open ? <TraceStepList steps={seg.steps} /> : null}
-          </Fragment>
-        );
-      })}
+              <TraceStepList steps={seg.steps} />
+            </Fragment>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

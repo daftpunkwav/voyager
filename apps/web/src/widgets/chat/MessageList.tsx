@@ -143,24 +143,27 @@ export function MessageList() {
     const prev = firstSeqRef.current;
     firstSeqRef.current = firstSeq;
     // A prepended older page lowers the first seq; the loader anchors the
-    // viewport itself, so only tail growth (new messages) scrolls to bottom
+    // viewport itself, so only tail growth (new messages) scrolls to bottom.
+    // Streaming deltas are intentionally absent here: per-delta smooth
+    // scrolling reads as teleporting; growth follow-up lives in the effect
+    // below and only fires when the user is already near the bottom.
     if (prev !== null && firstSeq !== null && firstSeq < prev) return;
     const reduce =
       typeof window !== 'undefined' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     bottomRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'end' });
-  }, [firstSeq, messages.length, thinking, artifacts.length, streaming]);
+  }, [firstSeq, messages.length, thinking, artifacts.length]);
 
-  // Live-trace growth follows the output only when the user is already near
-  // the bottom; reading history mid-turn must not be yanked back down.
+  // Trace growth and streaming text follow the output only when the user is
+  // already near the bottom; reading history mid-turn is never yanked back.
   useEffect(() => {
     const el = streamRef.current;
     const scroller = el ? getScrollParent(el) : null;
-    if (!scroller || steps.length === 0) return;
+    if (!scroller) return;
     const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
     if (distance > FOLLOW_MARGIN_PX) return;
     bottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
-  }, [steps.length]);
+  }, [steps.length, streaming]);
 
   // Closed trails keyed by their closing message seq: the trace renders right
   // above the answer it produced.
@@ -190,11 +193,11 @@ export function MessageList() {
           </Fragment>
         );
       })}
-      <LiveTurnTrace />
-      {showInterrupted && tailTrail ? <ClosedTurnTrace steps={tailTrail.steps} /> : null}
       {artifacts.map((a) => (
         <NoteArtifactCard key={a.seq} artifact={a} />
       ))}
+      <LiveTurnTrace />
+      {showInterrupted && tailTrail ? <ClosedTurnTrace steps={tailTrail.steps} /> : null}
       {streaming?.text ? (
         // Streaming typing paragraph: same agent-text styling with a caret
         // indicating generation in progress; the final content arrives via
