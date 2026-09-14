@@ -111,6 +111,8 @@ export interface TurnStep {
   /** LLM round steps: full round output (backend-capped) for the thinking block. */
   text?: string;
   textTruncated?: boolean;
+  /** LLM round steps: the adapter-resolved model for that round. */
+  model?: string;
 }
 
 /** Streaming typing for agent.delta: holds only the current delta of the main
@@ -215,6 +217,7 @@ export function toTurnStep(ev: ChatEvent): TurnStep {
     ttftMs: num(detail.ttft_ms),
     text: str(detail.text),
     textTruncated: detail.text_truncated === true ? true : undefined,
+    model: str(detail.model),
   };
 }
 
@@ -306,6 +309,19 @@ function historyToMessages(events: ChatEvent[]): ChatMessage[] {
       content: String(e.payload?.content ?? ''),
       ts: e.ts,
     }));
+}
+
+/** note.created rows of a history page -> artifact receipts (refresh restore:
+ *  receipts used to live only in the SSE session and vanished on reload). */
+function historyToArtifacts(events: ChatEvent[]): NoteArtifact[] {
+  return events
+    .filter((e) => e.type === 'note.created')
+    .map((e) => ({
+      seq: e.seq,
+      noteId: String(e.payload?.note_id ?? ''),
+      title: String(e.payload?.title ?? i18n.t('chat:store.untitledNote')),
+    }))
+    .filter((a) => a.noteId);
 }
 
 /** Latest user text above the timeline tail (trail attribution helper). */
@@ -437,24 +453,37 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   applyHistory: (events, hasMore = false) => {
     const msgs = historyToMessages(events);
+    // Note receipts are session-less global events: keep only those inside
+    // this session's history window (seq at/after its oldest message), so a
+    // long-lived workspace's older notes do not flood the timeline.
+    const windowStart = msgs.length ? msgs[0].seq : Number.POSITIVE_INFINITY;
+    const restored = historyToArtifacts(events).filter((a) => a.seq >= windowStart);
     // While a history request is in flight, live SSE messages may already sit in the
     // timeline: the replacement only covers the history range (seq <= last history
     // seq); newer live messages and locally synthesized bubbles (seq < 0) are kept,
     // otherwise the backfill would wipe just-arrived messages
     const maxSeq = msgs.length ? msgs[msgs.length - 1].seq : 0;
     const live = get().messages.filter((m) => m.seq < 0 || m.seq > maxSeq);
-    set({ messages: [...msgs, ...live], hasMoreHistory: hasMore, activeLoaded: true });
+    set({
+      messages: [...msgs, ...live],
+      artifacts: restored,
+      hasMoreHistory: hasMore,
+      activeLoaded: true,
+    });
   },
 
   prependHistory: (events, hasMore) => {
     const older = historyToMessages(events);
     const existing = get().messages;
-    // Dedup by seq: the window may overlap the current history if events
+    // Dedup by seq: the page may overlap the current history if events
     // landed between two page fetches
     const seen = new Set(existing.map((m) => m.seq));
     const fresh = older.filter((m) => !seen.has(m.seq));
+    // Older note receipts merge in as well (dedup by seq, ascending)
+    const artifacts = [...get().artifacts, ...historyToArtifacts(events).filter((a) => !get().artifacts.some((x) => x.seq === a.seq))].sort((a, b) => a.seq - b.seq);
     set({
       messages: [...fresh, ...existing],
+      artifacts,
       hasMoreHistory: hasMore,
       historyLoading: false,
     });

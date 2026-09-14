@@ -160,18 +160,19 @@ describe('ChatPage tabs', () => {
 });
 
 describe('live trace detail', () => {
-  it('expands a row to the call fact sheet', () => {
+  it('expands a tool row to the call fact sheet', () => {
     reset({ steps: TRAIL_STEPS, lastSteps: [] });
     render(<LiveTurnTrace />);
     fireEvent.click(screen.getByText('读取文件'));
     expect(screen.getByText('{"path":"a.txt"}')).toBeTruthy();
   });
 
-  it('expands a think row to the full round text', () => {
+  it('renders the round lead-in text and meta directly (no step numbers)', () => {
     reset({ steps: TRAIL_STEPS, lastSteps: [] });
     render(<LiveTurnTrace />);
-    fireEvent.click(screen.getByText('思考'));
-    expect(screen.getByText('思考内容')).toBeTruthy();
+    expect(screen.getByText('轮 1')).toBeTruthy();
     expect(screen.getByText(/完整的思考内容/)).toBeTruthy();
+    expect(screen.getByText(/首 token 350ms/)).toBeTruthy();
+    expect(screen.queryByText(/第 \d+ 步/)).toBeNull();
   });
 });

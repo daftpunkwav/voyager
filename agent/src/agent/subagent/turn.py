@@ -125,6 +125,13 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
             log.debug(
                 "failed to emit RunCancelled event (cancel semantics unaffected)", exc_info=True
             )
+        # Conversational closure: without a closing chat message the UI waits
+        # in the running state forever (the reply sink is success-only).
+        if inst.task.conversational and inst.reply_sink is not None:
+            try:
+                await inst.reply_sink("[已中断] 本回合被中断;可重新发送或换个说法继续。")
+            except Exception:  # best effort, same as the event above
+                log.debug("failed to emit cancel closure message", exc_info=True)
         raise
     except PauseRequested:
         # Cooperative pause (phase 20): stop at a paired boundary, persist a
@@ -153,6 +160,13 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
         await inst.events.emit(
             RuntimeEvent.RUN_FAILED, run_id=inst.state.run_id, error=inst.state.error
         )
+        # Conversational closure: a failed turn must still end the chat
+        # exchange, otherwise the UI stays in the running state forever.
+        if inst.task.conversational and inst.reply_sink is not None:
+            try:
+                await inst.reply_sink(f"[回合失败] {inst.state.error}")
+            except Exception:  # best effort: closure must not mask the failure
+                log.debug("failed to emit failure closure message", exc_info=True)
         raise
     except BaseException as exc:  # catch-all terminal state: the instance never stays RUNNING
         inst.state.status = RunStatus.FAILED

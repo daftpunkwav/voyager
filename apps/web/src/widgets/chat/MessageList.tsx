@@ -55,6 +55,32 @@ function getScrollParent(node: HTMLElement): HTMLElement | null {
   return null;
 }
 
+/** One entry of the unified conversation timeline: chat messages and note
+ *  artifacts interleaved by their event seq, so receipts (e.g. "note
+ *  created") stay attached to the turn that produced them instead of
+ *  stacking at the stream tail. */
+type TimelineItem =
+  | { kind: 'msg'; seq: number; msg: ChatMessage }
+  | { kind: 'artifact'; seq: number; artifact: NoteArtifact };
+
+function mergeTimeline(messages: ChatMessage[], artifacts: NoteArtifact[]): TimelineItem[] {
+  const items: TimelineItem[] = [
+    ...messages.map((m) => ({ kind: 'msg' as const, seq: m.seq, msg: m })),
+    ...artifacts.map((a) => ({ kind: 'artifact' as const, seq: a.seq, artifact: a })),
+  ];
+  // Both inputs ascend already; a merge-sort keeps that order stable.
+  const out: TimelineItem[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < messages.length && j < artifacts.length) {
+    if (messages[i].seq <= artifacts[j].seq) out.push(items[i++]);
+    else out.push(items[messages.length + j++]);
+  }
+  while (i < messages.length) out.push(items[i++]);
+  while (j < artifacts.length) out.push(items[messages.length + j++]);
+  return out;
+}
+
 export function MessageList() {
   const { t } = useTranslation('chat');
   const messages = useChatStore((s) => s.messages);
@@ -184,18 +210,19 @@ export function MessageList() {
           {t('chat:history.loadingOlder')}
         </div>
       ) : null}
-      {messages.map((m) => {
+      {mergeTimeline(messages, artifacts).map((item) => {
+        if (item.kind === 'artifact') {
+          return <NoteArtifactCard key={`a${item.seq}`} artifact={item.artifact} />;
+        }
+        const m = item.msg;
         const trail = m.role === 'agent' ? trailBySeq.get(m.seq) : undefined;
         return (
-          <Fragment key={`${m.seq}-${m.role}`}>
+          <Fragment key={`${m.seq ?? `local-${m.ts ?? item.seq}`}-${m.role}`}>
             {trail ? <ClosedTurnTrace steps={trail.steps} /> : null}
             <Bubble msg={m} />
           </Fragment>
         );
       })}
-      {artifacts.map((a) => (
-        <NoteArtifactCard key={a.seq} artifact={a} />
-      ))}
       <LiveTurnTrace />
       {showInterrupted && tailTrail ? <ClosedTurnTrace steps={tailTrail.steps} /> : null}
       {streaming?.text ? (

@@ -1,21 +1,23 @@
 /**
  * @file TurnTrace
  * @description Inline execution trace for the chat stream, styled after
- * mainstream agent UIs: each ReAct round renders its lead-in paragraph above
- * a collapsible group ("思考 1 次 · 工具 2 次") holding that round's think
- * marker and tool rows. The live turn's tail group stays expanded while tool
- * work is happening and auto-collapses the moment output text starts
- * streaming; a user click overrides until the turn ends. Closed turns render
- * as one collapsed group keyed off the persisted trail, expandable in place.
+ * mainstream agent UIs: each ReAct round renders as a round block — header
+ * (round number, model, token in/out, latency), the round's lead-in text
+ * shown directly, a meta line (first token / subagent / run id), and its
+ * tool rows with expandable call details. System operations (context
+ * compaction) render as operation rows inside the timeline.
  *
- * Data: live steps + frozen round texts from chatStore (live-only, a refresh
- * rebuilds closed turns from trails instead); closed turns pass steps in.
+ * The live turn renders one stable collapsible unit between the user's
+ * message and the final output: a fixed-height, internally-scrolling body,
+ * so streaming output below is never pushed around. Output text flowing is
+ * the "latest activity" and collapses the unit; the next tool step reopens
+ * it. Closed turns render the same blocks from the persisted trail.
  */
 
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { type RoundText, type TurnStep, useChatStore } from '@/stores/chatStore';
-import { formatDurationSec } from '@/utils/trajectory';
+import { formatCompactCount, formatDurationSec } from '@/utils/trajectory';
 import { StepDetail } from '@/widgets/chat/StepDetail';
 import { ChatMarkdown } from '@/widgets/chat/ChatMarkdown';
 
@@ -44,6 +46,7 @@ type IconName =
   | 'sparkle'
   | 'pencil'
   | 'file'
+  | 'gear'
   | 'box';
 
 /** Keyword -> icon mapping for tool rows; first match wins, so broad write
@@ -62,6 +65,7 @@ const TOOL_ICON_RULES: Array<[RegExp, IconName]> = [
 ];
 
 function iconForStep(step: TurnStep): IconName {
+  if (step.kind === 'system') return 'gear';
   if (step.kind !== 'tool') return 'sparkle';
   const idx = step.name.indexOf('__');
   const cap = idx >= 0 ? step.name.slice(idx + 2) : step.name;
@@ -72,7 +76,8 @@ function iconForStep(step: TurnStep): IconName {
 }
 
 /** 14px stroke icons (currentColor); tiny enough to sit inline in trace rows. */
-function TraceIcon({ name }: { name: IconName }) {  const common = {
+function TraceIcon({ name }: { name: IconName }) {
+  const common = {
     width: 14,
     height: 14,
     viewBox: '0 0 24 24',
@@ -147,6 +152,13 @@ function TraceIcon({ name }: { name: IconName }) {  const common = {
           <path d="M14.5 6.8l2.7 2.7" />
         </svg>
       );
+    case 'gear':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="3.2" />
+          <path d="M19 12a7 7 0 0 0-.14-1.4l2-1.55-2-3.46-2.36.95A7 7 0 0 0 14.1 5.2L13.75 2.7h-3.5L9.9 5.2a7 7 0 0 0-2.4 1.34l-2.36-.95-2 3.46 2 1.55a7 7 0 0 0 0 2.8l-2 1.55 2 3.46 2.36-.95a7 7 0 0 0 2.4 1.34l.35 2.5h3.5l.35-2.5a7 7 0 0 0 2.4-1.34l2.36.95 2-3.46-2-1.55A7 7 0 0 0 19 12z" />
+        </svg>
+      );
     case 'file':
       return (
         <svg {...common}>
@@ -194,9 +206,21 @@ function stepSeconds(step: TurnStep, next?: TurnStep): number | null {
   return sec >= 0 ? sec : null;
 }
 
-/** "思考 N 次 · 工具 M 次" for one group (parts with zero are dropped). */
+/** Row duration label: gap to the next step's ts when known, else the step's
+ *  own latency; null when neither is available (running tail). */
+function stepDuration(
+  step: TurnStep,
+  next: TurnStep | undefined,
+  t: (k: string, o?: Record<string, unknown>) => string
+): string | null {
+  const gap = stepSeconds(step, next);
+  if (gap !== null) return formatDurationSec(gap, t);
+  return typeof step.ms === 'number' && step.ms > 0 ? `${Math.round(step.ms)}ms` : null;
+}
+
+/** "思考 N 次 · 工具 M 次" for the collapsed summary (systems are ops, not thought). */
 function groupSummary(steps: TurnStep[], t: (k: string, o?: Record<string, unknown>) => string) {
-  const think = steps.filter((s) => s.kind !== 'tool').length;
+  const think = steps.filter((s) => s.kind === 'llm').length;
   const tools = steps.filter((s) => s.kind === 'tool').length;
   const parts: string[] = [];
   if (think > 0) parts.push(t('chat:trace.think', { n: think }));
@@ -204,6 +228,8 @@ function groupSummary(steps: TurnStep[], t: (k: string, o?: Record<string, unkno
   return parts.join(' · ');
 }
 
+/** One tool/system row: icon + label + summary + duration, expandable to the
+ *  call fact sheet. */
 function StepRow({
   step,
   next,
@@ -216,13 +242,18 @@ function StepRow({
   onToggle: () => void;
 }) {
   const { t } = useTranslation('chat');
-  const label = step.kind === 'tool' ? toolLabel(step.name, t) : t('chat:proc.think');
-  const dur = stepSeconds(step, next);
+  const isSystem = step.kind === 'system';
+  const label = isSystem
+    ? t(`chat:op.${step.name}`, { defaultValue: step.name })
+    : step.kind === 'tool'
+      ? toolLabel(step.name, t)
+      : t('chat:proc.think');
+  const dur = stepDuration(step, next, t);
   return (
     <li className="chat-trace__row">
       <button
         type="button"
-        className="chat-trace__rowbtn"
+        className={`chat-trace__rowbtn${isSystem ? ' chat-trace__rowbtn--op' : ''}`}
         aria-expanded={expanded}
         aria-label={`${label} ${t('chat:traj.detailToggle')}`}
         onClick={onToggle}
@@ -236,18 +267,17 @@ function StepRow({
             {step.summary}
           </span>
         ) : null}
-        {dur !== null ? (
-          <span className="chat-trace__dur">{formatDurationSec(dur, t)}</span>
-        ) : null}
+        {dur !== null ? <span className="chat-trace__dur">{dur}</span> : null}
       </button>
       {expanded ? <StepDetail step={step} /> : null}
     </li>
   );
 }
 
-/** The step list of one group (rows stack over their fact sheets). */
-function TraceStepList({ steps }: { steps: TurnStep[] }) {
+/** Tool/system rows of one round (rows stack over their fact sheets). */
+function RoundToolRows({ steps }: { steps: TurnStep[] }) {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  if (steps.length === 0) return null;
   return (
     <ul className="chat-trace__list">
       {steps.map((s, i) => (
@@ -264,7 +294,7 @@ function TraceStepList({ steps }: { steps: TurnStep[] }) {
 }
 
 /** One closed turn from the persisted trail: collapsed "已执行 N 步" summary,
- *  expandable to the full step list in place. */
+ *  expanding to the full round blocks in place. */
 export function ClosedTurnTrace({ steps }: { steps: TurnStep[] }) {
   const { t } = useTranslation('chat');
   const [open, setOpen] = useState(false);
@@ -285,53 +315,126 @@ export function ClosedTurnTrace({ steps }: { steps: TurnStep[] }) {
           {t('chat:proc.done', { steps: steps.length, tools, dur: formatDurationSec(totalSec, t) })}
         </span>
       </button>
-      {open ? <TraceStepList steps={steps} /> : null}
+      {open ? (
+        <div className="chat-trace__body">
+          {buildBlocks(steps, []).map((b) => (
+            <RoundBlockView key={b.key} block={b} />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-/** One live-turn segment: the round's frozen lead-in text above its step group. */
-interface TraceSegment {
+/** One round block: an llm round marker with its lead-in text, meta and tools. */
+interface RoundBlock {
   key: string;
-  /** Round number when the segment starts at an llm marker; leading steps
-   *  (before any marker) form a headless segment with round=null. */
   round: number | null;
+  llm: TurnStep | null;
   text: string;
-  steps: TurnStep[];
+  ops: TurnStep[];
+  tools: TurnStep[];
 }
 
-/** Split live steps into per-round groups: an llm marker starts its group and
- *  the tool steps after it belong to the same round (backend order: round
- *  deltas -> llm marker -> tool steps). Round text renders above its group. */
-function buildSegments(steps: TurnStep[], roundTexts: RoundText[]): TraceSegment[] {
-  const segments: TraceSegment[] = [];
-  let current: TraceSegment | null = null;
+/** Group steps into round blocks: an llm marker opens a block, tool steps
+ *  belong to the current block, system operations attach to the block they
+ *  precede (compaction happens at a round boundary). */
+function buildBlocks(steps: TurnStep[], roundTexts: RoundText[]): RoundBlock[] {
+  const blocks: RoundBlock[] = [];
+  let pendingOps: TurnStep[] = [];
+  let cur: RoundBlock | null = null;
+  const pushPending = () => {
+    if (pendingOps.length) {
+      blocks.push({ key: `ops-${blocks.length}`, round: null, llm: null, text: '', ops: pendingOps, tools: [] });
+      pendingOps = [];
+    }
+  };
   for (const s of steps) {
-    if (s.kind !== 'tool') {
-      current = { key: `r${s.round ?? s.seq}`, round: s.round ?? null, text: '', steps: [s] };
-      segments.push(current);
+    if (s.kind === 'llm') {
+      cur = {
+        // seq in the key: resumed/merged trails can hold two round-1 markers
+        key: `r${s.round ?? 'x'}-${s.seq}`,
+        round: s.round ?? null,
+        llm: s,
+        text: roundTexts.find((r) => r.round === s.round)?.text ?? '',
+        ops: pendingOps,
+        tools: [],
+      };
+      pendingOps = [];
+      blocks.push(cur);
+    } else if (s.kind === 'system') {
+      if (cur) cur.ops.push(s);
+      else pendingOps.push(s);
     } else {
-      if (!current) {
-        current = { key: 'head', round: null, text: '', steps: [] };
-        segments.push(current);
+      if (!cur) {
+        cur = { key: 'head', round: null, llm: null, text: '', ops: pendingOps, tools: [] };
+        pendingOps = [];
+        blocks.push(cur);
       }
-      current.steps.push(s);
+      cur.tools.push(s);
     }
   }
-  for (const seg of segments) {
-    if (seg.round !== null) {
-      seg.text = roundTexts.find((r) => r.round === seg.round)?.text ?? '';
-    }
-  }
-  return segments;
+  pushPending();
+  return blocks;
+}
+
+const LONG_TEXT_CHARS = 400;
+
+/** One round block: header (round, model, tokens, latency), lead-in text,
+ *  meta line, then its tool rows. */
+function RoundBlockView({ block }: { block: RoundBlock }) {
+  const { t } = useTranslation('chat');
+  const [textOpen, setTextOpen] = useState(false);
+  const llm = block.llm;
+  // Live: the frozen round text; closed/refreshed: the persisted step text.
+  const bodyText = block.text || llm?.text || '';
+  const long = bodyText.length > LONG_TEXT_CHARS;
+  const stats: string[] = [];
+  if (llm && typeof llm.inputTokens === 'number')
+    stats.push(t('chat:trace.in', { n: formatCompactCount(llm.inputTokens) }));
+  if (llm && typeof llm.outputTokens === 'number')
+    stats.push(t('chat:trace.out', { n: formatCompactCount(llm.outputTokens) }));
+  const meta: string[] = [];
+  if (llm?.ttftMs !== undefined) meta.push(t('chat:trace.ttft', { v: `${llm.ttftMs}ms` }));
+  if (llm?.subagent) meta.push(t('chat:trace.subagent', { v: llm.subagent }));
+  if (llm?.runId) meta.push(t('chat:trace.runId', { v: llm.runId }));
+
+  return (
+    <section className={`chat-round${llm ? '' : ' chat-round--ops'}`}>
+      {block.ops.length > 0 ? <RoundToolRows steps={block.ops} /> : null}
+      {llm ? (
+        <div className="chat-round__head">
+          <span className="chat-round__no">
+            {block.round ? t('chat:trace.roundN', { n: block.round }) : t('chat:proc.think')}
+          </span>
+          {llm.model ? <span className="chat-round__model">{llm.model}</span> : null}
+          {stats.length ? <span className="chat-round__stats">{stats.join(' · ')}</span> : null}
+        </div>
+      ) : null}
+      {bodyText ? (
+        <div className={`chat-round__text chat-md${long && !textOpen ? ' is-clamped' : ''}`}>
+          <ChatMarkdown content={bodyText} />
+        </div>
+      ) : null}
+      {long ? (
+        <button
+          type="button"
+          className="chat-round__toggle small"
+          onClick={() => setTextOpen(!textOpen)}
+        >
+          {textOpen ? t('chat:trace.collapseText') : t('chat:trace.expandText')}
+        </button>
+      ) : null}
+      {meta.length ? <div className="chat-round__meta small muted">{meta.join(' · ')}</div> : null}
+      <RoundToolRows steps={block.tools} />
+    </section>
+  );
 }
 
 /** The live turn's inline trace — ONE stable collapsible unit sitting between
  *  the user's message and the final output. Position never moves: the block
  *  only grows downward inside a fixed-height, internally-scrolling body, so
- *  streaming output below is never pushed around. Auto behavior: expanded
- *  while tool steps stream in, collapsed to the summary line while output
- *  text flows; a header click pins the state until the turn ends. */
+ *  streaming output below is never pushed around. */
 export function LiveTurnTrace() {
   const { t } = useTranslation('chat');
   const steps = useChatStore((s) => s.steps);
@@ -371,8 +474,7 @@ export function LiveTurnTrace() {
   }, [open, steps.length, streaming?.text]);
 
   if (!running) return null;
-  const segments = buildSegments(steps, roundTexts);
-  const summary = groupSummary(steps, t);
+  const blocks = buildBlocks(steps, roundTexts);
 
   return (
     <div className="chat-trace chat-trace--live">
@@ -383,7 +485,7 @@ export function LiveTurnTrace() {
         onClick={() => setManual(!open)}
       >
         <Chevron open={open} />
-        <span className="chat-trace__headtext">{summary}</span>
+        <span className="chat-trace__headtext">{groupSummary(steps, t)}</span>
         {autoOpen ? (
           <span className="chat-trace__livebadge">
             <span className="chat-trace__pulse" aria-hidden />
@@ -398,15 +500,8 @@ export function LiveTurnTrace() {
       </button>
       {open ? (
         <div className="chat-trace__body" ref={bodyRef}>
-          {segments.map((seg) => (
-            <Fragment key={seg.key}>
-              {seg.text ? (
-                <div className="chat-turntext chat-md">
-                  <ChatMarkdown content={seg.text} />
-                </div>
-              ) : null}
-              <TraceStepList steps={seg.steps} />
-            </Fragment>
+          {blocks.map((b) => (
+            <RoundBlockView key={b.key} block={b} />
           ))}
         </div>
       ) : null}

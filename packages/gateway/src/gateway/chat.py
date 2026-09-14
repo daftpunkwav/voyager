@@ -80,7 +80,9 @@ _STREAM_TYPES = (
     DomainEvent.SETTINGS_CHANGED,
     DomainEvent.NOTES_UI_CHANGED,
 )
-_HISTORY_TYPES = (DomainEvent.USER_MESSAGE, DomainEvent.AGENT_MESSAGE)
+# note.created rides along so note receipts survive a refresh (the UI
+# rebuilds its deliverable cards from the same history page).
+_HISTORY_TYPES = (DomainEvent.USER_MESSAGE, DomainEvent.AGENT_MESSAGE, DomainEvent.NOTE_CREATED)
 #: Step rows for trajectory rebuilds (execution detail, never the timeline).
 _TRAJECTORY_TYPES = (DomainEvent.AGENT_STEP,)
 #: Chunk size for session-filtered scans (multiple of any sane page size)
@@ -89,8 +91,14 @@ _FILTER_CHUNK = 400
 
 def _in_session(event: Event, session: str) -> bool:
     """Session match: exact id equality over the payload field; rows without
-    the field (legacy) belong to the global lane and match no filter."""
-    return str(event.payload.get("session") or "") == session
+    the field (legacy) belong to the global lane and match no filter — except
+    note receipts, which are session-less by nature (the notes domain does
+    not know the chat session) and ride along every lane so their cards
+    survive a refresh."""
+    ev_session = str(event.payload.get("session") or "")
+    if event.type == DomainEvent.NOTE_CREATED:
+        return not ev_session or ev_session == session
+    return ev_session == session
 
 
 class TrajectoryReader(Protocol):

@@ -53,6 +53,9 @@ class LLMReply:
     usage: Usage = field(default_factory=Usage)
     degraded: bool = False
     overflow: bool = False
+    # Resolved model name reported by the adapter (empty when unknown); the
+    # round step trail records it so model switches land in the trajectory.
+    model: str = ""
 
     @property
     def final(self) -> bool:

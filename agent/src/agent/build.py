@@ -245,6 +245,12 @@ def build_agent(
 
     log = EventLog(data_dir / "events.db", retention=EVENTS_RETENTION)
     bus = bus or EventBus(log)
+    if not owns_log:
+        # The bus was injected by the host: it persists into the host's own
+        # shared log, and the local file above would stay empty forever.
+        # Projections (trajectory, session index) must read the log the bus
+        # actually writes to, or every step is lost across restarts.
+        log = bus.log
     cursors = CursorStore(log.conn, log.lock)
 
     owns_settings = settings_store is None

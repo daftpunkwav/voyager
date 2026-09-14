@@ -158,7 +158,14 @@ async def run_react(
     for round_n in range(1, limits.max_rounds + 1):
         specs = toolbelt.specs() if toolbelt is not None else None
         if governor is not None:
-            await governor.enforce(messages)
+            report = await governor.enforce(messages)
+            if report is not None:
+                await on_step(
+                    "system",
+                    "compact",
+                    f"上下文已自动压缩({report.get('mode', 'mechanical')})",
+                    {"op": "compact", "mode": report.get("mode", "mechanical")},
+                )
         else:
             messages[:] = compress(messages, budget=compress_budget, prune=False)
         # Round timing: wall latency always; TTFT only when the caller
@@ -207,11 +214,18 @@ async def run_react(
                 )
             overflow_retried = True
             if governor is not None:
-                # Aggressive recovery: aim at the mechanical fallback budget,
+                # Aggressive recovery: aim for the mechanical fallback budget,
                 # the smallest sane target, before the per-message truncate
-                await governor.compact(
+                report = await governor.compact(
                     messages, target=min(governor.target_tokens(), compress_budget)
                 )
+                if report is not None:
+                    await on_step(
+                        "system",
+                        "compact",
+                        f"上下文溢出,已强制压缩({report.get('mode', 'mechanical')})",
+                        {"op": "compact", "mode": report.get("mode", "mechanical")},
+                    )
             else:
                 messages[:] = compress(messages, budget=compress_budget, prune=False)
             _emergency_truncate(messages, compress_budget)
@@ -235,6 +249,9 @@ async def run_react(
                 # Full round output so the chat UI can show the complete
                 # thinking text, not just the 120-char summary prefix
                 **round_text_detail(reply.text or ""),
+                # The adapter-resolved model: model switches become visible
+                # in the trajectory round by round
+                **({"model": reply.model} if getattr(reply, "model", "") else {}),
             },
         )
         if reply.final:
@@ -388,7 +405,14 @@ async def run_step(
     Returns the step result text; abort reports flow through unchanged so
     the caller can tell a failed step from real work."""
     if governor is not None:
-        await governor.enforce(messages)
+        report = await governor.enforce(messages)
+        if report is not None:
+            await on_step(
+                "system",
+                "compact",
+                f"上下文已自动压缩({report.get('mode', 'mechanical')})",
+                {"op": "compact", "mode": report.get("mode", "mechanical")},
+            )
     if toolbelt is not None and belt is not None:
         before_calls = belt.calls
         result = await run_react(

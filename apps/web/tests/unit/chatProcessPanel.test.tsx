@@ -35,9 +35,15 @@ import { type ChatEvent, useChatStore } from '@/stores/chatStore';
 import { initI18n } from '@/i18n';
 
 let seq = 1000;
-function stepEvent(kind: string, name: string, summary: string, ts: number): ChatEvent {
+function stepEvent(
+  kind: string,
+  name: string,
+  summary: string,
+  ts: number,
+  detail: Record<string, unknown> = {}
+): ChatEvent {
   seq += 1;
-  return { seq, type: 'agent.step', payload: { kind, name, summary, subagent: 'chat' }, ts };
+  return { seq, type: 'agent.step', payload: { kind, name, summary, subagent: 'chat', detail }, ts };
 }
 
 function resetStore() {
@@ -89,17 +95,17 @@ function renderStream() {
 }
 
 describe('inline live trace (MessageList)', () => {
-  it('stays expanded while the turn runs: think rows and localized tool labels', () => {
+  it('stays expanded while the turn runs: round block, tool rows, localized labels', () => {
     const { dispatch } = useChatStore.getState();
     useChatStore.setState({ thinking: true });
-    dispatch(stepEvent('llm', 'round-1', '我先查一下', 100));
+    dispatch(stepEvent('llm', 'round-1', '我先查一下', 100, { round: 1 }));
     dispatch(stepEvent('tool', 'notes__create_note', 'created', 103));
     const { container } = renderStream();
     expect(container.querySelector('.chat-trace--live')).not.toBeNull();
-    expect(screen.getByText('思考')).toBeTruthy();
+    expect(screen.getByText('轮 1')).toBeTruthy(); // round block header
     expect(screen.getByText('创建笔记')).toBeTruthy();
     expect(screen.queryByText('notes__create_note')).toBeNull(); // display layer humanizes
-    // the group header summarizes the round
+    // the group header summarizes the turn
     expect(screen.getByText(/思考 1 次/)).toBeTruthy();
     expect(screen.getByText(/工具 1 次/)).toBeTruthy();
   });
@@ -147,6 +153,29 @@ describe('inline live trace (MessageList)', () => {
   it('renders no trace without steps', () => {
     const { container } = renderStream();
     expect(container.querySelector('.chat-trace')).toBeNull();
+  });
+
+  it('keeps note receipts attached to their turn instead of the stream tail', () => {
+    // Turn 1 closed (answer seq 2), then a second user question arrived; the
+    // note receipt (seq 2, same event-log order) must sit between the two
+    // turns, not stack after the newest message.
+    useChatStore.setState({
+      messages: [
+        { seq: 1, role: 'user', content: '第一问' },
+        { seq: 2, role: 'agent', content: '第一答' },
+        { seq: 3, role: 'user', content: '第二问' },
+      ],
+      artifacts: [{ seq: 2, noteId: 'n1', title: '周报' }],
+    });
+    const { container } = renderStream();
+    const card = container.querySelector('.note-artifact');
+    const secondAsk = [...container.querySelectorAll('.chat-bubble--user')].at(-1);
+    expect(card).not.toBeNull();
+    expect(secondAsk).not.toBeNull();
+    // card precedes the second user bubble in document order
+    const cardEl = card as Element;
+    const askEl = secondAsk as Element;
+    expect(cardEl.compareDocumentPosition(askEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 

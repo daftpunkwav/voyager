@@ -144,6 +144,7 @@ class ServiceLLM:
                 input_tokens=int(usage.get("input_tokens") or 0),
                 output_tokens=int(usage.get("output_tokens") or 0),
             ),
+            model=str(out.get("model") or ""),
         )
 
     async def complete_stream(
@@ -205,6 +206,7 @@ class ServiceLLM:
                             input_tokens=int(usage.get("input_tokens") or 0),
                             output_tokens=int(usage.get("output_tokens") or 0),
                         ),
+                        model=str(chunk.get("model") or ""),
                     )
                 )
             else:
