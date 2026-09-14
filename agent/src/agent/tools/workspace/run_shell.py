@@ -27,6 +27,7 @@ import asyncio
 import os
 import re
 import shlex
+from contextlib import suppress
 from pathlib import Path
 
 from agent.tools.core.base import AgentTool
@@ -129,6 +130,15 @@ def run_shell_tool(cwd: str | Path) -> AgentTool:
                 await proc.wait()
             except Exception:  # noqa: BLE001, S110  # best-effort reaping; timeout semantics kept
                 pass
+        except asyncio.CancelledError:
+            # the calling task was cancelled (run tree cancel / shutdown):
+            # never leak the child process or the reader task
+            proc.kill()
+            with suppress(Exception):
+                await proc.wait()
+            with suppress(Exception):
+                await reader
+            raise
         out, discarded = await reader
         text = out.decode("utf-8", errors="replace")
         if discarded:

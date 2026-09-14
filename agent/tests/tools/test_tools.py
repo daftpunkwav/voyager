@@ -521,3 +521,46 @@ class _FakeSettings:
 
     def get(self, key: str):
         return self._values.get(key)
+
+
+class TestShellCancellation:
+    async def test_cancelled_run_shell_raises_and_returns_promptly(self, tmp_path) -> None:
+        """Cancelling a running run_shell propagates CancelledError through the
+        kill path (child killed, reader reaped) instead of leaking."""
+        import asyncio
+
+        script = tmp_path / "_hang.py"
+        script.write_text("import time\ntime.sleep(30)\n", encoding="utf-8")
+        run_shell = shell_tools(tmp_path)["run_shell"].handler
+        task = asyncio.create_task(run_shell(f"{sys.executable} {script.name}", timeout=30))
+        await asyncio.sleep(0.3)  # let the child start
+        task.cancel()
+        try:
+            await asyncio.wait_for(task, timeout=2)
+            raised = False
+        except asyncio.CancelledError:
+            raised = True
+        assert raised  # propagation preserved; child killed inside the handler
+
+
+class TestWriteFileAtomic:
+    async def test_failed_replace_keeps_original_and_cleans_tmp(self, workdir, monkeypatch) -> None:
+        """A mid-write failure must not truncate the target nor leave a stray
+        temp file (the journal's undo keys on file content)."""
+        import os
+
+        target = workdir / "repo" / "a.txt"
+        target.write_text("original", encoding="utf-8")
+
+        real_replace = os.replace
+
+        def _boom(src, dst):
+            raise OSError("disk full (simulated)")
+
+        monkeypatch.setattr(os, "replace", _boom)
+        belt = _belt(workdir)
+        out = await belt.call(ToolCall("1", "write_file", {"path": "repo/a.txt", "content": "new"}))
+        monkeypatch.setattr(os, "replace", real_replace)
+        assert "[工具失败]" in out
+        assert target.read_text(encoding="utf-8") == "original"  # untouched
+        assert not list((workdir / "repo").glob(".a.txt.*.tmp"))  # no stray tmp

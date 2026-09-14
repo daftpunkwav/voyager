@@ -8,6 +8,9 @@ can roll the write back.
 
 from __future__ import annotations
 
+import os
+import uuid
+from contextlib import suppress
 from typing import TYPE_CHECKING
 
 from agent.tools.core.base import AgentTool
@@ -23,7 +26,19 @@ def write_file_tool(jail: Jail, journal: WriteJournal | None = None) -> AgentToo
         target = jail.resolve(path, allow_write_roots=True)
         entry = safe_capture(journal, target, intent="write")
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
+        # Atomic write (temp file + os.replace, same discipline as edit_file):
+        # a mid-write failure must never truncate the target in place - the
+        # journal's undo safety check keys on file content, and a half-written
+        # file would be permanently unrestorable
+        tmp = target.with_name(f".{target.name}.{uuid.uuid4().hex[:8]}.tmp")
+        try:
+            with open(tmp, "w", encoding="utf-8", newline="") as handle:
+                handle.write(content)
+            os.replace(tmp, target)
+        except Exception:
+            with suppress(OSError):
+                tmp.unlink()  # never leave a stray temp file behind
+            raise
         safe_finalize(journal, entry, target)
         return {"written": str(target), "chars": len(content)}
 
