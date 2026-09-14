@@ -26,6 +26,12 @@ ROUND_DEADLINE_KEY = "agent.execution.round_deadline_s"
 _DEFAULT_TOOL_S = 90.0
 _DEFAULT_ROUND_S = 240.0
 
+#: Interactive tools are exempt from the tool deadline: their own question
+#: timeout (question_broker) bounds the wait, and the round deadline still
+#: backstops the turn. A 90s tool cap on a user-facing question just kills
+#: the conversation before anyone can answer.
+_INTERACTIVE_TOOLS = frozenset({"ask_user"})
+
 
 @dataclass(frozen=True)
 class Deadline:
@@ -49,7 +55,7 @@ class Deadline:
     async def run_tool(self, awaitable_factory, *, tool: str):
         """Await one tool execution under the tool cap; expiry returns a
         structured timeout outcome (ok=False) instead of raising."""
-        if self.tool_s <= 0:
+        if self.tool_s <= 0 or tool in _INTERACTIVE_TOOLS:
             return await awaitable_factory()
         try:
             return await asyncio.wait_for(awaitable_factory(), self.tool_s)

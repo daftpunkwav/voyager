@@ -250,6 +250,7 @@ def build(
     from gateway.mounts import MountSpec
     from gateway.rest import create_app as gateway_create
     from gateway.uploads import build_upload_router
+    from gateway.workspace import build_workspace_router
 
     data_root = Path(data_dir) if data_dir else ROOT / "data/runtime"
     data_root.mkdir(parents=True, exist_ok=True)
@@ -304,7 +305,7 @@ def build(
             MountSpec(domain=name, registry=w.registry, probe=w.probe, extra_router=w.extra_router)
             for name, w in wirings.items()
         ]
-        extra_routers = [build_upload_router(workspace)]
+        extra_routers = [build_upload_router(workspace), build_workspace_router(workspace)]
         agent = build_agent(
             data_dir=data_root / "agent",
             workspace_dir=workspace,

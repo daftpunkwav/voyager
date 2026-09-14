@@ -27,6 +27,8 @@ import asyncio
 import os
 import re
 import shlex
+import shutil
+import sys
 from contextlib import suppress
 from pathlib import Path
 
@@ -79,6 +81,27 @@ async def _read_capped(stream: asyncio.StreamReader | None, cap: int) -> tuple[b
             discarded += len(chunk)
 
 
+def _resolve_windows_stub(argv0: str) -> str:
+    """On Windows, `python`/`python3` from PATH often resolves to the
+    Microsoft Store alias under WindowsApps - a launcher stub that hangs
+    forever when spawned headlessly (no output, no exit). Prefer a real
+    interpreter found elsewhere on PATH, then the running interpreter."""
+    if os.name != "nt":
+        return argv0
+    stem = argv0.lower()
+    stem = stem.removesuffix(".exe")
+    if stem not in ("python", "python3"):
+        return argv0
+    for candidate in (argv0, "python", "python3"):
+        found = shutil.which(candidate)
+        if found and "windowsapps" not in found.lower():
+            return found
+    exe = Path(sys.executable)
+    if exe.name.lower().replace(".exe", "") in ("python", "python3", "pythonw"):
+        return str(exe)
+    return argv0
+
+
 def run_shell_tool(cwd: str | Path) -> AgentTool:
     """Build the run_shell tool; the subprocess cwd is pinned to the agent
     working directory supplied at assembly time."""
@@ -101,6 +124,7 @@ def run_shell_tool(cwd: str | Path) -> AgentTool:
                 f"[失败] 工作目录不可用: {work} 不存在或不是目录;"
                 "不会回退到进程当前目录,请让用户先修复 agent 工作目录设置"
             )
+        argv[0] = _resolve_windows_stub(argv[0])
         try:
             proc = await asyncio.create_subprocess_exec(
                 argv[0],

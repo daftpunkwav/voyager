@@ -308,6 +308,11 @@ def build_agent(
     # routing layer; without an injected transport everything shares the chat
     # model as before
     routes = purpose_llms or {}
+    # Confirmation dialogs must expire BEFORE the tool deadline
+    # (agent.execution.tool_deadline_s = 90s) so the user gets a real chance
+    # to approve; the remembered-approval store removes the friction after
+    # the first grant.
+    _CONFIRM_TIMEOUT_S = 75.0
     arbiter_llm = _metered(routes["arbiter"]) if "arbiter" in routes else chat_llm
     distiller_llm = _metered(routes["distill"]) if "distill" in routes else chat_llm
     planner_llm = _metered(routes["context_planner"]) if "context_planner" in routes else chat_llm
@@ -315,8 +320,11 @@ def build_agent(
 
     async def _confirm(prompt: str) -> bool:
         """L2 confirmation via asking the user; no answer before timeout means
-        declined."""
-        answer = await asker.ask(Question(prompt=prompt, kind="confirm"))
+        declined. The question timeout must stay below the tool deadline
+        (agent.execution.tool_deadline_s): otherwise the deadline kills the
+        whole call while the dialog is still open and the user never gets a
+        chance to approve."""
+        answer = await asker.ask(Question(prompt=prompt, kind="confirm", timeout_s=_CONFIRM_TIMEOUT_S))
         return bool(answer)
 
     async def _confirm_scoped(prompt: str, tool: str, target: str) -> str:
@@ -328,6 +336,7 @@ def build_agent(
                 prompt=prompt,
                 kind="choice",
                 options=("Allow once", "本次会话内允许", "总是允许(该工具+目标)"),
+                timeout_s=_CONFIRM_TIMEOUT_S,
             )
         )
         mapping = {

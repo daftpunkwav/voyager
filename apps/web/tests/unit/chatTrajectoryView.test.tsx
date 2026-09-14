@@ -118,18 +118,23 @@ beforeEach(() => {
 });
 
 describe('TrajectoryView', () => {
-  it('renders turn cards with rails, stats and expandable details', () => {
-    reset({ trails: [{ msgSeq: 4, userText: '读这个文件', steps: TRAIL_STEPS }] });
+  it('renders stats, timeline and turn-grouped rows with expandable details', () => {
+    reset({
+      messages: [
+        { seq: 1, role: 'user', content: '读这个文件' },
+        { seq: 4, role: 'agent', content: 'done' },
+      ],
+      trails: [{ msgSeq: 4, userText: '读这个文件', steps: TRAIL_STEPS }],
+    });
     render(<TrajectoryView />);
-    fireEvent.click(screen.getByText('读这个文件'));
-    // Rails + cost bar
-    expect(screen.getAllByText('输入').length).toBeGreaterThan(0);
-    expect(screen.getByText('模型')).toBeTruthy();
-    expect(screen.getByText('工具')).toBeTruthy();
-    expect(screen.getByText(/1轮·1次工具/)).toBeTruthy();
-    expect(screen.getByText(/输入 33.6k·输出 1.1k/)).toBeTruthy();
-    // Expand the tool row: arguments and latency become visible
-    fireEvent.click(screen.getByText('读取文件'));
+    // toolbar stats
+    expect(screen.getByText('轮次 1')).toBeTruthy();
+    expect(screen.getByText('调用 1')).toBeTruthy();
+    // event rows: user prompt, reasoning block, tool row, assistant reply
+    expect(screen.getByText('读这个文件')).toBeTruthy();
+    expect(screen.getByText(/完整的思考内容/)).toBeTruthy();
+    // expand the tool row: arguments and latency become visible
+    fireEvent.click(screen.getByText(/读取文件/));
     expect(screen.getByText('{"path":"a.txt"}')).toBeTruthy();
     expect(screen.getByText(/耗时: 12ms/)).toBeTruthy();
   });
@@ -143,7 +148,10 @@ describe('TrajectoryView', () => {
 describe('ChatPage tabs', () => {
   it('switches between conversation and trajectory panes', () => {
     reset({
-      messages: [{ seq: 4, role: 'agent', content: 'done' }],
+      messages: [
+        { seq: 3, role: 'user', content: '读这个文件' },
+        { seq: 4, role: 'agent', content: 'done' },
+      ],
       trails: [{ msgSeq: 4, userText: '读这个文件', steps: TRAIL_STEPS }],
     });
     render(

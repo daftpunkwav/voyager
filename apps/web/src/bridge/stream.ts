@@ -54,6 +54,12 @@ function connect(): void {
       if (Number.isFinite(seq) && seq > lastSeq) {
         lastSeq = seq;
       }
+      // The SSE `data:` payload is event.to_dict() and carries no seq (the
+      // sequence rides on the `id:` line only). Stamp it back so consumers
+      // (chatStore trajectories, dedup, turn grouping) see a real seq.
+      if (event.seq === undefined && Number.isFinite(seq)) {
+        event.seq = seq;
+      }
       for (const h of handlers) {
         if (h.patterns.some((p) => matchPattern(p, event.type))) h.fn(event);
       }

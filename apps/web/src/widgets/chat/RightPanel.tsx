@@ -17,11 +17,11 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { type TodoItem, listSubagents, listTodos } from '@/api/agent';
-import { callCapability } from '@/bridge/client';
 import { interruptInstance } from '@/bridge/chatSend';
 import { routes } from '@/utils/routes';
 import { formatDurationSec } from '@/utils/trajectory';
 import { useChatStore } from '@/stores/chatStore';
+import { WorkspaceSection } from '@/widgets/chat/WorkspacePanel';
 
 /** A list_subagents.running entry (status is a RunStatus.value from agent/runtime/state.py). */
 interface RunningInstance {
@@ -83,120 +83,6 @@ function SideSection({
   );
 }
 
-/** Workspace selector: shows the configured agent workspace directory and lets
- *  the user change it (settings-side, user-only). The directory is bound at
- *  service startup, so a change takes effect after the backend restarts —
- *  stated plainly in the UI instead of pretending it hot-swaps. */
-function WorkspaceSection() {
-  const { t } = useTranslation('chat');
-  const [value, setValue] = useState('');
-  const [loaded, setLoaded] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    callCapability<{ value?: unknown }>('settings', 'get_setting', {
-      key: 'agent.workspace.dir',
-    })
-      .then((item) => {
-        if (!alive) return;
-        setValue(typeof item?.value === 'string' ? item.value : '');
-        setLoaded(true);
-      })
-      .catch(() => {
-        if (alive) setLoaded(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const save = async () => {
-    const next = draft.trim();
-    if (!next || next === value) {
-      setEditing(false);
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      await callCapability('settings', 'set_setting', {
-        key: 'agent.workspace.dir',
-        value: next,
-      });
-      setValue(next);
-      setEditing(false);
-      setSaved(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('chat:workspace.saveFailed'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <SideSection title={t('chat:workspace.title')}>
-      {editing ? (
-        <div className="chat-ws__edit">
-          <input
-            className="field input"
-            value={draft}
-            placeholder="data/workspace"
-            aria-label={t('chat:workspace.title')}
-            autoFocus
-            onChange={(e) => {
-              setDraft(e.target.value);
-              setSaved(false);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void save();
-              if (e.key === 'Escape') setEditing(false);
-            }}
-          />
-          <div className="chat-ws__actions">
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>
-              {t('chat:workspace.cancel')}
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              disabled={saving || !draft.trim()}
-              onClick={() => void save()}
-            >
-              {t('chat:workspace.save')}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="chat-ws">
-          <button
-            type="button"
-            className="chat-ws__path"
-            title={t('chat:workspace.edit')}
-            onClick={() => {
-              setDraft(value);
-              setEditing(true);
-            }}
-          >
-            <span className="chat-ws__value">{loaded ? value || 'data/workspace' : '…'}</span>
-            <span className="chat-ws__editbtn">{t('chat:workspace.edit')}</span>
-          </button>
-        </div>
-      )}
-      <p className="chat-ws__hint small muted">{t('chat:workspace.hint')}</p>
-      {saved ? <p className="chat-ws__saved small">{t('chat:workspace.saved')}</p> : null}
-      {error ? (
-        <p className="chat-ws__error small" role="alert">
-          {error}
-        </p>
-      ) : null}
-    </SideSection>
-  );
-}
 
 function TodoMark({ status }: { status: string }) {
   if (status === 'done') {
