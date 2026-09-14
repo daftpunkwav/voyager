@@ -233,9 +233,11 @@ def locate(text: str, old_text: str) -> MatchResult:
             indent = None
             consumed_eol = False
             if level == "line_trimmed":
-                if old_text[:1] not in (" ", "\t", ""):
-                    # old_text is unindented while the file line may not be:
-                    # expose the file's indent so the caller can reindent
+                if _is_unindented(old_text):
+                    # old_text's content lines carry no indentation while the
+                    # file line may: expose the file's indent so the caller
+                    # can reindent new_text (a leading blank line must not
+                    # open the gate - its block may be pre-indented)
                     indent = _first_line_indent(text, spans[0]) or None
                 # a trailing "" in old_text makes the span swallow the file's
                 # terminator; the caller must keep one line break in place
@@ -245,6 +247,16 @@ def locate(text: str, old_text: str) -> MatchResult:
             return MatchResult(spans[0], level, 0, indent, consumed_eol)
         best_ambiguous = max(best_ambiguous, len(spans))
     return MatchResult(None, None, best_ambiguous)
+
+
+def _is_unindented(old_text: str) -> bool:
+    """Whether the first non-blank line of old_text starts with a
+    non-whitespace character (blank-only text never reaches here: edit_file
+    rejects empty old_text before matching)."""
+    for line in old_text.splitlines():
+        if line.strip():
+            return not line[0].isspace()
+    return False
 
 
 def _first_line_indent(text: str, span: tuple[int, int]) -> str:

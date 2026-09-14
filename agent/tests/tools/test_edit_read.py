@@ -287,3 +287,46 @@ class TestEditFile:
         )
         assert out.startswith("[失败]")
         assert (workdir / "repo" / "cnt.txt").read_text(encoding="utf-8") == "a \nb\n"
+
+
+class TestEditFuzzyRegression:
+    """Reviewer-reproduced edge cases: reindent gate must not double-indent a
+    pre-indented block that starts with a newline, and the kept line break
+    must not defeat newline normalization on CRLF files."""
+
+    async def test_leading_newline_indented_block_not_double_indented(self, workdir) -> None:
+        target = workdir / "repo" / "deep.py"
+        target.write_text("def f():\n        return x\n", encoding="utf-8")
+        out = await _belt(workdir, confirm=_yes).call(
+            ToolCall(
+                "1",
+                "edit_file",
+                {
+                    "path": "repo/deep.py",
+                    "old_text": "\n        return x\n",
+                    "new_text": "\n    return z",
+                },
+            )
+        )
+        body = json.loads(out)
+        assert body["matched_by"] == "line_trimmed"
+        # new_text's own indentation is respected: no file-indent re-application
+        assert target.read_text(encoding="utf-8") == "def f():\n    return z\n"
+
+    async def test_crlf_consumed_eol_stays_uniform(self, workdir) -> None:
+        target = workdir / "repo" / "win2.txt"
+        target.write_bytes(b"alpha\r\nbeta\r\ngamma\r\n")
+        out = await _belt(workdir, confirm=_yes).call(
+            ToolCall(
+                "1",
+                "edit_file",
+                {
+                    "path": "repo/win2.txt",
+                    "old_text": "alpha\nbeta\n",
+                    "new_text": "one\ntwo\nthree",
+                },
+            )
+        )
+        body = json.loads(out)
+        assert body["matched_by"] == "line_trimmed"
+        assert target.read_bytes() == b"one\r\ntwo\r\nthree\r\ngamma\r\n"

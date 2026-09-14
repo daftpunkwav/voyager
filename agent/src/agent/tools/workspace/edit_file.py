@@ -67,11 +67,16 @@ def _fuzzy_edit(
     replacement = new_text
     if result.level == "line_trimmed" and result.line_indent:
         replacement = reindent(replacement, result.line_indent)
+    # newline-normalize first, then keep the swallowed terminator: appending
+    # before normalization would make the guard in _to_file_newlines see the
+    # appended file-convention break and skip converting the inner newlines
+    # (mixed line endings in a CRLF file)
+    replacement = _to_file_newlines(text, replacement)
     if result.consumed_eol and not replacement.endswith(("\n", "\r\n")):
         # the span swallowed the line break old_text ended with: keep one
         replacement += "\r\n" if "\r\n" in text else "\n"
     entry = safe_capture(journal, target, intent="write")
-    updated = text[:start] + _to_file_newlines(text, replacement) + text[end:]
+    updated = text[:start] + replacement + text[end:]
     _atomic_write(target, updated)
     safe_finalize(journal, entry, target)
     return {"edited": jail.display(target), "replacements": 1, "matched_by": result.level}
