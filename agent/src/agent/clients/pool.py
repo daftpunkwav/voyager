@@ -266,23 +266,24 @@ class McpClientPool:
         """Periodically re-list connected approved servers so remote tool
         changes appear without a restart; interval hot-reads
         agent.mcp.refresh_seconds (<=0 keeps the loop idle). One cycle failing
-        must not kill the loop: settings read errors and per-server faults are
-        contained, the task has no one to await its exception."""
+        must not kill the loop: the interval read falling back to the default
+        and the cycle body being contained both keep the loop sleeping - a
+        failing settings read must never turn this into a zero-delay hot loop."""
         while True:
+            interval = 300.0
             try:
+                if self._settings is not None:
+                    raw = self._settings.get("agent.mcp.refresh_seconds")
+                    interval = float(raw) if raw else 300.0
+            except Exception:  # noqa: BLE001  # closed store / dirty value: default interval
                 interval = 300.0
-                try:
-                    if self._settings is not None:
-                        raw = self._settings.get("agent.mcp.refresh_seconds")
-                        interval = float(raw) if raw else 300.0
-                except (TypeError, ValueError):
-                    interval = 300.0
-                await asyncio.sleep(interval if interval > 0 else 300.0)
+            await asyncio.sleep(interval if interval > 0 else 300.0)
+            try:
                 if interval > 0:
                     await self.refresh_approved()
             except asyncio.CancelledError:
                 raise
-            except Exception:  # noqa: BLE001  # a cycle failure must not end the loop
+            except Exception:  # a cycle failure must not end the loop
                 log.exception("MCP refresh cycle failed; continuing")
 
     async def refresh_approved(self) -> None:
@@ -310,13 +311,13 @@ class McpClientPool:
                         self._sessions[sid] = await asyncio.wait_for(
                             self._connect({**cfg, "cwd": self._cwd}), CONNECT_TIMEOUT
                         )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001  # any connect fault is surfaced as entry error
                 self._errors[sid] = f"MCP '{cfg['name']}' reconnect failed: {exc}"
                 return
         session = self._sessions[sid]
         try:
             tools = await asyncio.wait_for(session.list_remote_tools(), CONNECT_TIMEOUT)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  # any list fault surfaces as entry error and drops session
             self._errors[sid] = f"MCP '{cfg['name']}' refresh failed: {exc}"
             await self.drop_session(sid)
             return
