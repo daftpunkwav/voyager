@@ -133,8 +133,12 @@ class Spawner:
         Incremental mid-ReAct persistence is handled by instance._on_step;
         the finally here persists the turn-terminal (done/failed/cancelled)
         boundary snapshot, which overrides the mid-run snapshot and resets
-        in_turn to False.
+        in_turn to False. A CANCELLED instance never enters the turn: cancel
+        may land while the instance is still queued for a concurrency slot,
+        and the deferred coroutine must not run once the slot opens.
         """
+        if instance.state.status is RunStatus.CANCELLED:
+            return "[cancelled] 已在开始执行前被取消,未执行任何步骤。"
         try:
             return await self._scheduler.run(instance.id, instance.run_turn(user_text))
         finally:
@@ -244,6 +248,7 @@ class Spawner:
             budget=self._budget(),
         )
         instance.history = [dict(m) for m in snap.history]
+        instance.parent_run_id = snap.parent_run_id  # cascade linkage survives resume
         if snap.active_tools:
             instance.active = set(snap.active_tools)
         if snap.in_turn and snap.pending_messages:
@@ -330,12 +335,14 @@ class Spawner:
                 name=inst.name,
             )
             stopped.append(inst)
-            # cascade: everything still running under this instance
+            # cascade: everything still running under this instance - running
+            # AND queued (PENDING waits for a concurrency slot; without this
+            # it would start and run to completion once a slot frees up)
             queue.extend(
                 other
                 for other in self.instances.values()
-                if other.status.alive
-                and other.id not in stopped_ids
+                if other.id not in stopped_ids
+                and (other.status.alive or other.status is RunStatus.PENDING)
                 and other.parent_run_id == inst.id
             )
         for sid in stopped_ids:

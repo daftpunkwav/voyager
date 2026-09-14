@@ -129,3 +129,59 @@ class TestCancelCascade:
             app.registry, "cancel_run", ActorContext(actor=LOCAL_USER), {"id_or_name": "a"}
         )
         assert set(out["cancelled"]) == {a.id, b.id}
+
+
+class TestCancelNoticeAndPending:
+    async def test_cancelled_dispatch_replies_cancelled(
+        self, tmp_path, agent_replies, wait_until
+    ) -> None:
+        """A running background dispatch that gets cancelled tells the session
+        [cancelled] via the dispatch wrapper's CancelledError path."""
+
+        class HangingLLM(FakeLLM):
+            async def complete(self, *args, **kw):
+                await asyncio.Event().wait()
+
+        app = _app(tmp_path, HangingLLM())
+        inst = await app.master.dispatch_task("long analysis", name="slowjob")
+        await app.spawner.cancel("slowjob")
+        await wait_until(
+            lambda: any("[cancelled]" in r and "slowjob" in r for r in agent_replies(app))
+        )
+        app.memory.close()
+
+    async def test_pending_child_cancelled_and_never_starts(self, tmp_path) -> None:
+        """Cascade covers queued (PENDING) descendants; a cancelled-queued
+        instance never enters its turn even when a slot frees up."""
+        from agent.runtime.state import RunStatus as RS
+
+        app = _app(tmp_path)
+        parent = app.spawner.spawn(TaskBook(goal="p"), name="p")
+        child = app.spawner.spawn(TaskBook(goal="c"), name="c")
+        child.parent_run_id = parent.id
+        parent.state.status = RS.RUNNING
+        child.state.status = RS.PENDING  # queued, no slot yet
+
+        out = await execute(
+            app.registry, "cancel_run", ActorContext(actor=LOCAL_USER), {"id_or_name": "p"}
+        )
+        assert set(out["cancelled"]) == {parent.id, child.id}
+        result = await app.spawner.start(child)  # slot "frees up"
+        assert "[cancelled]" in result
+        assert child.state.status is RS.CANCELLED
+
+    async def test_parent_link_survives_snapshot_roundtrip(self, tmp_path) -> None:
+        from agent.runtime.state import RunStatus as RS
+
+        app = _app(tmp_path)
+        inst = app.spawner.spawn(TaskBook(goal="x"), name="snap")
+        inst.parent_run_id = "parent123"
+        snap = inst.build_resume_snapshot()
+        assert snap.parent_run_id == "parent123"
+        restored = type(snap).from_dict(snap.to_dict())
+        assert restored.parent_run_id == "parent123"
+        # legacy snapshot without the key still loads (default "")
+        legacy = dict(snap.to_dict())
+        legacy.pop("parent_run_id")
+        assert type(snap).from_dict(legacy).parent_run_id == ""
+        assert inst.state.status is not None  # sanity: no accidental status change

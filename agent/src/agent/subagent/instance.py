@@ -206,6 +206,7 @@ class SubagentInstance:
             ),
             readonly=self.task.readonly,
             session=self.task.session,
+            parent_run_id=self.parent_run_id,
             max_rounds=self.task.limits.max_rounds if self.task.limits else None,
             max_tool_calls=self.task.limits.max_tool_calls if self.task.limits else None,
             conversational=self.task.conversational,

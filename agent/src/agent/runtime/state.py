@@ -86,6 +86,10 @@ class ResumeSnapshot:
     #: Chat session this task was dispatched from (defaults empty so
     #: pre-multi-session snapshots still load); results route back to it.
     session: str = ""
+    #: Dispatching instance's id (cancel cascade linkage; defaults empty so
+    #: pre-cascade snapshots still load - a resumed instance without it would
+    #: silently drop out of its parent's cancel cascade).
+    parent_run_id: str = ""
     max_rounds: int | None = None
     max_tool_calls: int | None = None
     conversational: bool = False

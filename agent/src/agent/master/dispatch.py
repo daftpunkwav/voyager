@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import suppress
 from dataclasses import dataclass
 
 from platform_contracts import ErrorSuffix, ServiceError
@@ -173,6 +174,15 @@ async def dispatch_task(
         try:
             result = await spawner.start(inst)
         except asyncio.CancelledError:
+            # Cancellation always propagates through spawner.start (the task
+            # itself is interrupted), so the else branch below is unreachable
+            # for it: the [cancelled] notice lives here, before the re-raise.
+            # Best effort - shutdown may already be tearing the channel down.
+            if inst.status is RunStatus.CANCELLED:
+                with suppress(Exception):
+                    await master.reply(
+                        f"[cancelled] {inst.name}", session=inst.task.session
+                    )
             raise
         except Exception as exc:  # run_turn already recorded the state; notify + server-side log
             log.exception("background dispatch failed: %s", inst.name)
@@ -181,11 +191,13 @@ async def dispatch_task(
                 session=inst.task.session,
             )
         else:
-            if inst.status.value == "paused":
-                await master.reply(f"[paused] {inst.name}", session=inst.task.session)
-            elif inst.status is RunStatus.CANCELLED:
-                # a cancelled run is not a done: dependents read this notice
+            if inst.status is RunStatus.CANCELLED:
+                # reachable when the instance was cancelled while still queued
+                # for a concurrency slot: start() returns normally (no
+                # CancelledError) but nothing ran
                 await master.reply(f"[cancelled] {inst.name}", session=inst.task.session)
+            elif inst.status.value == "paused":
+                await master.reply(f"[paused] {inst.name}", session=inst.task.session)
             else:
                 # Long results get one synthesis call so the notice carries the
                 # conclusions instead of a blind cut; failures fall back inside
