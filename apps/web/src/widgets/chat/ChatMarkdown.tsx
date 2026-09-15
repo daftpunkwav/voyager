@@ -10,6 +10,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import type { Options as SanitizeOptions } from 'rehype-sanitize';
+import { useNavigate } from 'react-router-dom';
 import { safeHttpUrl, safeInternalPath } from '@/utils/safeUrl';
 
 /** class names highlight.js may inject; same allowlist line as MarkdownRenderer (defense in depth). */
@@ -26,7 +27,7 @@ const sanitizeSchema: SanitizeOptions = {
 const mdComponents: Components = {
   a({ href, children }) {
     const internal = safeInternalPath(href);
-    if (internal) return <a href={internal}>{children}</a>;
+    if (internal) return <InternalLink to={internal}>{children}</InternalLink>;
     const http = safeHttpUrl(href);
     if (http) {
       return (
@@ -38,6 +39,21 @@ const mdComponents: Components = {
     return <span>{children}</span>;
   },
 };
+
+function InternalLink({ to, children }: { to: string; children: React.ReactNode }) {
+  const navigate = useNavigate();
+  return (
+    <a
+      href={to}
+      onClick={(e) => {
+        e.preventDefault();
+        navigate(to);
+      }}
+    >
+      {children}
+    </a>
+  );
+}
 
 export function ChatMarkdown({ content }: { content: string }) {
   return (
