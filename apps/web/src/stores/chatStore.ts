@@ -43,6 +43,9 @@ export interface ChatMessage {
   role: 'user' | 'agent' | 'system';
   content: string;
   ts?: number;
+  /** Backend message kind: "error" renders distinctly (failures and harness
+   *  degradation must not masquerade as normal answers); absent on old rows. */
+  kind?: string;
 }
 
 export interface ProgressCard {
@@ -111,6 +114,10 @@ export interface TurnStep {
   /** LLM round steps: full round output (backend-capped) for the thinking block. */
   text?: string;
   textTruncated?: boolean;
+  /** LLM round steps: model thinking on its own channel (backend-capped);
+   *  rendered in the thinking block, never merged into the answer. */
+  reasoning?: string;
+  reasoningTruncated?: boolean;
   /** LLM round steps: the adapter-resolved model for that round. */
   model?: string;
 }
@@ -219,6 +226,8 @@ export function toTurnStep(ev: ChatEvent): TurnStep {
     ttftMs: num(detail.ttft_ms),
     text: str(detail.text),
     textTruncated: detail.text_truncated === true ? true : undefined,
+    reasoning: str(detail.reasoning),
+    reasoningTruncated: detail.reasoning_truncated === true ? true : undefined,
     model: str(detail.model),
   };
 }
@@ -310,6 +319,7 @@ function historyToMessages(events: ChatEvent[]): ChatMessage[] {
       role: (e.type === 'user.message' ? 'user' : 'agent') as ChatMessage['role'],
       content: String(e.payload?.content ?? ''),
       ts: e.ts,
+      kind: typeof e.payload?.kind === 'string' ? (e.payload.kind as string) : undefined,
     }));
 }
 
@@ -577,6 +587,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               role: 'agent',
               content: String(p.content ?? ''),
               ts: ev.ts,
+              kind: typeof p.kind === 'string' ? (p.kind as string) : undefined,
             },
           ],
         });

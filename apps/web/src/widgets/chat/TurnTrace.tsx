@@ -60,7 +60,10 @@ const TOOL_ICON_RULES: Array<[RegExp, IconName]> = [
   [/ask|reach/i, 'chat'],
   [/spawn|wait_|subagent/i, 'agent'],
   [/skill/i, 'sparkle'],
-  [/write|edit|create|save|set|import|rename|reorder|mark|restore|purge|delete|drop|empty|batch|activate|sort/i, 'pencil'],
+  [
+    /write|edit|create|save|set|import|rename|reorder|mark|restore|purge|delete|drop|empty|batch|activate|sort/i,
+    'pencil',
+  ],
   [/read|get|list|show|view|export|toc|stats|info|defaults|test|usage|version/i, 'file'],
 ];
 
@@ -294,8 +297,10 @@ function RoundToolRows({ steps }: { steps: TurnStep[] }) {
 }
 
 /** One closed turn from the persisted trail: collapsed "已执行 N 步" summary,
- *  expanding to the full round blocks in place. */
-export function ClosedTurnTrace({ steps }: { steps: TurnStep[] }) {
+ *  expanding to the full round blocks in place. finalText is the closing
+ *  message: round lead-in text identical to it is hidden to avoid showing
+ *  the same paragraph twice. */
+export function ClosedTurnTrace({ steps, finalText }: { steps: TurnStep[]; finalText?: string }) {
   const { t } = useTranslation('chat');
   const [open, setOpen] = useState(false);
   const tools = steps.filter((s) => s.kind === 'tool').length;
@@ -317,7 +322,7 @@ export function ClosedTurnTrace({ steps }: { steps: TurnStep[] }) {
       </button>
       {open ? (
         <div className="chat-trace__body">
-          {buildBlocks(steps, []).map((b) => (
+          {buildBlocks(steps, [], finalText ?? '').map((b) => (
             <RoundBlockView key={b.key} block={b} />
           ))}
         </div>
@@ -332,6 +337,11 @@ interface RoundBlock {
   round: number | null;
   llm: TurnStep | null;
   text: string;
+  /** Model thinking on its own channel (never merged into text). */
+  reasoning: string;
+  reasoningTruncated: boolean;
+  /** Lead-in text identical to the closing message: hidden, not repeated. */
+  dup: boolean;
   ops: TurnStep[];
   tools: TurnStep[];
 }
@@ -339,24 +349,39 @@ interface RoundBlock {
 /** Group steps into round blocks: an llm marker opens a block, tool steps
  *  belong to the current block, system operations attach to the block they
  *  precede (compaction happens at a round boundary). */
-function buildBlocks(steps: TurnStep[], roundTexts: RoundText[]): RoundBlock[] {
+function buildBlocks(steps: TurnStep[], roundTexts: RoundText[], finalText = ''): RoundBlock[] {
   const blocks: RoundBlock[] = [];
   let pendingOps: TurnStep[] = [];
   let cur: RoundBlock | null = null;
   const pushPending = () => {
     if (pendingOps.length) {
-      blocks.push({ key: `ops-${blocks.length}`, round: null, llm: null, text: '', ops: pendingOps, tools: [] });
+      blocks.push({
+        key: `ops-${blocks.length}`,
+        round: null,
+        llm: null,
+        text: '',
+        reasoning: '',
+        reasoningTruncated: false,
+        dup: false,
+        ops: pendingOps,
+        tools: [],
+      });
       pendingOps = [];
     }
   };
   for (const s of steps) {
     if (s.kind === 'llm') {
+      const text = roundTexts.find((r) => r.round === s.round)?.text ?? '';
+      const persisted = text || s.text || '';
       cur = {
         // seq in the key: resumed/merged trails can hold two round-1 markers
         key: `r${s.round ?? 'x'}-${s.seq}`,
         round: s.round ?? null,
         llm: s,
-        text: roundTexts.find((r) => r.round === s.round)?.text ?? '',
+        text,
+        reasoning: s.reasoning ?? '',
+        reasoningTruncated: s.reasoningTruncated ?? false,
+        dup: !!finalText && !!persisted && persisted === finalText,
         ops: pendingOps,
         tools: [],
       };
@@ -367,7 +392,17 @@ function buildBlocks(steps: TurnStep[], roundTexts: RoundText[]): RoundBlock[] {
       else pendingOps.push(s);
     } else {
       if (!cur) {
-        cur = { key: 'head', round: null, llm: null, text: '', ops: pendingOps, tools: [] };
+        cur = {
+          key: 'head',
+          round: null,
+          llm: null,
+          text: '',
+          reasoning: '',
+          reasoningTruncated: false,
+          dup: false,
+          ops: pendingOps,
+          tools: [],
+        };
         pendingOps = [];
         blocks.push(cur);
       }
@@ -381,14 +416,18 @@ function buildBlocks(steps: TurnStep[], roundTexts: RoundText[]): RoundBlock[] {
 const LONG_TEXT_CHARS = 400;
 
 /** One round block: header (round, model, tokens, latency), lead-in text,
- *  meta line, then its tool rows. */
+ *  thinking block, meta line, then its tool rows. */
 function RoundBlockView({ block }: { block: RoundBlock }) {
   const { t } = useTranslation('chat');
   const [textOpen, setTextOpen] = useState(false);
+  const [reasonOpen, setReasonOpen] = useState(false);
   const llm = block.llm;
   // Live: the frozen round text; closed/refreshed: the persisted step text.
-  const bodyText = block.text || llm?.text || '';
+  // Hidden when it repeats the closing message verbatim (dup).
+  const bodyText = block.dup ? '' : block.text || llm?.text || '';
   const long = bodyText.length > LONG_TEXT_CHARS;
+  const reasoning = block.reasoning;
+  const reasonLong = reasoning.length > LONG_TEXT_CHARS;
   const stats: string[] = [];
   if (llm && typeof llm.inputTokens === 'number')
     stats.push(t('chat:trace.in', { n: formatCompactCount(llm.inputTokens) }));
@@ -424,6 +463,28 @@ function RoundBlockView({ block }: { block: RoundBlock }) {
         >
           {textOpen ? t('chat:trace.collapseText') : t('chat:trace.expandText')}
         </button>
+      ) : null}
+      {reasoning ? (
+        <div className="chat-round__reason">
+          <span className="chat-round__reasonlabel muted">{t('chat:traj.reasoning')}</span>
+          <div
+            className={`chat-round__reasontext chat-md${reasonLong && !reasonOpen ? ' is-clamped' : ''}`}
+          >
+            <ChatMarkdown content={reasoning} />
+          </div>
+          {reasonLong ? (
+            <button
+              type="button"
+              className="chat-round__toggle small"
+              onClick={() => setReasonOpen(!reasonOpen)}
+            >
+              {reasonOpen ? t('chat:trace.collapseText') : t('chat:trace.expandText')}
+            </button>
+          ) : null}
+          {block.reasoningTruncated ? (
+            <div className="chat-round__note small muted">{t('chat:traj.reasoningTruncated')}</div>
+          ) : null}
+        </div>
       ) : null}
       {meta.length ? <div className="chat-round__meta small muted">{meta.join(' · ')}</div> : null}
       <RoundToolRows steps={block.tools} />

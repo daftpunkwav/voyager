@@ -1150,6 +1150,24 @@ button.chat-ws__row:hover {
   max-height: 8.5em;
   overflow: hidden;
 }
+/* Model thinking on its own channel: visually secondary to the answer text,
+   same clamp behavior. */
+.chat-round__reason {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-left: 2px solid var(--bg-300);
+  padding-left: 8px;
+  font-size: 12.5px;
+  color: var(--text-600);
+}
+.chat-round__reasontext.is-clamped {
+  max-height: 8.5em;
+  overflow: hidden;
+}
+.chat-round__note {
+  font-size: 11.5px;
+}
 .chat-round__toggle {
   align-self: flex-start;
   border: none;
@@ -1399,6 +1417,15 @@ button.chat-ws__row:hover {
   align-self: stretch;
   padding: 0 2px;
   color: var(--text-800);
+}
+/* Failure/degradation text must not masquerade as a normal answer: it gets
+   explicit error chrome instead of the chromeless document style. */
+.chat-bubble--error {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--error-surface);
+  border: 1px solid var(--error);
+  color: var(--error);
 }
 .chat-md > :first-child {
   margin-top: 0;

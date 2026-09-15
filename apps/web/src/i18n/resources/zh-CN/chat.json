@@ -305,6 +305,8 @@
   "traj.statusFail": "失败",
   "traj.statusOk": "成功",
   "traj.subagent": "子智能体",
+  "traj.reasoning": "思考过程",
+  "traj.reasoningTruncated": "思考过程过长,仅保留前 4000 字",
   "traj.tabChat": "对话",
   "traj.tabTrajectory": "轨迹",
   "traj.tabsLabel": "对话视图切换",

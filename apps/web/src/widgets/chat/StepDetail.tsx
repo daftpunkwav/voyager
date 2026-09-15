@@ -73,6 +73,19 @@ export function StepDetail({ step }: { step: TurnStep }) {
               ) : null}
             </div>
           ) : null}
+          {step.reasoning ? (
+            <div className="chat-stepdetail__thinkwrap">
+              <span className="chat-stepdetail__key muted">{t('chat:traj.reasoning')}</span>
+              <div className="chat-stepdetail__think chat-md">
+                <ChatMarkdown content={step.reasoning} />
+              </div>
+              {step.reasoningTruncated ? (
+                <div className="chat-stepdetail__note muted">
+                  {t('chat:traj.reasoningTruncated')}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {step.toolCalls && step.toolCalls.length > 0 ? (
             <Row
               k={t('chat:traj.requestedTools')}

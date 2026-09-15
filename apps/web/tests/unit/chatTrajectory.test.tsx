@@ -111,4 +111,37 @@ describe('trajectory backfill', () => {
         .applyTrajectory([{ seq: 1, type: 'agent.step', payload: null }] as unknown as ChatEvent[])
     ).not.toThrow();
   });
+
+  it('agent.message kind error survives into the message', () => {
+    dispatch('agent.message', { content: '(LLM call failed: boom)', kind: 'error' });
+    const messages = useChatStore.getState().messages;
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({ role: 'agent', kind: 'error' });
+    dispatch('agent.message', { content: 'ok' });
+    expect(useChatStore.getState().messages[1].kind).toBeUndefined();
+  });
+
+  it('history backfill carries message kind and step reasoning', () => {
+    useChatStore.getState().applyHistory([
+      { seq: 1, type: 'user.message', payload: { content: 'hi' } },
+      { seq: 4, type: 'agent.message', payload: { content: 'boom', kind: 'error' } },
+    ] as ChatEvent[]);
+    expect(useChatStore.getState().messages[1]).toMatchObject({ kind: 'error' });
+    useChatStore.getState().applyTrajectory([
+      {
+        seq: 2,
+        type: 'agent.step',
+        payload: {
+          kind: 'llm',
+          name: 'round-1',
+          summary: 't',
+          subagent: 'chat',
+          detail: { round: 1, reasoning: 'weigh options' },
+        },
+      },
+    ] as ChatEvent[]);
+    expect(useChatStore.getState().trails[0].steps[0]).toMatchObject({
+      reasoning: 'weigh options',
+    });
+  });
 });

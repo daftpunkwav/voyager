@@ -305,6 +305,8 @@
   "traj.statusFail": "Failed",
   "traj.statusOk": "OK",
   "traj.subagent": "Subagent",
+  "traj.reasoning": "Reasoning",
+  "traj.reasoningTruncated": "Reasoning too long; only the first 4000 characters are kept",
   "traj.thinking": "Thinking",
   "traj.thinkTruncated": "Thinking too long; only the first 8000 characters are kept",
   "traj.tabChat": "Chat",

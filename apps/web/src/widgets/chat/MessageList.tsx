@@ -22,11 +22,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, Fragment } f
 import { flushSync } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import {
-  type ChatMessage,
-  type NoteArtifact,
-  useChatStore,
-} from '@/stores/chatStore';
+import { type ChatMessage, type NoteArtifact, useChatStore } from '@/stores/chatStore';
 import { fetchChatHistoryBefore } from '@/bridge/chatSend';
 import { ServiceError } from '@/bridge/client';
 import { getNote } from '@/api/notes';
@@ -218,7 +214,7 @@ export function MessageList() {
         const trail = m.role === 'agent' ? trailBySeq.get(m.seq) : undefined;
         return (
           <Fragment key={`${m.seq ?? `local-${m.ts ?? item.seq}`}-${m.role}`}>
-            {trail ? <ClosedTurnTrace steps={trail.steps} /> : null}
+            {trail ? <ClosedTurnTrace steps={trail.steps} finalText={m.content} /> : null}
             <Bubble msg={m} />
           </Fragment>
         );
@@ -257,10 +253,13 @@ function Bubble({ msg }: { msg: ChatMessage }) {
   if (msg.role === 'system') {
     return <div className="chat-system">{msg.content}</div>;
   }
+  const error = msg.role === 'agent' && msg.kind === 'error';
   const cls =
-    msg.role === 'user' ? 'chat-bubble chat-bubble--user' : 'chat-bubble chat-bubble--agent';
+    msg.role === 'user'
+      ? 'chat-bubble chat-bubble--user'
+      : `chat-bubble chat-bubble--agent${error ? ' chat-bubble--error' : ''}`;
   return (
-    <div className={cls}>
+    <div className={cls} role={error ? 'alert' : undefined}>
       <div className="chat-md">
         <ChatMarkdown content={msg.content} />
       </div>
