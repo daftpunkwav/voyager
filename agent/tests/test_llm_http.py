@@ -150,6 +150,63 @@ class TestComplete:
         assert reply.text == "ok"
         assert reply.reasoning == "why it works"
 
+    async def test_inline_tool_call_converted_when_wire_field_empty(self) -> None:
+        """MiniMax-style inline <tool_call> markup in content converts to a
+        real tool call and never reaches the answer text."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": '好的。\n<tool_call>\n{"name": "load_skill", "arguments": {"skill_name": "s"}}\n</tool_call>',
+                                "tool_calls": None,
+                            }
+                        }
+                    ],
+                },
+            )
+
+        reply = await _client(handler).complete(MSGS)
+        assert reply.text == "好的。\n"
+        assert reply.final is False
+        call = reply.tool_calls[0]
+        assert (call.id, call.name, call.arguments) == (
+            "inline_0",
+            "load_skill",
+            {"skill_name": "s"},
+        )
+
+    async def test_inline_tool_call_echo_dropped_when_wire_field_wins(self) -> None:
+        """The wire tool_calls field wins over the content echo: one call."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": '<tool_call>]<]minimax[>[<invoke name="x"/></tool_call>',
+                                "tool_calls": [
+                                    {
+                                        "id": "c1",
+                                        "function": {"name": "activate_tools", "arguments": "{}"},
+                                    }
+                                ],
+                            }
+                        }
+                    ],
+                },
+            )
+
+        reply = await _client(handler).complete(MSGS)
+        assert not reply.text  # markup stripped; empty answer normalizes to None
+        assert len(reply.tool_calls) == 1
+        assert reply.tool_calls[0].id == "c1"
+
 
 class TestStream:
     async def test_deltas_aggregate_to_final(self) -> None:

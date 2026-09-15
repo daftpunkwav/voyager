@@ -48,27 +48,39 @@ _NO_RETRY_NET = (httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout)
 
 _THINK_OPEN = "<think>"
 _THINK_CLOSE = "</think>"
+_TOOL_OPEN = "<tool_call>"
+_TOOL_CLOSE = "</tool_call>"
 
 
-def _partial_tag_len(buf: str, tag: str) -> int:
-    """Length of the longest suffix of buf that is a proper prefix of tag."""
-    for k in range(min(len(buf), len(tag) - 1), 0, -1):
-        if buf.endswith(tag[:k]):
-            return k
-    return 0
+def _partial_tag_len(buf: str, tags: tuple[str, ...]) -> int:
+    """Length of the longest suffix of buf that is a proper prefix of any tag."""
+    best = 0
+    for tag in tags:
+        for k in range(min(len(buf), len(tag) - 1), best, -1):
+            if buf.endswith(tag[:k]):
+                best = k
+                break
+    return best
 
 
-class _ThinkSplitter:
-    """Splits inline ``<think>...</think>`` reasoning out of content deltas
-    (MiniMax-style endpoints inline thinking in content instead of a
-    reasoning_content field). Tags may arrive split across chunks, hence the
-    carry-tail state machine. Same semantics as packages/llm's
-    think_split.ThinkSplitter (duplicated: agent -> packages imports are
-    forbidden by the import-linter contract)."""
+class _InlineTagSplitter:
+    """Splits inline ``<think>...</think>`` reasoning and ``<tool_call>``
+    blocks out of content deltas (MiniMax-style endpoints inline both in
+    content instead of their protocol fields). Tags may arrive split across
+    chunks, hence the carry-tail state machine. Same semantics as
+    packages/llm's inline_split.InlineTagSplitter (duplicated: agent ->
+    packages imports are forbidden by the import-linter contract)."""
 
     def __init__(self) -> None:
-        self._in_think = False
+        self._mode = "text"  # text | think | tool
         self._tail = ""
+        self._blocks: list[str] = []
+        self._block_acc: list[str] = []
+
+    @property
+    def tool_blocks(self) -> list[str]:
+        """Captured ``<tool_call>`` block bodies (verbatim, tags removed)."""
+        return self._blocks
 
     def feed(self, text: str) -> tuple[str, str]:
         """Feed one content delta; returns ``(answer_delta, reasoning_delta)``."""
@@ -77,24 +89,43 @@ class _ThinkSplitter:
         answer: list[str] = []
         reasoning: list[str] = []
         while True:
-            if self._in_think:
+            if self._mode == "think":
                 end = buf.find(_THINK_CLOSE)
                 if end >= 0:
                     reasoning.append(buf[:end])
                     buf = buf[end + len(_THINK_CLOSE) :]
-                    self._in_think = False
+                    self._mode = "text"
                     continue
-                keep = _partial_tag_len(buf, _THINK_CLOSE)
+                keep = _partial_tag_len(buf, (_THINK_CLOSE,))
                 reasoning.append(buf[: len(buf) - keep])
                 self._tail = buf[len(buf) - keep :]
                 return "".join(answer), "".join(reasoning)
+            if self._mode == "tool":
+                end = buf.find(_TOOL_CLOSE)
+                if end >= 0:
+                    self._block_acc.append(buf[:end])
+                    buf = buf[end + len(_TOOL_CLOSE) :]
+                    self._blocks.append("".join(self._block_acc))
+                    self._block_acc = []
+                    self._mode = "text"
+                    continue
+                keep = _partial_tag_len(buf, (_TOOL_CLOSE,))
+                self._block_acc.append(buf[: len(buf) - keep])
+                self._tail = buf[len(buf) - keep :]
+                return "".join(answer), "".join(reasoning)
             start = buf.find(_THINK_OPEN)
-            if start >= 0:
+            tool_start = buf.find(_TOOL_OPEN)
+            if 0 <= start and (tool_start < 0 or start < tool_start):
                 answer.append(buf[:start])
                 buf = buf[start + len(_THINK_OPEN) :]
-                self._in_think = True
+                self._mode = "think"
                 continue
-            keep = _partial_tag_len(buf, _THINK_OPEN)
+            if 0 <= tool_start:
+                answer.append(buf[:tool_start])
+                buf = buf[tool_start + len(_TOOL_OPEN) :]
+                self._mode = "tool"
+                continue
+            keep = _partial_tag_len(buf, (_THINK_OPEN, _TOOL_OPEN))
             answer.append(buf[: len(buf) - keep])
             self._tail = buf[len(buf) - keep :]
             return "".join(answer), "".join(reasoning)
@@ -102,19 +133,64 @@ class _ThinkSplitter:
     def flush(self) -> tuple[str, str]:
         """Drain the carry tail at end of stream; call once before aggregating."""
         text, self._tail = self._tail, ""
-        if not text:
+        if not text and not self._block_acc:
+            if self._mode == "tool":
+                # Empty unclosed block: nothing to capture either way.
+                self._mode = "text"
             return "", ""
-        if self._in_think:
+        if self._mode == "think":
             return "", text
+        if self._mode == "tool":
+            # Unclosed tool block: capture what arrived so the caller can
+            # decide (convert or drop); it never reaches the answer text.
+            self._blocks.append("".join(self._block_acc) + text)
+            self._block_acc = []
+            self._mode = "text"
+            return "", ""
         return text, ""
 
 
-def _split_inline_think(text: str) -> tuple[str, str]:
-    """One-shot split of a whole content string; returns ``(answer, reasoning)``."""
-    splitter = _ThinkSplitter()
+def _split_inline(text: str) -> tuple[str, str, list[str]]:
+    """One-shot split of a whole content string; ``(answer, reasoning, tool_blocks)``."""
+    splitter = _InlineTagSplitter()
     answer, reasoning = splitter.feed(text)
     tail_answer, tail_reasoning = splitter.flush()
-    return answer + tail_answer, reasoning + tail_reasoning
+    return answer + tail_answer, reasoning + tail_reasoning, splitter.tool_blocks
+
+
+def _parse_tool_blocks(blocks: list[str]) -> tuple[ToolCall, ...]:
+    """Tool-call block bodies -> ToolCall tuple (MiniMax/HF JSON shape);
+    unparseable blocks (the garbled echo variant) are dropped with a
+    warning — they never belong in the answer text."""
+    calls: list[ToolCall] = []
+    for i, block in enumerate(blocks):
+        raw = block.strip()
+        if not raw:
+            continue
+        try:
+            obj = json.loads(raw)
+        except ValueError:
+            log.warning("dropping unparseable inline tool_call block: %.80r", raw)
+            continue
+        entries = obj if isinstance(obj, list) else [obj]
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            fn = entry.get("function") or {}
+            name = str(entry.get("name") or fn.get("name") or "")
+            if not name:
+                continue
+            args = entry.get("arguments", fn.get("arguments"))
+            if isinstance(args, str):
+                args = _safe_json(args)
+            calls.append(
+                ToolCall(
+                    id=f"inline_{i}",
+                    name=name,
+                    arguments=args if isinstance(args, dict) else {},
+                )
+            )
+    return tuple(calls)
 
 
 def _retryable_status(status: int) -> bool:
@@ -315,10 +391,14 @@ class HttpLLM:
         choices = data.get("choices") or []
         msg = (choices[0].get("message") or {}) if choices else {}
         usage = data.get("usage") or {}
-        answer, inline_reasoning = _split_inline_think(str(msg.get("content") or ""))
+        answer, inline_reasoning, tool_blocks = _split_inline(str(msg.get("content") or ""))
+        calls = _parse_tool_calls(msg.get("tool_calls"))
+        # Inline <tool_call> markup converts only when the wire field stayed
+        # empty (MiniMax echoes the markup alongside the parsed call — the
+        # parsed field wins so the call runs exactly once).
         return LLMReply(
             text=answer or None,
-            tool_calls=_parse_tool_calls(msg.get("tool_calls")),
+            tool_calls=calls or _parse_tool_blocks(tool_blocks),
             usage=_parse_usage(usage),
             reasoning=str(msg.get("reasoning_content") or "") + inline_reasoning,
         )
@@ -396,7 +476,7 @@ class HttpLLM:
         text_parts: list[str] = []
         calls_by_index: dict[int, dict[str, Any]] = {}
         reasoning_parts: list[str] = []
-        think = _ThinkSplitter()
+        think = _InlineTagSplitter()
         usage: dict[str, Any] = {}
         emitted = False
         attempt = 0
@@ -521,6 +601,11 @@ class HttpLLM:
             text_parts.append(tail_answer)
         if tail_reasoning:
             reasoning_parts.append(tail_reasoning)
+        if not calls:
+            # Inline tool-call markup is the only carrier when the wire field
+            # stayed empty; when both arrive the parsed field wins (no echo
+            # double-execution). Read after flush so unclosed blocks count.
+            calls = _parse_tool_blocks(think.tool_blocks)
         text = "".join(text_parts)
         reasoning = "".join(reasoning_parts)
         if calls:
