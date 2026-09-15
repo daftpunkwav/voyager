@@ -38,6 +38,7 @@ import httpx
 
 from .client import (
     _TIMEOUT,
+    ProviderError,
     TransientError,
     _anthropic_messages,
     _anthropic_tools,
@@ -94,8 +95,17 @@ async def complete_stream(
         if tools:
             body["tools"] = _anthropic_tools(tools)
         body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
-        # Anthropic forbids temperature when extended thinking is enabled
+        # Anthropic forbids temperature when extended thinking is enabled.
+        # Extended thinking is also incompatible with tool use: reject before
+        # opening a stream the API would 400 (same guard as complete).
         if "thinking" in body:
+            if tools:
+                raise ProviderError(
+                    "Anthropic extended thinking is incompatible with tool use; "
+                    "clear llm.reasoning_effort or choose a non-anthropic provider.",
+                    status=400,
+                    retriable=False,
+                )
             body.pop("temperature", None)
         url = f"{base}/v1/messages"
         headers = {

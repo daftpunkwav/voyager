@@ -451,6 +451,34 @@ class TestCompleteWithTools:
         assert "tools" not in seen["body"]  # no tools passed: field absent from body
         assert out["tool_calls"] == []
 
+    async def test_anthropic_thinking_with_tools_rejected(self, deps, monkeypatch) -> None:
+        """Anthropic extended thinking is incompatible with tool use; the
+        client must refuse before sending a request the API would 400."""
+        calls: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls.append(request.url.path)
+            return httpx.Response(200, json={"content": [], "usage": {}})
+
+        self._patch(monkeypatch, handler)
+        from llm.client import ProviderError
+        from llm.client import complete as raw_complete
+
+        with pytest.raises(ProviderError, match="incompatible with tool use"):
+            await raw_complete(
+                {
+                    "id": "p",
+                    "base_url": "https://api.test/v1",
+                    "api_format": "anthropic",
+                },
+                api_key="sk-x",
+                model="m1",
+                messages=[{"role": "user", "content": "hi"}],
+                tools=self.TOOLS,
+                reasoning_effort="low",
+            )
+        assert calls == []  # never reached the wire
+
 
 class TestMessageTranslation:
     """Neutral history -> provider request bodies: paired history uses native

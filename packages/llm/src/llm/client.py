@@ -409,14 +409,13 @@ async def _post(
     return resp
 
 
-#: Reasoning effort -> Anthropic thinking budget (tokens). OpenAI-compatible
-#: endpoints take the effort value verbatim as reasoning_effort.
-_ANTHROPIC_THINKING_BUDGETS = {"low": 2048, "medium": 8192, "high": 16384}
+#: Reasoning-effort names and their Anthropic thinking budgets (tokens).
+#: OpenAI-compatible endpoints take the effort value verbatim as
+#: reasoning_effort; unknown values degrade to unset.
+REASONING_EFFORTS = {"low": 2048, "medium": 8192, "high": 16384}
 
 
-def reasoning_fields(
-    fmt: str, reasoning_effort: str, *, max_tokens: int
-) -> dict[str, Any]:
+def reasoning_fields(fmt: str, reasoning_effort: str, *, max_tokens: int) -> dict[str, Any]:
     """Extra request-body fields for the configured reasoning effort; empty
     when the effort is unset or unknown so nothing is injected by default.
 
@@ -424,11 +423,16 @@ def reasoning_fields(
     anthropic: a thinking block with a token budget; Anthropic requires
     max_tokens above the budget and no temperature, so max_tokens is raised
     and the caller must drop temperature when the returned dict has thinking.
+
+    Anthropic extended thinking is incompatible with tool use: a thinking
+    block must be the first assistant content block, but a tool-turn assistant
+    message must start with tool_use blocks. Callers that pass tools together
+    with an anthropic-format provider must leave reasoning_effort unset.
     """
-    if reasoning_effort not in _ANTHROPIC_THINKING_BUDGETS:
+    if reasoning_effort not in REASONING_EFFORTS:
         return {}
     if fmt == "anthropic":
-        budget = _ANTHROPIC_THINKING_BUDGETS[reasoning_effort]
+        budget = REASONING_EFFORTS[reasoning_effort]
         return {
             "thinking": {"type": "enabled", "budget_tokens": budget},
             "max_tokens": max(max_tokens, budget + 1024),
@@ -468,8 +472,17 @@ async def complete(
             if tools:
                 body["tools"] = _anthropic_tools(tools)
             body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
-            # Anthropic forbids temperature when extended thinking is enabled
+            # Anthropic forbids temperature when extended thinking is enabled.
+            # Extended thinking is also incompatible with tool use: reject
+            # before sending a request that the API would 400.
             if "thinking" in body:
+                if tools:
+                    raise ProviderError(
+                        "Anthropic extended thinking is incompatible with tool use; "
+                        "clear llm.reasoning_effort or choose a non-anthropic provider.",
+                        status=400,
+                        retriable=False,
+                    )
                 body.pop("temperature", None)
             resp = await _send_with_retry(
                 lambda: _post(

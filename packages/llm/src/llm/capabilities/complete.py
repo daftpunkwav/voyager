@@ -13,12 +13,14 @@ from llm.capabilities.common import (
     require_provider,
     service_error_for,
 )
-from llm.client import ProviderError
+from llm.client import REASONING_EFFORTS, ProviderError
 from llm.client import complete as llm_complete
 
-#: Values accepted for llm.reasoning_effort; anything else degrades to unset
-#: so a typo never silently rewrites every request.
-_REASONING_EFFORTS = ("", "low", "medium", "high")
+#: Valid values for llm.reasoning_effort; anything else degrades to unset so a
+#: typo never silently rewrites every request. The canonical set is the key
+#: set of REASONING_EFFORTS (low/medium/high), plus the empty string meaning
+#: "use the provider default / off".
+_REASONING_EFFORTS = ("", *REASONING_EFFORTS.keys())
 
 
 def configured_reasoning_effort() -> str:
