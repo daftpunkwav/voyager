@@ -37,9 +37,9 @@ CORE_TOOLS = (
     "request_context",
     "todo_read",
     "todo_write",
-    # The workspace working set (DSH parity: read/write/edit/delete/list/
-    # glob/grep/shell are resident): without write_file and run_shell the
-    # model cannot do actual workspace work and degrades into ask_user loops
+    # The workspace working set (read/write/edit/delete/list/glob/grep/shell
+    # are resident): without write_file and run_shell the model cannot do
+    # actual workspace work and degrades into ask_user loops
     "read_file",
     "write_file",
     "edit_file",

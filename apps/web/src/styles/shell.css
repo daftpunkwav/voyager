@@ -646,8 +646,8 @@
   white-space: nowrap;
 }
 
-/* Trajectory page (DSH-style): stats toolbar, three-lane timeline, turn-
-   grouped event table with expandable rows. */
+/* Execution-trajectory page: stats toolbar, three-lane timeline, turn-grouped
+   event table with expandable rows. */
 .chat-traj2 {
   flex: 1;
   min-height: 0;
