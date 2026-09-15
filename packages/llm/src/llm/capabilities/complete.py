@@ -87,4 +87,6 @@ async def complete(
         "model": result.model,
         "tool_calls": [dict(tc) for tc in result.tool_calls],
         "usage": {"input_tokens": result.input_tokens, "output_tokens": result.output_tokens},
+        "reasoning": result.reasoning,
+        "thinking_blocks": [dict(b) for b in result.thinking_blocks],
     }

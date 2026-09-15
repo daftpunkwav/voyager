@@ -117,6 +117,14 @@ class CompleteResult:
     cached_tokens: int = 0  # prompt tokens served from the provider's cache (subset of input)
     model: str = ""
     tool_calls: tuple[dict[str, Any], ...] = ()
+    #: Model thinking surfaced separately from the answer text: Anthropic
+    #: thinking blocks and OpenAI-style reasoning_content, concatenated.
+    #: Never mixed into text, so callers can render or drop it independently.
+    reasoning: str = ""
+    #: Raw Anthropic thinking/redacted_thinking blocks, verbatim, for
+    #: echo-back on later turns (extended thinking requires the exact blocks
+    #: back when tool use continues the conversation). Empty for chat format.
+    thinking_blocks: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -242,6 +250,10 @@ def _anthropic_messages(rest: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if role == "assistant":
             text = str(m.get("content") or "")
             blocks: list[dict[str, Any]] = []
+            # Echo stored thinking blocks first and verbatim: with extended
+            # thinking enabled the provider requires the exact blocks back
+            # while tool use continues the conversation.
+            blocks.extend(_echoable_thinking_blocks(m))
             if text:
                 blocks.append({"type": "text", "text": text})
             for tc in m.get("tool_calls") or ():
@@ -424,10 +436,13 @@ def reasoning_fields(fmt: str, reasoning_effort: str, *, max_tokens: int) -> dic
     max_tokens above the budget and no temperature, so max_tokens is raised
     and the caller must drop temperature when the returned dict has thinking.
 
-    Anthropic extended thinking is incompatible with tool use: a thinking
-    block must be the first assistant content block, but a tool-turn assistant
-    message must start with tool_use blocks. Callers that pass tools together
-    with an anthropic-format provider must leave reasoning_effort unset.
+    Extended thinking coexists with tool use (interleaved thinking): the
+    thinking block rides alongside tools in the same request. The provider
+    requires the returned thinking blocks back verbatim on following turns
+    while tool use continues, so callers must persist
+    CompleteResult.thinking_blocks into the transcript and re-emit them via
+    _anthropic_messages (which echoes a stored "thinking_blocks" entry first
+    in each assistant message).
     """
     if reasoning_effort not in REASONING_EFFORTS:
         return {}
@@ -438,6 +453,28 @@ def reasoning_fields(fmt: str, reasoning_effort: str, *, max_tokens: int) -> dic
             "max_tokens": max(max_tokens, budget + 1024),
         }
     return {"reasoning_effort": reasoning_effort}
+
+
+#: Content-block types echoed back verbatim for extended thinking.
+_THINKING_BLOCK_TYPES = ("thinking", "redacted_thinking")
+
+
+def _echoable_thinking_blocks(message: dict[str, Any]) -> list[dict[str, Any]]:
+    """Stored thinking blocks of one neutral assistant message, sanitized for
+    the wire: only well-formed thinking/redacted_thinking dicts pass, so a
+    poisoned history entry can never inject arbitrary content blocks."""
+    stored = message.get("thinking_blocks") or ()
+    if not isinstance(stored, (list, tuple)):
+        return []
+    out = []
+    for block in stored:
+        if (
+            isinstance(block, dict)
+            and block.get("type") in _THINKING_BLOCK_TYPES
+            and (block.get("type") == "redacted_thinking" or isinstance(block.get("thinking"), str))
+        ):
+            out.append(dict(block))
+    return out
 
 
 async def complete(
@@ -473,16 +510,9 @@ async def complete(
                 body["tools"] = _anthropic_tools(tools)
             body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
             # Anthropic forbids temperature when extended thinking is enabled.
-            # Extended thinking is also incompatible with tool use: reject
-            # before sending a request that the API would 400.
+            # Thinking and tool use coexist (interleaved thinking); the echo
+            # of stored thinking blocks happens in _anthropic_messages.
             if "thinking" in body:
-                if tools:
-                    raise ProviderError(
-                        "Anthropic extended thinking is incompatible with tool use; "
-                        "clear llm.reasoning_effort or choose a non-anthropic provider.",
-                        status=400,
-                        retriable=False,
-                    )
                 body.pop("temperature", None)
             resp = await _send_with_retry(
                 lambda: _post(
@@ -500,6 +530,14 @@ async def complete(
             usage = data.get("usage") or {}
             blocks = data.get("content") or []
             text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+            reasoning = "".join(
+                str(b.get("thinking") or "") for b in blocks if b.get("type") == "thinking"
+            )
+            thinking_blocks = tuple(
+                dict(b)
+                for b in blocks
+                if isinstance(b, dict) and b.get("type") in _THINKING_BLOCK_TYPES
+            )
             tool_calls = tuple(
                 {
                     "id": b.get("id", ""),
@@ -516,6 +554,8 @@ async def complete(
                 cached_tokens=int(usage.get("cache_read_input_tokens") or 0),
                 model=data.get("model", model),
                 tool_calls=tool_calls,
+                reasoning=reasoning,
+                thinking_blocks=thinking_blocks,
             )
         body = {
             "model": model,
@@ -548,6 +588,7 @@ async def complete(
             cached_tokens=int((usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0),
             model=data.get("model", model),
             tool_calls=_parse_tool_calls(message.get("tool_calls")),
+            reasoning=str(message.get("reasoning_content") or ""),
         )
 
 

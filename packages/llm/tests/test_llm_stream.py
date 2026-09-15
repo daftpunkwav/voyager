@@ -569,6 +569,80 @@ class TestStreamBoundary:
         _patch(monkeypatch, lambda r: httpx.Response(200, text=sse))
         chunks = await _collect(_ANTHROPIC)
         assert [c["text"] for c in chunks if c["type"] == "text"] == ["answer"]
+        # Thinking rides its own channel and aggregates into the final chunk,
+        # never into the answer text.
+        assert [c["text"] for c in chunks if c["type"] == "reasoning"] == ["inner monologue"]
+        assert chunks[-1]["reasoning"] == "inner monologue"
+        assert chunks[-1]["text"] == "answer"
+
+    async def test_anthropic_thinking_signature_captured(self, monkeypatch) -> None:
+        """Thinking signature deltas are captured for verbatim echo-back."""
+        sse = _sse(
+            {"type": "message_start", "message": {"model": "m", "usage": {"input_tokens": 1}}},
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "thinking", "thinking": ""},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "thinking_delta", "thinking": "weigh"},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "signature_delta", "signature": "sig-9"},
+            },
+            {
+                "type": "content_block_start",
+                "index": 1,
+                "content_block": {"type": "redacted_thinking", "data": "opaque"},
+            },
+            {"type": "message_delta", "usage": {"output_tokens": 2}},
+        )
+        _patch(monkeypatch, lambda r: httpx.Response(200, text=sse))
+        chunks = await _collect(_ANTHROPIC)
+        assert chunks[-1]["thinking_blocks"] == [
+            {"type": "thinking", "thinking": "weigh", "signature": "sig-9"},
+            {"type": "redacted_thinking", "data": "opaque"},
+        ]
+
+    async def test_anthropic_thinking_with_tools_coexists(self, monkeypatch) -> None:
+        """Streaming: thinking and tools share one request (no pre-wire refusal)."""
+        seen: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["body"] = json.loads(request.content)
+            return httpx.Response(200, text=_sse({"type": "message_stop"}))
+
+        _patch(monkeypatch, handler)
+        await _collect(
+            _ANTHROPIC,
+            tools=[{"name": "t", "description": "t", "schema": {}}],
+            reasoning_effort="low",
+        )
+        assert seen["body"]["thinking"] == {"type": "enabled", "budget_tokens": 2048}
+        assert seen["body"]["tools"][0]["name"] == "t"
+        assert "temperature" not in seen["body"]
+
+    async def test_chat_reasoning_content_captured(self, monkeypatch) -> None:
+        """OpenAI-style reasoning_content streams on its own channel and
+        aggregates into the final chunk."""
+        sse = _sse(
+            {"choices": [{"delta": {"reasoning_content": "step one"}}]},
+            {"choices": [{"delta": {"reasoning_content": "step two"}}]},
+            {"choices": [{"delta": {"content": "answer"}}]},
+            "[DONE]",
+        )
+        _patch(monkeypatch, lambda r: httpx.Response(200, text=sse))
+        chunks = await _collect(_CHAT)
+        assert [c["text"] for c in chunks if c["type"] == "reasoning"] == [
+            "step one",
+            "step two",
+        ]
+        assert chunks[-1]["reasoning"] == "step onestep two"
+        assert chunks[-1]["text"] == "answer"
 
     async def test_stress_thousands_of_deltas(self, monkeypatch) -> None:
         """Stress: 5000 delta fragments, lossless and duplicate-free

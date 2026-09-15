@@ -451,33 +451,155 @@ class TestCompleteWithTools:
         assert "tools" not in seen["body"]  # no tools passed: field absent from body
         assert out["tool_calls"] == []
 
-    async def test_anthropic_thinking_with_tools_rejected(self, deps, monkeypatch) -> None:
-        """Anthropic extended thinking is incompatible with tool use; the
-        client must refuse before sending a request the API would 400."""
-        calls: list[str] = []
+    async def test_anthropic_thinking_with_tools_coexists(self, deps, monkeypatch) -> None:
+        """Extended thinking coexists with tool use (interleaved thinking):
+        both ride the same request and no temperature is sent."""
+        seen: dict[str, Any] = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
-            calls.append(request.url.path)
+            seen["body"] = json.loads(request.content)
             return httpx.Response(200, json={"content": [], "usage": {}})
 
         self._patch(monkeypatch, handler)
-        from llm.client import ProviderError
         from llm.client import complete as raw_complete
 
-        with pytest.raises(ProviderError, match="incompatible with tool use"):
-            await raw_complete(
-                {
-                    "id": "p",
-                    "base_url": "https://api.test/v1",
-                    "api_format": "anthropic",
+        await raw_complete(
+            {
+                "id": "p",
+                "base_url": "https://api.test/v1",
+                "api_format": "anthropic",
+            },
+            api_key="sk-x",
+            model="m1",
+            messages=[{"role": "user", "content": "hi"}],
+            tools=self.TOOLS,
+            reasoning_effort="low",
+        )
+        body = seen["body"]
+        assert body["thinking"] == {"type": "enabled", "budget_tokens": 2048}
+        assert body["tools"][0]["name"] == "create_note"
+        assert "temperature" not in body  # forbidden with thinking enabled
+
+    async def test_anthropic_thinking_blocks_captured(self, deps, monkeypatch) -> None:
+        """Thinking text lands in reasoning (never in text); raw thinking and
+        redacted blocks are kept verbatim for echo-back."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "content": [
+                        {
+                            "type": "thinking",
+                            "thinking": "weigh options",
+                            "signature": "sig-1",
+                        },
+                        {"type": "redacted_thinking", "data": "opaque"},
+                        {"type": "text", "text": "answer"},
+                    ],
+                    "usage": {"input_tokens": 5, "output_tokens": 9},
+                    "model": "claude",
                 },
-                api_key="sk-x",
-                model="m1",
-                messages=[{"role": "user", "content": "hi"}],
-                tools=self.TOOLS,
-                reasoning_effort="low",
             )
-        assert calls == []  # never reached the wire
+
+        self._patch(monkeypatch, handler)
+        from llm.client import complete as raw_complete
+
+        out = await raw_complete(
+            {
+                "id": "p",
+                "base_url": "https://api.test/v1",
+                "api_format": "anthropic",
+            },
+            api_key="sk-x",
+            model="m1",
+            messages=[{"role": "user", "content": "hi"}],
+            reasoning_effort="low",
+        )
+        assert out.text == "answer"
+        assert out.reasoning == "weigh options"
+        assert out.thinking_blocks == (
+            {"type": "thinking", "thinking": "weigh options", "signature": "sig-1"},
+            {"type": "redacted_thinking", "data": "opaque"},
+        )
+
+    async def test_anthropic_thinking_blocks_echoed_verbatim(self, deps, monkeypatch) -> None:
+        """Stored thinking blocks go back first and verbatim while tool use
+        continues, satisfying the provider's echo requirement."""
+        seen: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["body"] = json.loads(request.content)
+            return httpx.Response(
+                200, json={"content": [{"type": "text", "text": "done"}], "usage": {}}
+            )
+
+        self._patch(monkeypatch, handler)
+        from llm.client import complete as raw_complete
+
+        stored = {"type": "thinking", "thinking": "weigh options", "signature": "sig-1"}
+        await raw_complete(
+            {
+                "id": "p",
+                "base_url": "https://api.test/v1",
+                "api_format": "anthropic",
+            },
+            api_key="sk-x",
+            model="m1",
+            messages=[
+                {
+                    "role": "assistant",
+                    "content": "calling tool",
+                    "tool_calls": [{"id": "tu_1", "name": "create_note", "arguments": {}}],
+                    "thinking_blocks": [stored, {"type": "bogus", "x": 1}],
+                },
+                {"role": "tool", "tool_call_id": "tu_1", "content": "ok"},
+            ],
+            tools=self.TOOLS,
+            reasoning_effort="low",
+        )
+        assistant = seen["body"]["messages"][0]
+        assert assistant["role"] == "assistant"
+        assert assistant["content"][0] == stored  # thinking first, verbatim
+        assert assistant["content"][1] == {"type": "text", "text": "calling tool"}
+        assert all(b.get("type") != "bogus" for b in assistant["content"])
+
+    async def test_chat_reasoning_content_captured(self, deps, monkeypatch) -> None:
+        """OpenAI-style reasoning_content lands in reasoning, not text."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "answer",
+                                "reasoning_content": "inner monologue",
+                            }
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 5, "completion_tokens": 9},
+                    "model": "m1",
+                },
+            )
+
+        self._patch(monkeypatch, handler)
+        from llm.client import complete as raw_complete
+
+        out = await raw_complete(
+            {
+                "id": "p",
+                "base_url": "https://api.test/v1",
+                "api_format": "chat",
+            },
+            api_key="sk-x",
+            model="m1",
+            messages=[{"role": "user", "content": "hi"}],
+        )
+        assert out.text == "answer"
+        assert out.reasoning == "inner monologue"
+        assert out.thinking_blocks == ()
 
 
 class TestMessageTranslation:

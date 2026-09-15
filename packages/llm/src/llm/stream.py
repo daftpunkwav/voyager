@@ -38,7 +38,6 @@ import httpx
 
 from .client import (
     _TIMEOUT,
-    ProviderError,
     TransientError,
     _anthropic_messages,
     _anthropic_tools,
@@ -96,16 +95,9 @@ async def complete_stream(
             body["tools"] = _anthropic_tools(tools)
         body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
         # Anthropic forbids temperature when extended thinking is enabled.
-        # Extended thinking is also incompatible with tool use: reject before
-        # opening a stream the API would 400 (same guard as complete).
+        # Thinking and tool use coexist (interleaved thinking); the echo of
+        # stored thinking blocks happens in _anthropic_messages.
         if "thinking" in body:
-            if tools:
-                raise ProviderError(
-                    "Anthropic extended thinking is incompatible with tool use; "
-                    "clear llm.reasoning_effort or choose a non-anthropic provider.",
-                    status=400,
-                    retriable=False,
-                )
             body.pop("temperature", None)
         url = f"{base}/v1/messages"
         headers = {
@@ -156,6 +148,7 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
     tool_calls reassembled from per-index fragments."""
     text_parts: list[str] = []
     frags: dict[int, dict[str, str]] = {}
+    reasoning_parts: list[str] = []
     usage: dict[str, Any] = {}
     model = ""
     async for line in resp.aiter_lines():
@@ -177,6 +170,13 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
             if content:
                 text_parts.append(str(content))
                 yield {"type": "text", "text": str(content)}
+            reasoning_content = delta.get("reasoning_content")
+            if reasoning_content:
+                # Reasoning rides its own channel: accumulated for the final
+                # aggregate and yielded live so UIs can show thinking
+                # separately instead of mixing it into the answer text.
+                reasoning_parts.append(str(reasoning_content))
+                yield {"type": "reasoning", "text": str(reasoning_content)}
             for tc in delta.get("tool_calls") or []:
                 idx = int(tc.get("index") or 0)
                 acc = frags.setdefault(idx, {"id": "", "name": "", "arguments": ""})
@@ -199,6 +199,7 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
     yield {
         "type": "final",
         "text": "".join(text_parts),
+        "reasoning": "".join(reasoning_parts),
         "tool_calls": [dict(t) for t in tool_calls],
         "usage": {
             "input_tokens": int(usage.get("prompt_tokens") or 0),
@@ -214,9 +215,13 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
 async def _anthropic_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
     """Anthropic Messages SSE: dispatch on the data payload's `type` (event
     lines ignored); tool_use opens at content_block_start and its arguments
-    are assembled from input_json_delta fragments."""
+    are assembled from input_json_delta fragments. Thinking deltas accumulate
+    into reasoning (yielded live on their own channel); thinking signatures
+    and redacted blocks are captured for verbatim echo-back."""
     text_parts: list[str] = []
     blocks: dict[int, dict[str, str]] = {}
+    thinking: dict[int, dict[str, str]] = {}
+    redacted: list[dict[str, Any]] = []
     input_tokens = 0
     output_tokens = 0
     cached_tokens = 0
@@ -239,31 +244,50 @@ async def _anthropic_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
             input_tokens = int(start_usage.get("input_tokens") or 0)
             cached_tokens = int(start_usage.get("cache_read_input_tokens") or 0)
         elif kind == "content_block_start":
+            index = int(obj.get("index") or 0)
             block = obj.get("content_block") or {}
             if block.get("type") == "tool_use":
-                blocks[int(obj.get("index") or 0)] = {
+                blocks[index] = {
                     "id": str(block.get("id") or ""),
                     "name": str(block.get("name") or ""),
                     "json": "",
                 }
+            elif block.get("type") == "thinking":
+                thinking[index] = {"thinking": "", "signature": ""}
+            elif block.get("type") == "redacted_thinking":
+                redacted.append({"type": "redacted_thinking", "data": block.get("data")})
         elif kind == "content_block_delta":
+            idx = int(obj.get("index") or 0)
             delta = obj.get("delta") or {}
             if delta.get("type") == "text_delta" and delta.get("text"):
                 text_parts.append(str(delta["text"]))
                 yield {"type": "text", "text": str(delta["text"])}
             elif delta.get("type") == "input_json_delta" and delta.get("partial_json"):
-                idx = int(obj.get("index") or 0)
                 if idx in blocks:
                     blocks[idx]["json"] += str(delta["partial_json"])
+            elif delta.get("type") == "thinking_delta" and delta.get("thinking"):
+                slot = thinking.setdefault(idx, {"thinking": "", "signature": ""})
+                slot["thinking"] += str(delta["thinking"])
+                yield {"type": "reasoning", "text": str(delta["thinking"])}
+            elif delta.get("type") == "signature_delta" and delta.get("signature"):
+                slot = thinking.setdefault(idx, {"thinking": "", "signature": ""})
+                slot["signature"] = str(delta["signature"])
         elif kind == "message_delta":
             output_tokens = int((obj.get("usage") or {}).get("output_tokens") or output_tokens)
     tool_calls = tuple(
         {"id": b["id"], "name": b["name"], "arguments": _safe_arguments(b["json"])}
         for _, b in sorted(blocks.items())
     )
+    thinking_blocks = [
+        {"type": "thinking", "thinking": slot["thinking"], "signature": slot["signature"]}
+        for _, slot in sorted(thinking.items())
+    ]
+    thinking_blocks.extend(redacted)
     yield {
         "type": "final",
         "text": "".join(text_parts),
+        "reasoning": "".join(slot["thinking"] for _, slot in sorted(thinking.items())),
+        "thinking_blocks": thinking_blocks,
         "tool_calls": [dict(t) for t in tool_calls],
         "usage": {
             "input_tokens": input_tokens,
