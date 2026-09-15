@@ -139,6 +139,7 @@
   "task.resumeFailed": "Resume failed: {{error}}",
   "tokens.unitWan": "×10K",
   "tokens.unitYi": "×100M",
+  "trace.thinking": "Thinking",
   "trace.outputting": "Writing",
   "trace.think": "Thought {{n}}x",
   "trace.tools": "{{n}} tool calls",
@@ -311,6 +312,5 @@
   "traj.toolName": "Tool",
   "traj.truncated": "Result spilled to the workspace spill directory; ask the agent to page through it",
   "traj.ttft": "First token",
-  "traj.untitledTurn": "A turn",
-  "typing.aria": "Processing"
+  "traj.untitledTurn": "A turn"
 }

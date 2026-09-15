@@ -234,16 +234,8 @@ export function MessageList() {
           </div>
         </div>
       ) : null}
-      {thinking && !streaming?.text && steps.length === 0 ? (
-        <div
-          className="chat-bubble chat-bubble--agent chat-typing"
-          aria-label={t('chat:typing.aria')}
-        >
-          <span />
-          <span />
-          <span />
-        </div>
-      ) : null}
+      {/* Pre-first-token wait indicator lives on the live trace bar
+          ("thinking" + working pulse) — no separate typing-dots bubble. */}
       <div ref={bottomRef} />
     </div>
   );

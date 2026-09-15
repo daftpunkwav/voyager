@@ -183,4 +183,21 @@ describe('live trace detail', () => {
     expect(screen.getByText(/首 token 350ms/)).toBeTruthy();
     expect(screen.queryByText(/第 \d+ 步/)).toBeNull();
   });
+
+  it('mounts during the pre-step phase (thinking, no steps yet)', () => {
+    // The first round's llm step only lands at round completion; the trace
+    // bar must already be visible while that round streams.
+    reset({ thinking: true, steps: [] });
+    render(<LiveTurnTrace />);
+    expect(screen.getByText('思考中')).toBeTruthy();
+    expect(screen.getByText('执行中')).toBeTruthy();
+    // No steps yet: the collapsible body stays hidden even though auto-open
+    expect(screen.queryByText('轮 1')).toBeNull();
+  });
+
+  it('stays hidden once the turn ends (not thinking, no steps)', () => {
+    reset({ thinking: false, steps: [] });
+    const { container } = render(<LiveTurnTrace />);
+    expect(container.querySelector('.chat-trace--live')).toBeNull();
+  });
 });

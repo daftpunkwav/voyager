@@ -493,19 +493,24 @@ function RoundBlockView({ block }: { block: RoundBlock }) {
 }
 
 /** The live turn's inline trace — ONE stable collapsible unit sitting between
- *  the user's message and the final output. Position never moves: the block
- *  only grows downward inside a fixed-height, internally-scrolling body, so
- *  streaming output below is never pushed around. */
+ *  the user's message and the final output. It mounts as soon as the turn
+ *  starts (thinking flag), before any step lands: the first round's llm step
+ *  only arrives at round completion, so gating on steps would leave the
+ *  whole first-round streaming without a trace. Position never moves: the
+ *  block only grows downward inside a fixed-height, internally-scrolling
+ *  body, so streaming output below is never pushed around. */
 export function LiveTurnTrace() {
   const { t } = useTranslation('chat');
   const steps = useChatStore((s) => s.steps);
   const roundTexts = useChatStore((s) => s.roundTexts);
   const streaming = useChatStore((s) => s.streaming);
+  const thinking = useChatStore((s) => s.thinking);
   const [manual, setManual] = useState<boolean | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const hadStepsRef = useRef(false);
 
-  const running = steps.length > 0;
+  const running = steps.length > 0 || thinking;
+  const hasSteps = steps.length > 0;
   // "Text is the latest activity": output yields the trace only while text
   // started flowing after the most recent step; the next tool step (or its
   // llm marker) flips activity back to the trace and it reopens. State, not
@@ -517,8 +522,12 @@ export function LiveTurnTrace() {
   useEffect(() => {
     if (streaming?.text) setTextSinceStep(true);
   }, [streaming?.text]);
-  const autoOpen = running && !textSinceStep;
+  const autoOpen = hasSteps && !textSinceStep;
   const open = manual ?? autoOpen;
+  const showBody = open && hasSteps;
+  // Pre-step phase (first round streaming / waiting for the first token)
+  // always reads as "working" — there is no step activity to yield to yet.
+  const working = autoOpen || !hasSteps;
 
   // Reset the manual pin when the turn ends so the next turn starts fresh.
   useEffect(() => {
@@ -542,12 +551,14 @@ export function LiveTurnTrace() {
       <button
         type="button"
         className="chat-trace__head"
-        aria-expanded={open}
+        aria-expanded={showBody}
         onClick={() => setManual(!open)}
       >
-        <Chevron open={open} />
-        <span className="chat-trace__headtext">{groupSummary(steps, t)}</span>
-        {autoOpen ? (
+        <Chevron open={showBody} />
+        <span className="chat-trace__headtext">
+          {hasSteps ? groupSummary(steps, t) : t('chat:trace.thinking')}
+        </span>
+        {working ? (
           <span className="chat-trace__livebadge">
             <span className="chat-trace__pulse" aria-hidden />
             {t('chat:trace.working')}
@@ -559,7 +570,7 @@ export function LiveTurnTrace() {
           </span>
         ) : null}
       </button>
-      {open ? (
+      {showBody ? (
         <div className="chat-trace__body" ref={bodyRef}>
           {blocks.map((b) => (
             <RoundBlockView key={b.key} block={b} />

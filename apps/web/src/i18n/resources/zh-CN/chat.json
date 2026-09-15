@@ -139,6 +139,7 @@
   "task.resumeFailed": "续跑失败:{{error}}",
   "tokens.unitWan": "万",
   "tokens.unitYi": "亿",
+  "trace.thinking": "思考中",
   "trace.outputting": "正在输出",
   "trace.think": "思考 {{n}} 次",
   "trace.tools": "工具 {{n}} 次",
@@ -311,6 +312,5 @@
   "traj.toolName": "工具",
   "traj.truncated": "结果超长已截断，完整输出在工作区 spill 目录，可让 agent 分段查看",
   "traj.ttft": "首 token",
-  "traj.untitledTurn": "一轮对话",
-  "typing.aria": "正在处理"
+  "traj.untitledTurn": "一轮对话"
 }
