@@ -10,7 +10,7 @@
  *   each row shows the elapsed runtime and interrupts that instance on click
  * - Deliverables: note artifacts from chatStore (note.created) plus the live
  *   task.* progress cards (rendered by TaskCards, passed in as children);
- *   the section hides entirely when there is nothing to show
+ *   the section stays visible with an empty hint when there is nothing to show
  */
 
 import { useEffect, useState, type ReactNode } from 'react';
@@ -21,7 +21,6 @@ import { interruptInstance } from '@/bridge/chatSend';
 import { routes } from '@/utils/routes';
 import { formatDurationSec } from '@/utils/trajectory';
 import { useChatStore } from '@/stores/chatStore';
-import { WorkspaceSection } from '@/widgets/chat/WorkspacePanel';
 
 /** A list_subagents.running entry (status is a RunStatus.value from agent/runtime/state.py). */
 interface RunningInstance {
@@ -82,7 +81,6 @@ function SideSection({
     </section>
   );
 }
-
 
 function TodoMark({ status }: { status: string }) {
   if (status === 'done') {
@@ -169,7 +167,6 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
 
   return (
     <aside className="chat-side" aria-label={t('chat:panel.aria')}>
-      <WorkspaceSection />
       <SideSection
         title={t('chat:panel.plan')}
         meta={todoMeta.total > 0 ? `${todoMeta.done}/${todoMeta.total}` : undefined}
@@ -187,7 +184,10 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
           <p className="chat-side__empty small muted">{t('chat:panel.planEmpty')}</p>
         )}
       </SideSection>
-      <SideSection title={t('chat:panel.agents')} meta={running.length > 0 ? running.length : undefined}>
+      <SideSection
+        title={t('chat:panel.agents')}
+        meta={running.length > 0 ? running.length : undefined}
+      >
         {running.length > 0 ? (
           <ul className="chat-side__agents">
             {running.map((r) => {
@@ -221,38 +221,42 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
           <p className="chat-side__empty small muted">{t('chat:panel.agentsEmpty')}</p>
         )}
       </SideSection>
-      {hasDeliverables ? (
-        <SideSection title={t('chat:panel.deliverables')} meta={artifacts.length + cardCount}>
-          {artifacts.length > 0 ? (
-            <ul className="chat-side__artifacts">
-              {artifacts.map((a) => (
-                <li key={a.seq}>
-                  <Link to={routes.note(a.noteId)} className="chat-side__artifact" title={a.title}>
-                    <svg className="chat-side__artifact-icon" viewBox="0 0 24 24" aria-hidden>
-                      <path
-                        d="M13.5 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5L13.5 3z"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.9"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M13.5 3v5.5H19"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.9"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    <span className="chat-side__artifact-title">{a.title}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {taskCards}
-        </SideSection>
-      ) : null}
+      <SideSection
+        title={t('chat:panel.deliverables')}
+        meta={hasDeliverables ? artifacts.length + cardCount : undefined}
+      >
+        {artifacts.length > 0 ? (
+          <ul className="chat-side__artifacts">
+            {artifacts.map((a) => (
+              <li key={a.seq}>
+                <Link to={routes.note(a.noteId)} className="chat-side__artifact" title={a.title}>
+                  <svg className="chat-side__artifact-icon" viewBox="0 0 24 24" aria-hidden>
+                    <path
+                      d="M13.5 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5L13.5 3z"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.9"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M13.5 3v5.5H19"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.9"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <span className="chat-side__artifact-title">{a.title}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {taskCards}
+        {!hasDeliverables ? (
+          <p className="chat-side__empty small muted">{t('chat:panel.deliverablesEmpty')}</p>
+        ) : null}
+      </SideSection>
     </aside>
   );
 }

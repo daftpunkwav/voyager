@@ -1,18 +1,19 @@
 /*
  * @file chat-sessions
- * @description Chat session drawer: overlay switcher for multi-session chat.
- * Masks stay transparent (shared overlay rule in pages/index.css); the panel
- * is the only elevated surface. Active marking uses background/text tone only —
- * no brand-colored bars. Danger actions go through .is-danger (var(--error)).
+ * @description Chat session switcher: centered modal overlay for multi-session
+ * chat. Masks stay transparent (shared overlay rule in pages/index.css); the
+ * panel is the only elevated surface. Active marking uses background/text tone
+ * only — no brand-colored bars. Danger actions go through .is-danger
+ * (var(--error)).
  */
 
 .session-drawer-mask {
   position: fixed;
   inset: 0;
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  padding: 64px 20px 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
   z-index: var(--z-modal, 1000);
 }
 

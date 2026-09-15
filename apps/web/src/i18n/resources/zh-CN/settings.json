@@ -129,6 +129,7 @@
 
   "llm.format.chat": "OpenAI 兼容",
   "llm.format.anthropic": "Anthropic",
+  "llm.format.responses": "Responses",
   "llm.style.default": "默认",
   "llm.style.defaultDesc": "平衡、中性",
   "llm.style.warm": "热情",

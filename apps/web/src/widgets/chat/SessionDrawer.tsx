@@ -1,11 +1,11 @@
 /**
  * @file SessionDrawer
- * @description Chat session switcher: an overlay drawer listing the chat
- * sessions (title / status / active badge) with create, rename, delete, and
- * a one-line context-usage status for the open session.
+ * @description Chat session switcher: a centered modal overlay listing the
+ * chat sessions (title / status / active badge) with create, rename, delete,
+ * and a one-line context-usage status for the open session.
  *
  * Design constraints (workspace conventions):
- * - Overlay drawer, never squeezing the main chat column
+ * - Overlay dialog, never squeezing the main chat column
  * - Active marking via background/text tone; no brand-colored bars
  * - Delete is a two-click confirm styled with `.is-danger`
  */

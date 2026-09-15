@@ -11,7 +11,8 @@
  * - Wire the SSE stream with navigation raised to react-router
  * - Tab between the conversation (message list with inline execution traces,
  *   ask dialog, composer) and the full trajectory view (per-turn execution
- *   detail rebuilt from persisted rows), with a session-log shortcut
+ *   detail rebuilt from persisted rows), with the session switcher at the far
+ *   left of the tab row; a reconnecting hint shows only while the stream is down
  * - Host the right panel: plan (todos), running subagents and deliverables
  */
 
@@ -53,6 +54,9 @@ export function ChatPage() {
     <section className="chat-page chat-layout">
       <div className="chat-main">
         <div className="chat-tabs">
+          <button type="button" className="btn btn-sm" onClick={() => setSessionsOpen(true)}>
+            {t('chat:session.drawerButton')}
+          </button>
           <div className="chat-tabs__group" role="tablist" aria-label={t('chat:traj.tabsLabel')}>
             <button
               type="button"
@@ -73,15 +77,11 @@ export function ChatPage() {
               {t('chat:traj.tabTrajectory')}
             </button>
           </div>
-          <span className="small muted" role="status">
-            {connected ? t('chat:float.online') : t('chat:float.reconnecting')}
-          </span>
-          <button type="button" className="btn btn-sm" onClick={() => setSessionsOpen(true)}>
-            {t('chat:session.drawerButton')}
-          </button>
-          <button type="button" className="btn btn-sm" onClick={() => navigate('/activity')}>
-            {t('chat:traj.sessionLog')}
-          </button>
+          {connected ? null : (
+            <span className="small muted" role="status">
+              {t('chat:float.reconnecting')}
+            </span>
+          )}
         </div>
         {view === 'chat' ? (
           <>

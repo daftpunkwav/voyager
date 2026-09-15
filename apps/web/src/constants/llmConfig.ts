@@ -23,6 +23,7 @@ import { AGENT_CATALOG } from '@/constants/agentCatalog';
 export const LLM_API_FORMAT_OPTIONS: { value: LlmApiFormat; labelKey: string; hint: string }[] = [
   { value: 'chat', labelKey: 'settings:llm.format.chat', hint: '/v1/chat/completions' },
   { value: 'anthropic', labelKey: 'settings:llm.format.anthropic', hint: '/v1/messages' },
+  { value: 'responses', labelKey: 'settings:llm.format.responses', hint: '/v1/responses' },
 ];
 
 /** Agent speaking styles */

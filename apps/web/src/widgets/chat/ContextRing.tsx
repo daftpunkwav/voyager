@@ -96,7 +96,8 @@ export function ContextRing() {
             ]
           : []),
         { k: t('chat:ctx.compact'), v: t('chat:ctx.pct', { pct: status.auto_compact_at_pct }) },
-        ...(status.prefix_cache && (status.prefix_cache.warm_rounds || status.prefix_cache.cold_rounds)
+        ...(status.prefix_cache &&
+        (status.prefix_cache.warm_rounds || status.prefix_cache.cold_rounds)
           ? [
               {
                 k: t('chat:ctx.cache'),
@@ -120,7 +121,7 @@ export function ContextRing() {
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        <svg width={24} height={24} viewBox="0 0 24 24" aria-hidden>
+        <svg width={16} height={16} viewBox="0 0 24 24" aria-hidden>
           <circle
             cx="12"
             cy="12"

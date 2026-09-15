@@ -1,8 +1,9 @@
 /**
  * @file ChatComposer
  * @description Shared chat composer: textarea plus a bottom bar holding the
+ * workspace path (far left), then — right-aligned after a spacer — the
  * context-usage ring, the model picker, the reasoning-effort picker and the
- * send/stop control (left to right, mainstream-agent layout). Used by the
+ * send/stop control (mainstream-agent layout). Used by the
  * chat page and the persistent floating window; each surface owns its own
  * useChatSend instance.
  *
@@ -26,6 +27,7 @@ import { listProviders } from '@/api/llm';
 import { LLM_MODEL_KEY, LLM_PROVIDER_KEY, LLM_REASONING_EFFORT_KEY } from '@/api/settings';
 import type { UseChatSendReturn } from '@/hooks/useChatSend';
 import { ContextRing } from '@/widgets/chat/ContextRing';
+import { WorkspacePathChip } from '@/widgets/chat/WorkspaceChip';
 
 interface ChatComposerProps {
   /** Send state from the surface-owned useChatSend instance */
@@ -118,7 +120,7 @@ const THINKING_LEVELS: Array<{ value: string; labelKey: string }> = [
   { value: 'high', labelKey: 'chat:thinking.high' },
 ];
 
-function BrainIcon() {
+function SparklesIcon() {
   return (
     <svg
       width={13}
@@ -131,8 +133,8 @@ function BrainIcon() {
       strokeLinejoin="round"
       aria-hidden
     >
-      <path d="M12 4.5a3.5 3.5 0 0 0-3.5 3.5v.4A3.2 3.2 0 0 0 6 11.4a3.3 3.3 0 0 0 1.6 2.9A3.2 3.2 0 0 0 9 19.5h3V4.5z" />
-      <path d="M12 4.5A3.5 3.5 0 0 1 15.5 8v.4a3.2 3.2 0 0 1 2.5 3 3.3 3.3 0 0 1-1.6 2.9A3.2 3.2 0 0 1 15 19.5h-3" />
+      <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" />
+      <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z" />
     </svg>
   );
 }
@@ -225,12 +227,12 @@ export function ChatComposer({
         }}
       />
       <div className="composer-bar">
-        <ContextRing />
+        <WorkspacePathChip />
         <span className="composer-bar__spacer" />
+        <ContextRing />
         <BarDropdown
           label={
             <>
-              <span className="composer-dot" aria-hidden />
               <span className="composer-dd__text">
                 {selectedModel || t('chat:composer.modelNone')}
               </span>
@@ -282,7 +284,7 @@ export function ChatComposer({
         <BarDropdown
           label={
             <>
-              <BrainIcon />
+              <SparklesIcon />
               <span className="composer-dd__text">{t(reasoningLabel)}</span>
             </>
           }

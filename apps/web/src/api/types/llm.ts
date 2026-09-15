@@ -7,8 +7,8 @@
  * @/api/types barrel.
  */
 
-/** Authoritative API formats: only these two remain; the legacy openai/google/ollama enum is retired. */
-export type LlmApiFormat = 'chat' | 'anthropic';
+/** Authoritative API formats; the legacy openai/google/ollama enum is retired. */
+export type LlmApiFormat = 'chat' | 'anthropic' | 'responses';
 
 /** Per-model metadata (llm provider models_meta): capability flags decide
  *  composer affordances (attachments / thinking picker), the token budgets
