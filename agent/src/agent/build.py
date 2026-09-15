@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from platform_contracts import DomainEvent
+from platform_contracts import DomainEvent, ServiceError
 from platform_eventbus import CursorStore, EventBus, EventLog, Retention
 from platform_settings import SettingsStore
 
@@ -308,11 +308,22 @@ def build_agent(
     # routing layer; without an injected transport everything shares the chat
     # model as before
     routes = purpose_llms or {}
-    # Confirmation dialogs must expire BEFORE the tool deadline
-    # (agent.execution.tool_deadline_s = 90s) so the user gets a real chance
-    # to approve; the remembered-approval store removes the friction after
-    # the first grant.
-    _CONFIRM_TIMEOUT_S = 75.0
+
+    def _confirm_timeout_s() -> float:
+        """Confirmation dialog timeout derived from the live tool deadline.
+
+        Must stay below agent.execution.tool_deadline_s so the dialog cannot
+        outlive the call it guards; a 15 s headroom keeps network/queue lag
+        from causing a race, and a 10 s floor keeps very short deadlines
+        usable for quick smoke tests."""
+        try:
+            tool_s = float(settings.get("agent.execution.tool_deadline_s"))
+        except (TypeError, ValueError, ServiceError):  # unregistered reads NOT_FOUND
+            tool_s = 90.0
+        if tool_s <= 0:
+            tool_s = 90.0
+        return max(10.0, tool_s - 15.0)
+
     arbiter_llm = _metered(routes["arbiter"]) if "arbiter" in routes else chat_llm
     distiller_llm = _metered(routes["distill"]) if "distill" in routes else chat_llm
     planner_llm = _metered(routes["context_planner"]) if "context_planner" in routes else chat_llm
@@ -320,11 +331,11 @@ def build_agent(
 
     async def _confirm(prompt: str) -> bool:
         """L2 confirmation via asking the user; no answer before timeout means
-        declined. The question timeout must stay below the tool deadline
-        (agent.execution.tool_deadline_s): otherwise the deadline kills the
-        whole call while the dialog is still open and the user never gets a
-        chance to approve."""
-        answer = await asker.ask(Question(prompt=prompt, kind="confirm", timeout_s=_CONFIRM_TIMEOUT_S))
+        declined. The question timeout is derived from the live tool deadline
+        so the dialog never outlives the call it guards."""
+        answer = await asker.ask(
+            Question(prompt=prompt, kind="confirm", timeout_s=_confirm_timeout_s())
+        )
         return bool(answer)
 
     async def _confirm_scoped(prompt: str, tool: str, target: str) -> str:
@@ -336,7 +347,7 @@ def build_agent(
                 prompt=prompt,
                 kind="choice",
                 options=("Allow once", "本次会话内允许", "总是允许(该工具+目标)"),
-                timeout_s=_CONFIRM_TIMEOUT_S,
+                timeout_s=_confirm_timeout_s(),
             )
         )
         mapping = {
