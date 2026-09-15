@@ -12,8 +12,9 @@ from agent.context.editor import iter_segments, render_segment_map
 
 
 class _FakeProfile:
-    def render(self) -> str:
-        return "偏好:简洁"
+    def render(self, max_chars: int = 800) -> str:
+        text = "偏好:简洁"
+        return text if len(text) <= max_chars else text[:max_chars] + "…"
 
 
 class _FakeMemory:

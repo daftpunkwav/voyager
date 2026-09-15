@@ -10,6 +10,16 @@ still echoed back (the settings page shows the current tier).
 
 from platform_settings import SettingDef, SettingType
 
+from agent.context.budgets import (
+    DIGEST_CHARS,
+    MCP_CHARS,
+    PAGE_CHARS,
+    PROFILE_CHARS,
+    SKILL_CHARS,
+    SKILL_MAX,
+    TASK_CHARS,
+)
+
 # Canonical key strings. Readers (outreach budget, trigger spawns, host
 # routing) import these constants instead of repeating the literals, so a
 # rename cannot silently detach a reader from its registered default.
@@ -310,6 +320,15 @@ DEFS = [
         description="Character cap of the resident relevance-memory layer",
     ),
     SettingDef(
+        key="agent.memory.profile_chars",
+        module="agent",
+        type=SettingType.INT,
+        default=PROFILE_CHARS,
+        min=0,
+        max=5000,
+        description="Character cap of the resident user-profile layer; 0 = off",
+    ),
+    SettingDef(
         key="agent.skills.organize_every",
         module="agent",
         type=SettingType.INT,
@@ -357,6 +376,60 @@ DEFS = [
         min=0,
         max=1_000_000,
         description="Per-tool-result line budget (either dimension spills); 0 disables the line dimension",
+    ),
+    SettingDef(
+        key="agent.context.skill_max",
+        module="agent",
+        type=SettingType.INT,
+        default=SKILL_MAX,
+        min=0,
+        max=500,
+        description="Resident skill-index entries shown in the system prompt; 0 = off",
+    ),
+    SettingDef(
+        key="agent.context.skill_chars",
+        module="agent",
+        type=SettingType.INT,
+        default=SKILL_CHARS,
+        min=0,
+        max=20_000,
+        description="Character cap of the resident skill-index layer; 0 = off",
+    ),
+    SettingDef(
+        key="agent.context.mcp_chars",
+        module="agent",
+        type=SettingType.INT,
+        default=MCP_CHARS,
+        min=0,
+        max=20_000,
+        description="Character cap of the MCP instruction layer; 0 = off",
+    ),
+    SettingDef(
+        key="agent.context.digest_chars",
+        module="agent",
+        type=SettingType.INT,
+        default=DIGEST_CHARS,
+        min=0,
+        max=10_000,
+        description="Character cap of the subagent digest layer; 0 = off",
+    ),
+    SettingDef(
+        key="agent.context.task_chars",
+        module="agent",
+        type=SettingType.INT,
+        default=TASK_CHARS,
+        min=0,
+        max=10_000,
+        description="Character cap of the task-brief layer; 0 = off",
+    ),
+    SettingDef(
+        key="agent.context.page_chars",
+        module="agent",
+        type=SettingType.INT,
+        default=PAGE_CHARS,
+        min=0,
+        max=5000,
+        description="Character cap of the page-awareness layer; 0 = off",
     ),
     SettingDef(
         key="agent.pricing.overrides",

@@ -570,6 +570,13 @@ def build_agent(
             plan_section=plan_gates.section_for(getattr(task, "session", "")),
             recall_section=recall,
             mcp_section=_mcp_section(),
+            skill_max=cards.skill_max,
+            skill_chars=cards.skill_chars,
+            profile_chars=cards.profile_chars,
+            task_chars=cards.task_chars,
+            digest_chars=cards.digest_chars,
+            page_chars=cards.page_chars,
+            mcp_chars=cards.mcp_chars,
         )
 
     spawner = Spawner(

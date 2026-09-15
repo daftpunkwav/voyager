@@ -37,6 +37,28 @@ MEMORY_CARD_CHARS = 600
 RECALL_FACTS = 4
 RECALL_CHARS = 600
 
+#: Resident skill-index layer defaults: max entries shown and the character
+#: cap of the whole layer (0 = off). The index would otherwise ride every
+#: turn unbounded as the workspace skill library grows.
+SKILL_MAX = 30
+SKILL_CHARS = 2000
+
+#: Server-declared MCP instruction layer character cap (0 = off).
+MCP_CHARS = 2000
+
+#: Subagent digest layer character cap (0 = off).
+DIGEST_CHARS = 2000
+
+#: User profile layer character cap (0 = off). Matches the previous
+#: hard-coded render default so existing prompts stay byte-identical.
+PROFILE_CHARS = 800
+
+#: Task-brief layer character cap (0 = off).
+TASK_CHARS = 1500
+
+#: Page-awareness layer character cap (0 = off).
+PAGE_CHARS = 800
+
 
 @dataclass(frozen=True)
 class ContextBudget:
@@ -57,6 +79,13 @@ class ContextBudget:
     memory_card_chars: int = MEMORY_CARD_CHARS  # character cap of that layer
     recall_facts: int = RECALL_FACTS  # relevance-layer hits for the current input
     recall_chars: int = RECALL_CHARS  # character cap of that layer
+    skill_max: int = SKILL_MAX  # resident skill-index entries shown
+    skill_chars: int = SKILL_CHARS  # character cap of that layer
+    mcp_chars: int = MCP_CHARS  # character cap of the MCP instruction layer
+    digest_chars: int = DIGEST_CHARS  # character cap of the subagent digest layer
+    profile_chars: int = PROFILE_CHARS  # character cap of the user profile layer
+    task_chars: int = TASK_CHARS  # character cap of the task-brief layer
+    page_chars: int = PAGE_CHARS  # character cap of the page-awareness layer
 
 
 def budget_from_settings(settings: SettingsReader, model_name: str = "") -> ContextBudget:
@@ -94,14 +123,28 @@ def budget_from_settings(settings: SettingsReader, model_name: str = "") -> Cont
         memory_card_chars=_int_or_zero("agent.memory.context_card_chars", MEMORY_CARD_CHARS),
         recall_facts=_int_or_zero("agent.memory.recall_facts", RECALL_FACTS),
         recall_chars=_int_or_zero("agent.memory.recall_chars", RECALL_CHARS),
+        skill_max=_int_or_zero("agent.context.skill_max", SKILL_MAX),
+        skill_chars=_int_or_zero("agent.context.skill_chars", SKILL_CHARS),
+        mcp_chars=_int_or_zero("agent.context.mcp_chars", MCP_CHARS),
+        digest_chars=_int_or_zero("agent.context.digest_chars", DIGEST_CHARS),
+        profile_chars=_int_or_zero("agent.memory.profile_chars", PROFILE_CHARS),
+        task_chars=_int_or_zero("agent.context.task_chars", TASK_CHARS),
+        page_chars=_int_or_zero("agent.context.page_chars", PAGE_CHARS),
     )
 
 
 __all__ = [
+    "DIGEST_CHARS",
+    "MCP_CHARS",
     "MEMORY_CARDS",
     "MEMORY_CARD_CHARS",
+    "PAGE_CHARS",
+    "PROFILE_CHARS",
     "RECALL_CHARS",
     "RECALL_FACTS",
+    "SKILL_CHARS",
+    "SKILL_MAX",
+    "TASK_CHARS",
     "ContextBudget",
     "budget_from_settings",
 ]
