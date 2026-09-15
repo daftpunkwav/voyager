@@ -7,7 +7,10 @@ class _Loader:
     def __init__(self) -> None:
         self.seen: list[int] = []
 
-    def recall(self, query: str, limit: int) -> list:
+    def skill_text(self, name: str) -> str:
+        return ""
+
+    def recall(self, query: str, limit: int = 8) -> list:
         self.seen.append(limit)
         return []
 

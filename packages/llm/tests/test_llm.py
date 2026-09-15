@@ -812,7 +812,7 @@ class TestMessageTranslation:
             )
 
         self._patch(monkeypatch, handler)
-        history = [
+        history: list[dict[str, Any]] = [
             {
                 "role": "assistant",
                 "content": "",

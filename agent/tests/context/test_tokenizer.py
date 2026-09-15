@@ -3,6 +3,7 @@ token, per-message frame overhead.
 """
 
 import json
+from typing import Any
 
 from agent.context.tokenizer import estimate_messages, estimate_text
 
@@ -69,7 +70,7 @@ class TestEstimateMessages:
 
     def test_malformed_thinking_ignored(self) -> None:
         """Non-list thinking_blocks or non-string thinking never raises."""
-        msgs = [
+        msgs: list[dict[str, Any]] = [
             {"role": "assistant", "content": "hi", "thinking_blocks": "junk"},
             {"role": "assistant", "content": "hi", "thinking_blocks": [{"type": "thinking"}]},
         ]
