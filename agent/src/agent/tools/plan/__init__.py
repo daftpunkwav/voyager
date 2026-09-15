@@ -9,6 +9,7 @@ from agent.tools.interact.question_broker import AskUser
 from agent.tools.plan.exit_plan_mode import exit_plan_mode_tool
 from agent.tools.plan.goal_read import goal_read_tool
 from agent.tools.plan.goal_write import goal_write_tool
+from agent.tools.plan.scratchpad import scratchpad_tool
 
 
 def plan_tools(gates: PlanGates, asker: AskUser) -> dict[str, AgentTool]:
@@ -22,4 +23,4 @@ def goal_tools(goals) -> dict[str, AgentTool]:
     return {goal_read.name: goal_read, goal_write.name: goal_write}
 
 
-__all__ = ["goal_tools", "plan_tools"]
+__all__ = ["goal_tools", "plan_tools", "scratchpad_tool"]

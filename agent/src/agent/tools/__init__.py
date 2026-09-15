@@ -23,9 +23,9 @@ from agent.tools.jobs import jobs_tools
 from agent.tools.memory import memory_tools, recall_memory_tool
 from agent.tools.net import web_tools
 from agent.tools.observe import observe_tools, session_retrieval_tools
-from agent.tools.plan import goal_tools, plan_tools
+from agent.tools.plan import goal_tools, plan_tools, scratchpad_tool
 from agent.tools.session import session_governance_tools, session_tools
-from agent.tools.skill import load_skill_tool
+from agent.tools.skill import load_skill_tool, propose_skill_tool
 from agent.tools.team import spawn_tool, team_tools
 from agent.tools.workspace import (
     DEFAULT_CATEGORIES,
@@ -64,9 +64,11 @@ __all__ = [
     "memory_tools",
     "observe_tools",
     "plan_tools",
+    "propose_skill_tool",
     "reach_out_tool",
     "recall_memory_tool",
     "request_context_tool",
+    "scratchpad_tool",
     "search_tools",
     "session_governance_tools",
     "session_retrieval_tools",

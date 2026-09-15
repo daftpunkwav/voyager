@@ -81,9 +81,11 @@ from agent.tools import (
     memory_tools,
     observe_tools,
     plan_tools,
+    propose_skill_tool,
     reach_out_tool,
     recall_memory_tool,
     request_context_tool,
+    scratchpad_tool,
     search_tools,
     session_governance_tools,
     session_retrieval_tools,
@@ -201,10 +203,22 @@ def _build_tools(
     req = request_context_tool(provide_context)
     registry.add(StaticToolSource("interact", {ask.name: ask, req.name: req}))
     skill = load_skill_tool(on_demand)
+    propose_skill = propose_skill_tool(workspace / "skills")
     recall = recall_memory_tool(on_demand)
-    registry.add(StaticToolSource("memory", {skill.name: skill, recall.name: recall}))
-    # Plan/todos: persisted under the workspace, shared across turns/instances
-    registry.add(StaticToolSource("plan", todo_tools(TodoStore(workspace / "todo.json"))))
+    registry.add(
+        StaticToolSource(
+            "memory",
+            {skill.name: skill, propose_skill.name: propose_skill, recall.name: recall},
+        )
+    )
+    # Plan/todos + scratchpad: persisted under the workspace, shared across turns/instances
+    scratchpad = scratchpad_tool(workspace)
+    registry.add(
+        StaticToolSource(
+            "plan",
+            {**todo_tools(TodoStore(workspace / "todo.json")), scratchpad.name: scratchpad},
+        )
+    )
     # LLM-driven context management: status + proactive compaction (resolve
     # the executing instance via the current_instance ContextVar)
     registry.add(StaticToolSource("context", context_tools()))

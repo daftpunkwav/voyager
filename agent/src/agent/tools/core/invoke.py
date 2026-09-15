@@ -141,7 +141,7 @@ def validate_arguments(tool: AgentTool, arguments: Any) -> str | None:
     (handlers treat it with their falsy/default handling).
     """
     if not isinstance(arguments, dict):
-        return f"[参数错误] {tool.name}: 参数必须是对象"
+        return f"[参数错误] {tool.name}: 参数必须是对象。请以合法对象形式传递参数。"
     schema = tool.schema or {}
     properties = schema.get("properties") or {}
     required = [k for k in (schema.get("required") or []) if isinstance(k, str)]
@@ -151,7 +151,8 @@ def validate_arguments(tool: AgentTool, arguments: Any) -> str | None:
         need = ", ".join(required) or "(无)"
         have = ", ".join(optional) or "(无)"
         return (
-            f"[参数错误] {tool.name}: 缺少必需参数 {', '.join(missing)}(需要: {need}; 可选: {have})"
+            f"[参数错误] {tool.name}: 缺少必需参数 {', '.join(missing)}(需要: {need}; 可选: {have})。"
+            "请根据 Schema 补全缺失参数后重试。"
         )
     for key, spec in properties.items():
         if not isinstance(spec, dict):
@@ -169,7 +170,10 @@ def validate_arguments(tool: AgentTool, arguments: Any) -> str | None:
             matched = isinstance(value, check)
         if not matched:
             actual = _TYPE_NAMES.get(type(value).__name__, type(value).__name__)
-            return f"[参数错误] {tool.name}: 参数 {key} 需要 {want},实际是 {actual}"
+            return (
+                f"[参数错误] {tool.name}: 参数 {key} 需要 {want},实际是 {actual}。"
+                f"请根据 Schema 修正 {key} 的类型后重试。"
+            )
     return None
 
 
@@ -182,6 +186,14 @@ async def invoke_detailed(view: ToolbeltView, call: ToolCall) -> ToolResult:
     """
     tool = view.tool(call.name)
     if tool is None:
+        # Check if the tool belongs to an unactivated domain or MCP
+        unactivated_hint = ""
+        if "__" in call.name:
+            domain_prefix = call.name.split("__")[0]
+            unactivated_hint = (
+                f";该工具可能属于 '{domain_prefix}' 积木域(尚未激活),"
+                f"可使用 activate_tools(domain='{domain_prefix}') 激活"
+            )
         # Repair hint: name-similar tools from the current roster, so a typo
         # or a bridged-name guess costs one corrected call instead of a stall
         candidates = difflib.get_close_matches(call.name, view.tools, n=3, cutoff=0.5)
@@ -189,7 +201,7 @@ async def invoke_detailed(view: ToolbeltView, call: ToolCall) -> ToolResult:
         return ToolResult(
             name=call.name,
             ok=False,
-            text=f"[未知工具] {call.name}(可能未授予本 subagent 或名称有误){hint}",
+            text=f"[未知工具] {call.name}(可能未授予本 subagent 或名称有误){unactivated_hint}{hint}",
             title=call.name,
         )
     invalid = validate_arguments(tool, call.arguments)
@@ -276,6 +288,21 @@ async def invoke_detailed(view: ToolbeltView, call: ToolCall) -> ToolResult:
         # loop; fold it into a text result for the LLM
         ok = False
         result = f"[熔断] {tool.name} 连续失败已暂停,请稍后重试"
+    except (ConnectionError, httpx.ConnectError) as exc:
+        ok = False
+        result = (
+            f"[积木服务离线] 工具 {tool.name} 所属的服务暂时不可用 (连接失败: {type(exc).__name__})。"
+            "建议：该积木服务可能未启动或已断开，请尝试使用本地纯文本/文件工具替代，或提示用户检查服务状态。"
+        )
+    except FileNotFoundError as exc:
+        ok = False
+        if tool.name.startswith("mcp__") or "__" in tool.name:
+            result = (
+                f"[积木服务离线] 工具 {tool.name} 所需的外部运行环境或可执行文件未找到 ({exc})。"
+                "建议：该积木运行环境缺失，请告知用户或使用本地其它工具替代。"
+            )
+        else:
+            result = f"[工具失败] {tool.name}: {type(exc).__name__}: {exc}"
     except Exception as exc:  # noqa: BLE001  # tool failures go back to the LLM as text results
         ok = False
         result = f"[工具失败] {tool.name}: {type(exc).__name__}: {exc}"

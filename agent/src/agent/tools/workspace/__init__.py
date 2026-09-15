@@ -20,6 +20,7 @@ from agent.tools.workspace.jail import Jail
 from agent.tools.workspace.list_dir import list_dir_tool
 from agent.tools.workspace.read_file import read_file_tool
 from agent.tools.workspace.run_shell import run_shell_tool
+from agent.tools.workspace.run_snippet import run_snippet_tool
 from agent.tools.workspace.todo_read import todo_read_tool
 from agent.tools.workspace.todo_store import TodoStore, read_plan
 from agent.tools.workspace.todo_write import todo_write_tool
@@ -89,8 +90,9 @@ def search_tools(
 
 
 def shell_tools(cwd: str | Path) -> dict[str, AgentTool]:
-    tool = run_shell_tool(cwd)
-    return {tool.name: tool}
+    shell = run_shell_tool(cwd)
+    snip = run_snippet_tool(cwd)
+    return {shell.name: shell, snip.name: snip}
 
 
 def todo_tools(store: TodoStore) -> dict[str, AgentTool]:
@@ -105,6 +107,7 @@ __all__ = [
     "ensure_workdir",
     "fs_tools",
     "read_plan",
+    "run_snippet_tool",
     "search_tools",
     "shell_tools",
     "todo_tools",

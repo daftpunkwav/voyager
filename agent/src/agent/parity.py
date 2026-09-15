@@ -66,6 +66,7 @@ AGENT_ONLY_TOOLS: dict[str, str] = {
     "grep": "workspace hand",
     "glob": "workspace hand",
     "run_shell": "workspace hand",
+    "run_snippet": "workspace hand (in-harness lightweight snippet execution for teaching and scratchpads)",
     "todo_write": "plan hand (human reads via todo_read)",
     "web_fetch": "network hand",
     "web_search": "network hand",
@@ -76,6 +77,8 @@ AGENT_ONLY_TOOLS: dict[str, str] = {
     "session_trace": "fork lineage reader (lineage is recorded for search, not a page)",
     "goal_read": "durable-goal status reader",
     "goal_write": "agent progress report (done/blocked only; lifecycle stays human-side)",
+    "scratchpad": "in-harness working scratchpad for intermediate thinking and step tracking",
+    "propose_skill": "proposes user skills from conversational experience, confirmed by human",
 }
 
 #: Transport-layer human surfaces that are not business capabilities and
