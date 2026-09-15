@@ -210,7 +210,7 @@ async def run_react(
             if overflow_retried:
                 return (
                     "[中断] 上下文压缩后仍超出模型窗口;"
-                    "请缩短输入、清理会话或在设置提高 agent.context.compress_budget。"
+                    "请缩短输入、清理会话，或检查 agent.context.window_tokens 与模型真实窗口是否一致。"
                 )
             overflow_retried = True
             if governor is not None:

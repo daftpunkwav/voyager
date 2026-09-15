@@ -250,6 +250,26 @@ class TestGovernor:
         assert await gov.compact(msgs, target=100_000) is None
         assert guard.allow_llm() is True
 
+    async def test_compact_resets_stale_provider_anchor(self) -> None:
+        """A successful compaction restructures the transcript in place, so the
+        pre-compact provider anchor is stale and must be dropped; otherwise the
+        status would pin above the trigger until the next LLM round reports."""
+        tracker = UsageTracker()
+        tracker.record(50_000)
+        gov = self._governor(FakeLLM(), tracker=tracker)
+        msgs = [{"role": "user", "content": "word " * 900}]
+        report = await gov.compact(msgs, target=10)
+        assert report is not None
+        assert tracker.last_reported == 0
+
+    async def test_noop_compact_keeps_anchor(self) -> None:
+        tracker = UsageTracker()
+        tracker.record(50_000)
+        gov = self._governor(FakeLLM(), tracker=tracker)
+        msgs = [{"role": "user", "content": "tiny"}]
+        assert await gov.compact(msgs, target=100_000) is None
+        assert tracker.last_reported == 50_000
+
 
 class TestReactIntegration:
     async def test_threshold_triggers_editor_before_round(self) -> None:

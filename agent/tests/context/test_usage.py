@@ -129,6 +129,15 @@ class TestUsageStatus:
         status2 = usage_status(window, [], tracker2, auto_compact_at=75)
         assert over_threshold(status2) is False
 
+    def test_reset_drops_stale_anchor_after_compaction(self) -> None:
+        tracker = UsageTracker()
+        tracker.record(90_000)
+        tracker.reset()
+        assert tracker.last_reported == 0
+        messages = [{"role": "user", "content": "hi"}]
+        status = usage_status(ContextWindow(200_000, 64_000), messages, tracker, auto_compact_at=75)
+        assert status["used_tokens"] == status["estimate_tokens"]
+
 
 class TestStatusLine:
     def test_line_carries_window_and_threshold(self) -> None:

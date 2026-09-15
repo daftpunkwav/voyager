@@ -105,6 +105,12 @@ class ContextGovernor:
             fallback_budget=self._fallback_budget,
             allow_llm=allow,
         )
+        if report is not None:
+            # The transcript was restructured in place: the provider anchor
+            # measured the pre-compact prefix and is now stale; drop it so
+            # the status reflects the shorter transcript instead of pinning
+            # above the trigger until the next LLM round reports.
+            self._tracker.reset()
         if self._guard is not None and allow and report is not None:
             # Only LLM attempts feed the guard; suppressed compactions ran
             # mechanically and prove nothing about the planner

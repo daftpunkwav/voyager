@@ -524,7 +524,7 @@ class TestOtherModes:
             compress_budget=100,
         )
         assert result.startswith("[中断]")
-        assert "compress_budget" in result
+        assert "window_tokens" in result
 
     async def test_readonly_batch_runs_in_parallel(self) -> None:
         """Two concurrent-safe calls in one round overlap in time; results are

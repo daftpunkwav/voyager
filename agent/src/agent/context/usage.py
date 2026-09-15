@@ -106,6 +106,14 @@ class UsageTracker:
         if input_tokens > 0:
             self.last_reported = max(self.last_reported, int(input_tokens))
 
+    def reset(self) -> None:
+        """Drop the provider anchor after the transcript was restructured
+        (compaction): the pre-compact rounds measured a longer prefix that no
+        longer exists, so keeping it would pin the status above the trigger
+        forever. Until the next provider report arrives, the local estimate
+        of the (now shorter) transcript anchors the status."""
+        self.last_reported = 0
+
 
 def usage_status(
     window: ContextWindow,

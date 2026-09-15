@@ -410,7 +410,10 @@ def build_agent(
     def _spill_result(result: str, tool: str) -> str:
         """Oversized tool-result budget: truncate to a preview and spill the
         full output under workspace/spill/ (read_file can pull it back); the
-        dual dimensions (chars/lines) hot-read settings, 0 disables."""
+        dual dimensions (chars/lines) hot-read settings, 0 disables. The
+        spill directory is bounded on every call (missing dir is a no-op),
+        not only when this result spilled, so old files cannot linger while
+        later results stay small."""
         limit = int(settings.get("agent.context.tool_result_max") or 0)
         max_lines = int(settings.get("agent.context.tool_result_max_lines") or 0)
         text = spill_result(
@@ -420,8 +423,7 @@ def build_agent(
             limit=limit,
             max_lines=max_lines,
         )
-        if text is not result:
-            bound_spill_dir(workspace / "spill", max_age_s=MAX_AGE_SECONDS)
+        bound_spill_dir(workspace / "spill", max_age_s=MAX_AGE_SECONDS)
         return text
 
     # spawn_subagent is not assembled here: it calls back into
