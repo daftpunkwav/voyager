@@ -207,6 +207,29 @@ class TestComplete:
         assert len(reply.tool_calls) == 1
         assert reply.tool_calls[0].id == "c1"
 
+    async def test_inline_array_block_yields_unique_ids(self) -> None:
+        """Multiple calls in one JSON-array block: synthesized ids stay unique
+        so per-id result pairing on the following turn is unambiguous."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": '<tool_call>[{"name": "a"}, {"name": "b"}]</tool_call>',
+                                "tool_calls": None,
+                            }
+                        }
+                    ],
+                },
+            )
+
+        reply = await _client(handler).complete(MSGS)
+        assert [c.id for c in reply.tool_calls] == ["inline_0", "inline_1"]
+        assert [c.name for c in reply.tool_calls] == ["a", "b"]
+
 
 class TestStream:
     async def test_deltas_aggregate_to_final(self) -> None:

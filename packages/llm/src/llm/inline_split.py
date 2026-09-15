@@ -147,12 +147,15 @@ def parse_tool_blocks(blocks: list[str]) -> list[dict[str, Any]]:
     """Tool-call block bodies -> normalized tool calls.
 
     Accepts one JSON object per block (``{"name", "arguments"}`` — the
-    MiniMax/HF tool-call shape) or a JSON array of them; synthesized ids
-    mark the origin. Unparseable blocks (the garbled echo variant) are
-    dropped with a warning — they never belong in the answer text.
+    MiniMax/HF tool-call shape; ``function.name`` / ``function.arguments``
+    are accepted too, matching the OpenAI-echo shape) or a JSON array of
+    them. Ids are synthesized uniquely per call so result pairing stays
+    unambiguous. Unparseable blocks (the garbled echo variant) are dropped
+    with a warning — they never belong in the answer text.
     """
     calls: list[dict[str, Any]] = []
-    for i, block in enumerate(blocks):
+    n = 0
+    for block in blocks:
         raw = block.strip()
         if not raw:
             continue
@@ -165,10 +168,11 @@ def parse_tool_blocks(blocks: list[str]) -> list[dict[str, Any]]:
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
-            name = str(entry.get("name") or entry.get("function", {}).get("name") or "")
+            fn = entry.get("function") or {}
+            name = str(entry.get("name") or fn.get("name") or "")
             if not name:
                 continue
-            args = entry.get("arguments")
+            args = entry.get("arguments", fn.get("arguments"))
             if isinstance(args, str):
                 try:
                     args = json.loads(args)
@@ -176,11 +180,12 @@ def parse_tool_blocks(blocks: list[str]) -> list[dict[str, Any]]:
                     args = {}
             calls.append(
                 {
-                    "id": f"inline_{i}",
+                    "id": f"inline_{n}",
                     "name": name,
                     "arguments": args if isinstance(args, dict) else {},
                 }
             )
+            n += 1
     return calls
 
 

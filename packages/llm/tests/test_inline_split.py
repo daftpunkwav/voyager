@@ -153,3 +153,20 @@ class TestParseToolBlocks:
     def test_non_dict_arguments_become_empty(self) -> None:
         calls = parse_tool_blocks(['{"name": "f", "arguments": [1, 2]}'])
         assert calls[0]["arguments"] == {}
+
+    def test_null_function_field_does_not_crash(self) -> None:
+        # Poisoned echo variant: "function": null must degrade to the flat
+        # shape (name wins), never raise
+        calls = parse_tool_blocks(['{"name": "f", "function": null}'])
+        assert calls == [{"id": "inline_0", "name": "f", "arguments": {}}]
+
+    def test_function_shape_fallback_for_name_and_arguments(self) -> None:
+        # OpenAI-echo shape inside the block: name/arguments live under function
+        calls = parse_tool_blocks(['{"function": {"name": "f", "arguments": "{\\"k\\": 1}"}}'])
+        assert calls == [{"id": "inline_0", "name": "f", "arguments": {"k": 1}}]
+
+    def test_array_entries_get_unique_ids(self) -> None:
+        # Two calls in one block: ids must stay unique or result pairing on
+        # the following turn is ambiguous
+        calls = parse_tool_blocks(['[{"name": "a"}, {"name": "b"}]'])
+        assert [c["id"] for c in calls] == ["inline_0", "inline_1"]

@@ -161,9 +161,11 @@ def _split_inline(text: str) -> tuple[str, str, list[str]]:
 def _parse_tool_blocks(blocks: list[str]) -> tuple[ToolCall, ...]:
     """Tool-call block bodies -> ToolCall tuple (MiniMax/HF JSON shape);
     unparseable blocks (the garbled echo variant) are dropped with a
-    warning — they never belong in the answer text."""
+    warning — they never belong in the answer text. Ids are synthesized
+    uniquely per call so result pairing stays unambiguous."""
     calls: list[ToolCall] = []
-    for i, block in enumerate(blocks):
+    n = 0
+    for block in blocks:
         raw = block.strip()
         if not raw:
             continue
@@ -185,11 +187,12 @@ def _parse_tool_blocks(blocks: list[str]) -> tuple[ToolCall, ...]:
                 args = _safe_json(args)
             calls.append(
                 ToolCall(
-                    id=f"inline_{i}",
+                    id=f"inline_{n}",
                     name=name,
                     arguments=args if isinstance(args, dict) else {},
                 )
             )
+            n += 1
     return tuple(calls)
 
 
