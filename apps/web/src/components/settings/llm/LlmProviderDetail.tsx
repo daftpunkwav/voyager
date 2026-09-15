@@ -111,6 +111,10 @@ export function LlmProviderDetail({
     if (provider.default_model === model) {
       patch.default_model = next[0] ?? '';
     }
+    if (provider.models_meta && model in provider.models_meta) {
+      const { [model]: _, ...rest } = provider.models_meta;
+      patch.models_meta = rest;
+    }
     run(() => onPatch(patch));
   };
 
