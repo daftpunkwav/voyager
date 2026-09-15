@@ -46,6 +46,76 @@ _RETRY_AFTER_CAP = 5.0
 #: been accepted by the server, so retrying only stacks up waiting time.
 _NO_RETRY_NET = (httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout)
 
+_THINK_OPEN = "<think>"
+_THINK_CLOSE = "</think>"
+
+
+def _partial_tag_len(buf: str, tag: str) -> int:
+    """Length of the longest suffix of buf that is a proper prefix of tag."""
+    for k in range(min(len(buf), len(tag) - 1), 0, -1):
+        if buf.endswith(tag[:k]):
+            return k
+    return 0
+
+
+class _ThinkSplitter:
+    """Splits inline ``<think>...</think>`` reasoning out of content deltas
+    (MiniMax-style endpoints inline thinking in content instead of a
+    reasoning_content field). Tags may arrive split across chunks, hence the
+    carry-tail state machine. Same semantics as packages/llm's
+    think_split.ThinkSplitter (duplicated: agent -> packages imports are
+    forbidden by the import-linter contract)."""
+
+    def __init__(self) -> None:
+        self._in_think = False
+        self._tail = ""
+
+    def feed(self, text: str) -> tuple[str, str]:
+        """Feed one content delta; returns ``(answer_delta, reasoning_delta)``."""
+        buf = self._tail + text
+        self._tail = ""
+        answer: list[str] = []
+        reasoning: list[str] = []
+        while True:
+            if self._in_think:
+                end = buf.find(_THINK_CLOSE)
+                if end >= 0:
+                    reasoning.append(buf[:end])
+                    buf = buf[end + len(_THINK_CLOSE) :]
+                    self._in_think = False
+                    continue
+                keep = _partial_tag_len(buf, _THINK_CLOSE)
+                reasoning.append(buf[: len(buf) - keep])
+                self._tail = buf[len(buf) - keep :]
+                return "".join(answer), "".join(reasoning)
+            start = buf.find(_THINK_OPEN)
+            if start >= 0:
+                answer.append(buf[:start])
+                buf = buf[start + len(_THINK_OPEN) :]
+                self._in_think = True
+                continue
+            keep = _partial_tag_len(buf, _THINK_OPEN)
+            answer.append(buf[: len(buf) - keep])
+            self._tail = buf[len(buf) - keep :]
+            return "".join(answer), "".join(reasoning)
+
+    def flush(self) -> tuple[str, str]:
+        """Drain the carry tail at end of stream; call once before aggregating."""
+        text, self._tail = self._tail, ""
+        if not text:
+            return "", ""
+        if self._in_think:
+            return "", text
+        return text, ""
+
+
+def _split_inline_think(text: str) -> tuple[str, str]:
+    """One-shot split of a whole content string; returns ``(answer, reasoning)``."""
+    splitter = _ThinkSplitter()
+    answer, reasoning = splitter.feed(text)
+    tail_answer, tail_reasoning = splitter.flush()
+    return answer + tail_answer, reasoning + tail_reasoning
+
 
 def _retryable_status(status: int) -> bool:
     """Transient server-side failures worth another attempt: 429 rate
@@ -245,11 +315,12 @@ class HttpLLM:
         choices = data.get("choices") or []
         msg = (choices[0].get("message") or {}) if choices else {}
         usage = data.get("usage") or {}
+        answer, inline_reasoning = _split_inline_think(str(msg.get("content") or ""))
         return LLMReply(
-            text=str(msg.get("content") or "") or None,
+            text=answer or None,
             tool_calls=_parse_tool_calls(msg.get("tool_calls")),
             usage=_parse_usage(usage),
-            reasoning=str(msg.get("reasoning_content") or ""),
+            reasoning=str(msg.get("reasoning_content") or "") + inline_reasoning,
         )
 
     async def complete(
@@ -325,6 +396,7 @@ class HttpLLM:
         text_parts: list[str] = []
         calls_by_index: dict[int, dict[str, Any]] = {}
         reasoning_parts: list[str] = []
+        think = _ThinkSplitter()
         usage: dict[str, Any] = {}
         emitted = False
         attempt = 0
@@ -368,9 +440,16 @@ class HttpLLM:
                             for choice in chunk.get("choices") or []:
                                 delta = choice.get("delta") or {}
                                 if delta.get("content"):
-                                    text_parts.append(delta["content"])
-                                    emitted = True
-                                    yield StreamReply(text_delta=delta["content"])
+                                    answer, inline_reasoning = think.feed(delta["content"])
+                                    if answer:
+                                        text_parts.append(answer)
+                                        emitted = True
+                                        yield StreamReply(text_delta=answer)
+                                    if inline_reasoning:
+                                        # Inline <think> reasoning joins the
+                                        # reasoning channel, never the answer.
+                                        reasoning_parts.append(inline_reasoning)
+                                        yield StreamReply(reasoning_delta=inline_reasoning)
                                 if delta.get("reasoning_content"):
                                     # Own channel like the aggregate path: never
                                     # merged into the answer text stream.
@@ -437,6 +516,11 @@ class HttpLLM:
             )
             for i in sorted(calls_by_index)
         )
+        tail_answer, tail_reasoning = think.flush()
+        if tail_answer:
+            text_parts.append(tail_answer)
+        if tail_reasoning:
+            reasoning_parts.append(tail_reasoning)
         text = "".join(text_parts)
         reasoning = "".join(reasoning_parts)
         if calls:
