@@ -10,8 +10,10 @@ Splits read-only file operations into three endpoints:
   of the local filesystem is acceptable for this single-user local
   deployment; the web directory picker makes the same containment trade.
 
-All endpoints are read-only; selecting a workspace goes through the
-existing settings.set_setting capability (user-only key).
+All endpoints are read-only; switching the workspace root goes through
+POST /api/workspace/switch (host-owned router: validates, rebuilds the
+agent around the new root without a service restart, and persists
+agent.workspace.dir itself).
 """
 
 from __future__ import annotations

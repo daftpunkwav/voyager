@@ -224,10 +224,13 @@
   "network.domainsSaveFailed": "保存白名单失败：{{message}}",
 
   "workspace.title": "工作目录",
-  "workspace.desc": "相对仓库根，默认 workspace；与资源库共用。保存后需重启开发服务才切换。",
+  "workspace.desc": "相对仓库根，默认 workspace。保存即热切换 agent，无需重启；笔记等应用数据不受影响。",
   "workspace.invalidPath": "工作目录不允许包含 .. 段",
   "workspace.saved": "已保存。重启开发服务后，文件工具与资源库会用新目录。",
   "workspace.saveFailed": "保存工作目录失败：{{message}}",
+  "workspace.switchConfirm": "切换工作区会重建 agent（进行中任务将被打断，会话与历史保留；笔记等应用数据不受影响）。继续？",
+  "workspace.switched": "工作区已热切换，无需重启。",
+  "workspace.switchFailed": "切换工作区失败：{{message}}",
 
   "fsroots.invalidPath": "「{{line}}」不是绝对路径：一行填一个绝对路径（如 D:\\docs 或 /home/me/docs），不允许 .. 段",
   "fsroots.dirCount": "{{count}} 个目录",

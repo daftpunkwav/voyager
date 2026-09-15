@@ -175,19 +175,54 @@ describe('network permission (phase-10)', () => {
   });
 });
 
-describe('workspace directory (phase-10)', () => {
-  it('saving writes agent.workspace.dir', async () => {
-    renderSection();
-    await waitDraft('工作目录', 'workspace');
+describe('workspace directory (phase-10, hot-switch)', () => {
+  it('saving hot-switches through the switch endpoint after confirming', async () => {
+    const confirmMock = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ workspace: 'ws2' }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      renderSection();
+      await waitDraft('工作目录', 'workspace');
 
-    fireEvent.change(screen.getByLabelText('工作目录'), { target: { value: 'ws2' } });
-    fireEvent.blur(screen.getByLabelText('工作目录'));
-    await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('settings', 'set_setting', {
-        key: 'agent.workspace.dir',
-        value: 'ws2',
-      })
-    );
+      fireEvent.change(screen.getByLabelText('工作目录'), { target: { value: 'ws2' } });
+      fireEvent.blur(screen.getByLabelText('工作目录'));
+      await waitFor(() => expect(confirmMock).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith(
+          '/api/workspace/switch',
+          expect.objectContaining({ method: 'POST' })
+        )
+      );
+      const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body ?? '{}'));
+      expect(body).toEqual({ dir: 'ws2' });
+      await waitFor(() =>
+        expect(useUIStore.getState().toasts.some((t) => t.type === 'success')).toBe(true)
+      );
+    } finally {
+      confirmMock.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('cancelling the confirm sends no switch request', async () => {
+    const confirmMock = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      renderSection();
+      await waitDraft('工作目录', 'workspace');
+
+      fireEvent.change(screen.getByLabelText('工作目录'), { target: { value: 'ws2' } });
+      fireEvent.blur(screen.getByLabelText('工作目录'));
+      await waitFor(() => expect(confirmMock).toHaveBeenCalled());
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      confirmMock.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('paths containing ".." segments are rejected without a request', async () => {

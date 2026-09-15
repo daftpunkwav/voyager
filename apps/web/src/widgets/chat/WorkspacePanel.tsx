@@ -3,10 +3,9 @@
  * @description Chat side panel workspace section: shows the configured agent
  * workspace, a lazy-loading file tree (directories expand, files preview a
  * capped text view), and a machine-wide directory chooser (drives/home/
- * crumbs navigation) for picking a new workspace root. Selecting persists
- * through the user-only agent.workspace.dir setting; the directory binds at
- * service startup, so a change takes effect after a backend restart — the
- * UI says so instead of pretending it hot-swaps.
+ * crumbs navigation) for picking a new workspace root. Picking hot-switches
+ * the agent (rebuild, no service restart) through POST /api/workspace/switch,
+ * which persists agent.workspace.dir itself.
  */
 
 import { useEffect, useState } from 'react';
@@ -18,6 +17,7 @@ import {
   listWorkspace,
   pickDirectory,
   readWorkspaceFile,
+  switchWorkspace,
 } from '@/api/workspace';
 
 const SETTING_KEY = 'agent.workspace.dir';
@@ -219,12 +219,20 @@ export function WorkspaceSection() {
     setSaving(true);
     setError(null);
     try {
-      await callCapability('settings', 'set_setting', { key: SETTING_KEY, value: next });
-      setValue(next);
+      // Hot-switch rebuilds the agent (in-flight turns are drained); confirm
+      // first since the switch interrupts running work.
+      if (!window.confirm(t('chat:workspace.switchConfirm'))) return;
+      const res = await switchWorkspace(next);
+      setValue(res.workspace);
       setEditing(false);
       setSaved(true);
+      setTree({});
+      setExpanded({});
+      const tree = await listWorkspace('');
+      if (!tree.error) setTree({ '': tree.entries });
+      else setError(tree.error.message);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('chat:workspace.saveFailed'));
+      setError(err instanceof Error ? err.message : t('chat:workspace.switchFailed'));
     } finally {
       setSaving(false);
     }

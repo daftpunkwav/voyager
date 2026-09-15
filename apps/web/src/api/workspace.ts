@@ -1,8 +1,10 @@
 /**
  * @file workspace.ts
  * @description Workspace browsing (gateway read-only endpoints): directory
- * listing inside the workspace for the file tree, capped text preview, and a
- * machine-wide directory picker used to choose a new workspace root.
+ * listing inside the workspace for the file tree, capped text preview, a
+ * machine-wide directory picker used to choose a new workspace root, and
+ * the hot-switch endpoint that rebuilds the agent around the new root
+ * without restarting the service.
  */
 
 export interface WorkspaceEntry {
@@ -46,4 +48,26 @@ export interface PickResult {
 
 export async function pickDirectory(path = ''): Promise<PickResult & MaybeError> {
   return callRest(`/api/workspace/pick?path=${encodeURIComponent(path)}`);
+}
+
+export interface SwitchResult {
+  workspace: string;
+  previous?: string;
+  note?: string;
+}
+
+/** Hot-switch the agent workspace: validates, rebuilds the agent around the
+ *  new root, persists agent.workspace.dir and rebinds workspace routes.
+ *  Throws the backend message on failure (validation / rebuild errors). */
+export async function switchWorkspace(dir: string): Promise<SwitchResult> {
+  const resp = await fetch('/api/workspace/switch', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ dir }),
+  });
+  const data = (await resp.json().catch(() => ({}))) as SwitchResult & MaybeError;
+  if (!resp.ok || data.error) {
+    throw new Error(data.error?.message ?? `workspace switch failed (${resp.status})`);
+  }
+  return data;
 }

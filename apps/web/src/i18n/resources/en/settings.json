@@ -224,10 +224,13 @@
   "network.domainsSaveFailed": "Failed to save the whitelist: {{message}}",
 
   "workspace.title": "Working directory",
-  "workspace.desc": "Relative to the repo root, default workspace; shared with the resource library. Restart the dev service after saving to switch.",
+  "workspace.desc": "Relative to the repo root, default workspace. Saving hot-switches the agent with no restart; app data like notes is unaffected.",
   "workspace.invalidPath": "The working directory must not contain \"..\" segments",
   "workspace.saved": "Saved. After restarting the dev service, file tools and the resource library will use the new directory.",
   "workspace.saveFailed": "Failed to save the working directory: {{message}}",
+  "workspace.switchConfirm": "Switching the workspace rebuilds the agent (running turns are interrupted; sessions and history are kept; app data like notes is unaffected). Continue?",
+  "workspace.switched": "Workspace switched without a restart.",
+  "workspace.switchFailed": "Failed to switch workspace: {{message}}",
 
   "fsroots.invalidPath": "\"{{line}}\" is not an absolute path: one absolute path per line (e.g. D:\\docs or /home/me/docs), no \"..\" segments",
   "fsroots.dirCount": "{{count}} directories",

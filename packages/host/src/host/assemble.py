@@ -45,6 +45,7 @@ from platform_eventbus import EventBus, EventLog
 from platform_secrets import SecretStore
 from platform_settings import SettingsStore
 
+from .agent_rebuild import AgentRebuilder, _teardown_agent, build_switch_router
 from .bridge import make_domain_tools
 from .call import bind_calls
 from .embedder_adapter import ServiceEmbedder
@@ -125,6 +126,7 @@ class Backend:
     log: EventLog
     secrets: SecretStore
     settings_store: SettingsStore
+    agent_rebuilder: Any = None  # restartless workspace-switch holder (None in tests not opting in)
 
 
 def _resolve_workspace(
@@ -305,7 +307,11 @@ def build(
             MountSpec(domain=name, registry=w.registry, probe=w.probe, extra_router=w.extra_router)
             for name, w in wirings.items()
         ]
-        extra_routers = [build_upload_router(workspace), build_workspace_router(workspace)]
+        extra_routers = [
+            build_upload_router(workspace),
+            build_workspace_router(workspace),
+            build_switch_router(),
+        ]
         agent = build_agent(
             data_dir=data_root / "agent",
             workspace_dir=workspace,
@@ -334,49 +340,74 @@ def build(
                 probe=lambda: {"status": "up"},
             )
         )
+        # Restartless workspace switching: the holder owns everything a new
+        # agent generation needs plus the live generation's task handles, all
+        # rotated under one lock (see host.agent_rebuild). domain_mounts is
+        # snapshotted before the agent mount above so a rebuild never feeds
+        # the agent's own registry back into its domain tools.
+        rebuilder = AgentRebuilder(
+            root=ROOT,
+            data_agent_dir=data_root / "agent",
+            bus=bus,
+            event_log=event_log,
+            settings_store=settings_store,
+            domain_mounts=[m for m in mounts if m.domain != "agent"],
+            call=call,
+            call_sync=call_sync,
+            audit=audit,
+            quota=quota,
+            issuer=issuer,
+            injected_llm=llm,
+            agent=built,
+        )
 
         @asynccontextmanager
         async def lifespan(_app: FastAPI):
-            mcp_task = None
-            agent_task = None
+            async with rebuilder.lock:
+                try:
+                    await start_wirings(wirings)
+                    rebuilder.mcp_task = asyncio.create_task(built.mcp.start())
+                    rebuilder.agent_task = asyncio.create_task(built.loop.run())
+                    with suppress(Exception):
+                        await built.start_queue_loop()
+                except BaseException:
+                    await _teardown_agent(built, rebuilder.agent_task, rebuilder.mcp_task)
+                    rebuilder.agent_task = None
+                    rebuilder.mcp_task = None
+                    rebuilder.agent = None
+                    await stop_wirings(list(wirings.values()))
+                    close_wirings(list(wirings.values()))
+                    close_quietly(built, what="agent")
+                    close_quietly(secrets, what="secrets")
+                    close_quietly(settings_store, what="settings_store")
+                    for i, sink in enumerate(audit):
+                        close_quietly(sink, what=f"audit[{i}]")
+                    close_quietly(event_log, what="event_log")
+                    raise
             try:
-                await start_wirings(wirings)
-                mcp_task = asyncio.create_task(built.mcp.start())
-                agent_task = asyncio.create_task(built.loop.run())
-                with suppress(Exception):
-                    await built.start_queue_loop()
                 yield
             finally:
-                built.loop.stop()
-                if agent_task is not None:
-                    agent_task.cancel()
-                    with suppress(asyncio.CancelledError):
-                        await agent_task
-                if mcp_task is not None:
-                    mcp_task.cancel()
-                    with suppress(asyncio.CancelledError):
-                        await mcp_task
-                if built is not None:
-                    with suppress(Exception):
-                        await built.scheduler.stop_queue()
-                    # Drain in-flight chat turns before closing stores: their
-                    # worker threads may still write sqlite after the loop is
-                    # gone (use-after-close is a hard crash on Windows)
-                    with suppress(Exception):
-                        await built.drain()
-                    # Reap timers and named tasks AFTER the drain grace
-                    # window: a pending timer firing between drain and store
-                    # close would touch already-closed sqlite connections.
-                    with suppress(Exception):
-                        await built.scheduler.shutdown()
-                await stop_wirings(list(wirings.values()))
-                close_wirings(list(wirings.values()))
-                close_quietly(built, what="agent")
-                close_quietly(secrets, what="secrets")
-                close_quietly(settings_store, what="settings_store")
-                for i, sink in enumerate(audit):
-                    close_quietly(sink, what=f"audit[{i}]")
-                close_quietly(event_log, what="event_log")
+                # Shutdown tears down the CURRENT generation (a workspace
+                # switch may have replaced the startup one), serialized with
+                # concurrent switches.
+                async with rebuilder.lock:
+                    current = rebuilder.agent
+                    agent_task = rebuilder.agent_task
+                    mcp_task = rebuilder.mcp_task
+                    rebuilder.agent = None
+                    rebuilder.agent_task = None
+                    rebuilder.mcp_task = None
+                    if current is not None:
+                        await _teardown_agent(current, agent_task, mcp_task)
+                    await stop_wirings(list(wirings.values()))
+                    close_wirings(list(wirings.values()))
+                    if current is not None:
+                        close_quietly(current, what="agent")
+                    close_quietly(secrets, what="secrets")
+                    close_quietly(settings_store, what="settings_store")
+                    for i, sink in enumerate(audit):
+                        close_quietly(sink, what=f"audit[{i}]")
+                    close_quietly(event_log, what="event_log")
 
         app = gateway_create(
             mounts,
@@ -401,7 +432,9 @@ def build(
             log=event_log,
             secrets=secrets,
             settings_store=settings_store,
+            agent_rebuilder=rebuilder,
         )
+        app.state.agent_rebuilder = rebuilder
         return app
     except BaseException:
         _release_partial(

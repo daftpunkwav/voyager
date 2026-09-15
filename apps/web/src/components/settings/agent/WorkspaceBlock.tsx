@@ -3,21 +3,24 @@
  * @description Settings block for the agent working directory (agent.workspace.dir), shared with the resource library.
  *
  * Responsibilities:
- * - Load and save agent.workspace.dir with validation
- * - Toast invalid input and save outcomes
+ * - Load and hot-switch agent.workspace.dir with validation
+ * - Toast invalid input and switch outcomes
  *
+ * Switching goes through POST /api/workspace/switch (validates, rebuilds
+ * the agent without a service restart, persists the setting itself).
  * Backend access goes through the capability bridge and api helpers; no direct fetch.
  */
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { switchWorkspace } from '@/api/workspace';
 import { callCapability } from '@/bridge/client';
 import { useUIStore } from '@/stores/uiStore';
 import { extractErrorMessage } from '@/utils/errors';
 import { WORKDIR_KEY } from './constants';
 import type { SettingItem } from './types';
 
-/** Working directory (agent.workspace.dir): relative to the repo root; a restart is required to switch the jail after saving */
+/** Working directory (agent.workspace.dir): relative to the repo root; saving hot-switches the agent, no restart needed */
 export function WorkspaceBlock() {
   const { t } = useTranslation('settings');
   const addToast = useUIStore((s) => s.addToast);
@@ -45,18 +48,18 @@ export function WorkspaceBlock() {
       addToast({ type: 'warning', message: t('workspace.invalidPath') });
       return;
     }
-    callCapability<SettingItem<string>>('settings', 'set_setting', {
-      key: WORKDIR_KEY,
-      value: next,
-    })
-      .then(() => {
-        setWorkdir(next);
-        addToast({ type: 'success', message: t('workspace.saved') });
+    // Hot-switch rebuilds the agent (in-flight turns are drained); confirm
+    // first since the switch interrupts running work.
+    if (!window.confirm(t('workspace.switchConfirm'))) return;
+    switchWorkspace(next)
+      .then((res) => {
+        setWorkdir(res.workspace);
+        addToast({ type: 'success', message: t('workspace.switched') });
       })
       .catch((err) => {
         addToast({
           type: 'error',
-          message: t('workspace.saveFailed', { message: extractErrorMessage(err) }),
+          message: t('workspace.switchFailed', { message: extractErrorMessage(err) }),
         });
       });
   };
