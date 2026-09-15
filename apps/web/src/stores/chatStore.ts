@@ -37,6 +37,7 @@ import { create } from 'zustand';
 import { i18n } from '@/i18n';
 import { routes } from '@/utils/routes';
 import { groupTrails } from '@/utils/trajectory';
+import type { ChatSessionRow } from '@/api/agent';
 
 export interface ChatMessage {
   seq: number;
@@ -155,16 +156,9 @@ export interface TurnTrail {
   steps: TurnStep[];
 }
 
-/** One row of the session list (agent.list_sessions payload). */
-export interface SessionRow {
-  session_id: string;
-  title: string;
-  persona?: string;
-  status: string;
-  active?: boolean;
-  turns?: number | null;
-  updated_at?: number | null;
-}
+/** One row of the session list (agent.session_list payload); mirrors the api
+ *  layer's ChatSessionRow instead of re-declaring the shape. */
+export type SessionRow = ChatSessionRow;
 
 /** Archived state of an inactive session (the active session lives in the
  *  top-level fields; switching swaps them). */
