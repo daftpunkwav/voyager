@@ -128,6 +128,9 @@ class DomainEvent:
     SETTINGS_CHANGED = "settings.changed"
     LLM_FALLBACK = "llm.fallback"
     GRAPH_ENGINE_FALLBACK = "graph.engine.fallback"
+    DOC_CREATED = "doc.created"
+    DOC_EDITED = "doc.edited"
+    DOC_DELETED = "doc.deleted"
     SERVICE_HEALTH_CHANGED = "service.health.changed"
 
 

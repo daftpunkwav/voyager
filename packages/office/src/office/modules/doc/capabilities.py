@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from platform_capability import Registry, capability
-from platform_contracts import ActorKind, ActorRef, ErrorSuffix, Event, ServiceError
+from platform_contracts import ActorKind, ActorRef, DomainEvent, ErrorSuffix, Event, ServiceError
 from platform_eventbus import EventBus
 
 from ...store import DocumentStore
@@ -59,7 +59,7 @@ async def _emit(type_: str, did: str, **payload) -> None:
 async def create_doc(title: str, blocks: list[dict] | None = None) -> dict[str, Any]:
     deps = _require_deps()
     doc = deps.store.create(title, "doc", blocks)
-    await _emit("doc.created", doc["id"], title=title)
+    await _emit(DomainEvent.DOC_CREATED, doc["id"], title=title)
     return doc
 
 
@@ -73,7 +73,7 @@ async def update_doc(doc_id: str, blocks: list[dict]) -> dict[str, Any]:
     deps = _require_deps()
     _require_doc(doc_id)
     doc = deps.store.update(doc_id, blocks=blocks)
-    await _emit("doc.edited", doc_id)
+    await _emit(DomainEvent.DOC_EDITED, doc_id)
     return doc
 
 
@@ -84,7 +84,7 @@ async def insert_block(doc_id: str, index: int, block: dict) -> dict[str, Any]:
     blocks: list[dict] = doc["blocks"]
     blocks.insert(max(0, min(index, len(blocks))), block)
     doc = deps.store.update(doc_id, blocks=blocks)
-    await _emit("doc.edited", doc_id)
+    await _emit(DomainEvent.DOC_EDITED, doc_id)
     return doc
 
 
@@ -93,7 +93,7 @@ async def delete_doc(doc_id: str) -> dict[str, Any]:
     deps = _require_deps()
     doc = _require_doc(doc_id)
     deps.store.delete(doc_id)
-    await _emit("doc.deleted", doc_id, title=doc["title"])
+    await _emit(DomainEvent.DOC_DELETED, doc_id, title=doc["title"])
     return {"deleted": doc_id, "title": doc["title"]}
 
 

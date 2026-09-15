@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from platform_capability import Registry, capability
-from platform_contracts import ActorKind, ActorRef, ErrorSuffix, Event, ServiceError
+from platform_contracts import ActorKind, ActorRef, DomainEvent, ErrorSuffix, Event, ServiceError
 from platform_eventbus import EventBus
 
 from ...store import DocumentStore
@@ -59,7 +59,7 @@ async def _emit(type_: str, did: str, **payload) -> None:
 async def create_deck(title: str, slides: list[dict] | None = None) -> dict[str, Any]:
     deps = _require_deps()
     deck = deps.store.create(title, "slides", slides)
-    await _emit("doc.created", deck["id"], title=title)
+    await _emit(DomainEvent.DOC_CREATED, deck["id"], title=title)
     return deck
 
 
@@ -73,7 +73,7 @@ async def update_deck(deck_id: str, slides: list[dict]) -> dict[str, Any]:
     deps = _require_deps()
     _require_deck(deck_id)
     deck = deps.store.update(deck_id, blocks=slides)
-    await _emit("doc.edited", deck_id)
+    await _emit(DomainEvent.DOC_EDITED, deck_id)
     return deck
 
 
@@ -84,7 +84,7 @@ async def add_slide(deck_id: str, slide: dict) -> dict[str, Any]:
     slides: list[dict] = deck["blocks"]
     slides.append(slide)
     deck = deps.store.update(deck_id, blocks=slides)
-    await _emit("doc.edited", deck_id)
+    await _emit(DomainEvent.DOC_EDITED, deck_id)
     return deck
 
 
@@ -93,7 +93,7 @@ async def delete_deck(deck_id: str) -> dict[str, Any]:
     deps = _require_deps()
     deck = _require_deck(deck_id)
     deps.store.delete(deck_id)
-    await _emit("doc.deleted", deck_id, title=deck["title"])
+    await _emit(DomainEvent.DOC_DELETED, deck_id, title=deck["title"])
     return {"deleted": deck_id, "title": deck["title"]}
 
 
