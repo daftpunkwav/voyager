@@ -44,6 +44,7 @@ from agent.subagent.modes.base import (
     StepCb,
     counting_step,
     noop_event,
+    reasoning_detail,
     round_text_detail,
     tool_detail,
 )
@@ -246,9 +247,16 @@ async def run_react(
                 "input_tokens": reply.usage.input_tokens,
                 "output_tokens": reply.usage.output_tokens,
                 "cached_tokens": reply.usage.cached_tokens,
+                # Degraded rounds (quota / provider-failure placeholders) are
+                # real steps, but the turn close-out must not present their
+                # text as a normal answer (see turn._turn_degraded).
+                "degraded": bool(reply.degraded),
                 # Full round output so the chat UI can show the complete
                 # thinking text, not just the 120-char summary prefix
                 **round_text_detail(reply.text or ""),
+                # Model thinking on its own channel (never mixed into text);
+                # empty when the provider sent no separate reasoning stream
+                **reasoning_detail(reply.reasoning or ""),
                 # The adapter-resolved model: model switches become visible
                 # in the trajectory round by round
                 **({"model": reply.model} if getattr(reply, "model", "") else {}),
@@ -309,17 +317,21 @@ async def run_react(
         # Neutral back-fill: one assistant entry carrying this round's tool_calls
         # (with ids), then one result entry per call carrying the same
         # tool_call_id; wire formats per provider (OpenAI tool_call_id /
-        # Anthropic tool_use_id) are translated by the packages/llm client
-        messages.append(
-            {
-                "role": "assistant",
-                "content": reply.text or "",
-                "tool_calls": [
-                    {"id": call.id, "name": call.name, "arguments": call.arguments}
-                    for call in executable
-                ],
-            }
-        )
+        # Anthropic tool_use_id) are translated by the packages/llm client.
+        # Stored thinking blocks ride along for verbatim echo-back while tool
+        # use continues (extended thinking); attached only when present so
+        # chat-format payloads never gain unknown message fields.
+        assistant_entry: dict[str, Any] = {
+            "role": "assistant",
+            "content": reply.text or "",
+            "tool_calls": [
+                {"id": call.id, "name": call.name, "arguments": call.arguments}
+                for call in executable
+            ],
+        }
+        if reply.thinking_blocks:
+            assistant_entry["thinking_blocks"] = [dict(b) for b in reply.thinking_blocks]
+        messages.append(assistant_entry)
         tool_calls_used += len(executable)
         if len(executable) > 1 and all(toolbelt.concurrent_safe(c.name) for c in executable):
             # Read-only batch: run in parallel, back-fill in call order so the

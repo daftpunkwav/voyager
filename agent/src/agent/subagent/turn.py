@@ -32,6 +32,16 @@ class PauseRequested(Exception):
     cooperative pause; run_turn turns it into the PAUSED state + event."""
 
 
+def _turn_degraded(inst: SubagentInstance) -> bool:
+    """Whether this turn's latest LLM round was harness degradation text
+    (quota / provider failure) rather than model output. Read back from the
+    round step trail instead of sniffing reply-text prefixes."""
+    for step in reversed(inst.state.steps):
+        if step.kind == "llm":
+            return bool((step.detail or {}).get("degraded"))
+    return False
+
+
 async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
     """Run one turn (conversational = one Q/A round; task = run to completion)."""
     was_paused = inst.state.status is RunStatus.PAUSED
@@ -129,7 +139,7 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
         # in the running state forever (the reply sink is success-only).
         if inst.task.conversational and inst.reply_sink is not None:
             try:
-                await inst.reply_sink("[已中断] 本回合被中断;可重新发送或换个说法继续。")
+                await inst.reply_sink("[已中断] 本回合被中断;可重新发送或换个说法继续。", "message")
             except Exception:  # best effort, same as the event above
                 log.debug("failed to emit cancel closure message", exc_info=True)
         raise
@@ -164,7 +174,7 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
         # exchange, otherwise the UI stays in the running state forever.
         if inst.task.conversational and inst.reply_sink is not None:
             try:
-                await inst.reply_sink(f"[回合失败] {inst.state.error}")
+                await inst.reply_sink(f"[回合失败] {inst.state.error}", "error")
             except Exception:  # best effort: closure must not mask the failure
                 log.debug("failed to emit failure closure message", exc_info=True)
         raise
@@ -201,7 +211,10 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
     if inst.task.conversational:
         inst.state.status = RunStatus.WAITING_INPUT
         if inst.reply_sink is not None:
-            await inst.reply_sink(result)
+            # Degraded LLM text (quota / provider failure placeholders) must
+            # not masquerade as a normal answer: the latest llm step carries
+            # the degraded flag, so read it back instead of sniffing prefixes.
+            await inst.reply_sink(result, "error" if _turn_degraded(inst) else "message")
     else:
         inst.state.status = RunStatus.COMPLETED
         await inst.events.emit(

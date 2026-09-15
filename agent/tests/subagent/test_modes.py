@@ -47,6 +47,44 @@ class TestReAct:
         assert messages[2]["tool_call_id"] == "1"
         assert messages[2]["content"] == "echo:a"
 
+    async def test_reasoning_stored_and_detailed(self) -> None:
+        """Model thinking lands in the step detail and thinking blocks ride
+        the assistant entry for echo-back; the answer text stays clean."""
+        thinking = {"type": "thinking", "thinking": "weigh", "signature": "s"}
+        seen: list[tuple[str, str, dict]] = []
+
+        async def _step(kind: str, name: str, summary: str, detail: dict) -> None:
+            seen.append((kind, name, detail))
+
+        llm = FakeLLM(
+            [
+                LLMReply(
+                    text="calling",
+                    tool_calls=(ToolCall("1", "echo_tool", {"x": "a"}),),
+                    reasoning="weigh options",
+                    thinking_blocks=(thinking,),
+                ),
+                LLMReply(text="完成"),
+            ]
+        )
+        messages = _msgs()
+        result = await run_mode(
+            Mode.REACT,
+            llm=llm,
+            toolbelt=_belt(),
+            messages=messages,
+            limits=ModeLimits(),
+            on_step=_step,
+        )
+        assert result == "完成"
+        assert messages[1].get("thinking_blocks") == [thinking]
+        llm_details = [d for k, _, d in seen if k == "llm"]
+        assert llm_details[0].get("reasoning") == "weigh options"
+        assert llm_details[0].get("text") == "calling"
+        # Plain-text entries never gain the echo key (chat wire safety).
+        assert "thinking_blocks" not in messages[0]
+        assert "thinking_blocks" not in messages[2]
+
     async def test_multiple_calls_paired_in_order(self) -> None:
         """Multiple calls in one round: one assistant plus several tool rows in matching order, with no user/system rows interleaved."""
         llm = FakeLLM(

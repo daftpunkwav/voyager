@@ -46,6 +46,11 @@ class LLMReply:
     overflow marks a context-window overflow: the transcript exceeded the
     model's context and the call was refused; the ReAct loop reacts by
     compacting harder and retrying once instead of surfacing the failure.
+    reasoning carries model thinking separately from the answer text
+    (Anthropic thinking blocks / OpenAI-style reasoning_content); it is
+    rendered into the trajectory thinking block, never into the reply text.
+    thinking_blocks are the raw Anthropic thinking/redacted blocks for
+    verbatim echo-back while tool use continues the conversation.
     """
 
     text: str | None = None
@@ -56,6 +61,8 @@ class LLMReply:
     # Resolved model name reported by the adapter (empty when unknown); the
     # round step trail records it so model switches land in the trajectory.
     model: str = ""
+    reasoning: str = ""
+    thinking_blocks: tuple[dict[str, Any], ...] = ()
 
     @property
     def final(self) -> bool:
@@ -68,11 +75,14 @@ class StreamReply:
     never both.
 
     final has the same shape as complete's return (one uniform outlet); an
-    aggregated stream ends with a single final block.
+    aggregated stream ends with a single final block. reasoning_delta carries
+    live model thinking on its own channel; consumers must not merge it into
+    the answer text (the final aggregate repeats it in LLMReply.reasoning).
     """
 
     text_delta: str = ""
     final: LLMReply | None = None
+    reasoning_delta: str = ""
 
 
 class LLMClient(Protocol):

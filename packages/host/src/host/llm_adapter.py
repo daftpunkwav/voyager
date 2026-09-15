@@ -133,6 +133,7 @@ class ServiceLLM:
         """One complete-capability result dict -> LLMReply (shared by complete
         and the routing fallback path)."""
         usage = out.get("usage") or {}
+        thinking_blocks = out.get("thinking_blocks") or ()
         return LLMReply(
             text=out.get("text") or None,
             tool_calls=tuple(
@@ -145,6 +146,8 @@ class ServiceLLM:
                 output_tokens=int(usage.get("output_tokens") or 0),
             ),
             model=str(out.get("model") or ""),
+            reasoning=str(out.get("reasoning") or ""),
+            thinking_blocks=tuple(dict(b) for b in thinking_blocks if isinstance(b, dict)),
         )
 
     async def complete_stream(
@@ -190,6 +193,7 @@ class ServiceLLM:
                 continue
             if chunk.get("type") == "final":
                 usage = chunk.get("usage") or {}
+                thinking_blocks = chunk.get("thinking_blocks") or ()
                 yield StreamReply(
                     final=LLMReply(
                         text=chunk.get("text") or None,
@@ -207,7 +211,15 @@ class ServiceLLM:
                             output_tokens=int(usage.get("output_tokens") or 0),
                         ),
                         model=str(chunk.get("model") or ""),
+                        reasoning=str(chunk.get("reasoning") or ""),
+                        thinking_blocks=tuple(
+                            dict(b) for b in thinking_blocks if isinstance(b, dict)
+                        ),
                     )
                 )
+            elif chunk.get("type") == "reasoning":
+                # Live thinking stays on its own channel: mapping it to
+                # text_delta would spray reasoning into the answer stream.
+                yield StreamReply(reasoning_delta=str(chunk.get("text") or ""))
             else:
                 yield StreamReply(text_delta=str(chunk.get("text") or ""))

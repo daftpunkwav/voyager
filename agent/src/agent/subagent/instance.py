@@ -109,7 +109,10 @@ class SubagentInstance:
     system_prompt: str
     events: RuntimeEvents
     state: RunState
-    reply_sink: Callable[[str], Awaitable[None]] | None = None
+    #: Per-turn reply outlet: (text, kind) with kind "message" (default) or
+    #: "error" (failures and harness degradation text); sinks render errors
+    #: distinctly instead of masquerading as normal answers.
+    reply_sink: Callable[[str, str], Awaitable[None]] | None = None
     name: str = ""
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     history: list[dict[str, Any]] = field(default_factory=list)

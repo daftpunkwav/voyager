@@ -87,6 +87,11 @@ def capped_args(arguments: Any) -> str:
 
 _MAX_ROUND_TEXT_CHARS = 8000
 
+#: Cap on model thinking kept in a step detail (characters): thinking can
+#: dwarf the answer on reasoning models, and the trajectory is a display
+#: projection, not a log - the full transcript stays in the event log.
+_MAX_REASONING_CHARS = 4000
+
 
 def round_text_detail(text: str) -> dict[str, Any]:
     """Full round output for the UI thinking block; capped like capped_args so
@@ -96,6 +101,17 @@ def round_text_detail(text: str) -> dict[str, Any]:
     if len(text) > _MAX_ROUND_TEXT_CHARS:
         return {"text": text[:_MAX_ROUND_TEXT_CHARS], "text_truncated": True}
     return {"text": text}
+
+
+def reasoning_detail(reasoning: str) -> dict[str, Any]:
+    """Model thinking for the UI thinking block, kept separate from the
+    answer text; capped like round_text_detail. Empty when the provider
+    sent no separate reasoning channel."""
+    if not reasoning:
+        return {}
+    if len(reasoning) > _MAX_REASONING_CHARS:
+        return {"reasoning": reasoning[:_MAX_REASONING_CHARS], "reasoning_truncated": True}
+    return {"reasoning": reasoning}
 
 
 def tool_detail(call: ToolCall, outcome: Any, ms: float) -> dict[str, Any]:
@@ -329,6 +345,7 @@ __all__ = [
     "noop_event",
     "noop_step",
     "parse_steps",
+    "reasoning_detail",
     "round_text_detail",
     "run_mode",
     "sys_message",

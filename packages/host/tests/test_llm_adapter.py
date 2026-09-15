@@ -62,6 +62,28 @@ class TestMapping:
         reply = await llm.complete(MSGS)
         assert reply.final is True and reply.text == "ok."
 
+    async def test_reasoning_and_thinking_blocks_mapped(self) -> None:
+        llm = ServiceLLM(
+            _call_with_provider(
+                {
+                    "text": "ok.",
+                    "tool_calls": [],
+                    "usage": {"input_tokens": 1, "output_tokens": 1},
+                    "reasoning": "why this works",
+                    "thinking_blocks": [
+                        {"type": "thinking", "thinking": "why this works", "signature": "s"},
+                        "junk",
+                    ],
+                },
+                [],
+            )
+        )
+        reply = await llm.complete(MSGS)
+        assert reply.reasoning == "why this works"
+        assert reply.thinking_blocks == (
+            {"type": "thinking", "thinking": "why this works", "signature": "s"},
+        )
+
 
 class TestDegraded:
     async def test_no_provider_readable_reply(self) -> None:

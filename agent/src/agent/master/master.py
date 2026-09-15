@@ -127,26 +127,30 @@ class Master:
     def _session_sink(self, session_id: str):
         """Per-session reply sink for conversational instances."""
 
-        async def _sink(text: str) -> None:
-            await self._reply(text, session=session_id)
+        async def _sink(text: str, kind: str = "message") -> None:
+            await self._reply(text, session=session_id, kind=kind)
 
         return _sink
 
-    async def _reply(self, text: str, *, trace_id: str = "", session: str = "") -> None:
+    async def _reply(
+        self, text: str, *, trace_id: str = "", session: str = "", kind: str = "message"
+    ) -> None:
         if self._bus is not None:
             await self._bus.publish(
                 Event(
                     type=DomainEvent.AGENT_MESSAGE,
                     actor=AGENT_MAIN,
-                    payload={"content": text, "session": session},
+                    payload={"content": text, "session": session, "kind": kind},
                     trace_id=trace_id,
                 )
             )
 
-    async def reply(self, text: str, *, trace_id: str = "", session: str = "") -> None:
+    async def reply(
+        self, text: str, *, trace_id: str = "", session: str = "", kind: str = "message"
+    ) -> None:
         """Public reply outlet: modules split out of this file (dispatch etc.)
         route messages back through here instead of calling the private _reply."""
-        await self._reply(text, trace_id=trace_id, session=session)
+        await self._reply(text, trace_id=trace_id, session=session, kind=kind)
 
     # -- message flow -----------------------------------------------------------
 
@@ -264,7 +268,7 @@ class Master:
             except Exception as exc:
                 log.exception("direct-chat turn failed")
                 try:
-                    await self._reply(f"(Turn failed: {exc})", trace_id=trace_id)
+                    await self._reply(f"(Turn failed: {exc})", trace_id=trace_id, kind="error")
                 except Exception:
                     log.exception("publishing the turn-failure reply failed")
 
@@ -326,7 +330,10 @@ class Master:
                 log.exception("user turn failed")
                 try:
                     await self._reply(
-                        f"(Turn failed: {exc})", trace_id=trace_id, session=inst.session
+                        f"(Turn failed: {exc})",
+                        trace_id=trace_id,
+                        session=inst.session,
+                        kind="error",
                     )
                 except Exception:
                     log.exception("publishing the turn-failure reply failed")

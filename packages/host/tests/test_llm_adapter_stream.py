@@ -76,6 +76,34 @@ class TestServiceLLMStream:
         assert final.tool_calls[0].name == "t"
         assert final.tool_calls[0].arguments == {"x": 1}
 
+    async def test_reasoning_in_final(self) -> None:
+        llm = _stream_llm(
+            [
+                {"type": "reasoning", "text": "weigh"},
+                {
+                    "type": "final",
+                    "text": "hello",
+                    "reasoning": "weigh",
+                    "thinking_blocks": [
+                        {"type": "thinking", "thinking": "weigh", "signature": "s"}
+                    ],
+                    "tool_calls": [],
+                    "usage": {},
+                    "model": "m",
+                },
+            ]
+        )
+        events = await _drain(llm, [{"role": "user", "content": "hi"}])
+        # Live reasoning chunks do not leak into the answer text stream.
+        assert [e.text_delta for e in events] == ["", ""]
+        assert events[0].reasoning_delta == "weigh"
+        final = events[-1].final
+        assert final.text == "hello"
+        assert final.reasoning == "weigh"
+        assert final.thinking_blocks == (
+            {"type": "thinking", "thinking": "weigh", "signature": "s"},
+        )
+
     async def test_call_error_degrades_to_final_text(self) -> None:
         """Call-time errors (guard rejection/unconfigured): degrade to a final
         readable reply, same semantics as complete."""
