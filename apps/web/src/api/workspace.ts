@@ -1,9 +1,8 @@
 /**
  * @file workspace.ts
- * @description Workspace browsing (gateway read-only endpoints, DSH
- * workspaceFiles/directoryPicker parity): directory listing inside the
- * workspace for the file tree, capped text preview, and a machine-wide
- * directory picker used to choose a new workspace root.
+ * @description Workspace browsing (gateway read-only endpoints): directory
+ * listing inside the workspace for the file tree, capped text preview, and a
+ * machine-wide directory picker used to choose a new workspace root.
  */
 
 export interface WorkspaceEntry {

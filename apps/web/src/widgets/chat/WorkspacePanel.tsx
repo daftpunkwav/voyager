@@ -12,7 +12,13 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { callCapability } from '@/bridge/client';
-import { type PickResult, type WorkspaceEntry, listWorkspace, pickDirectory, readWorkspaceFile } from '@/api/workspace';
+import {
+  type PickResult,
+  type WorkspaceEntry,
+  listWorkspace,
+  pickDirectory,
+  readWorkspaceFile,
+} from '@/api/workspace';
 
 const SETTING_KEY = 'agent.workspace.dir';
 
@@ -42,8 +48,8 @@ function WorkspaceBrowser({
         return;
       }
       setCurrent(res);
-    } catch {
-      setError(t('chat:workspace.loadFailed'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('chat:workspace.loadFailed'));
     }
   };
 
@@ -55,20 +61,30 @@ function WorkspaceBrowser({
   const entries = (current?.entries ?? []).filter((e) => e.type === 'directory');
 
   return (
-    <div className="ask-mask" role="dialog" aria-modal="true" aria-label={t('chat:workspace.browserTitle')}>
+    <div
+      className="ask-mask"
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('chat:workspace.browserTitle')}
+    >
       <div className="llm-model-dialog glass-card glass-card--dialog">
         <h3 className="llm-model-dialog__title">{t('chat:workspace.browserTitle')}</h3>
         <div className="chat-ws__browserbar">
           <input
             className="field input"
             value={pathInput}
-            placeholder="D:\MyProjects"
+            placeholder={t('chat:workspace.pathPlaceholder')}
+            aria-label={t('chat:workspace.pathPlaceholder')}
             onChange={(e) => setPathInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') void load(pathInput);
             }}
           />
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void load(pathInput)}>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => void load(pathInput)}
+          >
             {t('chat:workspace.go')}
           </button>
         </div>
@@ -106,7 +122,9 @@ function WorkspaceBrowser({
                 type="button"
                 className="composer-dd__item"
                 onClick={() => {
-                  const next = current?.path ? `${current.path.replace(/[\\/]+$/, '')}\\${e.name}` : e.name;
+                  const next = current?.path
+                    ? `${current.path.replace(/[\\/]+$/, '')}/${e.name}`
+                    : e.name;
                   setPathInput(next);
                   void load(next);
                 }}
@@ -115,7 +133,9 @@ function WorkspaceBrowser({
               </button>
             </li>
           ))}
-          {entries.length === 0 ? <li className="small muted">{t('chat:workspace.noDirs')}</li> : null}
+          {entries.length === 0 ? (
+            <li className="small muted">{t('chat:workspace.noDirs')}</li>
+          ) : null}
         </ul>
         {error ? (
           <p className="chat-ws__error small" role="alert">
@@ -152,7 +172,11 @@ export function WorkspaceSection() {
   const [browserOpen, setBrowserOpen] = useState(false);
   const [tree, setTree] = useState<Record<string, WorkspaceEntry[]>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [preview, setPreview] = useState<{ path: string; lines: string[]; truncated: boolean } | null>(null);
+  const [preview, setPreview] = useState<{
+    path: string;
+    lines: string[];
+    truncated: boolean;
+  } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -176,14 +200,20 @@ export function WorkspaceSection() {
     let alive = true;
     listWorkspace('')
       .then((res) => {
-        if (!alive && res.error) return;
-        if (!res.error) setTree((prev) => ({ ...prev, '': res.entries }));
+        if (!alive) return;
+        if (res.error) {
+          setError(res.error.message);
+          return;
+        }
+        setTree((prev) => ({ ...prev, '': res.entries }));
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (alive) setError(err instanceof Error ? err.message : t('chat:workspace.loadFailed'));
+      });
     return () => {
       alive = false;
     };
-  }, [loaded]);
+  }, [loaded, t]);
 
   const persist = async (next: string) => {
     setSaving(true);
@@ -213,18 +243,30 @@ export function WorkspaceSection() {
     const isOpen = expanded[path];
     setExpanded((prev) => ({ ...prev, [path]: !isOpen }));
     if (!isOpen && !tree[path]) {
-      const res = await listWorkspace(path);
-      if (!res.error) setTree((prev) => ({ ...prev, [path]: res.entries }));
+      try {
+        const res = await listWorkspace(path);
+        if (res.error) {
+          setError(res.error.message);
+          return;
+        }
+        setTree((prev) => ({ ...prev, [path]: res.entries }));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t('chat:workspace.loadFailed'));
+      }
     }
   };
 
   const openPreview = async (path: string) => {
-    const res = await readWorkspaceFile(path);
-    if (res.error) {
-      setPreview({ path, lines: [res.error.message], truncated: false });
-      return;
+    try {
+      const res = await readWorkspaceFile(path);
+      if (res.error) {
+        setError(res.error.message);
+        return;
+      }
+      setPreview({ path, lines: res.lines, truncated: res.truncated });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('chat:workspace.previewFailed'));
     }
-    setPreview({ path, lines: res.lines, truncated: res.truncated });
   };
 
   const rootEntries = tree[''];
@@ -247,7 +289,7 @@ export function WorkspaceSection() {
             <input
               className="field input"
               value={draft}
-              placeholder="data/workspace"
+              placeholder={t('chat:workspace.pathPlaceholder')}
               aria-label={t('chat:workspace.title')}
               autoFocus
               onChange={(e) => {
@@ -260,7 +302,11 @@ export function WorkspaceSection() {
               }}
             />
             <div className="chat-ws__actions">
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setEditing(false)}
+              >
                 {t('chat:workspace.cancel')}
               </button>
               <button
@@ -293,12 +339,20 @@ export function WorkspaceSection() {
             {(rootEntries ?? []).map((e) => (
               <li key={e.name}>
                 {e.type === 'directory' ? (
-                  <button type="button" className="chat-ws__row" onClick={() => void toggleDir(e.name)}>
+                  <button
+                    type="button"
+                    className="chat-ws__row"
+                    onClick={() => void toggleDir(e.name)}
+                  >
                     <span className="chat-ws__mark">{expanded[e.name] ? '▾' : '▸'}</span>
                     {e.name}
                   </button>
                 ) : (
-                  <button type="button" className="chat-ws__row" onClick={() => void openPreview(e.name)}>
+                  <button
+                    type="button"
+                    className="chat-ws__row"
+                    onClick={() => void openPreview(e.name)}
+                  >
                     <span className="chat-ws__mark">·</span>
                     {e.name}
                   </button>
@@ -325,7 +379,9 @@ export function WorkspaceSection() {
                       </li>
                     ))}
                     {tree[e.name].length === 0 ? (
-                      <li className="chat-ws__row is-static muted">(空)</li>
+                      <li className="chat-ws__row is-static muted">
+                        {t('chat:workspace.emptyDir')}
+                      </li>
                     ) : null}
                   </ul>
                 ) : null}
@@ -341,7 +397,11 @@ export function WorkspaceSection() {
           <div className="chat-ws__preview">
             <div className="chat-ws__previewhead">
               <span className="chat-ws__previewpath">{preview.path}</span>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPreview(null)}>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setPreview(null)}
+              >
                 ×
               </button>
             </div>
