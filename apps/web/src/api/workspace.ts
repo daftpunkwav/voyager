@@ -58,12 +58,15 @@ export interface SwitchResult {
 
 /** Hot-switch the agent workspace: validates, rebuilds the agent around the
  *  new root, persists agent.workspace.dir and rebinds workspace routes.
- *  Throws the backend message on failure (validation / rebuild errors). */
-export async function switchWorkspace(dir: string): Promise<SwitchResult> {
+ *  `marker` (optional request id) is echoed on the workspace.switched event
+ *  so the initiating tab can recognize its own broadcast; omitted from the
+ *  wire when unset. Throws the backend message on failure (validation /
+ *  rebuild errors). */
+export async function switchWorkspace(dir: string, marker = ''): Promise<SwitchResult> {
   const resp = await fetch('/api/workspace/switch', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ dir }),
+    body: JSON.stringify(marker ? { dir, marker } : { dir }),
   });
   const data = (await resp.json().catch(() => ({}))) as SwitchResult & MaybeError;
   if (!resp.ok || data.error) {

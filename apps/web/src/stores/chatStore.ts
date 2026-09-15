@@ -263,6 +263,10 @@ interface ChatState {
   /** Agent workspace generation counter: bumped on workspace.switched so
    *  workspace views (panel tree, settings value) refetch without polling. */
   workspaceRev: number;
+  /** Request id of this tab's in-flight/latest workspace switch (mirrored on
+   *  the workspace.switched event): lets useChatStream recognize the echo of
+   *  its own switch and skip the "switched elsewhere" toast. */
+  workspaceSwitchMarker: string | null;
   /** History API messages (user.message/agent.message) -> message stream; does not trigger the thinking indicator.
    *  hasMore records whether older pages exist for backward paging. */
   applyHistory: (events: ChatEvent[], hasMore?: boolean) => void;
@@ -385,6 +389,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   roundTexts: [],
   streaming: null,
   workspaceRev: 0,
+  workspaceSwitchMarker: null,
 
   setSessions: (rows, activeId) => {
     set({ sessions: rows, activeSessionId: activeId });

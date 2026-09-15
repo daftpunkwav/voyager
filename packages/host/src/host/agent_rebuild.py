@@ -239,7 +239,9 @@ def _swap_workspace_routes(
     app.openapi_schema = None  # force OpenAPI regen (FastAPI caches on first use)
 
 
-async def switch_workspace(rebuilder: AgentRebuilder, app: Any, raw_dir: str) -> dict[str, Any]:
+async def switch_workspace(
+    rebuilder: AgentRebuilder, app: Any, raw_dir: str, marker: str = ""
+) -> dict[str, Any]:
     """Validate, rebuild the agent around the new workspace, persist the
     setting, and rebind routes — all under one lock so concurrent switches
     and lifespan shutdown serialize.
@@ -306,12 +308,15 @@ async def switch_workspace(rebuilder: AgentRebuilder, app: Any, raw_dir: str) ->
         if hasattr(app.state, "backend") and app.state.backend is not None:
             app.state.backend.agent = new_agent
         # Let other tabs/sessions learn about the switch without polling:
-        # session-less events stay global on every lane.
+        # session-less events stay global on every lane. The optional marker
+        # echoes the initiating client's request id so it can tell its own
+        # switch apart from another tab's (the broadcast reaches the
+        # initiator too) and skip the "switched elsewhere" toast.
         await rebuilder.bus.publish(
             Event(
                 type=DomainEvent.WORKSPACE_SWITCHED,
                 actor=SYSTEM_HOST,
-                payload={"workspace": str(target), "previous": str(previous)},
+                payload={"workspace": str(target), "previous": str(previous), "marker": marker},
             )
         )
         return {
@@ -326,7 +331,7 @@ async def switch_workspace(rebuilder: AgentRebuilder, app: Any, raw_dir: str) ->
 
 
 def build_switch_router() -> APIRouter:
-    """POST /api/workspace/switch {dir}: hot-switch the agent workspace.
+    """POST /api/workspace/switch {dir, marker?}: hot-switch the agent workspace.
     Reads the rebuilder off app.state (set by the host composition root);
     standalone gateway deployments without one get a 503."""
     router = APIRouter()
@@ -347,7 +352,8 @@ def build_switch_router() -> APIRouter:
                 "host", ErrorSuffix.INVALID_INPUT, "request body must be JSON"
             ) from None
         raw = str((body or {}).get("dir") or "")
-        return await switch_workspace(rebuilder, request.app, raw)
+        marker = str((body or {}).get("marker") or "")[:64]
+        return await switch_workspace(rebuilder, request.app, raw, marker)
 
     return router
 

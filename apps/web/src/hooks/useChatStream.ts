@@ -93,12 +93,23 @@ export function useChatStream(onNavigate: (path: string) => void) {
       }
       if (ev.type === EventType.WORKSPACE_SWITCHED) {
         // Another tab switched the workspace: toast once, then let the store
-        // bump drive workspace views to refetch (no timeline entry).
-        const dir = String(ev.payload?.workspace ?? '').trim();
-        useUIStore.getState().addToast({
-          type: 'info',
-          message: i18n.t('chat:workspace.switchedElsewhere', { dir }),
-        });
+        // bump drive workspace views to refetch (no timeline entry). The
+        // broadcast reaches the initiating tab too; its own marker means the
+        // "switched elsewhere" copy would be wrong, so skip the toast (the
+        // revision bump below still refreshes the views).
+        const marker = typeof ev.payload?.marker === 'string' ? ev.payload.marker : '';
+        const mine = marker !== '' && marker === useChatStore.getState().workspaceSwitchMarker;
+        if (mine) {
+          useChatStore.setState({ workspaceSwitchMarker: null });
+        } else {
+          const dir = String(ev.payload?.workspace ?? '').trim();
+          if (dir) {
+            useUIStore.getState().addToast({
+              type: 'info',
+              message: i18n.t('chat:workspace.switchedElsewhere', { dir }),
+            });
+          }
+        }
       }
       if (ev.type === EventType.TASK_FAILED && ev.payload?.kind === 'resume') {
         // A failed background resume: its card lives in chatStore (job_id = run_id),

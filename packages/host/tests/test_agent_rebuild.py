@@ -49,7 +49,9 @@ class TestSwitchEndpoint:
             (new_ws / "hello.txt").write_text("new root", encoding="utf-8")
             app = build(tmp_path / "data", tmp_path / "ws-old")
             with TestClient(app) as client:
-                resp = client.post("/api/workspace/switch", json={"dir": str(new_ws)})
+                resp = client.post(
+                    "/api/workspace/switch", json={"dir": str(new_ws), "marker": "tab-1"}
+                )
                 assert resp.status_code == 200, resp.text
                 assert resp.json()["workspace"] == str(new_ws)
 
@@ -64,7 +66,9 @@ class TestSwitchEndpoint:
                 assert app.state.backend.agent is app.state.agent_rebuilder.agent
                 assert client.get("/health").status_code == 200
 
-                # The switch is announced for other tabs/sessions.
+                # The switch is announced for other tabs/sessions; the marker
+                # echoes back so the initiating tab can recognize its own
+                # broadcast.
                 switched = [
                     e.payload
                     for _, e in app.state.backend.log.read_after(
@@ -72,6 +76,7 @@ class TestSwitchEndpoint:
                     )
                 ]
                 assert switched and switched[-1]["workspace"] == str(new_ws)
+                assert switched[-1]["marker"] == "tab-1"
 
                 # A second switch works: the switch endpoint re-mounts itself
                 # with every generation instead of stranding the old routes.

@@ -2,7 +2,9 @@
  * @file workspaceSwitchToast
  * @description workspace.switched cross-tab notice unit tests: the event
  * fires an info toast and bumps the workspace revision for views to refetch,
- * and never enters the chat timeline.
+ * and never enters the chat timeline; the initiating tab's own broadcast
+ * (recognized by the echoed marker) refreshes without the misleading
+ * "switched elsewhere" toast.
  */
 
 import { render } from '@testing-library/react';
@@ -36,7 +38,7 @@ function handler() {
 
 beforeEach(() => {
   subscribeMock.mockClear();
-  useChatStore.setState({ messages: [], workspaceRev: 0 });
+  useChatStore.setState({ messages: [], workspaceRev: 0, workspaceSwitchMarker: null });
   useUIStore.setState({ toasts: [] });
   vi.stubGlobal(
     'fetch',
@@ -61,5 +63,24 @@ describe('workspace.switched → toast + revision bump', () => {
     handler()({ seq: 1, type: 'workspace.switched', payload: { workspace: 'a' } });
     handler()({ seq: 2, type: 'workspace.switched', payload: { workspace: 'b' } });
     expect(useChatStore.getState().workspaceRev).toBe(2);
+  });
+
+  it('skips the toast for its own echo (marker match) but still bumps', () => {
+    render(<HookProbe />);
+    useChatStore.setState({ workspaceSwitchMarker: 'tab-1' });
+    handler()({ seq: 1, type: 'workspace.switched', payload: { workspace: 'ws2', marker: 'tab-1' } });
+    expect(useUIStore.getState().toasts).toHaveLength(0);
+    expect(useChatStore.getState().workspaceRev).toBe(1);
+    // The marker is consumed: a later foreign switch toasts again.
+    handler()({ seq: 2, type: 'workspace.switched', payload: { workspace: 'ws3', marker: 'tab-1' } });
+    expect(useUIStore.getState().toasts).toHaveLength(1);
+  });
+
+  it('toasts when the marker belongs to another tab', () => {
+    render(<HookProbe />);
+    useChatStore.setState({ workspaceSwitchMarker: 'tab-1' });
+    handler()({ seq: 1, type: 'workspace.switched', payload: { workspace: 'ws2', marker: 'tab-2' } });
+    expect(useUIStore.getState().toasts).toHaveLength(1);
+    expect(useChatStore.getState().workspaceSwitchMarker).toBe('tab-1');
   });
 });

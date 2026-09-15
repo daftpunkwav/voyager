@@ -19,18 +19,27 @@ import { type PickResult, pickDirectory, switchWorkspace } from '@/api/workspace
 
 /**
  * Shared workspace hot-switch flow: confirm first (the switch rebuilds the
- * agent and drains in-flight turns), then POST the switch. Resolves to the
- * new workspace path, or null when the user dismissed the confirm; errors
- * propagate to the caller for surface-specific display.
+ * agent and drains in-flight turns), then POST the switch. A request id is
+ * stashed in chatStore before the POST: the broadcast reaches this tab too,
+ * and the marker lets useChatStream tell this tab's own switch apart from
+ * another tab's. Resolves to the new workspace path, or null when the user
+ * dismissed the confirm; errors propagate to the caller for surface-specific
+ * display.
  */
 function useWorkspaceSwitch() {
   const { t } = useTranslation('chat');
   const [switching, setSwitching] = useState(false);
   const persist = async (next: string): Promise<string | null> => {
     if (!window.confirm(t('chat:workspace.switchConfirm'))) return null;
+    // Stash before the POST: the SSE echo races the HTTP response, so the
+    // marker must already be in place when the event lands. A leftover
+    // marker (request failed / event lost) is inert: only an exact match
+    // suppresses, and the next switch overwrites it.
+    const marker = crypto.randomUUID();
+    useChatStore.setState({ workspaceSwitchMarker: marker });
     setSwitching(true);
     try {
-      const res = await switchWorkspace(next);
+      const res = await switchWorkspace(next, marker);
       return res.workspace;
     } finally {
       setSwitching(false);
