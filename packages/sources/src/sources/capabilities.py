@@ -33,7 +33,10 @@ _DOMAIN = "sources"
 registry = Registry(_DOMAIN)
 registry.merge(repo_caps.registry, doc_caps.registry, web_caps.registry)
 
-#: kind -> store; populated by wiring (init_all), read for aggregate fan-out
+#: kind -> store; populated by wiring (init_all) once per process and read for
+#: aggregate fan-out. The agent workspace hot-switch (host.agent_rebuild)
+#: rebuilds only the agent generation — domain stores are process-lifetime
+#: singletons and stay the live objects, so this map never goes stale.
 STORES: dict[str, RepoStore | DocStore | WebStore] = {}
 
 
