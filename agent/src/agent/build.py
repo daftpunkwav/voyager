@@ -552,12 +552,17 @@ def build_agent(
                 str(e.get("summary") or "")
                 for e in memory.episodic.recent(limit=cards.memory_cards)
             }
+            # Profile keys already ride the resident profile layer (Phase A):
+            # keep the recall budget for episodic/semantic hits. When the
+            # profile layer itself is off, its hits stay eligible here.
+            profile_keys = set(memory.profile.all()) if cards.profile_chars > 0 else None
             recall = render_relevant_recall(
                 memory,
                 query,
                 limit=cards.recall_facts,
                 max_chars=cards.recall_chars,
                 exclude_summaries=exclude,
+                exclude_profile_keys=profile_keys,
             )
         return builder.system(
             persona=persona,

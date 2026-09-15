@@ -51,6 +51,18 @@ def test_profile_hit_renders_with_label(tmp_path) -> None:
         app.close()
 
 
+def test_profile_hit_excluded_when_key_on_resident_layer(tmp_path) -> None:
+    app, memory = _memory(tmp_path)
+    try:
+        memory.profile.set("部署约束", "纯本地单用户,永不上线")
+        excluded = render_relevant_recall(memory, "部署 约束", exclude_profile_keys={"部署约束"})
+        assert "[画像]" not in excluded
+        kept = render_relevant_recall(memory, "部署 约束", exclude_profile_keys={"别的键"})
+        assert "[画像] 部署约束" in kept
+    finally:
+        app.close()
+
+
 def test_episodic_hit_and_card_exclusion(tmp_path) -> None:
     app, memory = _memory(tmp_path)
     try:
@@ -119,5 +131,28 @@ def test_turn_system_prompt_carries_relevance_layer(tmp_path) -> None:
         system = str(sent[0].get("content") or "")
         assert HEADER in system
         assert "年假五天" in system
+    finally:
+        app.memory.close()
+
+
+def test_turn_system_prompt_skips_duplicate_profile_line(tmp_path) -> None:
+    """End-to-end: a profile key already on the resident profile layer is not
+    repeated as a [画像] line in the relevance layer."""
+    llm = FakeLLM()
+    app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=llm)
+    try:
+        app.memory.profile.set("部署约束", "纯本地单用户,永不上线")
+
+        async def _drive() -> None:
+            await app.master.handle_user_message("部署 约束是什么?")
+            while app.master._bg:
+                await asyncio.gather(*list(app.master._bg))
+
+        asyncio.run(_drive())
+        sent = llm.calls[0]["messages"]
+        system = str(sent[0].get("content") or "")
+        assert "【用户画像】" in system
+        assert "部署约束" in system
+        assert "[画像] 部署约束" not in system
     finally:
         app.memory.close()
