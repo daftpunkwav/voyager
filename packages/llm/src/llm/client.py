@@ -1,15 +1,16 @@
 """Direct LLM HTTP client: no litellm dependency, plain httpx calls.
 
 Responsibilities:
-- Send requests in two wire formats: `chat` (OpenAI-compatible) and
-  `anthropic` (Messages), including connection tests
+- Send requests in three wire formats: `chat` (OpenAI Chat
+  Completions), `anthropic` (Messages) and `responses` (OpenAI Responses),
+  including connection tests
 - Normalize the neutral tools format and tool_calls, and encode the agent's
   neutral message history into each provider's native tool protocol
 - Classify upstream errors (rate limit / auth / context overflow /
   transient) and retry retriable ones with bounded exponential backoff
 
-Supports two API formats: `chat` (OpenAI-compatible) and `anthropic`
-(Messages). Usage is written to the store by the caller after complete
+Supports three API formats: `chat` (OpenAI-compatible), `anthropic`
+(Messages) and `responses` (OpenAI Responses). Usage is written to the store by the caller after complete
 succeeds (direct metering, not log parsing). The tools argument uses a
 neutral format [{"name", "description", "schema"}] (aligned with agent
 ToolSpec); tool_calls are normalized to [{"id", "name", "arguments": dict}]
@@ -29,6 +30,9 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
+
+from .think_split import split_inline_think
+from .wire_responses import parse_response_output, responses_input, responses_tools
 
 _TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
 
@@ -442,6 +446,8 @@ def reasoning_fields(fmt: str, reasoning_effort: str, *, max_tokens: int) -> dic
     anthropic: a thinking block with a token budget; Anthropic requires
     max_tokens above the budget and no temperature, so max_tokens is raised
     and the caller must drop temperature when the returned dict has thinking.
+    responses (OpenAI Responses): reasoning.effort, matching that API's
+    request field.
 
     Extended thinking coexists with tool use (interleaved thinking): the
     thinking block rides alongside tools in the same request. The provider
@@ -459,6 +465,8 @@ def reasoning_fields(fmt: str, reasoning_effort: str, *, max_tokens: int) -> dic
             "thinking": {"type": "enabled", "budget_tokens": budget},
             "max_tokens": max(max_tokens, budget + 1024),
         }
+    if fmt == "responses":
+        return {"reasoning": {"effort": reasoning_effort}}
     return {"reasoning_effort": reasoning_effort}
 
 
@@ -504,9 +512,57 @@ async def complete(
     base = provider["base_url"].rstrip("/")
     messages = _resolve_tool_messages(messages)
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        if fmt == "responses":
+            instructions, inp = responses_input(messages)
+            body: dict[str, Any] = {
+                "model": model,
+                "instructions": instructions,
+                "input": inp
+                or [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": "(no content, please continue)"}
+                        ],
+                    }
+                ],
+                "max_output_tokens": max_tokens,
+                # No temperature: OpenAI reasoning models on this endpoint
+                # reject it. store=False keeps the conversation out of the
+                # provider's 30-day retention (local-first posture).
+                "store": False,
+            }
+            if tools:
+                body["tools"] = responses_tools(tools)
+            body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
+            resp = await _send_with_retry(
+                lambda: _post(
+                    client,
+                    f"{base}/responses",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    body=body,
+                )
+            )
+            data = resp.json()
+            if data.get("status") == "failed":
+                # Same contract as the stream's response.failed: ride the
+                # degraded-reply path instead of returning an empty answer.
+                error = data.get("error") or {}
+                error_message = str(error.get("message") if isinstance(error, dict) else error)
+                raise ProviderError(f"responses call failed: {error_message}", status=200)
+            out = parse_response_output(data)
+            return CompleteResult(
+                text=out["text"],
+                input_tokens=out["usage"]["input_tokens"],
+                output_tokens=out["usage"]["output_tokens"],
+                cached_tokens=out["usage"]["cached_tokens"],
+                model=out["model"],
+                tool_calls=tuple(out["tool_calls"]),
+                reasoning=out["reasoning"],
+            )
         if fmt == "anthropic":
             system, rest = _split_system(messages)
-            body: dict[str, Any] = {
+            body = {
                 "model": model,
                 "max_tokens": max_tokens,
                 "temperature": temperature,
@@ -593,14 +649,16 @@ async def complete(
         usage = data.get("usage") or {}
         choice = (data.get("choices") or [{}])[0]
         message = choice.get("message") or {}
+        answer, inline_reasoning = split_inline_think(str(message.get("content") or ""))
         return CompleteResult(
-            text=str(message.get("content") or ""),
+            text=answer,
             input_tokens=int(usage.get("prompt_tokens") or 0),
             output_tokens=int(usage.get("completion_tokens") or 0),
             cached_tokens=int((usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0),
             model=data.get("model", model),
             tool_calls=_parse_tool_calls(message.get("tool_calls")),
-            reasoning=str(message.get("reasoning_content") or ""),
+            # Inline <think> reasoning joins the reasoning_content channel
+            reasoning=str(message.get("reasoning_content") or "") + inline_reasoning,
         )
 
 

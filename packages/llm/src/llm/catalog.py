@@ -1,8 +1,9 @@
 """Built-in provider catalog: pure data, extensible.
 
-Two API formats: `chat` (OpenAI-compatible /chat/completions) and `anthropic`
-(Anthropic Messages /v1/messages). Custom providers are stored through
-add_provider and are not registered in this file.
+Three API formats: `chat` (OpenAI-compatible /chat/completions), `anthropic`
+(Anthropic Messages /v1/messages) and `responses` (OpenAI Responses
+/v1/responses). Custom providers are stored through add_provider and are not
+registered in this file.
 """
 
 from __future__ import annotations
@@ -16,6 +17,13 @@ BUILTIN_PROVIDERS: tuple[dict[str, Any], ...] = (
         "base_url": "https://api.openai.com/v1",
         "api_format": "chat",
         "models": ["gpt-4o", "gpt-4o-mini", "o4-mini"],
+    },
+    {
+        "preset_id": "openai-responses",
+        "display_name": "OpenAI (Responses)",
+        "base_url": "https://api.openai.com/v1",
+        "api_format": "responses",
+        "models": ["gpt-5.2", "o3", "o4-mini"],
     },
     {
         "preset_id": "anthropic",
@@ -54,7 +62,7 @@ BUILTIN_PROVIDERS: tuple[dict[str, Any], ...] = (
     },
 )
 
-_API_FORMATS = ("chat", "anthropic")
+_API_FORMATS = ("chat", "anthropic", "responses")
 
 
 def get_preset(preset_id: str) -> dict[str, Any] | None:

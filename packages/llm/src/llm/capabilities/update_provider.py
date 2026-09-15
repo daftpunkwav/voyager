@@ -49,7 +49,7 @@ def update_provider(
         raise ServiceError(
             DOMAIN,
             ErrorSuffix.INVALID_INPUT,
-            f"api_format only supports chat / anthropic: {api_format}",
+            f"api_format only supports chat / anthropic / responses: {api_format}",
         )
     if models_meta is not None and not valid_models_meta(models_meta):
         raise ServiceError(

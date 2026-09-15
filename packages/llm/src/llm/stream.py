@@ -2,8 +2,8 @@
 error classification.
 
 Responsibilities:
-- Parse SSE line-by-line per wire format (chat = OpenAI-compatible,
-  anthropic = Messages)
+- Parse SSE line-by-line per wire format (chat = OpenAI Chat
+  Completions, anthropic = Messages, responses = OpenAI Responses)
 - Aggregate deltas into text chunks plus a final aggregate chunk shaped like
   complete's return (text / tool_calls / usage / model)
 - Classify errors like complete: pre-first-packet errors keep retryable
@@ -11,7 +11,7 @@ Responsibilities:
 
 client.py handles one-shot requests; this module only does streaming:
 line-by-line SSE parsing and incremental aggregation per wire format
-(chat = OpenAI-compatible, anthropic = Messages), producing dict chunks —
+(chat, anthropic, responses), producing dict chunks —
 several `{"type": "text", "text": <delta>}` chunks and a final
 `{"type": "final", "text", "tool_calls", "usage", "model"}` chunk (same shape
 as the complete capability return, so adapters map them uniformly).
@@ -49,6 +49,8 @@ from .client import (
     _split_system,
     reasoning_fields,
 )
+from .think_split import ThinkSplitter
+from .wire_responses import responses_input, responses_sse, responses_tools
 
 
 def _safe_arguments(raw: str) -> dict[str, Any]:
@@ -78,9 +80,33 @@ async def complete_stream(
     fmt = provider["api_format"]
     base = provider["base_url"].rstrip("/")
     messages = _resolve_tool_messages(messages)
-    if fmt == "anthropic":
+    if fmt == "responses":
+        instructions, inp = responses_input(messages)
+        body = {
+            "model": model,
+            "instructions": instructions,
+            "input": inp
+            or [
+                {
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "(no content, please continue)"}],
+                }
+            ],
+            "max_output_tokens": max_tokens,
+            # No temperature (reasoning models reject it) and store=False
+            # (local-first: no provider-side retention).
+            "store": False,
+            "stream": True,
+        }
+        if tools:
+            body["tools"] = responses_tools(tools)
+        body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
+        url = f"{base}/responses"
+        headers = {"Authorization": f"Bearer {api_key}"}
+        parser = responses_sse
+    elif fmt == "anthropic":
         system, rest = _split_system(messages)
-        body: dict[str, Any] = {
+        body = {
             "model": model,
             "max_tokens": max_tokens,
             "temperature": temperature,
@@ -145,10 +171,13 @@ async def complete_stream(
 
 async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
     """OpenAI-compatible SSE: `data:` lines terminated by `[DONE]`;
-    tool_calls reassembled from per-index fragments."""
+    tool_calls reassembled from per-index fragments. Inline ``<think>``
+    segments (MiniMax-style content reasoning) are split onto the reasoning
+    channel instead of leaking into the answer text."""
     text_parts: list[str] = []
     frags: dict[int, dict[str, str]] = {}
     reasoning_parts: list[str] = []
+    think = ThinkSplitter()
     usage: dict[str, Any] = {}
     model = ""
     async for line in resp.aiter_lines():
@@ -168,8 +197,13 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
             delta = choice.get("delta") or {}
             content = delta.get("content")
             if content:
-                text_parts.append(str(content))
-                yield {"type": "text", "text": str(content)}
+                answer, inline_reasoning = think.feed(str(content))
+                if answer:
+                    text_parts.append(answer)
+                    yield {"type": "text", "text": answer}
+                if inline_reasoning:
+                    reasoning_parts.append(inline_reasoning)
+                    yield {"type": "reasoning", "text": inline_reasoning}
             reasoning_content = delta.get("reasoning_content")
             if reasoning_content:
                 # Reasoning rides its own channel: accumulated for the final
@@ -196,6 +230,11 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
             for _, a in sorted(frags.items())
         ]
     )
+    tail_answer, tail_reasoning = think.flush()
+    if tail_answer:
+        text_parts.append(tail_answer)
+    if tail_reasoning:
+        reasoning_parts.append(tail_reasoning)
     yield {
         "type": "final",
         "text": "".join(text_parts),

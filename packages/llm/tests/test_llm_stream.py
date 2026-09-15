@@ -172,6 +172,28 @@ class TestChatStream:
         assert seen["body"]["stream"] is True
         assert seen["body"]["stream_options"] == {"include_usage": True}
 
+    async def test_inline_think_split_to_reasoning_channel(self, monkeypatch) -> None:
+        """MiniMax-style inline <think> in content: thinking rides the reasoning
+        channel even when the tags arrive split across chunks."""
+        sse = _sse(
+            {"choices": [{"delta": {"content": "用户问我是谁。<thi"}}], "model": "mm"},
+            {"choices": [{"delta": {"content": "nk>推理中</think>我是 Lucien。"}}]},
+            "[DONE]",
+        )
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, text=sse)
+
+        _patch(monkeypatch, handler)
+        chunks = await _collect(_CHAT)
+        texts = [c["text"] for c in chunks if c["type"] == "text"]
+        reasonings = [c["text"] for c in chunks if c["type"] == "reasoning"]
+        assert texts == ["用户问我是谁。", "我是 Lucien。"]
+        assert reasonings == ["推理中"]
+        final = chunks[-1]
+        assert final["text"] == "用户问我是谁。我是 Lucien。"
+        assert final["reasoning"] == "推理中"
+
     async def test_tool_only_stream(self, monkeypatch) -> None:
         """Tool-only stream without text: no text chunks; final carries the
         parsed tool_calls."""
