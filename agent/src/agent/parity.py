@@ -66,7 +66,7 @@ AGENT_ONLY_TOOLS: dict[str, str] = {
     "grep": "workspace hand",
     "glob": "workspace hand",
     "run_shell": "workspace hand",
-    "run_snippet": "workspace hand (in-harness lightweight snippet execution for teaching and scratchpads)",
+    "run_snippet": "shell hand (in-harness lightweight snippet execution, L2 like run_shell)",
     "todo_write": "plan hand (human reads via todo_read)",
     "web_fetch": "network hand",
     "web_search": "network hand",

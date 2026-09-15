@@ -199,10 +199,11 @@ def run_snippet_tool(workspace: str | Path) -> AgentTool:
         name="run_snippet",
         description=(
             "在沙箱执行轻量代码片段进行概念教学或计算演示(支持 Python / JavaScript / TypeScript;"
-            "超时上限 15s;自动捕获标准输出、异常诊断及生成图表)"
+            "默认需用户确认，超时上限 15s；自动捕获标准输出、异常诊断及生成图表；"
+            "长任务或不可信代码请用 code_exec__run_snippet 异步沙箱)"
         ),
         handler=run_snippet,
-        dimension="workspace",
+        dimension="shell",
         write=True,
         schema={
             "type": "object",

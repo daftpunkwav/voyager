@@ -40,7 +40,7 @@ class AgentTool:
     description: str
     handler: Callable[..., Any]
     schema: dict[str, Any] = field(default_factory=dict)
-    dimension: str = "none"  # fs | network | shell | app | resource | none
+    dimension: str = "none"  # fs | network | shell | app | skill | plan | resource | none
     write: bool = False
     irreversible: bool = False
     timeout_s: float | None = None  # per-call cap; None = rely on the handler's own limits

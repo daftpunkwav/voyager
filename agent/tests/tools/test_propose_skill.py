@@ -5,7 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from agent.llm import ToolCall
+from agent.policy import PolicyEngine
 from agent.skills.loader import SkillLoader
+from agent.tools.core.base import Toolbelt
 from agent.tools.skill.propose_skill import propose_skill_tool
 
 
@@ -71,3 +74,39 @@ class TestProposeSkill:
         )
         assert "[参数错误]" in res
         assert "内容" in res
+
+
+class TestPolicyGate:
+    """Skill-library writes land in the resident index next turn, so they
+    need an explicit human confirmation (L2); without a confirm channel the
+    call is skipped and nothing is written."""
+
+    async def test_requires_confirmation_by_default(self, skills_dir: Path) -> None:
+        tool = propose_skill_tool(skills_dir)
+        belt = Toolbelt({tool.name: tool}, PolicyEngine())
+        out = await belt.call_detailed(
+            ToolCall(
+                "1",
+                "propose_skill",
+                {"name": "gated-skill", "description": "d", "content": "c"},
+            )
+        )
+        assert out.ok is False
+        assert "[需确认]" in out.text
+        assert not (skills_dir / "gated-skill" / "SKILL.md").exists()
+
+    async def test_writes_after_confirmation(self, skills_dir: Path) -> None:
+        async def _allow(_prompt: str) -> bool:
+            return True
+
+        tool = propose_skill_tool(skills_dir)
+        belt = Toolbelt({tool.name: tool}, PolicyEngine(), confirm=_allow)
+        out = await belt.call_detailed(
+            ToolCall(
+                "1",
+                "propose_skill",
+                {"name": "gated-skill", "description": "d", "content": "c"},
+            )
+        )
+        assert out.ok is True
+        assert (skills_dir / "gated-skill" / "SKILL.md").exists()

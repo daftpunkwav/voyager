@@ -5,6 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from agent.llm import ToolCall
+from agent.policy import PolicyEngine
+from agent.tools.core.base import Toolbelt
 from agent.tools.workspace.run_snippet import run_snippet_tool
 
 
@@ -93,3 +96,25 @@ class TestRunSnippet:
         assert "exit=0" in result
         assert "[生成图表]" in result
         assert "sandbox/snippets/chart.png" in result
+
+
+class TestPolicyGate:
+    """Code execution inherits the shell-dimension gate (L2 by default):
+    without a confirm channel the call is skipped, never run silently."""
+
+    async def test_requires_confirmation_by_default(self, workspace: Path) -> None:
+        tool = run_snippet_tool(workspace)
+        belt = Toolbelt({tool.name: tool}, PolicyEngine())
+        out = await belt.call_detailed(ToolCall("1", "run_snippet", {"code": "print('hi')"}))
+        assert out.ok is False
+        assert "[需确认]" in out.text
+
+    async def test_executes_after_confirmation(self, workspace: Path) -> None:
+        async def _allow(_prompt: str) -> bool:
+            return True
+
+        tool = run_snippet_tool(workspace)
+        belt = Toolbelt({tool.name: tool}, PolicyEngine(), confirm=_allow)
+        out = await belt.call_detailed(ToolCall("1", "run_snippet", {"code": "print('hi')"}))
+        assert out.ok is True
+        assert "hi" in out.text

@@ -1,7 +1,8 @@
 """Permission engine facade: hot-readable dimension snapshots dispatched to
 the per-dimension decision functions (network / fs / app / shell — one file
-each since phase 21). Decisions are pure; confirmation interaction lives in
-the Toolbelt (tools/base.py), and remembered confirmations live in
+each since phase 21; the skill dimension is decided inline below).
+Decisions are pure; confirmation interaction lives in the Toolbelt
+(tools/base.py), and remembered confirmations live in
 policy.approvals.ApprovalStore.
 
 Resource counting (rounds/tokens/concurrency) is tracked at execution
@@ -31,7 +32,7 @@ class ResourcePolicy:
 
 @dataclass(frozen=True)
 class Action:
-    dimension: str  # network | fs | app | shell | resource | none
+    dimension: str  # network | fs | app | shell | skill | resource | none
     target: str = ""  # url / path / capability name / command
     write: bool = False
     irreversible: bool = False
@@ -68,6 +69,7 @@ class PolicyEngine:
             "fs": self._decide_fs,
             "app": self._decide_app,
             "shell": self._decide_shell,
+            "skill": self._decide_skill,
         }.get(action.dimension)
         if handler is None:
             # none/resource/unknown dimensions are intentionally allowed at L0;
@@ -177,6 +179,16 @@ class PolicyEngine:
 
     def _decide_shell(self, action: Action) -> Decision:
         return decide_shell(self._fs_policy(), self._shell_policy(), action)
+
+    @staticmethod
+    def _decide_skill(action: Action) -> Decision:
+        """Skill-library dimension: writes land in the resident skill index
+        the next turn (the same subtree file/shell tools must not touch), so
+        writes and irreversible ops need an explicit human confirmation;
+        reads stay silent."""
+        if action.write or action.irreversible:
+            return Decision(True, Level.L2_CONFIRM, "Skill library writes require confirmation")
+        return Decision(allow=True)
 
 
 __all__ = [

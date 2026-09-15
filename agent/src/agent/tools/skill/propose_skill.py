@@ -7,7 +7,7 @@ or pedagogical problem-solving steps into reusable skills. Persists to
 Responsibilities:
 - Validate skill naming convention (lowercase kebab-case, no path traversal).
 - Validate content boundaries to prevent context runaway.
-- Atomically persist Markdown skill file with standard header structure.
+- Persist the Markdown skill file with standard header structure.
 - Report indexing readiness for subsequent on-demand loads.
 """
 
