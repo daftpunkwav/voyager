@@ -260,6 +260,9 @@ interface ChatState {
   roundTexts: RoundText[];
   /** Current streaming typing (agent.delta); cleared by agent.message, restarted on round change */
   streaming: StreamingText | null;
+  /** Agent workspace generation counter: bumped on workspace.switched so
+   *  workspace views (panel tree, settings value) refetch without polling. */
+  workspaceRev: number;
   /** History API messages (user.message/agent.message) -> message stream; does not trigger the thinking indicator.
    *  hasMore records whether older pages exist for backward paging. */
   applyHistory: (events: ChatEvent[], hasMore?: boolean) => void;
@@ -381,6 +384,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   lastSteps: [],
   roundTexts: [],
   streaming: null,
+  workspaceRev: 0,
 
   setSessions: (rows, activeId) => {
     set({ sessions: rows, activeSessionId: activeId });
@@ -433,7 +437,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         steps: [],
         messages: [
           ...lane.messages,
-          { seq: ev.seq, role: 'agent', content: String(p.content ?? ''), ts: ev.ts },
+          {
+            seq: ev.seq,
+            role: 'agent',
+            content: String(p.content ?? ''),
+            ts: ev.ts,
+            kind: typeof p.kind === 'string' ? (p.kind as string) : undefined,
+          },
         ],
       };
       set({ lanes: { ...get().lanes, [sessionId]: next } });
@@ -721,6 +731,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
           link: taskLink(p) ?? prev?.link,
         };
         set({ cards, cardOrder: [...get().cardOrder] });
+        break;
+      }
+      case EventType.WORKSPACE_SWITCHED: {
+        // Cross-tab notice: not a timeline event. Bumping the revision lets
+        // workspace views refetch without polling.
+        set({ workspaceRev: get().workspaceRev + 1 });
         break;
       }
       default:

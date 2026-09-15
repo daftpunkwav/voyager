@@ -53,6 +53,8 @@ export const EventType = {
   LLM_FALLBACK: 'llm.fallback',
   /** Graph C engine unreachable, Python engine took over */
   GRAPH_ENGINE_FALLBACK: 'graph.engine.fallback',
+  /** Agent workspace hot-switched (cross-tab notice, not a timeline event) */
+  WORKSPACE_SWITCHED: 'workspace.switched',
   /** Service health state transition (data source of the badge bar) */
   SERVICE_HEALTH_CHANGED: 'service.health.changed',
 } as const;

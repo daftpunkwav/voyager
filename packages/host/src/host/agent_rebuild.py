@@ -40,7 +40,15 @@ from agent.settings import WORKSPACE_DIR_KEY as WORKSPACE_KEY
 from agent.tools import ensure_workdir
 from fastapi import APIRouter, Request
 from platform_capability import build_router
-from platform_contracts import LOCAL_USER, ErrorSuffix, ServiceError
+from platform_contracts import (
+    LOCAL_USER,
+    ActorKind,
+    ActorRef,
+    DomainEvent,
+    ErrorSuffix,
+    Event,
+    ServiceError,
+)
 
 from .bridge import make_domain_tools
 from .embedder_adapter import ServiceEmbedder
@@ -50,6 +58,8 @@ from .llm_adapter import ServiceLLM
 from .llm_routing import RoutingServiceLLM
 
 log = logging.getLogger("host.agent_rebuild")
+
+SYSTEM_HOST = ActorRef(kind=ActorKind.SYSTEM, id="host.workspace")
 
 #: Route prefixes rebound to the new workspace/agent on switch.
 _SWITCH_PREFIXES = ("/api/agent", "/api/workspace", "/api/uploads")
@@ -295,6 +305,15 @@ async def switch_workspace(rebuilder: AgentRebuilder, app: Any, raw_dir: str) ->
         await _start_agent_tasks(rebuilder, new_agent)
         if hasattr(app.state, "backend") and app.state.backend is not None:
             app.state.backend.agent = new_agent
+        # Let other tabs/sessions learn about the switch without polling:
+        # session-less events stay global on every lane.
+        await rebuilder.bus.publish(
+            Event(
+                type=DomainEvent.WORKSPACE_SWITCHED,
+                actor=SYSTEM_HOST,
+                payload={"workspace": str(target), "previous": str(previous)},
+            )
+        )
         return {
             "workspace": str(target),
             "previous": str(previous),

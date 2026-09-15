@@ -79,6 +79,7 @@ _STREAM_TYPES = (
     DomainEvent.SOURCE_REMOVED,
     DomainEvent.SETTINGS_CHANGED,
     DomainEvent.NOTES_UI_CHANGED,
+    DomainEvent.WORKSPACE_SWITCHED,
 )
 # note.created rides along so note receipts survive a refresh (the UI
 # rebuilds its deliverable cards from the same history page).

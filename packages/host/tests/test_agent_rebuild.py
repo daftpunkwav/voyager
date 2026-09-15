@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from host.agent_rebuild import build_switch_router, resolve_candidate_dir
 from host.assemble import ROOT, build
-from platform_contracts import ServiceError
+from platform_contracts import DomainEvent, ServiceError
 
 
 class TestResolveCandidate:
@@ -63,6 +63,15 @@ class TestSwitchEndpoint:
                 # The agent generation was replaced and still answers.
                 assert app.state.backend.agent is app.state.agent_rebuilder.agent
                 assert client.get("/health").status_code == 200
+
+                # The switch is announced for other tabs/sessions.
+                switched = [
+                    e.payload
+                    for _, e in app.state.backend.log.read_after(
+                        types=[DomainEvent.WORKSPACE_SWITCHED]
+                    )
+                ]
+                assert switched and switched[-1]["workspace"] == str(new_ws)
 
                 # A second switch works: the switch endpoint re-mounts itself
                 # with every generation instead of stranding the old routes.

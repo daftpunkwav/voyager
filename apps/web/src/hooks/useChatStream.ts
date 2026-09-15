@@ -33,6 +33,7 @@ const STREAM_PATTERNS = [
   EventType.AGENT_POLICY_NOTIFY,
   'task.*', // subscription glob, not a concrete type
   EventType.NOTE_CREATED,
+  EventType.WORKSPACE_SWITCHED,
 ];
 
 export function useChatStream(onNavigate: (path: string) => void) {
@@ -89,6 +90,15 @@ export function useChatStream(onNavigate: (path: string) => void) {
         const msg = String(ev.payload?.message ?? '').trim();
         if (msg) useUIStore.getState().addToast({ type: 'info', message: msg });
         return;
+      }
+      if (ev.type === EventType.WORKSPACE_SWITCHED) {
+        // Another tab switched the workspace: toast once, then let the store
+        // bump drive workspace views to refetch (no timeline entry).
+        const dir = String(ev.payload?.workspace ?? '').trim();
+        useUIStore.getState().addToast({
+          type: 'info',
+          message: i18n.t('chat:workspace.switchedElsewhere', { dir }),
+        });
       }
       if (ev.type === EventType.TASK_FAILED && ev.payload?.kind === 'resume') {
         // A failed background resume: its card lives in chatStore (job_id = run_id),

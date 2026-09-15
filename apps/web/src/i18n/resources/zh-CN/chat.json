@@ -49,6 +49,7 @@
   "workspace.saveFailed": "保存失败",
   "workspace.switchConfirm": "切换工作区会重建 agent（进行中任务将被打断，会话与历史保留；笔记等应用数据不受影响）。继续？",
   "workspace.switchFailed": "切换失败",
+  "workspace.switchedElsewhere": "工作区已在另一处切换为 {{dir}}，已刷新",
   "workspace.hint": "文件读写、命令执行等工具都在该目录下进行",
   "feed.actorUser": "用户",
   "feed.agentAsk": "{{who}} 向用户提问",

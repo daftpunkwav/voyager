@@ -187,6 +187,23 @@ class TestChat:
         hist = client.get("/api/chat/messages").json()["messages"]
         assert all(m["type"] != "agent.policy.notify" for m in hist)
 
+    def test_sse_streams_workspace_switched_not_history(self, client, bus) -> None:
+        """Workspace hot-switch notices ride the SSE stream for cross-tab
+        awareness; they are not part of the chat history."""
+        asyncio.run(
+            bus.publish(
+                Event(
+                    type=DomainEvent.WORKSPACE_SWITCHED,
+                    actor=ActorRef(kind=ActorKind.SYSTEM, id="host.workspace"),
+                    payload={"workspace": "ws2", "previous": "ws1"},
+                )
+            )
+        )
+        r = client.get("/api/chat/stream?after_seq=0&once=true")
+        assert "workspace.switched" in r.text and "ws2" in r.text
+        hist = client.get("/api/chat/messages").json()["messages"]
+        assert all(m["type"] != "workspace.switched" for m in hist)
+
     def test_sse_replay_includes_task_glob(self, client, bus) -> None:
         """once-mode replay understands subscription globs: 'task.*' in
         _STREAM_TYPES replays persisted task.progress events from the log."""

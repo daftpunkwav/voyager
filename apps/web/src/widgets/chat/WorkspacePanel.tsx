@@ -8,9 +8,10 @@
  * which persists agent.workspace.dir itself.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { callCapability } from '@/bridge/client';
+import { useChatStore } from '@/stores/chatStore';
 import { WORKDIR_KEY } from '@/components/settings/agent/constants';
 import {
   type PickResult,
@@ -161,6 +162,7 @@ function WorkspaceBrowser({
 
 export function WorkspaceSection() {
   const { t } = useTranslation('chat');
+  const workspaceRev = useChatStore((s) => s.workspaceRev);
   const [value, setValue] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -213,6 +215,36 @@ export function WorkspaceSection() {
       alive = false;
     };
   }, [loaded, t]);
+
+  // Cross-tab switch: another tab rebuilt the agent around a new root.
+  // Re-read the configured value and reset the tree/preview (expanded state
+  // is dropped: old paths may not exist under the new root).
+  const revRef = useRef(workspaceRev);
+  useEffect(() => {
+    if (revRef.current === workspaceRev) return;
+    revRef.current = workspaceRev;
+    let alive = true;
+    callCapability<{ value?: unknown }>('settings', 'get_setting', { key: WORKDIR_KEY })
+      .then((item) => {
+        if (!alive) return;
+        if (typeof item?.value === 'string') setValue(item.value);
+        setTree({});
+        setExpanded({});
+        setPreview(null);
+        return listWorkspace('');
+      })
+      .then((res) => {
+        if (!alive || !res) return;
+        if (!res.error) setTree({ '': res.entries });
+        else setError(res.error.message);
+      })
+      .catch((err) => {
+        if (alive) setError(err instanceof Error ? err.message : t('chat:workspace.loadFailed'));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [workspaceRev, t]);
 
   const persist = async (next: string) => {
     setSaving(true);

@@ -49,6 +49,7 @@
   "workspace.saveFailed": "Save failed",
   "workspace.switchConfirm": "Switching the workspace rebuilds the agent (running turns are interrupted; sessions and history are kept; app data like notes is unaffected). Continue?",
   "workspace.switchFailed": "Switch failed",
+  "workspace.switchedElsewhere": "Workspace was switched to {{dir}} elsewhere; refreshed",
   "workspace.hint": "File tools and shell commands all run inside this directory",
   "feed.actorUser": "User",
   "feed.agentAsk": "{{who}} asked the user",

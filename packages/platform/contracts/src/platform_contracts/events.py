@@ -131,6 +131,7 @@ class DomainEvent:
     DOC_CREATED = "doc.created"
     DOC_EDITED = "doc.edited"
     DOC_DELETED = "doc.deleted"
+    WORKSPACE_SWITCHED = "workspace.switched"
     SERVICE_HEALTH_CHANGED = "service.health.changed"
 
 
