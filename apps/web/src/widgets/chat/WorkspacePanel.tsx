@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { callCapability } from '@/bridge/client';
+import { WORKDIR_KEY } from '@/components/settings/agent/constants';
 import {
   type PickResult,
   type WorkspaceEntry,
@@ -19,8 +20,6 @@ import {
   readWorkspaceFile,
   switchWorkspace,
 } from '@/api/workspace';
-
-const SETTING_KEY = 'agent.workspace.dir';
 
 function joinPath(base: string, name: string): string {
   return base ? `${base}/${name}` : name;
@@ -180,7 +179,7 @@ export function WorkspaceSection() {
 
   useEffect(() => {
     let alive = true;
-    callCapability<{ value?: unknown }>('settings', 'get_setting', { key: SETTING_KEY })
+    callCapability<{ value?: unknown }>('settings', 'get_setting', { key: WORKDIR_KEY })
       .then((item) => {
         if (!alive) return;
         setValue(typeof item?.value === 'string' ? item.value : '');

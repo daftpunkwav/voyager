@@ -26,13 +26,12 @@ import {
   updateProvider,
 } from '@/api/llm';
 import type { LlmProvider, LlmTestOutcome } from '@/api/types';
+import { LLM_PROVIDER_KEY } from '@/api/settings';
 import { LlmProviderAdd } from './llm/LlmProviderAdd';
 import { LlmAgentOverrides } from './llm/LlmAgentOverrides';
 import { LlmProviderDetail } from './llm/LlmProviderDetail';
 import { LlmProviderList } from './llm/LlmProviderList';
 import { Degraded } from '@/shell/Degraded';
-
-const DEFAULT_PROVIDER_KEY = 'llm.default_provider';
 
 /** Settings -> LLM: client for the llm service.
  *
@@ -59,7 +58,7 @@ export function LlmSettingsSection() {
       const [list, defItem] = await Promise.all([
         listProviders(),
         callCapability<{ value?: unknown }>('settings', 'get_setting', {
-          key: DEFAULT_PROVIDER_KEY,
+          key: LLM_PROVIDER_KEY,
         }),
       ]);
       setProviders(list);
@@ -136,7 +135,7 @@ export function LlmSettingsSection() {
     // When removing the default provider, clear the setting so ServiceLLM does not resolve to a deleted id (it would fall back automatically, but the setting should stay honest)
     if (defaultId === id) {
       await callCapability('settings', 'set_setting', {
-        key: DEFAULT_PROVIDER_KEY,
+        key: LLM_PROVIDER_KEY,
         value: '',
       });
       setDefaultId('');
@@ -146,7 +145,7 @@ export function LlmSettingsSection() {
 
   const setDefault = async (id: string) => {
     await callCapability('settings', 'set_setting', {
-      key: DEFAULT_PROVIDER_KEY,
+      key: LLM_PROVIDER_KEY,
       value: id,
     });
     setDefaultId(id);

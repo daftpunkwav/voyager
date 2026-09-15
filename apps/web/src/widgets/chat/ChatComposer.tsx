@@ -23,6 +23,7 @@ import { useTranslation } from 'react-i18next';
 import { callCapability } from '@/bridge/client';
 import type { LlmProvider } from '@/api/types';
 import { listProviders } from '@/api/llm';
+import { LLM_MODEL_KEY, LLM_PROVIDER_KEY, LLM_REASONING_EFFORT_KEY } from '@/api/settings';
 import type { UseChatSendReturn } from '@/hooks/useChatSend';
 import { ContextRing } from '@/widgets/chat/ContextRing';
 
@@ -167,9 +168,9 @@ export function ChatComposer({
       })
       .catch(() => {}); // picker degrades to disabled; composing still works
     const keys: Array<[string, (v: string) => void]> = [
-      ['llm.default_provider', setProviderId],
-      ['llm.default_model', setModel],
-      ['llm.reasoning_effort', setReasoning],
+      [LLM_PROVIDER_KEY, setProviderId],
+      [LLM_MODEL_KEY, setModel],
+      [LLM_REASONING_EFFORT_KEY, setReasoning],
     ];
     for (const [key, apply] of keys) {
       callCapability<{ value?: unknown }>('settings', 'get_setting', { key })
@@ -191,19 +192,18 @@ export function ChatComposer({
   const pickModel = (p: LlmProvider, m: string) => {
     setProviderId(p.id);
     setModel(m);
-    void callCapability('settings', 'set_setting', { key: 'llm.default_provider', value: p.id })
+    void callCapability('settings', 'set_setting', { key: LLM_PROVIDER_KEY, value: p.id })
       .catch(() => {})
-      .then(() =>
-        callCapability('settings', 'set_setting', { key: 'llm.default_model', value: m })
-      )
+      .then(() => callCapability('settings', 'set_setting', { key: LLM_MODEL_KEY, value: m }))
       .catch(() => {});
   };
 
   const pickReasoning = (value: string) => {
     setReasoning(value);
-    void callCapability('settings', 'set_setting', { key: 'llm.reasoning_effort', value }).catch(
-      () => {}
-    );
+    void callCapability('settings', 'set_setting', {
+      key: LLM_REASONING_EFFORT_KEY,
+      value,
+    }).catch(() => {});
   };
 
   const reasoningLabel =
@@ -258,9 +258,7 @@ export function ChatComposer({
                     >
                       {m}
                       {p.models_meta?.[m]?.image_input ? (
-                        <span className="composer-dd__badge">
-                          {t('chat:composer.badgeImage')}
-                        </span>
+                        <span className="composer-dd__badge">{t('chat:composer.badgeImage')}</span>
                       ) : null}
                     </button>
                   ))}
