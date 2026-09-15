@@ -1,11 +1,10 @@
 /**
  * @file TrajectoryView
- * @description Full execution-trajectory page, localized from DSH's
- * ui-trajectory: a stats toolbar (duration / turns / calls + search), a
- * three-lane timeline (input / model / tools) where every event is a span
- * that scrolls the table to its row, and a turn-grouped event table whose
- * rows expand in place (tool call details, full reasoning text, assistant
- * output).
+ * @description Full execution-trajectory page: a stats toolbar (duration /
+ * turns / calls + search), a three-lane timeline (input / model / tools)
+ * where every event is a span that scrolls the table to its row, and a
+ * turn-grouped event table whose rows expand in place (tool call details,
+ * full reasoning text, assistant output).
  *
  * Data comes from chatStore: trails (persisted per-turn steps), live steps,
  * and the message stream. Rows are derived, never persisted.
@@ -144,16 +143,19 @@ export function TrajectoryView() {
   const [selected, setSelected] = useState<string | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
-  const allSteps = [...trails.flatMap((tr) => tr.steps), ...steps, ...lastSteps];
+  const allSteps = useMemo(() => {
+    const bySeq = new Map<number, TurnStep>();
+    for (const s of trails.flatMap((tr) => tr.steps)) bySeq.set(s.seq, s);
+    for (const s of steps) bySeq.set(s.seq, s);
+    for (const s of lastSteps) bySeq.set(s.seq, s);
+    return [...bySeq.values()].sort((a, b) => a.seq - b.seq);
+  }, [trails, steps, lastSteps]);
   const stats = summarizeTurn(allSteps);
   const firstTs = allSteps[0]?.ts;
   const lastTs = allSteps[allSteps.length - 1]?.ts;
   const totalSec = firstTs && lastTs ? Math.max(0, Math.round(lastTs - firstTs)) : 0;
 
-  const rows = useMemo(
-    () => buildRows(messages, trails, steps, t),
-    [messages, trails, steps, t]
-  );
+  const rows = useMemo(() => buildRows(messages, trails, steps, t), [messages, trails, steps, t]);
 
   const filtered = query.trim()
     ? rows.filter((r) => r.text.toLowerCase().includes(query.trim().toLowerCase()))
@@ -172,9 +174,15 @@ export function TrajectoryView() {
   return (
     <div className="chat-traj2">
       <div className="chat-traj2__toolbar">
-        <span className="chat-traj2__stat">{t('chat:traj.statsDuration', { v: formatDurationSec(totalSec, t) })}</span>
-        <span className="chat-traj2__stat">{t('chat:traj.statsTurns', { n: rows.filter((r) => r.kind === 'user').length })}</span>
-        <span className="chat-traj2__stat">{t('chat:traj.statsCalls', { n: stats.toolCalls })}</span>
+        <span className="chat-traj2__stat">
+          {t('chat:traj.statsDuration', { v: formatDurationSec(totalSec, t) })}
+        </span>
+        <span className="chat-traj2__stat">
+          {t('chat:traj.statsTurns', { n: rows.filter((r) => r.kind === 'user').length })}
+        </span>
+        <span className="chat-traj2__stat">
+          {t('chat:traj.statsCalls', { n: stats.toolCalls })}
+        </span>
         <span className="chat-traj2__stat muted">
           {t('chat:traj.statsTokens', {
             a: formatCompactCount(stats.inputTokens),
@@ -232,7 +240,9 @@ export function TrajectoryView() {
                   setSelected(r.key);
                 }}
               >
-                <span className={`chat-traj2__badge is-${r.kind}`}>{t(KIND_LABEL_KEYS[r.kind])}</span>
+                <span className={`chat-traj2__badge is-${r.kind}`}>
+                  {t(KIND_LABEL_KEYS[r.kind])}
+                </span>
                 <span className="chat-traj2__rowtext">
                   {r.kind === 'tool' || r.kind === 'op'
                     ? `${r.label}${r.text ? ` ${r.text}` : ''}`

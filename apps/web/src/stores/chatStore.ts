@@ -167,6 +167,7 @@ interface LaneSnapshot {
   trails: TurnTrail[];
   steps: TurnStep[];
   lastSteps: TurnStep[];
+  artifacts: NoteArtifact[];
   streaming: StreamingText | null;
   thinking: boolean;
   /** History/trajectory backfill already ran for this lane. */
@@ -180,6 +181,7 @@ function emptyLane(): LaneSnapshot {
     trails: [],
     steps: [],
     lastSteps: [],
+    artifacts: [],
     streaming: null,
     thinking: false,
     loaded: false,
@@ -388,6 +390,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       trails: s.trails,
       steps: s.steps,
       lastSteps: s.lastSteps,
+      artifacts: s.artifacts,
       streaming: s.streaming,
       thinking: s.thinking,
       loaded: s.activeLoaded,
@@ -401,6 +404,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       trails: lane.trails,
       steps: lane.steps,
       lastSteps: lane.lastSteps,
+      artifacts: lane.artifacts,
       roundTexts: [],
       streaming: lane.streaming,
       thinking: lane.thinking,
@@ -446,6 +450,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
           },
         },
       });
+    } else if (ev.type === 'note.created') {
+      const artifact = {
+        seq: ev.seq,
+        noteId: String(p.note_id ?? ''),
+        title: String(p.title ?? i18n.t('chat:store.untitledNote')),
+      };
+      if (!artifact.noteId) return;
+      set({
+        lanes: {
+          ...get().lanes,
+          [sessionId]: {
+            ...lane,
+            artifacts: [...lane.artifacts, artifact].filter(
+              (a, i, arr) => arr.findIndex((x) => x.seq === a.seq) === i
+            ),
+          },
+        },
+      });
     }
     // agent.step for background lanes is dropped: progress visuals matter
     // only for the open lane, and the final message still lands above.
@@ -464,9 +486,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // otherwise the backfill would wipe just-arrived messages
     const maxSeq = msgs.length ? msgs[msgs.length - 1].seq : 0;
     const live = get().messages.filter((m) => m.seq < 0 || m.seq > maxSeq);
+    // While backfilling, live note.created receipts may have already landed:
+    // keep artifacts newer than the history window and merge restored ones.
+    const liveArtifacts = get().artifacts.filter((a) => a.seq < 0 || a.seq > maxSeq);
+    const restoredMap = new Map<number, NoteArtifact>();
+    for (const a of restored) restoredMap.set(a.seq, a);
+    for (const a of liveArtifacts) restoredMap.set(a.seq, a);
     set({
       messages: [...msgs, ...live],
-      artifacts: restored,
+      artifacts: [...restoredMap.values()].sort((a, b) => a.seq - b.seq),
       hasMoreHistory: hasMore,
       activeLoaded: true,
     });
@@ -480,7 +508,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const seen = new Set(existing.map((m) => m.seq));
     const fresh = older.filter((m) => !seen.has(m.seq));
     // Older note receipts merge in as well (dedup by seq, ascending)
-    const artifacts = [...get().artifacts, ...historyToArtifacts(events).filter((a) => !get().artifacts.some((x) => x.seq === a.seq))].sort((a, b) => a.seq - b.seq);
+    const artifacts = [
+      ...get().artifacts,
+      ...historyToArtifacts(events).filter((a) => !get().artifacts.some((x) => x.seq === a.seq)),
+    ].sort((a, b) => a.seq - b.seq);
     set({
       messages: [...fresh, ...existing],
       artifacts,
@@ -593,16 +624,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         break;
       }
       case 'note.created': {
-        // Note artifact card (appears whether the user or the agent saved it; click navigates to the notes page)
+        // Note artifact card (appears whether the user or the agent saved it; click navigates to the notes page).
+        // SSE replays may re-deliver the same event: dedup by seq so the card never doubles.
+        const artifact = {
+          seq: ev.seq,
+          noteId: String(p.note_id ?? ''),
+          title: String(p.title ?? i18n.t('chat:store.untitledNote')),
+        };
+        if (!artifact.noteId || get().artifacts.some((a) => a.seq === artifact.seq)) break;
         set({
-          artifacts: [
-            ...get().artifacts,
-            {
-              seq: ev.seq,
-              noteId: String(p.note_id ?? ''),
-              title: String(p.title ?? i18n.t('chat:store.untitledNote')),
-            },
-          ].filter((a) => a.noteId),
+          artifacts: [...get().artifacts, artifact],
         });
         break;
       }
