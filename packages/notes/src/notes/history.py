@@ -13,7 +13,7 @@ Responsibilities:
 from __future__ import annotations
 
 from platform_capability import capability
-from platform_contracts import ErrorSuffix, ServiceError
+from platform_contracts import DomainEvent, ErrorSuffix, ServiceError
 
 from .marks import MarkError, apply_note_mark
 from .runtime import DOMAIN, emit, get_any, registry, require_alive, require_deps
@@ -63,7 +63,7 @@ async def restore_version(note_id: str, version: int) -> dict:
         raise ServiceError(DOMAIN, ErrorSuffix.NOT_FOUND, f"Version not found: v{version}")
     deps.store.update(note_id, content=snap["content"])
     deps.store.sync_links(note_id, snap["content"])
-    await emit("note.edited", note_id, restored_version=int(version))
+    await emit(DomainEvent.NOTE_EDITED, note_id, restored_version=int(version))
     return get_any(note_id)
 
 
@@ -112,7 +112,7 @@ async def edit_note_range(note_id: str, start: int, end: int, new_text: str) -> 
     new_content = content[:start] + (new_text or "") + content[end:]
     deps.store.update(note_id, content=new_content)
     deps.store.sync_links(note_id, new_content)
-    await emit("note.edited", note_id, range_edit=True, start=start, end=end)
+    await emit(DomainEvent.NOTE_EDITED, note_id, range_edit=True, start=start, end=end)
     return get_any(note_id)
 
 
@@ -139,5 +139,5 @@ async def mark_note_span(note_id: str, quote: str, tone: str = "warm") -> dict:
     validate_content(new_content)
     deps.store.update(note_id, content=new_content)
     deps.store.sync_links(note_id, new_content)
-    await emit("note.edited", note_id, mark_span=True, tone=tone)
+    await emit(DomainEvent.NOTE_EDITED, note_id, mark_span=True, tone=tone)
     return get_any(note_id)

@@ -130,7 +130,7 @@ async def update_note(
     if content is not None:
         deps.store.sync_links(note_id, content)
     await emit(
-        "note.edited",
+        DomainEvent.NOTE_EDITED,
         note_id,
         content_changed=content is not None,
         pinned=pinned,
@@ -157,7 +157,7 @@ async def link_note(note_id: str, source_id: str | None = None, node_id: str | N
     if node_id is not None:
         node_id = validate_node_id(node_id)
     deps.store.update(note_id, source_id=source_id, node_id=node_id)
-    await emit("note.edited", note_id, linked=True)
+    await emit(DomainEvent.NOTE_EDITED, note_id, linked=True)
     return get_any(note_id)
 
 
@@ -178,7 +178,7 @@ async def delete_note(note_id: str) -> dict:
             hint="restore_note can recover it",
         )
     deps.store.trash(note_id)
-    await emit("note.deleted", note_id, title=note["title"])
+    await emit(DomainEvent.NOTE_DELETED, note_id, title=note["title"])
     return {
         "trashed": note_id,
         "title": note["title"],
@@ -193,7 +193,7 @@ async def restore_note(note_id: str) -> dict:
     if note["trashed_ts"] is None:
         raise ServiceError(DOMAIN, ErrorSuffix.CONFLICT, "Note is not in the trash")
     deps.store.restore(note_id)
-    await emit("note.restored", note_id, title=note["title"])
+    await emit(DomainEvent.NOTE_RESTORED, note_id, title=note["title"])
     return get_any(note_id)
 
 
@@ -208,7 +208,9 @@ async def purge_note(note_id: str) -> dict:
     note = get_any(note_id)
     deps.store.delete(note_id)
     removed_assets = deps.purge_assets(note_id) if deps.purge_assets else []
-    await emit("note.purged", note_id, title=note["title"], removed_assets=len(removed_assets))
+    await emit(
+        DomainEvent.NOTE_PURGED, note_id, title=note["title"], removed_assets=len(removed_assets)
+    )
     return {"purged": note_id, "title": note["title"]}
 
 
@@ -237,5 +239,5 @@ async def empty_trash(max_age_days: int | None = None) -> dict:
     if deps.purge_assets:
         for nid in purged:
             deps.purge_assets(nid)
-    await emit("note.purged_batch", purged[0], purged_count=len(purged), note_ids=purged)
+    await emit(DomainEvent.NOTE_PURGED_BATCH, purged[0], purged_count=len(purged), note_ids=purged)
     return {"purged_count": len(purged)}

@@ -16,7 +16,7 @@ import asyncio
 from functools import partial
 from typing import Any, Protocol
 
-from platform_contracts import ActorKind, ActorRef, Event
+from platform_contracts import ActorKind, ActorRef, DomainEvent, Event
 from platform_eventbus import EventBus
 
 from .c.client import CEngineClient
@@ -90,7 +90,8 @@ class EngineAdapter:
                 hint="check the sidecar process; or set graph.engine.mode to auto",
             )
         await self._emit(
-            "graph.engine.fallback", reason="C engine unreachable, fell back to the Python engine"
+            DomainEvent.GRAPH_ENGINE_FALLBACK,
+            reason="C engine unreachable, fell back to the Python engine",
         )
         return self._python, "python"
 

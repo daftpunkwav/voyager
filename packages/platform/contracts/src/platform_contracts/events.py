@@ -116,12 +116,18 @@ class DomainEvent:
     AGENT_POLICY_NOTIFY = "agent.policy.notify"
     AGENT_NAVIGATE = "agent.navigate"
     NOTE_CREATED = "note.created"
+    NOTE_EDITED = "note.edited"
+    NOTE_DELETED = "note.deleted"
+    NOTE_RESTORED = "note.restored"
+    NOTE_PURGED = "note.purged"
+    NOTE_PURGED_BATCH = "note.purged_batch"
     NOTES_UI_CHANGED = "notes.ui.changed"
     SOURCE_ADDED = "source.added"
     SOURCE_READY = "source.ready"
     SOURCE_REMOVED = "source.removed"
     SETTINGS_CHANGED = "settings.changed"
     LLM_FALLBACK = "llm.fallback"
+    GRAPH_ENGINE_FALLBACK = "graph.engine.fallback"
     SERVICE_HEALTH_CHANGED = "service.health.changed"
 
 
