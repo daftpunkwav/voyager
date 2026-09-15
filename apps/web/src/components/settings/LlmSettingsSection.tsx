@@ -93,7 +93,7 @@ export function LlmSettingsSection() {
   const selected = providers.find((p) => p.id === selectedId) ?? null;
   const anyUsable = providers.some((p) => p.enabled && p.has_api_key);
 
-  /** Metadata patch: update_provider (no key; format enum is only chat/anthropic) */
+  /** Metadata patch: update_provider (no key; format enum: chat / anthropic / responses) */
   const patchProvider = (
     id: string,
     patch: Partial<

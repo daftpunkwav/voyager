@@ -19,7 +19,7 @@ import type { AgentLlmConfig, AgentSpeakingStyle, LlmApiFormat } from '@/api/typ
 import { i18n } from '@/i18n';
 import { AGENT_CATALOG } from '@/constants/agentCatalog';
 
-/** API format options (aligned with the backend LLM catalog: chat / anthropic only) */
+/** API format options (aligned with the backend LLM catalog: chat / anthropic / responses) */
 export const LLM_API_FORMAT_OPTIONS: { value: LlmApiFormat; labelKey: string; hint: string }[] = [
   { value: 'chat', labelKey: 'settings:llm.format.chat', hint: '/v1/chat/completions' },
   { value: 'anthropic', labelKey: 'settings:llm.format.anthropic', hint: '/v1/messages' },

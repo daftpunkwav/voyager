@@ -53,6 +53,10 @@ export const EventType = {
   LLM_FALLBACK: 'llm.fallback',
   /** Graph C engine unreachable, Python engine took over */
   GRAPH_ENGINE_FALLBACK: 'graph.engine.fallback',
+  /** Office document lifecycle (doc and slides modules share the vocabulary) */
+  DOC_CREATED: 'doc.created',
+  DOC_EDITED: 'doc.edited',
+  DOC_DELETED: 'doc.deleted',
   /** Agent workspace hot-switched (cross-tab notice, not a timeline event) */
   WORKSPACE_SWITCHED: 'workspace.switched',
   /** Service health state transition (data source of the badge bar) */
