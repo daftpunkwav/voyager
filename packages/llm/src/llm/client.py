@@ -204,16 +204,23 @@ def _chat_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Paired history -> OpenAI wire format: assistant.tool_calls gain the
     type/function shape with arguments serialized to a JSON string.
     role:"tool" and tool_call_id are native OpenAI fields and pass through
-    unchanged (orphans were already downgraded by _resolve_tool_messages)."""
+    unchanged (orphans were already downgraded by _resolve_tool_messages).
+
+    Stored thinking_blocks are Anthropic-only: they are stripped here so a
+    mid-session provider switch can never leak unknown message fields to a
+    strict OpenAI endpoint (400 on additional properties)."""
     out: list[dict[str, Any]] = []
     for m in messages:
         tool_calls = m.get("tool_calls") if m.get("role") == "assistant" else None
         if not tool_calls:
+            if "thinking_blocks" in m:
+                m = {k: v for k, v in m.items() if k != "thinking_blocks"}
             out.append(m)
             continue
+        rest = {k: v for k, v in m.items() if k != "thinking_blocks"}
         out.append(
             {
-                **m,
+                **rest,
                 "tool_calls": [
                     {
                         "id": str(tc.get("id") or ""),
@@ -462,18 +469,23 @@ _THINKING_BLOCK_TYPES = ("thinking", "redacted_thinking")
 def _echoable_thinking_blocks(message: dict[str, Any]) -> list[dict[str, Any]]:
     """Stored thinking blocks of one neutral assistant message, sanitized for
     the wire: only well-formed thinking/redacted_thinking dicts pass, so a
-    poisoned history entry can never inject arbitrary content blocks."""
+    poisoned history entry can never inject arbitrary content blocks. Empty
+    signatures and dataless redacted blocks are dropped rather than echoed:
+    strict endpoints reject signature-less thinking replays."""
     stored = message.get("thinking_blocks") or ()
     if not isinstance(stored, (list, tuple)):
         return []
     out = []
     for block in stored:
-        if (
-            isinstance(block, dict)
-            and block.get("type") in _THINKING_BLOCK_TYPES
-            and (block.get("type") == "redacted_thinking" or isinstance(block.get("thinking"), str))
-        ):
-            out.append(dict(block))
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "thinking" and isinstance(block.get("thinking"), str):
+            echo = {"type": "thinking", "thinking": block["thinking"]}
+            if block.get("signature"):
+                echo["signature"] = block["signature"]
+            out.append(echo)
+        elif block.get("type") == "redacted_thinking" and block.get("data") is not None:
+            out.append({"type": "redacted_thinking", "data": block["data"]})
     return out
 
 

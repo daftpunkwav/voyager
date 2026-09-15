@@ -134,6 +134,22 @@ class TestComplete:
         reply = await _client(handler).complete(MSGS)
         assert reply.degraded and reply.overflow is True
 
+    async def test_reasoning_content_parsed_separately(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {"message": {"content": "ok", "reasoning_content": "why it works"}}
+                    ],
+                    "usage": {"prompt_tokens": 3, "completion_tokens": 5},
+                },
+            )
+
+        reply = await _client(handler).complete(MSGS)
+        assert reply.text == "ok"
+        assert reply.reasoning == "why it works"
+
 
 class TestStream:
     async def test_deltas_aggregate_to_final(self) -> None:
@@ -161,6 +177,34 @@ class TestStream:
         assert deltas == ["你", "好"]
         assert final is not None and final.text == "你好"
         assert final.usage.output_tokens == 2
+
+    async def test_stream_reasoning_stays_off_text_channel(self) -> None:
+        def sse(text: dict | str) -> bytes:
+            return f"data: {json.dumps(text)}\n\n".encode()
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            chunks = [
+                {"choices": [{"delta": {"reasoning_content": "weigh"}}]},
+                {"choices": [{"delta": {"content": "ok"}}]},
+                "DONE",
+            ]
+            body = b"".join(sse(c) if isinstance(c, dict) else b"data: [DONE]\n\n" for c in chunks)
+            return httpx.Response(200, content=body, headers={"content-type": "text/event-stream"})
+
+        llm = _client(handler)
+        text_deltas: list[str] = []
+        reasoning_deltas: list[str] = []
+        final = None
+        async for ev in llm.complete_stream(MSGS):
+            if ev.final is not None:
+                final = ev.final
+            else:
+                text_deltas.append(ev.text_delta)
+                reasoning_deltas.append(ev.reasoning_delta)
+        assert text_deltas == ["", "ok"]
+        assert reasoning_deltas == ["weigh", ""]
+        assert final is not None and final.text == "ok"
+        assert final.reasoning == "weigh"
 
     async def test_stream_tool_fragments_merge(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:

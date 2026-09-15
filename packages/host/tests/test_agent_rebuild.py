@@ -82,6 +82,82 @@ class TestSwitchEndpoint:
             )
             assert client.post("/api/workspace/switch", json={}).status_code == 400
 
+    def test_switch_same_target_is_noop(self, tmp_path) -> None:
+        import os
+
+        ws = ROOT / "data" / f".test-ws-same-{os.getpid()}"
+        ws.mkdir(parents=True, exist_ok=True)
+        try:
+            app = build(tmp_path / "data", ws)
+            with TestClient(app) as client:
+                before = app.state.backend.agent
+                resp = client.post("/api/workspace/switch", json={"dir": str(ws)})
+                assert resp.status_code == 200, resp.text
+                assert "nothing was rebuilt" in resp.json()["note"]
+                assert app.state.backend.agent is before
+        finally:
+            shutil.rmtree(ws, ignore_errors=True)
+
+    def test_switch_failure_rolls_back(self, tmp_path) -> None:
+        import os
+
+        ws = ROOT / "data" / f".test-ws-rb-{os.getpid()}"
+        ws.mkdir(parents=True, exist_ok=True)
+        try:
+            app = build(tmp_path / "data", ws)
+            with TestClient(app) as client:
+                rb = app.state.agent_rebuilder
+                orig = rb.build_fn
+                calls: list = []
+
+                def flaky(target):
+                    calls.append(target)
+                    if len(calls) == 1:
+                        raise RuntimeError("boom")
+                    return orig(target)
+
+                rb.build_fn = flaky  # type: ignore[method-assign]
+                other = ROOT / "data" / f".test-ws-rb-new-{os.getpid()}"
+                resp = client.post("/api/workspace/switch", json={"dir": str(other)})
+                assert resp.status_code == 503, resp.text
+                assert "rolled back" in resp.json()["error"]["message"]
+                # Rolled back to a live generation on the old workspace.
+                assert rb.agent is not None
+                assert rb.current_workspace == ws
+                assert client.get("/health").status_code == 200
+                # The setting still points at the old workspace.
+                assert app.state.backend.settings_store.get("agent.workspace.dir") != str(other)
+        finally:
+            shutil.rmtree(ws, ignore_errors=True)
+            shutil.rmtree(ROOT / "data" / f".test-ws-rb-new-{os.getpid()}", ignore_errors=True)
+
+    def test_switch_total_failure_marks_not_running(self, tmp_path) -> None:
+        import os
+
+        ws = ROOT / "data" / f".test-ws-dead-{os.getpid()}"
+        ws.mkdir(parents=True, exist_ok=True)
+        try:
+            app = build(tmp_path / "data", ws)
+            with TestClient(app) as client:
+                rb = app.state.agent_rebuilder
+
+                def always_fail(target):
+                    raise RuntimeError("boom")
+
+                rb.build_fn = always_fail  # type: ignore[method-assign]
+                other = ROOT / "data" / f".test-ws-dead-new-{os.getpid()}"
+                resp = client.post("/api/workspace/switch", json={"dir": str(other)})
+                assert resp.status_code == 503, resp.text
+                assert rb.agent is None
+                # A later switch reports the honest state instead of tearing
+                # down a half-closed generation again.
+                resp2 = client.post("/api/workspace/switch", json={"dir": str(other)})
+                assert resp2.status_code == 503
+                assert "not running" in resp2.json()["error"]["message"]
+        finally:
+            shutil.rmtree(ws, ignore_errors=True)
+            shutil.rmtree(ROOT / "data" / f".test-ws-dead-new-{os.getpid()}", ignore_errors=True)
+
     def test_switch_without_rebuilder_is_unavailable(self) -> None:
         app = FastAPI()
 

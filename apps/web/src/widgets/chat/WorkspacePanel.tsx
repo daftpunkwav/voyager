@@ -228,6 +228,7 @@ export function WorkspaceSection() {
       setSaved(true);
       setTree({});
       setExpanded({});
+      setPreview(null);
       const tree = await listWorkspace('');
       if (!tree.error) setTree({ '': tree.entries });
       else setError(tree.error.message);

@@ -35,13 +35,19 @@ def estimate_text(text: str) -> int:
 def estimate_messages(messages: list[dict[str, Any]]) -> int:
     """Estimate a messages list: each message gets the framing floor; the JSON arguments of
     assistant.tool_calls are counted too (previously ignored, which skewed budgets on
-    multi-tool turns)."""
+    multi-tool turns), as is echoed thinking text (extended-thinking replays ride every
+    request while tool use continues)."""
     total = 0
     for m in messages:
         text = str(m.get("content", ""))
         calls = m.get("tool_calls") or ()
         if calls:
             text += json.dumps(calls, ensure_ascii=False, default=str)
+        thinking = m.get("thinking_blocks") or ()
+        if isinstance(thinking, (list, tuple)):
+            for block in thinking:
+                if isinstance(block, dict) and isinstance(block.get("thinking"), str):
+                    text += block["thinking"]
         total += max(estimate_text(text), _PER_MESSAGE_FLOOR)
     return total
 

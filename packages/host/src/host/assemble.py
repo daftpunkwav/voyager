@@ -359,6 +359,7 @@ def build(
             issuer=issuer,
             injected_llm=llm,
             agent=built,
+            current_workspace=workspace,
         )
 
         @asynccontextmanager
@@ -375,6 +376,7 @@ def build(
                     rebuilder.agent_task = None
                     rebuilder.mcp_task = None
                     rebuilder.agent = None
+                    rebuilder.current_workspace = None
                     await stop_wirings(list(wirings.values()))
                     close_wirings(list(wirings.values()))
                     close_quietly(built, what="agent")
@@ -397,6 +399,7 @@ def build(
                     rebuilder.agent = None
                     rebuilder.agent_task = None
                     rebuilder.mcp_task = None
+                    rebuilder.current_workspace = None
                     if current is not None:
                         await _teardown_agent(current, agent_task, mcp_task)
                     await stop_wirings(list(wirings.values()))

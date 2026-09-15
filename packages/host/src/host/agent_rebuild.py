@@ -106,6 +106,10 @@ class AgentRebuilder:
     agent: AgentApp | None = None
     agent_task: asyncio.Task | None = None
     mcp_task: asyncio.Task | None = None
+    #: Resolved workspace of the live generation (source of truth for
+    #: rollback and the previous field — the settings value may predate an
+    #: explicit workspace_dir injection or a direct capability write).
+    current_workspace: Path | None = None
 
     def build_fn(self, workspace: Path) -> AgentApp:
         """Assemble one agent generation around workspace (mirrors the
@@ -240,10 +244,20 @@ async def switch_workspace(rebuilder: AgentRebuilder, app: Any, raw_dir: str) ->
         old = rebuilder.agent
         if old is None:
             raise ServiceError("host", ErrorSuffix.UNAVAILABLE, "agent is not running")
-        previous = str(
-            rebuilder.settings_store.get(WORKSPACE_KEY)
-            or rebuilder.data_agent_dir.parent / "workspace"
-        )
+        previous = rebuilder.current_workspace
+        if previous is None:
+            raw_previous = str(rebuilder.settings_store.get(WORKSPACE_KEY) or "")
+            previous = (
+                resolve_candidate_dir(raw_previous, rebuilder.root)
+                if raw_previous.strip()
+                else rebuilder.data_agent_dir.parent / "workspace"
+            )
+        if previous.resolve() == target.resolve():
+            return {
+                "workspace": str(target),
+                "previous": str(previous),
+                "note": "already on this workspace; nothing was rebuilt.",
+            }
         await _teardown_agent(old, rebuilder.agent_task, rebuilder.mcp_task)
         rebuilder.agent_task = None
         rebuilder.mcp_task = None
@@ -252,18 +266,22 @@ async def switch_workspace(rebuilder: AgentRebuilder, app: Any, raw_dir: str) ->
         except Exception as exc:
             log.exception("workspace switch build failed for %s; rolling back", target)
             try:
-                rollback_target = resolve_candidate_dir(previous, rebuilder.root)
-                ensure_workdir(rollback_target)
-                rolled = rebuilder.build_fn(rollback_target)
+                ensure_workdir(previous)
+                rolled = rebuilder.build_fn(previous)
             except Exception:
                 log.exception("workspace rollback failed")
+                # Leave no half-torn-down generation behind: the next switch
+                # (or lifespan shutdown) sees a clean "not running" state.
+                rebuilder.agent = None
+                rebuilder.current_workspace = None
                 raise ServiceError(
                     "host",
                     ErrorSuffix.UNAVAILABLE,
                     f"workspace switch failed ({exc}); rollback failed too — restart the service",
                 ) from exc
             rebuilder.agent = rolled
-            _swap_workspace_routes(app, rolled, rollback_target, rebuilder)
+            rebuilder.current_workspace = previous
+            _swap_workspace_routes(app, rolled, previous, rebuilder)
             await _start_agent_tasks(rebuilder, rolled)
             if hasattr(app.state, "backend") and app.state.backend is not None:
                 app.state.backend.agent = rolled
@@ -271,6 +289,7 @@ async def switch_workspace(rebuilder: AgentRebuilder, app: Any, raw_dir: str) ->
                 "host", ErrorSuffix.UNAVAILABLE, f"workspace switch failed ({exc}); rolled back"
             ) from exc
         rebuilder.agent = new_agent
+        rebuilder.current_workspace = target
         _swap_workspace_routes(app, new_agent, target, rebuilder)
         await rebuilder.settings_store.set(WORKSPACE_KEY, str(target), LOCAL_USER)
         await _start_agent_tasks(rebuilder, new_agent)
@@ -278,7 +297,7 @@ async def switch_workspace(rebuilder: AgentRebuilder, app: Any, raw_dir: str) ->
             app.state.backend.agent = new_agent
         return {
             "workspace": str(target),
-            "previous": previous,
+            "previous": str(previous),
             "note": (
                 "agent workspace switched without a service restart; sessions and "
                 "history are preserved, in-flight turns were drained. Domain data "

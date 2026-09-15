@@ -52,3 +52,27 @@ class TestEstimateMessages:
         calls = [{"id": "1", "name": "t", "arguments": {"obj": object()}}]
         msgs = [{"role": "assistant", "content": "", "tool_calls": calls}]
         assert estimate_messages(msgs) > 0
+
+    def test_echoed_thinking_counted(self) -> None:
+        """Echoed thinking blocks ride every request while tool use continues;
+        ignoring them would skew budgets on thinking-model turns."""
+        base = [{"role": "assistant", "content": "", "tool_calls": []}]
+        thinking = "weigh options carefully"
+        msgs = [
+            {
+                "role": "assistant",
+                "content": "",
+                "thinking_blocks": [{"type": "thinking", "thinking": thinking}],
+            }
+        ]
+        assert estimate_messages(msgs) > estimate_messages(base)
+
+    def test_malformed_thinking_ignored(self) -> None:
+        """Non-list thinking_blocks or non-string thinking never raises."""
+        msgs = [
+            {"role": "assistant", "content": "hi", "thinking_blocks": "junk"},
+            {"role": "assistant", "content": "hi", "thinking_blocks": [{"type": "thinking"}]},
+        ]
+        assert estimate_messages(msgs) == 2 * estimate_messages(
+            [{"role": "assistant", "content": "hi"}]
+        )

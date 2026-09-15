@@ -768,6 +768,70 @@ class TestMessageTranslation:
             {"type": "tool_result", "tool_use_id": "call_2", "content": "echo:b"},
         ]
 
+    async def test_chat_strips_thinking_blocks(self, monkeypatch) -> None:
+        """Stored thinking blocks are Anthropic-only: a mid-session provider
+        switch to chat format must not leak unknown message fields (strict
+        OpenAI endpoints 400 on additional properties)."""
+        seen = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [{"message": {"content": "ok"}}],
+                    "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+                    "model": "m",
+                },
+            )
+
+        self._patch(monkeypatch, handler)
+        history = [
+            dict(m, thinking_blocks=[{"type": "thinking", "thinking": "t", "signature": "s"}])
+            if m.get("role") == "assistant"
+            else m
+            for m in self._PAIRED
+        ]
+        await client_mod.complete(self._CHAT, api_key="sk", model="m", messages=history)
+        assert "thinking_blocks" not in json.dumps(seen["body"])
+
+    async def test_anthropic_echo_drops_unsigned_and_dataless(self, monkeypatch) -> None:
+        """Echo sanitizer: unsigned thinking replays without the signature
+        key and dataless redacted blocks are dropped rather than echoed."""
+        seen = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "content": [{"type": "text", "text": "ok"}],
+                    "usage": {"input_tokens": 1, "output_tokens": 1},
+                    "model": "m",
+                },
+            )
+
+        self._patch(monkeypatch, handler)
+        history = [
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{"id": "call_1", "name": "echo_tool", "arguments": {}}],
+                "thinking_blocks": [
+                    {"type": "thinking", "thinking": "unsigned"},
+                    {"type": "redacted_thinking"},
+                    {"type": "redacted_thinking", "data": "opaque"},
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_1", "content": "echo:a"},
+        ]
+        await client_mod.complete(self._ANTHROPIC, api_key="sk", model="m", messages=history)
+        assert seen["body"]["messages"][0]["content"] == [
+            {"type": "thinking", "thinking": "unsigned"},
+            {"type": "redacted_thinking", "data": "opaque"},
+            {"type": "tool_use", "id": "call_1", "name": "echo_tool", "input": {}},
+        ]
+
     async def test_orphan_tool_flattens_alongside_paired(self, monkeypatch) -> None:
         """Mixed paired + orphan history: pairs keep native shapes while
         orphans (legacy/pruned leftovers) still degrade to user text."""

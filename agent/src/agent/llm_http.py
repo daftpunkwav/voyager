@@ -249,6 +249,7 @@ class HttpLLM:
             text=str(msg.get("content") or "") or None,
             tool_calls=_parse_tool_calls(msg.get("tool_calls")),
             usage=_parse_usage(usage),
+            reasoning=str(msg.get("reasoning_content") or ""),
         )
 
     async def complete(
@@ -323,6 +324,7 @@ class HttpLLM:
         """
         text_parts: list[str] = []
         calls_by_index: dict[int, dict[str, Any]] = {}
+        reasoning_parts: list[str] = []
         usage: dict[str, Any] = {}
         emitted = False
         attempt = 0
@@ -369,6 +371,13 @@ class HttpLLM:
                                     text_parts.append(delta["content"])
                                     emitted = True
                                     yield StreamReply(text_delta=delta["content"])
+                                if delta.get("reasoning_content"):
+                                    # Own channel like the aggregate path: never
+                                    # merged into the answer text stream.
+                                    reasoning_parts.append(str(delta["reasoning_content"]))
+                                    yield StreamReply(
+                                        reasoning_delta=str(delta["reasoning_content"])
+                                    )
                                 for frag in delta.get("tool_calls") or []:
                                     self._merge_tool_fragment(calls_by_index, frag)
                         break
@@ -429,10 +438,15 @@ class HttpLLM:
             for i in sorted(calls_by_index)
         )
         text = "".join(text_parts)
+        reasoning = "".join(reasoning_parts)
         if calls:
-            yield StreamReply(final=LLMReply(tool_calls=calls, usage=_parse_usage(usage)))
+            yield StreamReply(
+                final=LLMReply(tool_calls=calls, usage=_parse_usage(usage), reasoning=reasoning)
+            )
         else:
-            yield StreamReply(final=LLMReply(text=text or None, usage=_parse_usage(usage)))
+            yield StreamReply(
+                final=LLMReply(text=text or None, usage=_parse_usage(usage), reasoning=reasoning)
+            )
 
     @staticmethod
     def _merge_tool_fragment(acc: dict[int, dict[str, Any]], frag: dict[str, Any]) -> None:
