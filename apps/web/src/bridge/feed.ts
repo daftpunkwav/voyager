@@ -17,6 +17,7 @@
  */
 
 import { i18n } from '@/i18n';
+import { EventType } from '@/bridge/events';
 
 export interface FeedEvent {
   seq: number;
@@ -51,12 +52,12 @@ export function summarize(ev: FeedEvent): RowSummary {
   const who = actorName(ev.actor);
   const p = ev.payload;
   switch (ev.type) {
-    case 'user.message':
+    case EventType.USER_MESSAGE:
       return {
         text: i18n.t('chat:feed.userMessage', { who, content: clip(p.content) }),
         tone: 'normal',
       };
-    case 'agent.message': {
+    case EventType.AGENT_MESSAGE: {
       // Proactive messages carry their trigger source so the activity page also shows "why you were contacted"
       if (p.proactive) {
         const why = String(p.reason ?? '').trim();
@@ -74,9 +75,9 @@ export function summarize(ev: FeedEvent): RowSummary {
         tone: 'normal',
       };
     }
-    case 'user.online':
+    case EventType.USER_ONLINE:
       return { text: i18n.t('chat:feed.userOnline', { who }), tone: 'muted' };
-    case 'user.activity':
+    case EventType.USER_ACTIVITY:
       return {
         text: i18n.t('chat:feed.userActivity', {
           who,
@@ -85,49 +86,49 @@ export function summarize(ev: FeedEvent): RowSummary {
         }),
         tone: 'muted',
       };
-    case 'note.created':
+    case EventType.NOTE_CREATED:
       return {
         text: i18n.t('chat:feed.noteCreated', { who, title: clip(p.title, 40) }),
         tone: 'normal',
       };
-    case 'note.edited':
+    case EventType.NOTE_EDITED:
       return {
         text: i18n.t('chat:feed.noteEdited', { who, noteId: clip(p.note_id, 12) }),
         tone: 'normal',
       };
-    case 'note.deleted':
+    case EventType.NOTE_DELETED:
       return {
         text: i18n.t('chat:feed.noteDeleted', { who, title: clip(p.title, 40) }),
         tone: 'muted',
       };
-    case 'source.added':
+    case EventType.SOURCE_ADDED:
       return {
         text: i18n.t('chat:feed.sourceAdded', { who, name: clip(p.name ?? p.source_id, 40) }),
         tone: 'normal',
       };
-    case 'source.ready':
+    case EventType.SOURCE_READY:
       return {
         text: i18n.t('chat:feed.sourceReady', { who, name: clip(p.name ?? p.source_id, 40) }),
         tone: 'normal',
       };
-    case 'source.removed':
+    case EventType.SOURCE_REMOVED:
       return {
         text: i18n.t('chat:feed.sourceRemoved', { who, sourceId: clip(p.source_id, 12) }),
         tone: 'muted',
       };
-    case 'task.enqueued':
+    case EventType.TASK_ENQUEUED:
       return {
         text: i18n.t('chat:feed.taskEnqueued', { who, target: clip(p.project ?? p.source_id, 30) }),
         tone: 'muted',
       };
-    case 'task.progress': {
+    case EventType.TASK_PROGRESS: {
       const pct = Math.round(Number(p.progress ?? 0) * 100);
       return {
         text: i18n.t('chat:feed.taskProgress', { who, pct, stage: clip(p.stage, 20) }),
         tone: 'muted',
       };
     }
-    case 'task.completed':
+    case EventType.TASK_COMPLETED:
       return {
         text: i18n.t('chat:feed.taskCompleted', {
           who,
@@ -135,17 +136,17 @@ export function summarize(ev: FeedEvent): RowSummary {
         }),
         tone: 'normal',
       };
-    case 'task.failed':
+    case EventType.TASK_FAILED:
       return {
         text: i18n.t('chat:feed.taskFailed', { who, error: clip(p.error, 60) }),
         tone: 'error',
       };
-    case 'settings.changed':
+    case EventType.SETTINGS_CHANGED:
       return {
         text: i18n.t('chat:feed.settingsChanged', { who, key: clip(p.key, 40) }),
         tone: 'normal',
       };
-    case 'service.health.changed':
+    case EventType.SERVICE_HEALTH_CHANGED:
       return {
         text: i18n.t('chat:feed.serviceHealth', {
           service: clip(p.service, 20),
@@ -153,14 +154,14 @@ export function summarize(ev: FeedEvent): RowSummary {
         }),
         tone: p.status === 'up' ? 'muted' : 'error',
       };
-    case 'graph.engine.fallback':
+    case EventType.GRAPH_ENGINE_FALLBACK:
       return {
         text: i18n.t('chat:feed.graphFallback', { reason: clip(p.reason, 50) }),
         tone: 'muted',
       };
-    case 'agent.ask':
+    case EventType.AGENT_ASK:
       return { text: i18n.t('chat:feed.agentAsk', { who }), tone: 'normal' };
-    case 'agent.observe': {
+    case EventType.AGENT_OBSERVE: {
       // Agent observation notices (considerations such as resources becoming ready); acted = a task was dispatched automatically
       const acted = p.acted ? i18n.t('chat:feed.agentObserveActed') : '';
       return {
@@ -168,7 +169,7 @@ export function summarize(ev: FeedEvent): RowSummary {
         tone: 'muted',
       };
     }
-    case 'agent.navigate':
+    case EventType.AGENT_NAVIGATE:
       return {
         text: i18n.t('chat:feed.agentNavigate', { who, path: clip(p.path ?? p.to, 20) }),
         tone: 'muted',

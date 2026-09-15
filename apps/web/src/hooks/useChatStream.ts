@@ -18,20 +18,21 @@
 import { useEffect } from 'react';
 import { fetchChatHistory, fetchTrajectory, loadChatSessions } from '@/bridge/chatSend';
 import { subscribe } from '@/bridge/stream';
+import { EventType } from '@/bridge/events';
 import { safeInternalPath } from '@/utils/safeUrl';
 import { type ChatEvent, useChatStore } from '@/stores/chatStore';
 import { useUIStore } from '@/stores/uiStore';
 import { i18n } from '@/i18n';
 
 const STREAM_PATTERNS = [
-  'agent.message',
-  'agent.ask',
-  'agent.navigate',
-  'agent.step',
-  'agent.delta',
-  'agent.policy.notify',
-  'task.*',
-  'note.created',
+  EventType.AGENT_MESSAGE,
+  EventType.AGENT_ASK,
+  EventType.AGENT_NAVIGATE,
+  EventType.AGENT_STEP,
+  EventType.AGENT_DELTA,
+  EventType.AGENT_POLICY_NOTIFY,
+  'task.*', // subscription glob, not a concrete type
+  EventType.NOTE_CREATED,
 ];
 
 export function useChatStream(onNavigate: (path: string) => void) {
@@ -78,18 +79,18 @@ export function useChatStream(onNavigate: (path: string) => void) {
         useChatStore.getState().addSystem(i18n.t('chat:history.failedNotice'));
       });
     const off = subscribe(STREAM_PATTERNS, (ev) => {
-      if (ev.type === 'agent.navigate') {
+      if (ev.type === EventType.AGENT_NAVIGATE) {
         const path = safeInternalPath(ev.payload.path);
         if (path) onNavigate(path);
         return;
       }
-      if (ev.type === 'agent.policy.notify') {
+      if (ev.type === EventType.AGENT_POLICY_NOTIFY) {
         // L1 permission notice: surface as an info toast only, never into the chat timeline
         const msg = String(ev.payload?.message ?? '').trim();
         if (msg) useUIStore.getState().addToast({ type: 'info', message: msg });
         return;
       }
-      if (ev.type === 'task.failed' && ev.payload?.kind === 'resume') {
+      if (ev.type === EventType.TASK_FAILED && ev.payload?.kind === 'resume') {
         // A failed background resume: its card lives in chatStore (job_id = run_id),
         // so also raise an immediate toast and collapse the floating window as a
         // fallback; other task.failed kinds (code_exec/sources/graph) still go

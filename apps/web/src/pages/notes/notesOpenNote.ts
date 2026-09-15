@@ -19,6 +19,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { routes } from '@/utils/routes';
 import { i18n } from '@/i18n';
 import { subscribe } from '@/bridge/stream';
+import { EventType } from '@/bridge/events';
 import { noteSourceId } from './noteListing';
 import type { NotesSaveState } from './notesAutoSave';
 
@@ -123,7 +124,7 @@ export function useNotesOpener(options: UseNotesOpenerOptions) {
 
   // Remote note.edited: pull the full note to align when the local copy is clean (a dirty local edit is never interrupted)
   useEffect(() => {
-    return subscribe(['note.edited'], (event) => {
+    return subscribe([EventType.NOTE_EDITED], (event) => {
       const nid = event.payload.note_id;
       if (typeof nid !== 'string' || nid !== useNoteStore.getState().editingNoteId) return;
       if (dirtyRef.current) return;

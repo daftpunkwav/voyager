@@ -21,6 +21,7 @@ import {
   setActivityReportEnabled,
 } from '@/bridge/activity';
 import { subscribe } from '@/bridge/stream';
+import { EventType } from '@/bridge/events';
 import { resolvePageProbe } from '@/shell/pageProbes';
 
 const SUMMARY_INTERVAL_MS = 30_000;
@@ -42,7 +43,7 @@ export function PageProbe() {
     void initActivityReport();
     // Hot toggle: turning the switch off takes effect immediately (no further reports);
     // the module is statically bundled, so call it directly
-    return subscribe(['settings.changed'], (ev) => {
+    return subscribe([EventType.SETTINGS_CHANGED], (ev) => {
       if (ev.payload.key === 'privacy.activity_report') {
         setActivityReportEnabled(ev.payload.value !== false);
       }

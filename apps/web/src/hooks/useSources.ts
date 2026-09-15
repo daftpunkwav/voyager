@@ -30,6 +30,7 @@ import {
   removePage,
 } from '@/api/sources';
 import { subscribe } from '@/bridge/stream';
+import { EventType } from '@/bridge/events';
 
 /** Unified source summary (list_sources response; same shape across kinds, `kind` marked by the backend). */
 export interface SourceSummary {
@@ -82,11 +83,19 @@ export function useSourcesStats() {
 export function useSourceEvents() {
   const qc = useQueryClient();
   useEffect(() => {
-    const off = subscribe(['source.added', 'source.ready', 'source.removed', 'task.failed'], () => {
-      for (const key of SOURCES_KEYS) {
-        void qc.invalidateQueries({ queryKey: [key] });
+    const off = subscribe(
+      [
+        EventType.SOURCE_ADDED,
+        EventType.SOURCE_READY,
+        EventType.SOURCE_REMOVED,
+        EventType.TASK_FAILED,
+      ],
+      () => {
+        for (const key of SOURCES_KEYS) {
+          void qc.invalidateQueries({ queryKey: [key] });
+        }
       }
-    });
+    );
     return off;
   }, [qc]);
 }
@@ -125,11 +134,14 @@ export function useDocumentEvents(docId: string | undefined) {
   const qc = useQueryClient();
   useEffect(() => {
     if (!docId) return;
-    const off = subscribe(['task.progress', 'task.failed', 'source.ready'], (e) => {
-      if (e.payload.source_id === docId) {
-        void qc.invalidateQueries({ queryKey: ['documents', docId] });
+    const off = subscribe(
+      [EventType.TASK_PROGRESS, EventType.TASK_FAILED, EventType.SOURCE_READY],
+      (e) => {
+        if (e.payload.source_id === docId) {
+          void qc.invalidateQueries({ queryKey: ['documents', docId] });
+        }
       }
-    });
+    );
     return off;
   }, [qc, docId]);
 }

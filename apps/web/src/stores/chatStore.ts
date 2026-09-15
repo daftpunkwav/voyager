@@ -38,6 +38,7 @@ import { i18n } from '@/i18n';
 import { routes } from '@/utils/routes';
 import { groupTrails } from '@/utils/trajectory';
 import type { ChatSessionRow } from '@/api/agent';
+import { EventType } from '@/bridge/events';
 
 export interface ChatMessage {
   seq: number;
@@ -307,10 +308,10 @@ function upsertTrail(trails: TurnTrail[], trail: TurnTrail): TurnTrail[] {
 /** History rows (user.message/agent.message events) -> message stream items. */
 function historyToMessages(events: ChatEvent[]): ChatMessage[] {
   return events
-    .filter((e) => e.type === 'user.message' || e.type === 'agent.message')
+    .filter((e) => e.type === EventType.USER_MESSAGE || e.type === EventType.AGENT_MESSAGE)
     .map((e) => ({
       seq: e.seq,
-      role: (e.type === 'user.message' ? 'user' : 'agent') as ChatMessage['role'],
+      role: (e.type === EventType.USER_MESSAGE ? 'user' : 'agent') as ChatMessage['role'],
       content: String(e.payload?.content ?? ''),
       ts: e.ts,
       kind: typeof e.payload?.kind === 'string' ? (e.payload.kind as string) : undefined,
@@ -321,7 +322,7 @@ function historyToMessages(events: ChatEvent[]): ChatMessage[] {
  *  receipts used to live only in the SSE session and vanished on reload). */
 function historyToArtifacts(events: ChatEvent[]): NoteArtifact[] {
   return events
-    .filter((e) => e.type === 'note.created')
+    .filter((e) => e.type === EventType.NOTE_CREATED)
     .map((e) => ({
       seq: e.seq,
       noteId: String(e.payload?.note_id ?? ''),
@@ -423,7 +424,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const lane = get().lanes[sessionId];
     if (!lane) return; // no archived view yet: the backfill will pick the rows up
     const p = ev.payload ?? {};
-    if (ev.type === 'agent.message') {
+    if (ev.type === EventType.AGENT_MESSAGE) {
       const next: LaneSnapshot = {
         ...lane,
         thinking: false,
@@ -436,7 +437,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ],
       };
       set({ lanes: { ...get().lanes, [sessionId]: next } });
-    } else if (ev.type === 'agent.delta') {
+    } else if (ev.type === EventType.AGENT_DELTA) {
       const round = Number(p.round ?? 1);
       const prev = lane.streaming;
       const same = prev !== null && prev.round === round;
@@ -454,7 +455,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           },
         },
       });
-    } else if (ev.type === 'note.created') {
+    } else if (ev.type === EventType.NOTE_CREATED) {
       const artifact = {
         seq: ev.seq,
         noteId: String(p.note_id ?? ''),
@@ -527,7 +528,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setHistoryLoading: (v) => set({ historyLoading: v }),
 
   applyTrajectory: (events) => {
-    const incoming = events.filter((e) => e.type === 'agent.step').map(toTurnStep);
+    const incoming = events.filter((e) => e.type === EventType.AGENT_STEP).map(toTurnStep);
     const seen = new Set(get().steps.map((s) => s.seq));
     const merged = [...get().steps, ...incoming.filter((s) => !seen.has(s.seq))]
       .sort((a, b) => a.seq - b.seq)
@@ -549,7 +550,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     switch (ev.type) {
-      case 'agent.message': {
+      case EventType.AGENT_MESSAGE: {
         // Clear question too: the agent speaking again means it is no longer waiting
         // for an answer (e.g. continuing with defaults after an answer timeout), so
         // the dialog must not stay stuck on a question the backend dropped;
@@ -587,7 +588,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         });
         break;
       }
-      case 'agent.ask': {
+      case EventType.AGENT_ASK: {
         // Options are rendered as button children: normalize defensively — the
         // backend used to pass the LLM's {"content": ...} objects through, and a
         // non-string option crashes the whole route
@@ -614,7 +615,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         });
         break;
       }
-      case 'agent.navigate': {
+      case EventType.AGENT_NAVIGATE: {
         set({
           messages: [
             ...get().messages,
@@ -628,7 +629,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         });
         break;
       }
-      case 'note.created': {
+      case EventType.NOTE_CREATED: {
         // Note artifact card (appears whether the user or the agent saved it; click navigates to the notes page).
         // SSE replays may re-deliver the same event: dedup by seq so the card never doubles.
         const artifact = {
@@ -642,7 +643,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         });
         break;
       }
-      case 'agent.step': {
+      case EventType.AGENT_STEP: {
         // Live tool/round step: a new step overwrites the old one for the
         // StepLine-style slot, and the full trajectory grows for the timeline.
         const prev = get().steps;
@@ -656,7 +657,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         });
         break;
       }
-      case 'agent.delta': {
+      case EventType.AGENT_DELTA: {
         // Streaming typing: accumulate within the same round; a round change (a new
         // round after tool rounds) freezes the finished round's lead-in text for the
         // inline trace and restarts the slot — lead-in text of intermediate rounds
@@ -678,8 +679,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         });
         break;
       }
-      case 'task.progress':
-      case 'task.enqueued': {
+      case EventType.TASK_PROGRESS:
+      case EventType.TASK_ENQUEUED: {
         const key = taskKey(p);
         if (!key) break;
         const cards = { ...get().cards };
@@ -697,11 +698,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set({ cards, cardOrder: [...get().cardOrder] });
         break;
       }
-      case 'task.completed':
-      case 'task.failed': {
+      case EventType.TASK_COMPLETED:
+      case EventType.TASK_FAILED: {
         const key = taskKey(p);
         if (!key) break;
-        const failed = ev.type === 'task.failed';
+        const failed = ev.type === EventType.TASK_FAILED;
         const cards = { ...get().cards };
         const prev = cards[key];
         // Create a card even without an earlier progress card: completion/failure are

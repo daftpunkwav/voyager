@@ -20,6 +20,7 @@ import { GlassCard } from '@/components/common/GlassCard';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
 import { summarize, type FeedEvent } from '@/bridge/feed';
+import { EventType } from '@/bridge/events';
 import { fetchActivityFeed } from '@/bridge/activity';
 import { extractErrorMessage } from '@/utils/errors';
 import { rememberActivityFeedCount } from './provider';
@@ -27,12 +28,12 @@ import { rememberActivityFeedCount } from './provider';
 /** Filter options; labels come from the activity:filter.* resources. */
 const KIND_OPTIONS: Array<{ value: string; key: string }> = [
   { value: '', key: 'activity:filter.all' },
-  { value: 'user.message', key: 'activity:filter.userMessage' },
-  { value: 'agent.message', key: 'activity:filter.agentMessage' },
-  { value: 'task.progress', key: 'activity:filter.taskProgress' },
-  { value: 'note.created', key: 'activity:filter.noteCreated' },
-  { value: 'source.added', key: 'activity:filter.sourceAdded' },
-  { value: 'settings.changed', key: 'activity:filter.settingsChanged' },
+  { value: EventType.USER_MESSAGE, key: 'activity:filter.userMessage' },
+  { value: EventType.AGENT_MESSAGE, key: 'activity:filter.agentMessage' },
+  { value: EventType.TASK_PROGRESS, key: 'activity:filter.taskProgress' },
+  { value: EventType.NOTE_CREATED, key: 'activity:filter.noteCreated' },
+  { value: EventType.SOURCE_ADDED, key: 'activity:filter.sourceAdded' },
+  { value: EventType.SETTINGS_CHANGED, key: 'activity:filter.settingsChanged' },
 ];
 
 export function ActivityPage() {

@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { subscribe } from '@/bridge/stream';
+import { EventType } from '@/bridge/events';
 import { useFloatingStore } from '@/stores/floatingStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useUIStore } from '@/stores/uiStore';
@@ -55,7 +56,7 @@ export function FloatingChat() {
   useChatStream(onNavigate);
 
   useEffect(() => {
-    return subscribe(['agent.message'], () => {
+    return subscribe([EventType.AGENT_MESSAGE], () => {
       if (!useFloatingStore.getState().open) {
         useFloatingStore.setState((s) => ({ unread: s.unread + 1 }));
       }

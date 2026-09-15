@@ -19,6 +19,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { subscribe } from '@/bridge/stream';
+import { EventType } from '@/bridge/events';
 import { openFloatingChat } from '@/bridge/chatSend';
 import { routes } from '@/utils/routes';
 import {
@@ -29,11 +30,11 @@ import {
 } from './notesView';
 
 const NOTE_EVENTS = [
-  'note.created',
-  'note.edited',
-  'note.deleted',
-  'note.restored',
-  'note.purged',
+  EventType.NOTE_CREATED,
+  EventType.NOTE_EDITED,
+  EventType.NOTE_DELETED,
+  EventType.NOTE_RESTORED,
+  EventType.NOTE_PURGED,
 ] as const;
 
 function useNotesUiBridge() {
@@ -50,8 +51,8 @@ function useNotesUiBridge() {
         /* Backend not running: keep the localStorage seed and do not break the shell */
       });
 
-    const offUi = subscribe(['notes.ui.changed', 'settings.changed'], (event) => {
-      if (event.type === 'settings.changed') {
+    const offUi = subscribe([EventType.NOTES_UI_CHANGED, EventType.SETTINGS_CHANGED], (event) => {
+      if (event.type === EventType.SETTINGS_CHANGED) {
         const key = event.payload.key;
         if (typeof key === 'string' && key.startsWith('notes.ui.')) {
           applyNotesSettingKey(key, event.payload.value);
@@ -85,7 +86,7 @@ function useNotesUiBridge() {
 
     const offNotes = subscribe([...NOTE_EVENTS], (event) => {
       void qc.invalidateQueries({ queryKey: ['notes'] });
-      if (event.type === 'note.edited' || event.type === 'note.created') {
+      if (event.type === EventType.NOTE_EDITED || event.type === EventType.NOTE_CREATED) {
         const nid = event.payload.note_id;
         if (typeof nid === 'string' && nid) {
           void qc.invalidateQueries({ queryKey: ['note', nid] });
