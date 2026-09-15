@@ -31,7 +31,7 @@ from typing import Any
 
 import httpx
 
-from .think_split import split_inline_think
+from .inline_split import parse_tool_blocks, split_inline
 from .wire_responses import parse_response_output, responses_input, responses_tools
 
 _TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
@@ -649,14 +649,18 @@ async def complete(
         usage = data.get("usage") or {}
         choice = (data.get("choices") or [{}])[0]
         message = choice.get("message") or {}
-        answer, inline_reasoning = split_inline_think(str(message.get("content") or ""))
+        answer, inline_reasoning, tool_blocks = split_inline(str(message.get("content") or ""))
+        api_tool_calls = _parse_tool_calls(message.get("tool_calls"))
         return CompleteResult(
             text=answer,
             input_tokens=int(usage.get("prompt_tokens") or 0),
             output_tokens=int(usage.get("completion_tokens") or 0),
             cached_tokens=int((usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0),
             model=data.get("model", model),
-            tool_calls=_parse_tool_calls(message.get("tool_calls")),
+            # Inline <tool_call> markup converts only when the wire field
+            # stayed empty (MiniMax echoes the markup alongside the parsed
+            # call — the parsed field wins so the call runs exactly once).
+            tool_calls=api_tool_calls or tuple(parse_tool_blocks(tool_blocks)),
             # Inline <think> reasoning joins the reasoning_content channel
             reasoning=str(message.get("reasoning_content") or "") + inline_reasoning,
         )

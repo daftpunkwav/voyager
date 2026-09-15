@@ -49,7 +49,7 @@ from .client import (
     _split_system,
     reasoning_fields,
 )
-from .think_split import ThinkSplitter
+from .inline_split import InlineTagSplitter, parse_tool_blocks
 from .wire_responses import responses_input, responses_sse, responses_tools
 
 
@@ -173,11 +173,14 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
     """OpenAI-compatible SSE: `data:` lines terminated by `[DONE]`;
     tool_calls reassembled from per-index fragments. Inline ``<think>``
     segments (MiniMax-style content reasoning) are split onto the reasoning
-    channel instead of leaking into the answer text."""
+    channel and inline ``<tool_call>`` blocks are captured out of the text
+    (converted to tool calls only when the wire ``tool_calls`` field stayed
+    empty — MiniMax echoes the markup while also returning the parsed call)
+    so neither leaks into the answer text."""
     text_parts: list[str] = []
     frags: dict[int, dict[str, str]] = {}
     reasoning_parts: list[str] = []
-    think = ThinkSplitter()
+    think = InlineTagSplitter()
     usage: dict[str, Any] = {}
     model = ""
     async for line in resp.aiter_lines():
@@ -235,6 +238,11 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
         text_parts.append(tail_answer)
     if tail_reasoning:
         reasoning_parts.append(tail_reasoning)
+    if not tool_calls:
+        # Inline tool-call markup is the only carrier when the wire field
+        # stayed empty; when both arrive the parsed field wins (no echo
+        # double-execution).
+        tool_calls = tuple(parse_tool_blocks(think.tool_blocks))
     yield {
         "type": "final",
         "text": "".join(text_parts),

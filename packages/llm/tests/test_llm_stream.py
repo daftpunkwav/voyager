@@ -194,6 +194,72 @@ class TestChatStream:
         assert final["text"] == "用户问我是谁。我是 Lucien。"
         assert final["reasoning"] == "推理中"
 
+    async def test_inline_tool_call_stripped_and_converted(self, monkeypatch) -> None:
+        """MiniMax-style inline <tool_call> in content with an EMPTY wire
+        tool_calls field: the markup never reaches the text channel and the
+        block converts to a tool call."""
+        sse = _sse(
+            {"choices": [{"delta": {"content": "好的。<tool_ca"}}], "model": "mm"},
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "content": 'll>\n{"name": "load_skill", "arguments": {"skill_name": "s"}}\n</tool_call>完成。'
+                        }
+                    }
+                ],
+            },
+            "[DONE]",
+        )
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, text=sse)
+
+        _patch(monkeypatch, handler)
+        chunks = await _collect(_CHAT)
+        texts = [c["text"] for c in chunks if c["type"] == "text"]
+        assert texts == ["好的。", "完成。"]
+        final = chunks[-1]
+        assert final["text"] == "好的。完成。"
+        assert final["tool_calls"] == [
+            {"id": "inline_0", "name": "load_skill", "arguments": {"skill_name": "s"}}
+        ]
+
+    async def test_inline_tool_call_echo_dropped_when_wire_field_wins(self, monkeypatch) -> None:
+        """MiniMax echoes the markup WHILE also returning the parsed call in
+        the wire tool_calls field: the parsed field wins (the call runs once)
+        and the markup still never reaches the text channel."""
+        sse = _sse(
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "content": '<tool_call>]<]minimax[>[<invoke name="x"/></tool_call>',
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "call_1",
+                                    "function": {"name": "activate_tools", "arguments": "{}"},
+                                }
+                            ],
+                        }
+                    }
+                ],
+                "model": "mm",
+            },
+            "[DONE]",
+        )
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, text=sse)
+
+        _patch(monkeypatch, handler)
+        chunks = await _collect(_CHAT)
+        assert [c["text"] for c in chunks if c["type"] == "text"] == []
+        final = chunks[-1]
+        assert final["text"] == ""
+        assert final["tool_calls"] == [{"id": "call_1", "name": "activate_tools", "arguments": {}}]
+
     async def test_tool_only_stream(self, monkeypatch) -> None:
         """Tool-only stream without text: no text chunks; final carries the
         parsed tool_calls."""
