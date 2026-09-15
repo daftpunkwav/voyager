@@ -31,6 +31,7 @@ OUTREACH_QUIET_KEY = "agent.outreach.quiet_hours"
 TRIGGERS_COOLDOWN_KEY = "agent.triggers.cooldown_s"
 SUBAGENTS_MAX_DEPTH_KEY = "agent.subagents.max_depth"
 ROUTING_KEY = "agent.llm.routing"
+WORKSPACE_DIR_KEY = "agent.workspace.dir"
 
 DEFS = [
     SettingDef(
@@ -171,7 +172,7 @@ DEFS = [
         description="Per-agent conduct rules {<persona key>: text}, layered on top of the general rules (user-writable only)",
     ),
     SettingDef(
-        key="agent.workspace.dir",
+        key=WORKSPACE_DIR_KEY,
         module="agent",
         type=SettingType.STR,
         default="data/workspace",

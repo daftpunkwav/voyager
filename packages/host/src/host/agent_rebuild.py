@@ -33,6 +33,10 @@ from agent.build import build_agent
 from agent.contracts import Purpose
 from agent.llm import LLMClient
 from agent.runtime.jobs_view import JobsView
+
+# Canonical settings-key constant (registry lives in agent.settings); aliased
+# to keep this module's public name stable.
+from agent.settings import WORKSPACE_DIR_KEY as WORKSPACE_KEY
 from agent.tools import ensure_workdir
 from fastapi import APIRouter, Request
 from platform_capability import build_router
@@ -46,10 +50,6 @@ from .llm_adapter import ServiceLLM
 from .llm_routing import RoutingServiceLLM
 
 log = logging.getLogger("host.agent_rebuild")
-
-#: Settings key persisted on a successful switch (same key the settings page
-#: writes; the value is the canonical absolute directory).
-WORKSPACE_KEY = "agent.workspace.dir"
 
 #: Route prefixes rebound to the new workspace/agent on switch.
 _SWITCH_PREFIXES = ("/api/agent", "/api/workspace", "/api/uploads")

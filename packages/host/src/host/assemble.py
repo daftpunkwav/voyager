@@ -37,6 +37,7 @@ from agent.contracts import Purpose
 from agent.llm import LLMClient
 from agent.runtime.jobs_view import JobsView
 from agent.settings import DEFS as AGENT_SETTING_DEFS
+from agent.settings import WORKSPACE_DIR_KEY
 from fastapi import FastAPI
 from platform_actor import LocalTokenIssuer
 from platform_capability import CostQuota, SqliteAuditSink, Wiring
@@ -140,7 +141,7 @@ def _resolve_workspace(
     """
     if workspace_dir is not None:
         return Path(workspace_dir)
-    raw = str(settings_store.get("agent.workspace.dir") or "").strip()
+    raw = str(settings_store.get(WORKSPACE_DIR_KEY) or "").strip()
     if not raw:
         return ROOT / "data" / "workspace"
     if ".." in Path(raw).parts:

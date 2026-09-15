@@ -57,6 +57,7 @@ from agent.runtime.trajectory import TrajectoryStore
 from agent.runtime.wake_budget import WakeBudget
 from agent.runtime.wire import bind_event_loop
 from agent.settings import DEFS as AGENT_SETTING_DEFS
+from agent.settings import WORKSPACE_DIR_KEY
 from agent.skills import SkillLoader
 from agent.skills.organizer import SkillOrganizer
 from agent.subagent import Spawner, SubagentRegistry
@@ -271,7 +272,7 @@ def build_agent(
     settings = settings_store or SettingsStore(data_dir / "settings.db", bus=bus)
     settings.register_fresh(AGENT_SETTING_DEFS)  # idempotent: only registers missing agent.* keys
 
-    workspace = ensure_workdir(workspace_dir or settings.get("agent.workspace.dir"))
+    workspace = ensure_workdir(workspace_dir or settings.get(WORKSPACE_DIR_KEY))
     memory = Memory(data_dir / "memory", embedder=embedder)
     pages = PageContextRegistry()
     asker = AskUser(bus)

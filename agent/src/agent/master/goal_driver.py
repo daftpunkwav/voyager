@@ -18,6 +18,7 @@ from typing import Any
 
 from agent.master.goal import ACTIVE, GoalManager
 from agent.master.outreach_budget import in_quiet_hours
+from agent.settings import OUTREACH_QUIET_KEY
 
 log = logging.getLogger("agent.goal")
 
@@ -64,7 +65,7 @@ class GoalDriver:
         if not self._goals.may_continue(session, max_rounds_per_day=MAX_ROUNDS_PER_DAY):
             log.info("goal continuation round budget reached (session %s)", session)
             return
-        quiet = str(self._settings.get("agent.outreach.quiet_hours") or "")
+        quiet = str(self._settings.get(OUTREACH_QUIET_KEY) or "")
         if in_quiet_hours(quiet, time.time()):
             log.info("goal continuation inside quiet hours (session %s)", session)
             return
