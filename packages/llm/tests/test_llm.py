@@ -601,6 +601,89 @@ class TestCompleteWithTools:
         assert out.reasoning == "inner monologue"
         assert out.thinking_blocks == ()
 
+    async def test_chat_inline_tool_call_echo_wire_field_wins(self, deps, monkeypatch) -> None:
+        """complete path (stream's mirror): MiniMax echoes inline <tool_call>
+        markup in content WHILE also returning the parsed call in the wire
+        tool_calls field — the parsed field wins (call runs once) and the
+        markup never reaches the answer text."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": '<tool_call>]<]minimax[>[<invoke name="x"/></tool_call>',
+                                "tool_calls": [
+                                    {
+                                        "id": "call_1",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "activate_tools",
+                                            "arguments": "{}",
+                                        },
+                                    }
+                                ],
+                            }
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 5, "completion_tokens": 2},
+                    "model": "m1",
+                },
+            )
+
+        self._patch(monkeypatch, handler)
+        out = await client_mod.complete(
+            {"id": "p", "base_url": "https://api.test/v1", "api_format": "chat"},
+            api_key="sk-x",
+            model="m1",
+            messages=[{"role": "user", "content": "hi"}],
+        )
+        assert out.text == ""
+        assert out.tool_calls == ({"id": "call_1", "name": "activate_tools", "arguments": {}},)
+        # Inline <think> reasoning joins the reasoning_content channel on the
+        # complete path too.
+        assert out.reasoning == ""
+
+    async def test_chat_inline_tool_call_converted_when_wire_field_empty(
+        self, deps, monkeypatch
+    ) -> None:
+        """complete path with an EMPTY wire tool_calls field: inline markup is
+        the only carrier and converts; ids stay unique per entry."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": (
+                                    "<think>plan</think>好的。\n<tool_call>"
+                                    '[{"name": "a"}, {"name": "b"}]</tool_call>'
+                                ),
+                                "tool_calls": None,
+                            }
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 5, "completion_tokens": 2},
+                    "model": "m1",
+                },
+            )
+
+        self._patch(monkeypatch, handler)
+        out = await client_mod.complete(
+            {"id": "p", "base_url": "https://api.test/v1", "api_format": "chat"},
+            api_key="sk-x",
+            model="m1",
+            messages=[{"role": "user", "content": "hi"}],
+        )
+        assert out.text == "好的。\n"
+        assert out.reasoning == "plan"
+        assert [c["id"] for c in out.tool_calls] == ["inline_0", "inline_1"]
+        assert [c["name"] for c in out.tool_calls] == ["a", "b"]
+
 
 class TestMessageTranslation:
     """Neutral history -> provider request bodies: paired history uses native

@@ -61,6 +61,21 @@ class TestDoc:
         )
         assert len(updated["blocks"]) == 1
 
+    async def test_edit_emits_literal_doc_edited_event(self, deps) -> None:
+        """The event type literal stays 'doc.edited' (web subscription
+        parity): a vocabulary rename must fail here, not silently detach the
+        consumer."""
+        _, log = deps
+        doc = await execute(registry, "create_doc", USER_CTX, {"title": "t"})
+        await execute(
+            registry,
+            "update_doc",
+            USER_CTX,
+            {"doc_id": doc["id"], "blocks": [{"type": "paragraph", "text": "Hi"}]},
+        )
+        types = [e.type for _, e in log.read_after()]
+        assert "doc.edited" in types
+
     async def test_delete_doc_emits_event(self, deps) -> None:
         _, log = deps
         doc = await execute(registry, "create_doc", USER_CTX, {"title": "t"})

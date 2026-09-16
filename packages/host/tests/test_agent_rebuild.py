@@ -49,8 +49,9 @@ class TestSwitchEndpoint:
             (new_ws / "hello.txt").write_text("new root", encoding="utf-8")
             app = build(tmp_path / "data", tmp_path / "ws-old")
             with TestClient(app) as client:
+                # An over-long marker exercises the endpoint's 64-char cap.
                 resp = client.post(
-                    "/api/workspace/switch", json={"dir": str(new_ws), "marker": "tab-1"}
+                    "/api/workspace/switch", json={"dir": str(new_ws), "marker": "m" * 100}
                 )
                 assert resp.status_code == 200, resp.text
                 assert resp.json()["workspace"] == str(new_ws)
@@ -68,7 +69,7 @@ class TestSwitchEndpoint:
 
                 # The switch is announced for other tabs/sessions; the marker
                 # echoes back so the initiating tab can recognize its own
-                # broadcast.
+                # broadcast. A client-supplied marker is capped at 64 chars.
                 switched = [
                     e.payload
                     for _, e in app.state.backend.log.read_after(
@@ -76,7 +77,7 @@ class TestSwitchEndpoint:
                     )
                 ]
                 assert switched and switched[-1]["workspace"] == str(new_ws)
-                assert switched[-1]["marker"] == "tab-1"
+                assert switched[-1]["marker"] == "m" * 64
 
                 # A second switch works: the switch endpoint re-mounts itself
                 # with every generation instead of stranding the old routes.
@@ -84,6 +85,15 @@ class TestSwitchEndpoint:
                 assert resp2.status_code == 200, resp2.text
                 listing2 = client.get("/api/workspace/list", params={"path": ""}).json()
                 assert "hello.txt" not in [e["name"] for e in listing2["entries"]]
+                # An omitted marker stays a (empty) payload field, so the
+                # echo contract holds for marker-less clients too.
+                switched2 = [
+                    e.payload
+                    for _, e in app.state.backend.log.read_after(
+                        types=[DomainEvent.WORKSPACE_SWITCHED]
+                    )
+                ]
+                assert switched2[-1]["marker"] == ""
         finally:
             shutil.rmtree(new_ws, ignore_errors=True)
             shutil.rmtree(back_ws, ignore_errors=True)
