@@ -551,3 +551,37 @@ class TestTransientRetry:
                 final = ev.final
         assert final is not None and final.degraded and "authentication" in (final.text or "")
         assert calls["n"] == 1 and sleeps == []
+
+    async def test_stream_retry_resets_inline_splitter(self, monkeypatch) -> None:
+        """A mid-stream drop during the <think> phase retries (nothing emitted
+        yet); the retried attempt must start with a fresh splitter — a
+        leftover open <think> would swallow the new attempt's answer text
+        onto the reasoning channel."""
+        self._zero_backoff(monkeypatch)
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            if calls["n"] == 1:
+
+                async def stream():
+                    yield b'data: {"choices": [{"delta": {"content": "<think>partial"}}]}\n\n'
+                    raise httpx.ReadError("connection dropped mid-stream", request=request)
+
+                return httpx.Response(200, content=stream())
+            # Attempt 2 is clean: no <think> tags at all.
+            return httpx.Response(
+                200,
+                content=(
+                    b'data: {"choices": [{"delta": {"content": "Final answer"}}]}\n\n'
+                    b"data: [DONE]\n\n"
+                ),
+            )
+
+        final = None
+        async for ev in _client(handler).complete_stream(MSGS):
+            if ev.final is not None:
+                final = ev.final
+        assert calls["n"] == 2
+        assert final is not None and final.text == "Final answer"
+        assert final.reasoning == ""  # attempt-1 reasoning must not leak into the aggregate

@@ -476,14 +476,18 @@ class HttpLLM:
         stream_options (some compatible servers reject unknown options) is
         retried once without the option.
         """
-        text_parts: list[str] = []
-        calls_by_index: dict[int, dict[str, Any]] = {}
-        reasoning_parts: list[str] = []
-        think = _InlineTagSplitter()
-        usage: dict[str, Any] = {}
         emitted = False
         attempt = 0
         while True:
+            # Per-attempt state: a retry re-streams the whole completion, so
+            # anything an aborted attempt consumed must not leak into the next
+            # one — a splitter left inside an open <think> would misroute the
+            # retried stream's answer text onto the reasoning channel.
+            text_parts: list[str] = []
+            calls_by_index: dict[int, dict[str, Any]] = {}
+            reasoning_parts: list[str] = []
+            think = _InlineTagSplitter()
+            usage: dict[str, Any] = {}
             retry_delay: float | None = None
             try:
                 async with self._client.stream("POST", "/chat/completions", json=body) as resp:
