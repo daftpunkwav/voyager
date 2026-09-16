@@ -157,7 +157,12 @@
   border: 1px solid rgba(255, 255, 255, 0.45);
   border-radius: var(--radius-btn-sm);
   color: var(--text-500);
-  transition: all 0.18s var(--ease);
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease),
+    border-color 0.18s var(--ease),
+    box-shadow 0.18s var(--ease),
+    transform 0.18s var(--ease);
 }
 .filter-search:focus-within {
   border-color: var(--brand-500);
@@ -192,7 +197,12 @@
   color: var(--text-700);
   font: 600 12px/1 var(--font-sans);
   cursor: pointer;
-  transition: all 0.18s var(--ease);
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease),
+    border-color 0.18s var(--ease),
+    box-shadow 0.18s var(--ease),
+    transform 0.18s var(--ease);
   position: relative;
   white-space: nowrap;
 }
@@ -384,7 +394,12 @@
   font: 600 12px/1 var(--font-sans);
   color: var(--text-700);
   cursor: pointer;
-  transition: all 0.18s var(--ease);
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease),
+    border-color 0.18s var(--ease),
+    box-shadow 0.18s var(--ease),
+    transform 0.18s var(--ease);
   border: 1px solid rgba(255, 255, 255, 0.55);
 }
 .bulk-bar__btn:hover {
@@ -508,7 +523,11 @@
   background: rgba(255, 255, 255, 0.7);
   cursor: pointer;
   position: relative;
-  transition: all 0.15s var(--ease);
+  transition:
+    background 0.15s var(--ease),
+    color 0.15s var(--ease),
+    border-color 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
   flex-shrink: 0;
   margin: 0;
 }
@@ -701,7 +720,12 @@
   color: var(--brand-700);
   font: 600 11px/1 var(--font-sans);
   cursor: pointer;
-  transition: all 0.18s var(--ease);
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease),
+    border-color 0.18s var(--ease),
+    box-shadow 0.18s var(--ease),
+    transform 0.18s var(--ease);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 .btn-scout:hover {
@@ -731,7 +755,12 @@
   border: 0;
   color: var(--text-500);
   cursor: pointer;
-  transition: all 0.18s var(--ease);
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease),
+    border-color 0.18s var(--ease),
+    box-shadow 0.18s var(--ease),
+    transform 0.18s var(--ease);
 }
 .icon-btn:hover {
   background: var(--bg-300);
@@ -773,7 +802,12 @@
   color: var(--text-700);
   font: 600 12px/1 var(--font-sans);
   cursor: pointer;
-  transition: all 0.18s var(--ease);
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease),
+    border-color 0.18s var(--ease),
+    box-shadow 0.18s var(--ease),
+    transform 0.18s var(--ease);
 }
 .page-btn:hover:not(:disabled):not(.active) {
   background: rgba(255, 255, 255, 0.7);
@@ -1150,7 +1184,12 @@
   font-weight: 600;
   color: var(--text-500);
   cursor: pointer;
-  transition: all 0.18s var(--ease);
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease),
+    border-color 0.18s var(--ease),
+    box-shadow 0.18s var(--ease),
+    transform 0.18s var(--ease);
 }
 .import-tab:hover {
   color: var(--text-800);

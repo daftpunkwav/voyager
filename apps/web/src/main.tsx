@@ -15,6 +15,10 @@ import { useLocaleBridge } from '@/shell/localeBridge';
 import { ensureSession } from '@/bridge/session';
 import { initI18n, i18n } from '@/i18n';
 
+// Self-hosted variable fonts (offline-deterministic; no Google Fonts dependency)
+import '@fontsource-variable/dm-sans/opsz.css';
+import '@fontsource-variable/jetbrains-mono';
+
 // Global styles (liquid-glass design system + shell + global + per-page private)
 import '@/styles/design-system.css';
 import '@/styles/liquid-glass.css';

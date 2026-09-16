@@ -22,7 +22,7 @@
 /* ---------- Service badge strip · same glass as the topbar ---------- */
 .svc-strip {
   position: sticky;
-  top: var(--topbar-h, 56px);
+  top: 0;
   z-index: calc(var(--z-glass, 50) - 1);
   height: 38px;
   padding: 0 24px;

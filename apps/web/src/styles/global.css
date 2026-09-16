@@ -24,7 +24,12 @@ a {
 .glass-card--panel,
 .glass-card--panel-clear,
 .glass-card--control {
-  transition: all var(--dur-base, 250ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) !important;
+  /* Named properties only: hover lifts change transform + shadow, theme flips recolor surfaces */
+  transition:
+    transform var(--dur-base, 250ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) !important,
+    box-shadow var(--dur-base, 250ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) !important,
+    border-color var(--dur-base, 250ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) !important,
+    background-color var(--dur-base, 250ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) !important;
 }
 .glass-card--panel:hover,
 .glass-card--panel-clear:hover {
@@ -339,7 +344,7 @@ a {
   animation: drawerIn var(--dur-base, 250ms) var(--ease-apple) both;
 }
 
-/* -- Dropdown/menu pop-in -- */
+/* -- Dropdown/menu pop-in (class names match GlassSelect / FilterDropdown components) -- */
 @keyframes popIn {
   from {
     opacity: 0;
@@ -350,9 +355,8 @@ a {
     transform: none;
   }
 }
-.chat-more-pop,
-.glass-select__menu,
-.filter-dropdown__menu {
+.glass-select-menu,
+.filter-dropdown-menu {
   animation: popIn var(--dur-fast, 150ms) var(--ease-apple) both;
 }
 
@@ -360,7 +364,7 @@ a {
 .stat-grid > *,
 .health-grid > *,
 .team-grid > * {
-  animation: contentFadeIn var(--dur-slow, 350ms) var(--ease-apple) both;
+  animation: contentFadeIn var(--dur-base, 250ms) var(--ease-apple) both;
 }
 .stat-grid > :nth-child(2),
 .health-grid > :nth-child(2),
