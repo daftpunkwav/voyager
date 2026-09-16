@@ -486,7 +486,7 @@ class HttpLLM:
             text_parts: list[str] = []
             calls_by_index: dict[int, dict[str, Any]] = {}
             reasoning_parts: list[str] = []
-            think = _InlineTagSplitter()
+            splitter = _InlineTagSplitter()
             usage: dict[str, Any] = {}
             retry_delay: float | None = None
             try:
@@ -527,7 +527,7 @@ class HttpLLM:
                             for choice in chunk.get("choices") or []:
                                 delta = choice.get("delta") or {}
                                 if delta.get("content"):
-                                    answer, inline_reasoning = think.feed(delta["content"])
+                                    answer, inline_reasoning = splitter.feed(delta["content"])
                                     if answer:
                                         text_parts.append(answer)
                                         emitted = True
@@ -603,7 +603,7 @@ class HttpLLM:
             )
             for i in sorted(calls_by_index)
         )
-        tail_answer, tail_reasoning = think.flush()
+        tail_answer, tail_reasoning = splitter.flush()
         if tail_answer:
             text_parts.append(tail_answer)
         if tail_reasoning:
@@ -612,7 +612,7 @@ class HttpLLM:
             # Inline tool-call markup is the only carrier when the wire field
             # stayed empty; when both arrive the parsed field wins (no echo
             # double-execution). Read after flush so unclosed blocks count.
-            calls = _parse_tool_blocks(think.tool_blocks)
+            calls = _parse_tool_blocks(splitter.tool_blocks)
         text = "".join(text_parts)
         reasoning = "".join(reasoning_parts)
         if calls:

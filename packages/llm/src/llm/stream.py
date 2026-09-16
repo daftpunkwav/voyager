@@ -180,7 +180,7 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
     text_parts: list[str] = []
     frags: dict[int, dict[str, str]] = {}
     reasoning_parts: list[str] = []
-    think = InlineTagSplitter()
+    splitter = InlineTagSplitter()
     usage: dict[str, Any] = {}
     model = ""
     async for line in resp.aiter_lines():
@@ -200,7 +200,7 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
             delta = choice.get("delta") or {}
             content = delta.get("content")
             if content:
-                answer, inline_reasoning = think.feed(str(content))
+                answer, inline_reasoning = splitter.feed(str(content))
                 if answer:
                     text_parts.append(answer)
                     yield {"type": "text", "text": answer}
@@ -233,7 +233,7 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
             for _, a in sorted(frags.items())
         ]
     )
-    tail_answer, tail_reasoning = think.flush()
+    tail_answer, tail_reasoning = splitter.flush()
     if tail_answer:
         text_parts.append(tail_answer)
     if tail_reasoning:
@@ -242,7 +242,7 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
         # Inline tool-call markup is the only carrier when the wire field
         # stayed empty; when both arrive the parsed field wins (no echo
         # double-execution).
-        tool_calls = tuple(parse_tool_blocks(think.tool_blocks))
+        tool_calls = tuple(parse_tool_blocks(splitter.tool_blocks))
     yield {
         "type": "final",
         "text": "".join(text_parts),

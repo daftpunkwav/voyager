@@ -29,7 +29,7 @@ import { type PickResult, pickDirectory, switchWorkspace } from '@/api/workspace
 function useWorkspaceSwitch() {
   const { t } = useTranslation('chat');
   const [switching, setSwitching] = useState(false);
-  const persist = async (next: string): Promise<string | null> => {
+  const applySwitch = async (next: string): Promise<string | null> => {
     if (!window.confirm(t('chat:workspace.switchConfirm'))) return null;
     // Stash before the POST: the SSE echo races the HTTP response, so the
     // marker must already be in place when the event lands. A leftover
@@ -45,7 +45,7 @@ function useWorkspaceSwitch() {
       setSwitching(false);
     }
   };
-  return { persist, switching };
+  return { applySwitch, switching };
 }
 
 /**
@@ -59,7 +59,7 @@ export function WorkspacePathChip() {
   const workspaceRev = useChatStore((s) => s.workspaceRev);
   const [value, setValue] = useState('');
   const [browserOpen, setBrowserOpen] = useState(false);
-  const { persist, switching } = useWorkspaceSwitch();
+  const { applySwitch, switching } = useWorkspaceSwitch();
 
   useEffect(() => {
     let alive = true;
@@ -80,7 +80,7 @@ export function WorkspacePathChip() {
   const pick = async (path: string) => {
     setBrowserOpen(false);
     try {
-      const ws = await persist(path);
+      const ws = await applySwitch(path);
       if (ws) setValue(ws);
     } catch (err) {
       useUIStore.getState().addToast({
