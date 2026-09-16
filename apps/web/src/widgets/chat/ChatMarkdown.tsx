@@ -5,6 +5,7 @@
  * previews and the inline turn trace.
  */
 
+import { memo } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -55,7 +56,13 @@ function InternalLink({ to, children }: { to: string; children: React.ReactNode 
   );
 }
 
-export function ChatMarkdown({ content }: { content: string }) {
+/** Memoized on `content`: streaming frames re-render the whole message list
+ *  (MessageList subscribes to `streaming`, so every agent.delta re-renders all
+ *  bubbles) while historical messages keep identical content. Memo lets React
+ *  skip the full remark/rehype pipeline for unchanged text — that repeated
+ *  parsing dominates per-delta render cost in long conversations. Output is a
+ *  pure function of `content`, so shallow prop comparison is safe. */
+export const ChatMarkdown = memo(function ChatMarkdown({ content }: { content: string }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -65,4 +72,4 @@ export function ChatMarkdown({ content }: { content: string }) {
       {content}
     </ReactMarkdown>
   );
-}
+});
