@@ -622,15 +622,16 @@ class HttpLLM:
 
     @staticmethod
     def _merge_tool_fragment(acc: dict[int, dict[str, Any]], frag: dict[str, Any]) -> None:
-        """Accumulate one streaming tool-call fragment by index: id/name arrive
-        on the first fragment, arguments stream in pieces."""
+        """Accumulate one streaming tool-call fragment by index: arguments
+        stream in pieces; some compat endpoints resend the full id/name on
+        every fragment, so both are overwritten (idempotent), never appended."""
         idx = int(frag.get("index", 0))
         slot = acc.setdefault(idx, {"id": "", "name": "", "arguments": ""})
         if frag.get("id"):
             slot["id"] = frag["id"]
         fn = frag.get("function") or {}
         if fn.get("name"):
-            slot["name"] += fn["name"]
+            slot["name"] = str(fn["name"])
         if fn.get("arguments"):
             slot["arguments"] += fn["arguments"]
 
