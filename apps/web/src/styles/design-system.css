@@ -146,7 +146,9 @@
   --radius-tile: calc(32px / var(--phi));
   --radius-avatar-lg: calc(72px / var(--phi));
   --radius-bubble: calc(39px / var(--phi));
-  --radius-field: calc(44px / var(--phi));
+  /* Text inputs use a fixed 12px: pill radii on wide fields read as bloated
+     and waste the corners where the caret works */
+  --radius-field: 12px;
   --radius-nav: var(--radius-btn);
 
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -1507,12 +1509,12 @@ svg {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 44px;
+  height: 40px;
   padding: 0 14px;
   background: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: var(--radius-field);
   color: var(--text-800);
   font: 14px/1 var(--font-sans);
@@ -1521,10 +1523,12 @@ svg {
     box-shadow 0.18s var(--ease),
     background 0.18s var(--ease);
 }
+/* Focus is neutral: border darkens and the surface solidifies; accent blue is
+   reserved for selection/checked states and the keyboard focus ring */
 .field:focus-within {
-  border-color: var(--brand-500);
-  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.12);
-  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(0, 0, 0, 0.24);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.88);
 }
 .field input,
 .field textarea,
@@ -2537,7 +2541,8 @@ textarea.field {
 }
 [data-theme='dark'] .field:focus-within {
   background: rgba(255, 255, 255, 0.1);
-  border-color: var(--brand-500);
+  border-color: rgba(255, 255, 255, 0.32);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
 }
 
 [data-theme='dark'] .stat {
