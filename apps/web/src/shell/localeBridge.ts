@@ -18,6 +18,7 @@
 
 import { useEffect } from 'react';
 import { callCapability } from '@/bridge/client';
+import { EventType } from '@/bridge/events';
 import { subscribe } from '@/bridge/stream';
 import { useUIStore } from '@/stores/uiStore';
 import { i18n } from '@/i18n';
@@ -60,7 +61,7 @@ export function useLocaleBridge() {
         // selection / default, don't break shell rendering
       });
 
-    const off = subscribe(['settings.changed'], (event) => {
+    const off = subscribe([EventType.SETTINGS_CHANGED], (event) => {
       const payload = event.payload as LocalePayload;
       if (payload.key === 'appearance.locale') {
         syncLocale(payload.value);

@@ -21,6 +21,7 @@
 
 import { useEffect } from 'react';
 import { callCapability } from '@/bridge/client';
+import { EventType } from '@/bridge/events';
 import { subscribe } from '@/bridge/stream';
 import { useUIStore, type Theme } from '@/stores/uiStore';
 
@@ -85,7 +86,7 @@ export function useThemeBridge() {
     onSchemeChange();
     media.addEventListener('change', onSchemeChange);
 
-    const off = subscribe(['settings.changed'], (event) => {
+    const off = subscribe([EventType.SETTINGS_CHANGED], (event) => {
       const payload = event.payload as ThemePayload;
       if (payload.key === 'appearance.theme' && typeof payload.value === 'string') {
         syncTheme(payload.value);

@@ -17,7 +17,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from platform_contracts import ActorKind, ActorRef, Event
+from platform_contracts import ActorKind, ActorRef, DomainEvent, Event
 from platform_eventbus import EventBus
 
 from .index_queue import IndexQueue
@@ -75,7 +75,7 @@ class IndexScheduler:
 
     async def _run_guarded(self, job: dict[str, Any]) -> None:
         async with self._sem:
-            await self._emit("task.progress", job, progress=0.0, stage="start")
+            await self._emit(DomainEvent.TASK_PROGRESS, job, progress=0.0, stage="start")
             try:
                 await self._run(job)
             except asyncio.CancelledError:
@@ -87,14 +87,14 @@ class IndexScheduler:
                     await asyncio.sleep(self._backoff * (2 ** (job["attempts"] - 1)))
                 self._queue.finish(job["id"], ok=False, error=str(exc), retry=retry)
                 await self._emit(
-                    "task.failed" if not retry else "task.progress",
+                    DomainEvent.TASK_FAILED if not retry else DomainEvent.TASK_PROGRESS,
                     job,
                     error=str(exc)[:200],
                     stage="retry" if retry else "failed",
                 )
                 return
             self._queue.finish(job["id"], ok=True)
-            await self._emit("task.completed", job, progress=1.0)
+            await self._emit(DomainEvent.TASK_COMPLETED, job, progress=1.0)
 
     async def _emit(self, type_: str, job: dict[str, Any], **payload) -> None:
         if self._bus is not None:
