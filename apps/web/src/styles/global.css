@@ -404,6 +404,12 @@ a {
 .team-section + .team-section {
   margin-top: 24px;
 }
+.team-section > .h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-700);
+  margin: 0 0 12px;
+}
 .team-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
@@ -417,8 +423,7 @@ a {
 .persona-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 18px 20px;
+  padding: 16px 18px;
   background: var(--bg-100);
   border: 1px solid var(--bg-300);
   border-radius: var(--radius-md2, 12px);
@@ -447,14 +452,17 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin: 0;
+  margin: 0 0 8px;
 }
 .persona-card__head .h3 {
   font-size: 15px;
   letter-spacing: -0.01em;
 }
 .persona-card > p {
-  margin: 0;
+  margin: 0 0 7px;
+}
+.persona-card > p:last-of-type {
+  margin-bottom: 0;
 }
 .persona-card > p.small {
   color: var(--text-600);
@@ -470,6 +478,12 @@ a {
 }
 .persona-card details {
   min-width: 0;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--bg-300);
+}
+[data-theme='dark'] .persona-card details {
+  border-top-color: rgba(255, 255, 255, 0.07);
 }
 .persona-card details > summary {
   cursor: pointer;
