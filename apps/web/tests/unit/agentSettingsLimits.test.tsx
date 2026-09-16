@@ -24,6 +24,7 @@ vi.mock('@/bridge/client', async (importOriginal) => ({
 vi.mock('@/api/client', () => ({ getApi: getApiMock }));
 
 import { AgentSettingsSection } from '@/components/settings/AgentSettingsSection';
+import { useChatStore } from '@/stores/chatStore';
 import { useUIStore } from '@/stores/uiStore';
 
 const SNAPSHOT = {
@@ -197,7 +198,12 @@ describe('workspace directory (phase-10, hot-switch)', () => {
         )
       );
       const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body ?? '{}'));
-      expect(body).toEqual({ dir: 'ws2' });
+      // The request carries the echo marker and it was stashed before the
+      // POST, so this tab's useChatStream skips the "switched elsewhere" toast.
+      expect(body.dir).toBe('ws2');
+      expect(typeof body.marker).toBe('string');
+      expect(body.marker).not.toBe('');
+      expect(useChatStore.getState().workspaceSwitchMarker).toBe(body.marker);
       await waitFor(() =>
         expect(useUIStore.getState().toasts.some((t) => t.type === 'success')).toBe(true)
       );

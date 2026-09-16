@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { switchWorkspace } from '@/api/workspace';
 import { callCapability } from '@/bridge/client';
+import { useChatStore } from '@/stores/chatStore';
 import { useUIStore } from '@/stores/uiStore';
 import { extractErrorMessage } from '@/utils/errors';
 import { WORKDIR_KEY } from './constants';
@@ -51,7 +52,14 @@ export function WorkspaceBlock() {
     // Hot-switch rebuilds the agent (in-flight turns are drained); confirm
     // first since the switch interrupts running work.
     if (!window.confirm(t('workspace.switchConfirm'))) return;
-    switchWorkspace(next)
+    // Stash the request marker before the POST (the SSE echo races the HTTP
+    // response): the workspace.switched broadcast reaches this tab's own
+    // useChatStream too, and without the marker it would raise the misleading
+    // "switched elsewhere" toast on top of the success one below. Same
+    // protocol as the composer chip's useWorkspaceSwitch.
+    const marker = crypto.randomUUID();
+    useChatStore.setState({ workspaceSwitchMarker: marker });
+    switchWorkspace(next, marker)
       .then((res) => {
         setWorkdir(res.workspace);
         addToast({ type: 'success', message: t('workspace.switched') });

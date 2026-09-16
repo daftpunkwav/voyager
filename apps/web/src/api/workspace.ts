@@ -1,17 +1,10 @@
 /**
  * @file workspace.ts
- * @description Workspace browsing (gateway read-only endpoints): directory
- * listing inside the workspace for the file tree, capped text preview, a
+ * @description Workspace browsing (gateway read-only endpoints): a
  * machine-wide directory picker used to choose a new workspace root, and
  * the hot-switch endpoint that rebuilds the agent around the new root
  * without restarting the service.
  */
-
-export interface WorkspaceEntry {
-  name: string;
-  type: 'directory' | 'file';
-  size?: number;
-}
 
 interface MaybeError {
   error?: { code: string; message: string };
@@ -26,17 +19,10 @@ async function callRest<T>(path: string): Promise<T & MaybeError> {
   return (await resp.json()) as T & MaybeError;
 }
 
-export async function listWorkspace(
-  path = ''
-): Promise<{ path: string; entries: WorkspaceEntry[] } & MaybeError> {
-  return callRest(`/api/workspace/list?path=${encodeURIComponent(path)}`);
-}
-
-export async function readWorkspaceFile(
-  path: string,
-  limit = 200
-): Promise<{ lines: string[]; truncated: boolean; total_bytes: number } & MaybeError> {
-  return callRest(`/api/workspace/read?path=${encodeURIComponent(path)}&limit=${limit}`);
+export interface WorkspaceEntry {
+  name: string;
+  type: 'directory' | 'file';
+  size?: number;
 }
 
 export interface PickResult {
@@ -60,8 +46,12 @@ export interface SwitchResult {
  *  new root, persists agent.workspace.dir and rebinds workspace routes.
  *  `marker` (optional request id) is echoed on the workspace.switched event
  *  so the initiating tab can recognize its own broadcast; omitted from the
- *  wire when unset. Throws the backend message on failure (validation /
- *  rebuild errors). */
+ *  wire when unset. Caller contract: a surface whose tab subscribes to SSE
+ *  (useChatStream is mounted, e.g. via FloatingChat) must generate a marker
+ *  and stash it in chatStore.workspaceSwitchMarker BEFORE calling — the
+ *  broadcast races the HTTP response, and an unstashed marker means the
+ *  initiating tab sees the misleading "switched elsewhere" toast. Throws the
+ *  backend message on failure (validation / rebuild errors). */
 export async function switchWorkspace(dir: string, marker = ''): Promise<SwitchResult> {
   const resp = await fetch('/api/workspace/switch', {
     method: 'POST',
