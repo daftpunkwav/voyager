@@ -9,7 +9,9 @@
  * fictional settings-blob contract. Wiring a real backend key is future work.
  *
  * Responsibilities:
- * - Render the per-agent provider / model / speaking-style override table
+ * - Render the per-agent provider / model / speaking-style override table as a
+ *   flat inner block (single top-layer glass principle: the section panel is
+ *   the only glass surface; titles live at section level)
  * - Keep edits presentation-local and toast the explicit not-persisted warning
  */
 
@@ -57,10 +59,7 @@ export function LlmAgentOverrides({ providers, defaultProviderId }: LlmAgentOver
   };
 
   return (
-    <div className="llm-settings-block glass-card glass-card--overview-inner glass-overflow-visible">
-      <h3 className="llm-block-title">{t('llm.overrides.title')}</h3>
-      <p className="llm-block-desc">{t('llm.overrides.desc')}</p>
-
+    <div className="llm-settings-block">
       <div className="llm-agent-table-wrap">
         <table className="llm-agent-table">
           <thead>

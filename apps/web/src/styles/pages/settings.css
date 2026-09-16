@@ -949,12 +949,41 @@
   overflow-x: auto;
 }
 
+/* ---------- Top-layer liquid glass (single glass surface per view) ----------
+   The section panel is the ONLY glass layer on a settings tab; everything
+   nested inside is flat (solid fills, hairline dividers, no blur/border/
+   shadow). Legacy overview-outer/inner nodes are no-ops under this spec and
+   get flattened as each tab is migrated. */
+.settings-page .settings-section.glass-card {
+  background: rgba(255, 255, 255, 0.66);
+  backdrop-filter: blur(28px) saturate(170%);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: var(--lg-radius-card, 20px);
+  box-shadow:
+    0 24px 48px -24px rgba(15, 23, 42, 0.16),
+    0 2px 6px -2px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+.settings-page .settings-section.glass-card::before {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+}
+[data-theme='dark'] .settings-page .settings-section.glass-card {
+  background: rgba(28, 28, 30, 0.72);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 24px 48px -24px rgba(0, 0, 0, 0.6),
+    0 2px 6px -2px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+[data-theme='dark'] .settings-page .settings-section.glass-card::before {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+}
+
 /* ---------- LLM config extensions ---------- */
-/* Remove the liquid glass gray drop-shadow, keep only the inset highlight */
+/* Model tab internals keep the inset-only glass treatment (not yet migrated) */
 .llm-settings .glass-card.glass-card--overview-outer,
-.llm-settings .glass-card.glass-card--overview-inner,
-.settings-page .glass-card.glass-card--overview-outer,
-.settings-page .glass-card.glass-card--overview-inner {
+.llm-settings .glass-card.glass-card--overview-inner {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
     inset 0 -1px 0 rgba(255, 255, 255, 0.12),
@@ -962,9 +991,7 @@
 }
 
 [data-theme='dark'] .llm-settings .glass-card.glass-card--overview-outer,
-[data-theme='dark'] .llm-settings .glass-card.glass-card--overview-inner,
-[data-theme='dark'] .settings-page .glass-card.glass-card--overview-outer,
-[data-theme='dark'] .settings-page .glass-card.glass-card--overview-inner {
+[data-theme='dark'] .llm-settings .glass-card.glass-card--overview-inner {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
     inset 0 -1px 0 rgba(255, 255, 255, 0.06),
@@ -1151,12 +1178,17 @@
   flex: 1;
 }
 .llm-settings-block {
-  padding: 18px 20px;
+  /* Flat inner block under the single top-layer glass: separation comes from
+     a hairline divider, not a nested card */
+  padding: 18px 0 0;
   overflow: visible;
-}
-/* With overflow:visible, turn off the left highlight to avoid a stray vertical line */
-.llm-settings-block.glass-card::after {
-  content: none;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--bg-300);
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .llm-block-title {
   margin: 0 0 4px;
@@ -1360,7 +1392,6 @@
 }
 .llm-agent-table-wrap {
   overflow-x: auto;
-  margin: 0 -4px;
 }
 .llm-agent-table {
   width: 100%;
