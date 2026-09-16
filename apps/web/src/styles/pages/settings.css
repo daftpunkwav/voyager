@@ -14,8 +14,10 @@
   gap: 32px;
   width: 100%;
   /* Container-relative: the shell already sits inside .content, so sizing
-     against 100vw double-counted the sidebar and overflowed mid widths */
-  max-width: 1120px;
+     against 100vw double-counted the sidebar and overflowed mid widths.
+     1440 = .content max (1520) minus this shell's own padding: on wide
+     screens the column fills the pane instead of floating with dead gutters */
+  max-width: 1440px;
   margin: 0 auto;
   padding: 28px clamp(16px, 3vw, 40px) 40px;
 }

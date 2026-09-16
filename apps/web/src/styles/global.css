@@ -395,6 +395,21 @@ a {
   }
 }
 
+/* -- Team blocks (personas / definitions, shared by the team page and the
+   settings agent tab): responsive card grid; without it the cards stack
+   full-width and stretch absurdly on wide screens -- */
+.team-section {
+  min-width: 0;
+}
+.team-section + .team-section {
+  margin-top: 24px;
+}
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+  gap: 16px;
+}
+
 /* -- Card grid entrance stagger (stat cards / health cards / team cards) -- */
 .stat-grid > *,
 .health-grid > *,
