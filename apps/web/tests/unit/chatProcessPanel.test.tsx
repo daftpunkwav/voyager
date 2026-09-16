@@ -43,7 +43,12 @@ function stepEvent(
   detail: Record<string, unknown> = {}
 ): ChatEvent {
   seq += 1;
-  return { seq, type: 'agent.step', payload: { kind, name, summary, subagent: 'chat', detail }, ts };
+  return {
+    seq,
+    type: 'agent.step',
+    payload: { kind, name, summary, subagent: 'chat', detail },
+    ts,
+  };
 }
 
 function resetStore() {
@@ -224,7 +229,13 @@ describe('RightPanel', () => {
     });
     listSubagentsMock.mockResolvedValue({
       running: [
-        { id: 'r1', name: 'indexer', status: 'running', goal: '建索引', started_ts: Date.now() / 1000 - 65 },
+        {
+          id: 'r1',
+          name: 'indexer',
+          status: 'running',
+          goal: '建索引',
+          started_ts: Date.now() / 1000 - 65,
+        },
       ],
     });
     render(

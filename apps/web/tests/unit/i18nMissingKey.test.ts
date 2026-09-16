@@ -17,7 +17,7 @@ describe('i18n bootstrap and missing-key fallback', () => {
   });
 
   it('the default Chinese bundle works (flat keys hit as-is)', () => {
-    expect(i18n.t('shell:nav.chat')).toBe('对话');
+    expect(i18n.t('shell:nav.settings')).toBe('设置');
     expect(i18n.t('settings:appearance.title')).toBe('外观');
   });
 
@@ -44,8 +44,8 @@ describe('i18n bootstrap and missing-key fallback', () => {
 
   it('t() follows changeLanguage (en)', async () => {
     await i18n.changeLanguage('en');
-    expect(i18n.t('shell:nav.chat')).toBe('Chat');
+    expect(i18n.t('shell:nav.settings')).toBe('Settings');
     await i18n.changeLanguage('zh-CN');
-    expect(i18n.t('shell:nav.chat')).toBe('对话');
+    expect(i18n.t('shell:nav.settings')).toBe('设置');
   });
 });

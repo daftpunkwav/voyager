@@ -22,7 +22,7 @@ vi.mock('@/bridge/client', async (importOriginal) => ({
 
 vi.mock('@/api/client', () => ({ getApi: getApiMock }));
 
-import { AgentSettingsSection } from '@/components/settings/AgentSettingsSection';
+import { AppPolicyBlock } from '@/components/settings/agent/AppPolicyBlock';
 import { useUIStore } from '@/stores/uiStore';
 
 const SNAPSHOT = {
@@ -62,7 +62,11 @@ function backend(_domain: string, name: string, args: Record<string, unknown>) {
 }
 
 function renderSection() {
-  render(<AgentSettingsSection />);
+  render(
+    <>
+      <AppPolicyBlock />
+    </>
+  );
 }
 
 beforeEach(() => {

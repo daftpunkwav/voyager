@@ -23,7 +23,7 @@ vi.mock('@/bridge/client', async (importOriginal) => ({
 
 vi.mock('@/api/client', () => ({ getApi: getApiMock }));
 
-import { AgentSettingsSection } from '@/components/settings/AgentSettingsSection';
+import { ReadRootsBlock } from '@/components/settings/agent/ReadRootsBlock';
 import { useUIStore } from '@/stores/uiStore';
 
 const SNAPSHOT = {
@@ -75,12 +75,20 @@ beforeAll(() => {
 
 describe('read-only extra directories (phase-54)', () => {
   it('reads the draft on mount: array shown line by line', async () => {
-    render(<AgentSettingsSection />);
+    render(
+      <>
+        <ReadRootsBlock />
+      </>
+    );
     await waitDraft('D:\\docs\n/home/me/papers');
   });
 
   it('on edit+save, trims/strips empty lines and writes the JSON array to agent.fs.read_roots', async () => {
-    render(<AgentSettingsSection />);
+    render(
+      <>
+        <ReadRootsBlock />
+      </>
+    );
     await waitDraft('D:\\docs\n/home/me/papers');
 
     const box = screen.getByLabelText('只读附加目录') as HTMLTextAreaElement;
@@ -98,7 +106,11 @@ describe('read-only extra directories (phase-54)', () => {
   });
 
   it('rejects relative paths: warning toast, no request', async () => {
-    render(<AgentSettingsSection />);
+    render(
+      <>
+        <ReadRootsBlock />
+      </>
+    );
     await waitDraft('D:\\docs\n/home/me/papers');
 
     const box = screen.getByLabelText('只读附加目录') as HTMLTextAreaElement;
@@ -115,7 +127,11 @@ describe('read-only extra directories (phase-54)', () => {
   });
 
   it('rejects paths containing ".." segments: warning toast, no request', async () => {
-    render(<AgentSettingsSection />);
+    render(
+      <>
+        <ReadRootsBlock />
+      </>
+    );
     await waitDraft('D:\\docs\n/home/me/papers');
 
     const box = screen.getByLabelText('只读附加目录') as HTMLTextAreaElement;
@@ -132,7 +148,11 @@ describe('read-only extra directories (phase-54)', () => {
   });
 
   it('blank-lines-only input saves as an empty array', async () => {
-    render(<AgentSettingsSection />);
+    render(
+      <>
+        <ReadRootsBlock />
+      </>
+    );
     await waitDraft('D:\\docs\n/home/me/papers');
 
     const box = screen.getByLabelText('只读附加目录') as HTMLTextAreaElement;

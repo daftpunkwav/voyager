@@ -24,7 +24,8 @@ vi.mock('@/bridge/client', async (importOriginal) => ({
 
 vi.mock('@/api/client', () => ({ getApi: getApiMock }));
 
-import { AgentSettingsSection } from '@/components/settings/AgentSettingsSection';
+import { UserHooksBlock } from '@/components/settings/agent/UserHooksBlock';
+import { WorkspaceBlock } from '@/components/settings/agent/WorkspaceBlock';
 import { useUIStore } from '@/stores/uiStore';
 
 const SNAPSHOT = {
@@ -87,7 +88,12 @@ function backend(
 
 function renderSection(impl: ReturnType<typeof backend>) {
   callCapabilityMock.mockImplementation(impl);
-  render(<AgentSettingsSection />);
+  render(
+    <>
+      <UserHooksBlock />
+      <WorkspaceBlock />
+    </>
+  );
 }
 
 const toastTexts = () => useUIStore.getState().toasts.map((t) => t.message);
@@ -187,7 +193,11 @@ describe('settings page user hooks block (phase-78)', () => {
         return Promise.resolve({});
       }
     );
-    render(<AgentSettingsSection />);
+    render(
+      <>
+        <UserHooksBlock />
+      </>
+    );
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '重新加载用户钩子' })).toBeTruthy()
     );

@@ -23,7 +23,7 @@ vi.mock('@/bridge/client', async (importOriginal) => ({
 
 vi.mock('@/api/client', () => ({ getApi: getApiMock }));
 
-import { AgentSettingsSection } from '@/components/settings/AgentSettingsSection';
+import { WriteRootsBlock } from '@/components/settings/agent/WriteRootsBlock';
 import { useUIStore } from '@/stores/uiStore';
 
 const SNAPSHOT = {
@@ -75,12 +75,20 @@ beforeAll(() => {
 
 describe('read/write extra directories (phase-56)', () => {
   it('reads the draft on mount: array shown line by line', async () => {
-    render(<AgentSettingsSection />);
+    render(
+      <>
+        <WriteRootsBlock />
+      </>
+    );
     await waitDraft('E:\\shared\n/srv/dropbox');
   });
 
   it('on edit+save, trims/strips empty lines and writes the JSON array to agent.fs.write_roots', async () => {
-    render(<AgentSettingsSection />);
+    render(
+      <>
+        <WriteRootsBlock />
+      </>
+    );
     await waitDraft('E:\\shared\n/srv/dropbox');
 
     const box = screen.getByLabelText('读写附加目录') as HTMLTextAreaElement;
@@ -98,7 +106,11 @@ describe('read/write extra directories (phase-56)', () => {
   });
 
   it('rejects relative paths: warning toast, no request', async () => {
-    render(<AgentSettingsSection />);
+    render(
+      <>
+        <WriteRootsBlock />
+      </>
+    );
     await waitDraft('E:\\shared\n/srv/dropbox');
 
     const box = screen.getByLabelText('读写附加目录') as HTMLTextAreaElement;
@@ -115,7 +127,11 @@ describe('read/write extra directories (phase-56)', () => {
   });
 
   it('rejects paths containing ".." segments: warning toast, no request', async () => {
-    render(<AgentSettingsSection />);
+    render(
+      <>
+        <WriteRootsBlock />
+      </>
+    );
     await waitDraft('E:\\shared\n/srv/dropbox');
 
     const box = screen.getByLabelText('读写附加目录') as HTMLTextAreaElement;
@@ -132,7 +148,11 @@ describe('read/write extra directories (phase-56)', () => {
   });
 
   it('blank-lines-only input saves as an empty array', async () => {
-    render(<AgentSettingsSection />);
+    render(
+      <>
+        <WriteRootsBlock />
+      </>
+    );
     await waitDraft('E:\\shared\n/srv/dropbox');
 
     const box = screen.getByLabelText('读写附加目录') as HTMLTextAreaElement;

@@ -21,7 +21,7 @@ import { graphProvider } from '@/pages/graph/provider';
 import { codeGraphProvider } from '@/pages/code-graph/provider';
 import { notesProvider } from '@/pages/notes/provider';
 import { sourcesProvider, sourceDetailProvider } from '@/pages/sources/provider';
-import { teamProvider } from '@/pages/team/provider';
+import { teamProvider } from '@/components/team/provider';
 
 export type { PageProbe } from '@/bridge/pageContext';
 

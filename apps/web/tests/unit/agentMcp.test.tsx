@@ -22,7 +22,8 @@ vi.mock('@/bridge/client', async (importOriginal) => ({
 
 vi.mock('@/api/client', () => ({ getApi: getApiMock }));
 
-import { AgentSettingsSection } from '@/components/settings/AgentSettingsSection';
+import { McpBlock } from '@/components/settings/agent/McpBlock';
+import { RoundsBlock } from '@/components/settings/agent/RoundsBlock';
 import { useUIStore } from '@/stores/uiStore';
 
 const SNAPSHOT = {
@@ -94,7 +95,12 @@ function backend(overrides: Record<string, unknown> = {}) {
 
 function renderSection(impl: ReturnType<typeof backend>) {
   callCapabilityMock.mockImplementation(impl);
-  render(<AgentSettingsSection />);
+  render(
+    <>
+      <McpBlock />
+      <RoundsBlock />
+    </>
+  );
 }
 
 const toastTexts = () => useUIStore.getState().toasts.map((t) => t.message);

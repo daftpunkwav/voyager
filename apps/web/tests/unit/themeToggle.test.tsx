@@ -1,9 +1,9 @@
 /**
  * @file themeToggle
- * @description Phase-06 theme single-source tests: even when the store and
- * the DOM drift, one click on the topbar switches the theme; the only write
- * path is settings.set_theme (including system); on failure the selection is
- * unchanged.
+ * @description Theme single-source tests at the useTheme hook level: the only
+ * write path is settings.set_theme (including system); on failure the selection
+ * and visuals stay unchanged. (The former topbar toggle cases were retired with
+ * the topbar theme button.)
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -17,14 +17,12 @@ vi.mock('@/bridge/client', async (importOriginal) => ({
   callCapability: callCapabilityMock,
 }));
 
-import { Topbar } from '@/shell/Topbar';
-import { useTheme } from '@/hooks/useTheme';
-import { useUIStore, type Theme } from '@/stores/uiStore';
+import { useTheme, type Theme } from '@/hooks/useTheme';
+import { useUIStore } from '@/stores/uiStore';
 import { applyTheme } from '@/shell/themeBridge';
-import { initI18n } from '@/i18n';
 
 beforeAll(() => {
-  // jsdom gap: Topbar / themeBridge read the system light/dark preference
+  // jsdom gap: themeBridge reads the system light/dark preference
   if (!window.matchMedia) {
     window.matchMedia = ((query: string) => ({
       matches: false,
@@ -37,8 +35,6 @@ beforeAll(() => {
       dispatchEvent: () => false,
     })) as unknown as typeof window.matchMedia;
   }
-  // Topbar copy and pageMeta titles go through i18n; the kernel must be ready (default zh-CN)
-  initI18n();
 });
 
 beforeEach(() => {
@@ -49,35 +45,8 @@ beforeEach(() => {
   applyTheme('light');
 });
 
-function renderTopbar() {
-  return render(
-    <MemoryRouter>
-      <Topbar />
-    </MemoryRouter>
-  );
-}
-
 describe('theme single source of truth (phase-06)', () => {
-  it('when the store says light but the DOM is dark (historical dual-source drift), one topbar click switches to light and persists', async () => {
-    applyTheme('dark'); // the screen shows dark
-    useUIStore.setState({ theme: 'light' }); // the store still says light → two clicks before the fix
-
-    renderTopbar();
-    fireEvent.click(screen.getByRole('button', { name: '切换主题' }));
-
-    // Direction follows what is visible (the DOM): emit light, not what the store thinks (dark)
-    await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('settings', 'set_theme', {
-        theme: 'light',
-      })
-    );
-    // after persistence succeeds the selection matches the visuals in a single click
-    await waitFor(() => expect(useUIStore.getState().theme).toBe('light'));
-    expect(document.documentElement.dataset.theme).toBe('light');
-  });
-
   it('changeTheme("system") also writes the backend; the selection and visuals follow on success', async () => {
-    // The topbar only toggles light↔dark; the system entry is the settings page / same changeTheme (harness tests it directly)
     function Harness({ next }: { next: Theme }) {
       const { changeTheme } = useTheme();
       return (
@@ -101,23 +70,6 @@ describe('theme single source of truth (phase-06)', () => {
     await waitFor(() => expect(useUIStore.getState().theme).toBe('system'));
     // system resolves to the current system preference (jsdom mock = light); data-theme is never left empty
     expect(document.documentElement.dataset.theme).toBe('light');
-  });
-
-  it('keeps the original selection and shows a toast when set_theme fails, without pretending success', async () => {
-    callCapabilityMock.mockRejectedValue(new Error('backend service not started or unreachable'));
-    applyTheme('dark');
-    useUIStore.setState({ theme: 'dark' });
-
-    renderTopbar();
-    fireEvent.click(screen.getByRole('button', { name: '切换主题' }));
-
-    await waitFor(() => {
-      const last = useUIStore.getState().toasts.at(-1);
-      expect(last?.type).toBe('error');
-      expect(last?.message).toContain('主题切换失败');
-    });
-    expect(useUIStore.getState().theme).toBe('dark');
-    expect(document.documentElement.dataset.theme).toBe('dark'); // visuals unchanged too
   });
 });
 

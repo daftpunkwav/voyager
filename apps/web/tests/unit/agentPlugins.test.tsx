@@ -25,7 +25,8 @@ vi.mock('@/bridge/client', async (importOriginal) => ({
 
 vi.mock('@/api/client', () => ({ getApi: getApiMock }));
 
-import { AgentSettingsSection } from '@/components/settings/AgentSettingsSection';
+import { PluginsBlock } from '@/components/settings/agent/PluginsBlock';
+import { WorkspaceBlock } from '@/components/settings/agent/WorkspaceBlock';
 import { useUIStore } from '@/stores/uiStore';
 
 const SNAPSHOT = {
@@ -119,7 +120,12 @@ function backend(
 
 function renderSection(impl: ReturnType<typeof backend>) {
   callCapabilityMock.mockImplementation(impl);
-  render(<AgentSettingsSection />);
+  render(
+    <>
+      <PluginsBlock />
+      <WorkspaceBlock />
+    </>
+  );
 }
 
 const toastTexts = () => useUIStore.getState().toasts.map((t) => t.message);
@@ -372,7 +378,11 @@ describe('settings page plugin revoke reclaims MCP (phase-76)', () => {
         return Promise.resolve({});
       }
     );
-    render(<AgentSettingsSection />);
+    render(
+      <>
+        <PluginsBlock />
+      </>
+    );
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '撤销批准 example' })).toBeTruthy()
     );
@@ -407,7 +417,11 @@ describe('settings page plugin revoke reclaims MCP (phase-76)', () => {
         return Promise.resolve({});
       }
     );
-    render(<AgentSettingsSection />);
+    render(
+      <>
+        <PluginsBlock />
+      </>
+    );
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '自定义批准 example' })).toBeTruthy()
     );
@@ -526,7 +540,11 @@ describe('settings page plugin install/delete (phase-77)', () => {
         return Promise.resolve({});
       }
     );
-    render(<AgentSettingsSection />);
+    render(
+      <>
+        <PluginsBlock />
+      </>
+    );
     await waitFor(() => expect(screen.getByLabelText('插件目录路径')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('插件目录路径'), { target: { value: 'C:/x' } });
     fireEvent.click(screen.getByRole('button', { name: '安装插件' }));

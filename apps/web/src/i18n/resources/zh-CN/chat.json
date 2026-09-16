@@ -130,6 +130,7 @@
   "session.status.stored": "已存档",
   "session.status.waiting_input": "等待输入",
   "session.switch": "切换到此会话",
+  "session.untitled": "未命名会话",
   "store.navigated": "已跳转:{{path}}",
   "store.stageCompleted": "已完成",
   "store.stageRunning": "进行中",

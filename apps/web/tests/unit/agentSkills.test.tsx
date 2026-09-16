@@ -21,7 +21,8 @@ vi.mock('@/bridge/client', async (importOriginal) => ({
 
 vi.mock('@/api/client', () => ({ getApi: getApiMock }));
 
-import { AgentSettingsSection } from '@/components/settings/AgentSettingsSection';
+import { SkillsBlock } from '@/components/settings/agent/SkillsBlock';
+import { WorkspaceBlock } from '@/components/settings/agent/WorkspaceBlock';
 import { useUIStore } from '@/stores/uiStore';
 
 const SNAPSHOT = {
@@ -61,7 +62,12 @@ function backend(skills: unknown, failSkills = false) {
 
 function renderSection(impl: ReturnType<typeof backend>) {
   callCapabilityMock.mockImplementation(impl);
-  render(<AgentSettingsSection />);
+  render(
+    <>
+      <SkillsBlock />
+      <WorkspaceBlock />
+    </>
+  );
 }
 
 beforeEach(() => {

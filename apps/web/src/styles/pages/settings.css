@@ -21,7 +21,7 @@
 /* ---------- Subnav (left 200px sticky) ---------- */
 .subnav {
   position: sticky;
-  top: calc(var(--topbar-h) + 32px);
+  top: 32px;
   align-self: start;
   display: flex;
   flex-direction: column;
@@ -34,6 +34,25 @@
   text-transform: uppercase;
   color: var(--text-400);
   padding: 0 12px 8px;
+}
+.subnav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 16px;
+}
+.subnav-group-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-400);
+  padding: 0 12px 4px;
+}
+/* Embedded sections host a full widget (usage dashboard / activity feed) that
+   brings its own card surface, so no glass-card wrapper here */
+.settings-section--embedded > h2 {
+  margin-bottom: 4px;
 }
 .subnav-item {
   display: flex;

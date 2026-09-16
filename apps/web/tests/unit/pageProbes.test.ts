@@ -12,7 +12,7 @@ import { initI18n } from '@/i18n';
 import { resolvePageName, resolvePageProbe } from '@/shell/pageProbes';
 import { chatProvider } from '@/pages/chat/provider';
 import { notesProvider, rememberNotesListCount } from '@/pages/notes/provider';
-import { teamProvider, rememberTeamSnapshot, patchTeamSnapshot } from '@/pages/team/provider';
+import { teamProvider, rememberTeamSnapshot, patchTeamSnapshot } from '@/components/team/provider';
 import { sourceDetailProvider, rememberSourceDetail } from '@/pages/sources/provider';
 import { activityProvider, rememberActivityFeedCount } from '@/pages/activity/provider';
 import { useChatStore } from '@/stores/chatStore';

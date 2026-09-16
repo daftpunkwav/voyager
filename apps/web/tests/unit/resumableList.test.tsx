@@ -16,7 +16,7 @@ vi.mock('@/bridge/client', async (importOriginal) => ({
   callCapability: callCapabilityMock,
 }));
 
-import { ResumableList } from '@/pages/team/ResumableList';
+import { ResumableList } from '@/components/team/ResumableList';
 import { useUIStore } from '@/stores/uiStore';
 import { initI18n } from '@/i18n';
 

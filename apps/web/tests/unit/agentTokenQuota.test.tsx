@@ -21,7 +21,7 @@ vi.mock('@/bridge/client', async (importOriginal) => ({
 
 vi.mock('@/api/client', () => ({ getApi: vi.fn() }));
 
-import { AgentSettingsSection } from '@/components/settings/AgentSettingsSection';
+import { TokenQuotaBlock } from '@/components/settings/agent/TokenQuotaBlock';
 import { useUIStore } from '@/stores/uiStore';
 
 const SNAPSHOT = {
@@ -62,7 +62,11 @@ function backend(_domain: string, name: string, args: Record<string, unknown>) {
 }
 
 function renderSection() {
-  render(<AgentSettingsSection />);
+  render(
+    <>
+      <TokenQuotaBlock />
+    </>
+  );
 }
 
 beforeEach(() => {

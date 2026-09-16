@@ -1,20 +1,18 @@
 /**
  * @file SettingsPage
- * @description Settings page with category navigation: appearance, GitHub binding, LLM, agent, data export, and about.
- *
- * Sections render only after settings have loaded; a backend failure shows a
- * degraded state with a retry entry instead of a blank page.
+ * @description Settings page with grouped category navigation: basic (general /
+ * appearance / models), agent capabilities (agents / subagents / plugins / mcp /
+ * skills / commands / tools), and data & system (health / usage / activity /
+ * data / about). Pages retired from the shell (team / usage / activity) are
+ * composed here from their building blocks.
  *
  * Responsibilities:
- * - Gate rendering on the settings schema load, with loading and degraded
- *   states plus retry
- * - Compose the six sections: appearance, GitHub binding, LLM, agent,
- *   data export, and about
- * - Handle the GitHub token bind/unbind flow and JSON data export with
- *   toast feedback
+ * - Render the grouped subnav and the active section panel
+ * - Compose retired pages (usage / activity) and team blocks into sections
+ * - Own GitHub binding and data-export flows; delegated blocks own their state
  */
 
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettings } from '@/hooks/useSettings';
@@ -29,27 +27,79 @@ import { useUIStore } from '@/stores/uiStore';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { LlmSettingsSection } from '@/components/settings/LlmSettingsSection';
-import { AgentSettingsSection } from '@/components/settings/AgentSettingsSection';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { extractErrorMessage } from '@/utils/errors';
 import { PRODUCT_NAME } from '@/brand';
 
-type Section = 'appearance' | 'github' | 'llm' | 'agent' | 'data' | 'about';
+import { LlmUsageDashboard } from '@/components/usage/LlmUsageDashboard';
+import { ActivityFeed } from '@/components/activity/ActivityFeed';
+import { PersonaGrid } from '@/components/team/PersonaGrid';
+import { InstanceList } from '@/components/team/InstanceList';
+import { DefinitionGrid } from '@/components/team/DefinitionGrid';
+import { SpawnForm } from '@/components/team/SpawnForm';
+import { ResumableList } from '@/components/team/ResumableList';
+import { ToolCatalog } from '@/components/team/ToolCatalog';
+import { PluginsBlock } from '@/components/settings/agent/PluginsBlock';
+import { McpBlock } from '@/components/settings/agent/McpBlock';
+import { SkillsBlock } from '@/components/settings/agent/SkillsBlock';
+import { UserHooksBlock } from '@/components/settings/agent/UserHooksBlock';
+
+type Section =
+  | 'general'
+  | 'appearance'
+  | 'llm'
+  | 'agents'
+  | 'subagents'
+  | 'plugins'
+  | 'mcp'
+  | 'skills'
+  | 'commands'
+  | 'tools'
+  | 'health'
+  | 'usage'
+  | 'activity'
+  | 'data'
+  | 'about';
 
 // Labels resolve through settings:nav.<id> at render time so the active
-// language applies (nav.github/llm/agent are identity strings in both locales).
-const NAV: { id: Section; icon: string }[] = [
-  { id: 'appearance', icon: '◐' },
-  { id: 'github', icon: '⌂' },
-  { id: 'llm', icon: '◇' },
-  { id: 'agent', icon: '◎' },
-  { id: 'data', icon: '▤' },
-  { id: 'about', icon: 'i' },
+// language applies.
+const NAV_GROUPS: { labelKey: string; items: { id: Section; icon: string }[] }[] = [
+  {
+    labelKey: 'navGroup.basic',
+    items: [
+      { id: 'general', icon: '○' },
+      { id: 'appearance', icon: '◐' },
+      { id: 'llm', icon: '◇' },
+    ],
+  },
+  {
+    labelKey: 'navGroup.agent',
+    items: [
+      { id: 'agents', icon: '⊙' },
+      { id: 'subagents', icon: '⊕' },
+      { id: 'plugins', icon: '⌗' },
+      { id: 'mcp', icon: '⇄' },
+      { id: 'skills', icon: '✦' },
+      { id: 'commands', icon: '⌘' },
+      { id: 'tools', icon: '⚒' },
+    ],
+  },
+  {
+    labelKey: 'navGroup.system',
+    items: [
+      { id: 'health', icon: '♥' },
+      { id: 'usage', icon: '▥' },
+      { id: 'activity', icon: '◔' },
+      { id: 'data', icon: '▤' },
+      { id: 'about', icon: 'i' },
+    ],
+  },
 ];
 
 export function SettingsPage() {
   const { t } = useTranslation('settings');
+  const navigate = useNavigate();
   const { settings, isLoading } = useSettings();
   const error = useSettingsStore((s) => s.error);
   const loadSettings = useSettingsStore((s) => s.loadSettings);
@@ -61,11 +111,12 @@ export function SettingsPage() {
   const { data: accounts = [], refetch: refetchAccounts } = useGithubAccounts();
   const addToast = useUIStore((s) => s.addToast);
   const [section, setSection] = useState<Section>('appearance');
+  const [activityKind, setActivityKind] = useState('');
   const [ghUser, setGhUser] = useState('');
   const [ghPat, setGhPat] = useState('');
   const [unbindId, setUnbindId] = useState<string | null>(null);
 
-  // Language names are autonomys: they never follow the current UI language,
+  // Language names are autonomous: they never follow the current UI language,
   // so users can always find their own language (design §8.4).
   const LOCALE_CARDS = [
     { id: 'zh-CN', name: t('appearance.locale.zhCN') },
@@ -152,23 +203,76 @@ export function SettingsPage() {
       <div className="settings-shell">
         <nav className="subnav" aria-label={t('nav.aria')}>
           <div className="subnav-title">{t('nav.categories')}</div>
-          {NAV.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`subnav-item ${section === item.id ? 'active' : ''}`}
-              onClick={() => setSection(item.id)}
-            >
-              <span className="subnav-icon" aria-hidden>
-                {item.icon}
-              </span>
-              {t(`nav.${item.id}`)}
-              {item.id === 'llm' && llmAvailability === 'missing' && <span className="dot-unset" />}
-            </button>
+          {NAV_GROUPS.map((group) => (
+            <div key={group.labelKey} className="subnav-group">
+              <div className="subnav-group-label">{t(group.labelKey)}</div>
+              {group.items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`subnav-item ${section === item.id ? 'active' : ''}`}
+                  onClick={() => setSection(item.id)}
+                >
+                  <span className="subnav-icon" aria-hidden>
+                    {item.icon}
+                  </span>
+                  {t(`nav.${item.id}`)}
+                  {item.id === 'llm' && llmAvailability === 'missing' && (
+                    <span className="dot-unset" />
+                  )}
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
 
         <div className="settings-main">
+          {section === 'general' && (
+            <section className="settings-section glass-card glass-card--overview-outer">
+              <h2>{t('general.title')}</h2>
+              <p className="section-desc">{t('general.desc')}</p>
+              <h3 className="settings-group-title">GitHub</h3>
+              {accounts.map((a) => (
+                <div key={a.id} className="gh-card" style={{ marginBottom: 16 }}>
+                  <div className="gh-avatar">{a.username[0]?.toUpperCase()}</div>
+                  <div className="gh-meta">
+                    <div className="gh-handle">@{a.username}</div>
+                    <div className="gh-sub">{t('github.bound')}</div>
+                  </div>
+                  <div className="gh-actions">
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setUnbindId(a.id)}
+                    >
+                      {t('github.unbind')}
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <div className="form-row">
+                <label>{t('github.username')}</label>
+                <input
+                  className="field input"
+                  value={ghUser}
+                  onChange={(e) => setGhUser(e.target.value)}
+                />
+              </div>
+              <div className="form-row">
+                <label>Personal Access Token</label>
+                <input
+                  className="field input"
+                  type="password"
+                  value={ghPat}
+                  onChange={(e) => setGhPat(e.target.value)}
+                />
+              </div>
+              <button type="button" className="btn btn-primary" onClick={() => void bindGithub()}>
+                {t('github.saveAndBind')}
+              </button>
+            </section>
+          )}
+
           {section === 'appearance' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('appearance.title')}</h2>
@@ -291,65 +395,114 @@ export function SettingsPage() {
             </section>
           )}
 
-          {section === 'github' && (
-            <section className="settings-section glass-card glass-card--overview-outer">
-              <h2>GitHub</h2>
-              <p className="section-desc">{t('github.desc')}</p>
-              {accounts.map((a) => (
-                <div key={a.id} className="gh-card" style={{ marginBottom: 16 }}>
-                  <div className="gh-avatar">{a.username[0]?.toUpperCase()}</div>
-                  <div className="gh-meta">
-                    <div className="gh-handle">@{a.username}</div>
-                    <div className="gh-sub">{t('github.bound')}</div>
-                  </div>
-                  <div className="gh-actions">
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => setUnbindId(a.id)}
-                    >
-                      {t('github.unbind')}
-                    </button>
-                  </div>
-                </div>
-              ))}
-              <div className="form-row">
-                <label>{t('github.username')}</label>
-                <input
-                  className="field input"
-                  value={ghUser}
-                  onChange={(e) => setGhUser(e.target.value)}
-                />
-              </div>
-              <div className="form-row">
-                <label>Personal Access Token</label>
-                <input
-                  className="field input"
-                  type="password"
-                  value={ghPat}
-                  onChange={(e) => setGhPat(e.target.value)}
-                />
-              </div>
-              <button type="button" className="btn btn-primary" onClick={() => void bindGithub()}>
-                {t('github.saveAndBind')}
-              </button>
-            </section>
-          )}
-
           {section === 'llm' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('llm.title')}</h2>
               <p className="section-desc">{t('llm.desc')}</p>
               <LlmSettingsSection />
               <p style={{ marginTop: 12, fontSize: 13 }}>
-                <Link to="/usage" style={{ color: 'var(--brand-500)' }}>
+                <Link
+                  to="/usage"
+                  style={{ color: 'var(--brand-500)' }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setSection('usage');
+                  }}
+                >
                   {t('llm.viewUsage')}
                 </Link>
               </p>
             </section>
           )}
 
-          {section === 'agent' && <AgentSettingsSection />}
+          {section === 'agents' && (
+            <section className="settings-section glass-card glass-card--overview-outer">
+              <h2>{t('agents.title')}</h2>
+              <p className="section-desc">{t('agents.desc')}</p>
+              <PersonaGrid />
+              <InstanceList />
+            </section>
+          )}
+
+          {section === 'subagents' && (
+            <section className="settings-section glass-card glass-card--overview-outer">
+              <h2>{t('subagents.title')}</h2>
+              <p className="section-desc">{t('subagents.desc')}</p>
+              <DefinitionGrid />
+              <SpawnForm />
+              <ResumableList />
+            </section>
+          )}
+
+          {section === 'plugins' && (
+            <section className="settings-section glass-card glass-card--overview-outer">
+              <h2>{t('plugins.title')}</h2>
+              <p className="section-desc">{t('plugins.desc')}</p>
+              <PluginsBlock />
+            </section>
+          )}
+
+          {section === 'mcp' && (
+            <section className="settings-section glass-card glass-card--overview-outer">
+              <h2>{t('mcp.title')}</h2>
+              <p className="section-desc">{t('mcp.desc')}</p>
+              <McpBlock />
+            </section>
+          )}
+
+          {section === 'skills' && (
+            <section className="settings-section glass-card glass-card--overview-outer">
+              <h2>{t('skills.title')}</h2>
+              <p className="section-desc">{t('skills.desc')}</p>
+              <SkillsBlock />
+            </section>
+          )}
+
+          {section === 'commands' && (
+            <section className="settings-section glass-card glass-card--overview-outer">
+              <h2>{t('commands.title')}</h2>
+              <p className="section-desc">{t('commands.desc')}</p>
+              <UserHooksBlock />
+            </section>
+          )}
+
+          {section === 'tools' && (
+            <section className="settings-section glass-card glass-card--overview-outer">
+              <h2>{t('tools.title')}</h2>
+              <p className="section-desc">{t('tools.desc')}</p>
+              <ToolCatalog />
+            </section>
+          )}
+
+          {section === 'health' && (
+            <section className="settings-section glass-card glass-card--overview-outer">
+              <h2>{t('health.title')}</h2>
+              <p className="section-desc">{t('health.desc')}</p>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => navigate('/system/health')}
+              >
+                {t('health.open')}
+              </button>
+            </section>
+          )}
+
+          {section === 'usage' && (
+            <section className="settings-section settings-section--embedded">
+              <h2>{t('usage.title')}</h2>
+              <p className="section-desc">{t('usage.desc')}</p>
+              <LlmUsageDashboard />
+            </section>
+          )}
+
+          {section === 'activity' && (
+            <section className="settings-section settings-section--embedded">
+              <h2>{t('activity.title')}</h2>
+              <p className="section-desc">{t('activity.desc')}</p>
+              <ActivityFeed kind={activityKind} onKindChange={setActivityKind} />
+            </section>
+          )}
 
           {section === 'data' && (
             <section className="settings-section glass-card glass-card--overview-outer">

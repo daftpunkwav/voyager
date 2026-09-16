@@ -130,6 +130,7 @@
   "session.status.stored": "Stored",
   "session.status.waiting_input": "Waiting",
   "session.switch": "Switch to this session",
+  "session.untitled": "Untitled session",
   "store.navigated": "Navigated: {{path}}",
   "store.stageCompleted": "Completed",
   "store.stageRunning": "In progress",

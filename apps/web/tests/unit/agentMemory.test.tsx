@@ -23,7 +23,8 @@ vi.mock('@/bridge/client', async (importOriginal) => ({
 // Any call to getApi fails the test: the memory section must go through callCapability
 vi.mock('@/api/client', () => ({ getApi: getApiMock }));
 
-import { AgentSettingsSection } from '@/components/settings/AgentSettingsSection';
+import { MemoryBlock } from '@/components/settings/agent/MemoryBlock';
+import { MemoryRetentionBlock } from '@/components/settings/agent/MemoryRetentionBlock';
 import { useUIStore } from '@/stores/uiStore';
 
 const SNAPSHOT = {
@@ -60,7 +61,12 @@ function backend(_domain: string, name: string, args: Record<string, unknown>) {
 }
 
 function renderSection() {
-  render(<AgentSettingsSection />);
+  render(
+    <>
+      <MemoryBlock />
+      <MemoryRetentionBlock />
+    </>
+  );
 }
 
 beforeEach(() => {

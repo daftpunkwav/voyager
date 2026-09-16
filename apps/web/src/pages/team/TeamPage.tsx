@@ -10,12 +10,12 @@
  *   or data
  */
 
-import { PersonaGrid } from './PersonaGrid';
-import { DefinitionGrid } from './DefinitionGrid';
-import { SpawnForm } from './SpawnForm';
-import { ToolCatalog } from './ToolCatalog';
-import { ResumableList } from './ResumableList';
-import { InstanceList } from './InstanceList';
+import { PersonaGrid } from '@/components/team/PersonaGrid';
+import { DefinitionGrid } from '@/components/team/DefinitionGrid';
+import { SpawnForm } from '@/components/team/SpawnForm';
+import { ToolCatalog } from '@/components/team/ToolCatalog';
+import { ResumableList } from '@/components/team/ResumableList';
+import { InstanceList } from '@/components/team/InstanceList';
 
 export function TeamPage() {
   return (
