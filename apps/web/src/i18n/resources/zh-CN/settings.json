@@ -14,16 +14,15 @@
   "toast.themeSaveFailed": "主题保存失败:{{message}}",
   "toast.localeSaveFailed": "语言保存失败:{{message}}",
   "toast.agentOverridesNotPersisted": "Agent 级供应商/模型覆盖暂未接入后端,修改不会保存",
-
   "navGroup.basic": "基础设置",
   "navGroup.agent": "Agent 能力",
   "navGroup.system": "数据与系统",
-
   "nav.general": "常规",
   "nav.appearance": "外观",
   "nav.llm": "模型设置",
   "nav.agents": "常驻 Agent",
   "nav.subagents": "Subagent",
+  "nav.agentLlm": "Agent 供应商与风格",
   "nav.plugins": "插件",
   "nav.mcp": "MCP",
   "nav.skills": "技能",
@@ -39,7 +38,6 @@
   "page.loading": "加载设置中…",
   "page.loadFailedTitle": "无法加载设置",
   "page.loadFailedDesc": "后端服务未启动或不可达。请检查 gateway 是否运行后重试。",
-
   "github.desc": "绑定账号以同步 Stars",
   "github.bound": "已绑定",
   "github.unbind": "解绑",
@@ -51,34 +49,29 @@
   "github.tokenSaved": "GitHub token 已保存，Stars 同步已可用",
   "github.saveFailed": "保存失败",
   "github.unbound": "已解绑",
-
   "data.title": "数据",
   "data.desc": "导出本地项目与笔记",
   "data.exportProjects": "导出项目 JSON",
   "data.exportNotes": "导出笔记 JSON",
-
   "health.title": "服务状态",
   "health.desc": "查看后端各服务的实时健康与运行详情。",
   "health.open": "打开服务状态页",
-
   "about.title": "关于 {{name}}",
   "about.versionLabel": "版本",
   "about.positioningLabel": "定位",
   "about.positioning": "GitHub 项目学习驾驶舱",
-
   "general.title": "常规",
   "general.desc": "账号绑定与同步",
-
   "agents.title": "常驻 Agent",
-  "agents.desc": "常驻智能体人格与运行中的实例。",
+  "agents.desc": "常驻智能体的人格与职责设定。",
   "subagents.title": "Subagent",
-  "subagents.desc": "定义、派发与恢复子智能体任务。",
+  "subagents.desc": "定义、派发与恢复子智能体任务，并查看运行中的实例。",
   "plugins.title": "插件",
-  "plugins.desc": "安装、覆盖与管理扩展插件。",
-  "mcp.title": "MCP",
-  "mcp.desc": "配置 MCP 服务器与工具接入。",
+  "plugins.desc": "仓库根 plugins/ 下的声明式插件。整包批准后它的技能与钩子进入系统；也可以展开逐项勾选。 随插件的 MCP 配置只会登记为待批准条目，工具仍需在外接 MCP 里逐台批准； 撤销批准时会同步移除其登记、且工具还没批准过的外接 MCP（已批准工具的保留）。",
+  "mcp.title": "外接 MCP",
+  "mcp.desc": "添加后先列出它的工具，批准才会进对话工具面；领域笔记/图谱仍走内置能力，不要在这里填本仓库的 mcp_server。",
   "skills.title": "技能",
-  "skills.desc": "查看与管理 Agent 技能包。",
+  "skills.desc": "可复用的过程包。索引（名称 + 一句描述）常驻对话上下文；需要步骤时 Agent 用 load_skill 取全文。",
   "commands.title": "命令",
   "commands.desc": "用户自定义钩子（事件触发命令）。",
   "tools.title": "工具",
@@ -87,7 +80,6 @@
   "usage.desc": "LLM 调用与 token 消耗统计。",
   "activity.title": "活动",
   "activity.desc": "最近发生的事件流。",
-
   "llm.title": "模型设置",
   "llm.desc": "供应商连接、模型列表与各 Agent 的模型与说话风格",
   "llm.viewUsage": "查看 LLM 用量 →",
@@ -97,7 +89,6 @@
   "llm.multiProviderHint": "多供应商可并存；设为默认的供应商就是对话实际调用的那家。",
   "llm.emptyProviders": "尚无提供商;从内置目录新增一个开始。",
   "llm.selectProviderPrompt": "请选择左侧供应商",
-
   "llm.provider.unnamed": "未命名供应商",
   "llm.provider.setDefault": "设为默认",
   "llm.provider.defaultTag": "默认",
@@ -140,7 +131,6 @@
   "llm.provider.testOk": "✓ 连通正常",
   "llm.provider.testFail": "✗ 测试失败",
   "llm.provider.unknownError": "未知错误",
-
   "llm.overrides.title": "Agent 供应商与风格",
   "llm.overrides.desc": "每个 Agent 可指定供应商与模型；留空则使用默认供应商的默认模型",
   "llm.overrides.provider": "供应商",
@@ -151,7 +141,6 @@
   "llm.overrides.providerAria": "{{name}} 供应商",
   "llm.overrides.modelAria": "{{name}} 模型",
   "llm.overrides.styleAria": "{{name}} 说话风格",
-
   "llm.add.unnamedName": "未命名提供商",
   "llm.add.fromPreset": "从内置目录添加",
   "llm.add.custom": "自定义",
@@ -159,13 +148,11 @@
   "llm.add.modelsLabel": "可用模型(逗号或换行分隔)",
   "llm.add.saving": "保存中…",
   "llm.add.save": "保存(api key 稍后在卡片上配置)",
-
   "llm.list.title": "供应商",
   "llm.list.keySet": "已配置 Key",
   "llm.list.keyMissing": "未配置 Key",
   "llm.list.disabled": "已禁用",
   "llm.list.add": "+ 添加供应商",
-
   "llm.format.chat": "OpenAI 兼容",
   "llm.format.anthropic": "Anthropic",
   "llm.format.responses": "Responses",
@@ -185,14 +172,11 @@
   "llm.style.mentorDesc": "循序渐进讲解",
   "llm.style.socratic": "苏格拉底",
   "llm.style.socraticDesc": "反问引导思考",
-
   "common.loadFailed": "读取失败请刷新。",
   "common.save": "保存",
   "common.saving": "保存中…",
   "common.cancel": "取消",
   "common.delete": "删除",
-
-
   "arbiter.title": "仲裁模式",
   "arbiter.desc": "对话运行中收到新消息的处理方式:排队等待 / 由判官自动决定合并或排队 / 排队并询问是否优先处理。",
   "arbiter.queue": "排队",
@@ -202,20 +186,17 @@
   "arbiter.loadFailed": "读取失败",
   "arbiter.saved": "仲裁模式已更新",
   "arbiter.switchFailed": "仲裁模式切换失败:{{message}}",
-
   "conduct.title": "通用行为准则",
   "conduct.desc": "对所有 Agent 生效。例如：回答简洁、不要使用 emoji、先确认再改代码。",
   "conduct.placeholder": "写一条所有 Agent 都应遵守的规则…",
   "conduct.saved": "通用行为准则已保存",
   "conduct.saveFailed": "保存通用行为准则失败：{{message}}",
-
   "style.title": "说话风格",
   "style.desc": "全局语气叠加层，会拼进每次对话的系统提示，与各 Agent 自带气质叠加。",
   "style.aria": "全局说话风格",
   "style.loadFailedOption": "读取失败，请刷新重试",
   "style.saved": "说话风格已保存，下一轮对话生效",
   "style.saveFailed": "保存风格失败：{{message}}",
-
   "guidelines.title": "分 Agent 行为准则",
   "guidelines.desc": "仅对选中的 Agent 生效，叠加在通用准则之上。",
   "guidelines.tabsAria": "选择 Agent",
@@ -223,7 +204,6 @@
   "guidelines.textareaAria": "{{name}} 行为准则",
   "guidelines.saved": "{{name}} 准则已保存",
   "guidelines.saveFailed": "保存{{name}}准则失败：{{message}}",
-
   "rounds.title": "轮数上限",
   "rounds.desc": "ReAct 推理轮数与工具调用次数的全局上限。对话每回合与任务派出都会读取，改完下一句对话 / 下一单任务生效。",
   "rounds.reLabel": "ReAct 轮数",
@@ -233,14 +213,12 @@
   "rounds.invalidRange": "{{label}}须为 1–{{max}} 的整数",
   "rounds.saved": "{{label}}已保存，下一句对话 / 下一单任务生效",
   "rounds.saveFailed": "保存{{label}}失败：{{message}}",
-
   "quota.title": "Token 日配额",
   "quota.desc": "当日（UTC 自然日切日）所有 LLM 调用的输入 + 输出 token 合计上限；0 表示不限。保存后下一句对话即按新配额生效；服务重启后当日用量仍累计。",
   "quota.dailyLabel": "每日 token 上限",
   "quota.invalid": "Token 日配额须为 0–{{max}} 的整数（0 表示不限）",
   "quota.saved": "Token 日配额已保存，下一句对话即按新配额生效",
   "quota.saveFailed": "保存 Token 日配额失败：{{message}}",
-
   "network.title": "网络权限",
   "network.desc": "控制 Agent 联网抓取的档位；下一轮联网判定即生效，无需重启。",
   "network.modeAria": "网络权限模式",
@@ -256,7 +234,6 @@
   "network.invalidDomain": "「{{line}}」不是域名：一行填一个 host（如 github.com），不带协议与路径",
   "network.domainsSaved": "白名单已保存（{{count}} 个域名），下一轮联网判定即生效",
   "network.domainsSaveFailed": "保存白名单失败：{{message}}",
-
   "workspace.title": "工作目录",
   "workspace.desc": "相对仓库根，默认 workspace。保存即热切换 agent，无需重启；笔记等应用数据不受影响。",
   "workspace.invalidPath": "工作目录不允许包含 .. 段",
@@ -265,22 +242,18 @@
   "workspace.switchConfirm": "切换工作区会重建 agent（进行中任务将被打断，会话与历史保留；笔记等应用数据不受影响）。继续？",
   "workspace.switched": "工作区已热切换，无需重启。",
   "workspace.switchFailed": "切换工作区失败：{{message}}",
-
   "fsroots.invalidPath": "「{{line}}」不是绝对路径：一行填一个绝对路径（如 D:\\docs 或 /home/me/docs），不允许 .. 段",
   "fsroots.dirCount": "{{count}} 个目录",
-
   "readRoots.title": "只读附加目录",
   "readRoots.desc": "工作目录之外的只读白名单：read_file / list_dir 可访问这些目录；写入与删除仍仅限工作目录。 保存后下一轮读文件判定即生效，无需重启。",
   "readRoots.cleared": "已清空只读附加目录，下一轮读文件判定即生效",
   "readRoots.saved": "已保存，下一轮读文件判定即生效",
   "readRoots.saveFailed": "保存只读附加目录失败：{{message}}",
-
   "writeRoots.title": "读写附加目录",
   "writeRoots.desc": "工作目录之外的可写白名单：目录内读可直接访问；写入与删除须用户 L2 确认（workspace 内写是 L1 执行并提示，这里更严）。保存后下一轮文件权限判定即生效，无需重启。",
   "writeRoots.cleared": "已清空读写附加目录，下一轮文件权限判定即生效",
   "writeRoots.saved": "已保存，下一轮文件权限判定即生效",
   "writeRoots.saveFailed": "保存读写附加目录失败：{{message}}",
-
   "appPolicy.title": "应用内能力",
   "appPolicy.desc": "控制 Agent 能否调用笔记、图谱等应用内能力。名称与团队页工具面一致（如 notes__create_note）。单独一行 * 表示全部应用内能力；notes__* 表示该域前缀；拒绝优先于允许。空白允许名单会让笔记/图谱等桥工具全部失败。 批准后的外接 MCP（mcp__*）也走本名单；文件、联网、命令不走。",
   "appPolicy.allowedLabel": "应用内能力允许名单",
@@ -296,17 +269,10 @@
   "appPolicy.errSpace": "「{{line}}」不能包含空格",
   "appPolicy.errUppercase": "「{{line}}」不能包含大写字母",
   "appPolicy.errInvalidName": "「{{line}}」不是合法的能力名",
-
-  "skills.title": "技能",
-  "skills.desc": "可复用的过程包。索引（名称 + 一句描述）常驻对话上下文；需要步骤时 Agent 用 load_skill 取全文。",
   "skills.loading": "技能清单加载中…",
   "skills.empty": "还没有技能。把 SKILL.md 放到工作目录的 skills/<名称>/ 下，重启开发服务后生效。",
-
-  "mcp.title": "外接 MCP",
-  "mcp.desc": "添加后先列出它的工具，批准才会进对话工具面；领域笔记/图谱仍走内置能力，不要在这里填本仓库的 mcp_server。",
   "mcp.loading": "外接 MCP 列表加载中…",
   "mcp.empty": "还没有外接 MCP。用下面的表单添加一台 stdio 命令或 HTTP URL。",
-
   "mcp.list.refreshFailed": "刷新工具列表失败：{{message}}",
   "mcp.list.approvedToast": "已批准 {{count}} 个工具进名册；当前这句对话若已开始，下一句或新对话可见",
   "mcp.list.approveFailed": "批准失败：{{message}}",
@@ -327,7 +293,6 @@
   "mcp.list.removeAria": "移除 {{name}}",
   "mcp.list.removeTitle": "移除 MCP「{{id}}」",
   "mcp.list.removeConfirm": "会断开连接、从工具名册卸下它的工具并删除配置。确定移除？",
-
   "mcp.form.heading": "添加外接 MCP",
   "mcp.form.invalidId": "id 须为小写字母开头的 1–32 位小写字母/数字/连字符",
   "mcp.form.addedConnected": "MCP「{{id}}」已添加并列出工具；批准后进入工具名册，下一句或新对话可见",
@@ -351,7 +316,6 @@
   "mcp.form.urlAria": "MCP URL",
   "mcp.form.addAria": "添加 MCP",
   "mcp.form.add": "添加",
-
   "hooks.title": "用户钩子",
   "hooks.desc": "工作目录 hooks/ 下的声明式钩子（JSON 文件，on + enabled）。增删改文件后点 「重新加载」立即生效，无需重启开发服务；已批准插件的钩子不受影响。",
   "hooks.reload": "重新加载",
@@ -365,7 +329,6 @@
   "hooks.unparsable": "（无法解析）",
   "hooks.disabled": "已停用",
   "hooks.unloaded": "未装载",
-
   "memory.title": "记忆",
   "memory.desc": "Agent 的四类记忆。画像摘要会注入每次对话的系统提示；清空只影响记忆， 对话时间线、笔记与项目保留。",
   "memory.loadFailed": "记忆快照加载失败，上方风格与准则不受影响；请刷新重试。",
@@ -406,7 +369,6 @@
   "memory.confirm.profile": "确定清空用户画像？Agent 将忘记你的偏好与背景。对话时间线、笔记与项目会保留，此操作不可恢复。",
   "memory.confirm.episodic": "确定清空情节记忆（决策与事件留痕）？对话时间线、笔记与项目会保留，此操作不可恢复。",
   "memory.confirm.semantic": "确定清空语义记忆（事实三元组）？对话时间线、笔记与项目会保留，此操作不可恢复。",
-
   "retention.title": "情节保留天数",
   "retention.aria": "情节记忆保留天数",
   "retention.desc": "0 = 不按天自动清（交给 Agent 管理）；大于 0 = 打开本页时清理超过天数的情节。",
@@ -414,9 +376,6 @@
   "retention.savedDays": "情节记忆保留 {{days}} 天，打开本页时清理更早情节",
   "retention.savedManaged": "已交给 Agent 管理，不再按天清理",
   "retention.saveFailed": "保存保留天数失败：{{message}}",
-
-  "plugins.title": "插件",
-  "plugins.desc": "仓库根 plugins/ 下的声明式插件。整包批准后它的技能与钩子进入系统；也可以展开逐项勾选。 随插件的 MCP 配置只会登记为待批准条目，工具仍需在外接 MCP 里逐台批准； 撤销批准时会同步移除其登记、且工具还没批准过的外接 MCP（已批准工具的保留）。",
   "plugins.loading": "插件清单加载中…",
   "plugins.empty": "还没有发现插件。把含 plugin.json 的插件目录放进仓库根的 plugins/ 下即可出现在这里， 也可以用上方安装入口从 zip 或本机目录安装。",
   "plugins.requestPermission": "请求权限：",

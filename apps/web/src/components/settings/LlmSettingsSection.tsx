@@ -28,7 +28,6 @@ import {
 import type { LlmProvider, LlmTestOutcome } from '@/api/types';
 import { LLM_PROVIDER_KEY } from '@/api/settings';
 import { LlmProviderAdd } from './llm/LlmProviderAdd';
-import { LlmAgentOverrides } from './llm/LlmAgentOverrides';
 import { LlmProviderDetail } from './llm/LlmProviderDetail';
 import { LlmProviderList } from './llm/LlmProviderList';
 import { Degraded } from '@/shell/Degraded';
@@ -203,8 +202,6 @@ export function LlmSettingsSection() {
           )}
         </div>
       </div>
-
-      <LlmAgentOverrides providers={providers} defaultProviderId={defaultId} />
     </div>
   );
 }

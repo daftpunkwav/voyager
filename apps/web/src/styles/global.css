@@ -410,6 +410,90 @@ a {
   gap: 16px;
 }
 
+/* -- Persona / definition cards (team page + settings agent tab): solid
+   precise surfaces instead of raw glass — blur over a flat dark background
+   reads as cheap film; a solid tone with a hairline border and quiet shadow
+   reads as a deliberate material. Overrides .glass-card (loads later). -- */
+.persona-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  background: var(--bg-100);
+  border: 1px solid var(--bg-300);
+  border-radius: var(--radius-md2, 12px);
+  box-shadow: var(--shadow-hairline);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition:
+    border-color var(--dur-fast, 150ms) var(--ease),
+    box-shadow var(--dur-fast, 150ms) var(--ease);
+}
+[data-theme='dark'] .persona-card {
+  background: #1c1c1e;
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow: none;
+}
+.persona-card:hover {
+  border-color: var(--bg-400);
+  box-shadow: var(--shadow-card);
+}
+[data-theme='dark'] .persona-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.5);
+}
+.persona-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+}
+.persona-card__head .h3 {
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+.persona-card > p {
+  margin: 0;
+}
+.persona-card details {
+  min-width: 0;
+}
+.persona-card details > summary {
+  cursor: pointer;
+  color: var(--text-500);
+  font-weight: 500;
+  transition: color var(--dur-fast, 150ms) var(--ease);
+}
+.persona-card details > summary:hover {
+  color: var(--text-800);
+}
+.persona-card details[open] > summary {
+  margin-bottom: 6px;
+}
+.persona-card .system-prompt,
+.persona-card pre {
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  max-height: 200px;
+  overflow: auto;
+  background: var(--bg-200);
+  border: 1px solid var(--bg-300);
+  border-radius: var(--radius-xs2, 4px);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-700);
+}
+[data-theme='dark'] .persona-card .system-prompt,
+[data-theme='dark'] .persona-card pre {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-600);
+}
+
 /* -- Card grid entrance stagger (stat cards / health cards / team cards) -- */
 .stat-grid > *,
 .health-grid > *,

@@ -27,6 +27,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { LlmSettingsSection } from '@/components/settings/LlmSettingsSection';
+import { AgentLlmOverridesPanel } from '@/components/settings/llm/AgentLlmOverridesPanel';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { extractErrorMessage } from '@/utils/errors';
@@ -50,6 +51,7 @@ type Section =
   | 'appearance'
   | 'llm'
   | 'agents'
+  | 'agentLlm'
   | 'subagents'
   | 'plugins'
   | 'mcp'
@@ -77,6 +79,7 @@ const NAV_GROUPS: { labelKey: string; items: { id: Section; icon: string }[] }[]
     labelKey: 'navGroup.agent',
     items: [
       { id: 'agents', icon: '⊙' },
+      { id: 'agentLlm', icon: '◈' },
       { id: 'subagents', icon: '⊕' },
       { id: 'plugins', icon: '⌗' },
       { id: 'mcp', icon: '⇄' },
@@ -420,7 +423,14 @@ export function SettingsPage() {
               <h2>{t('agents.title')}</h2>
               <p className="section-desc">{t('agents.desc')}</p>
               <PersonaGrid />
-              <InstanceList />
+            </section>
+          )}
+
+          {section === 'agentLlm' && (
+            <section className="settings-section glass-card glass-card--overview-outer">
+              <h2>{t('llm.overrides.title')}</h2>
+              <p className="section-desc">{t('llm.overrides.desc')}</p>
+              <AgentLlmOverridesPanel />
             </section>
           )}
 
@@ -430,6 +440,7 @@ export function SettingsPage() {
               <p className="section-desc">{t('subagents.desc')}</p>
               <DefinitionGrid />
               <SpawnForm />
+              <InstanceList />
               <ResumableList />
             </section>
           )}
