@@ -261,7 +261,8 @@ interface ChatState {
   /** Current streaming typing (agent.delta); cleared by agent.message, restarted on round change */
   streaming: StreamingText | null;
   /** Agent workspace generation counter: bumped on workspace.switched so
-   *  workspace views (panel tree, settings value) refetch without polling. */
+   *  workspace views (the composer's workspace path chip) refetch without
+   *  polling. */
   workspaceRev: number;
   /** Request id of this tab's in-flight/latest workspace switch (mirrored on
    *  the workspace.switched event): lets useChatStream recognize the echo of

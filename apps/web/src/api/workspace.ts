@@ -1,6 +1,6 @@
 /**
  * @file workspace.ts
- * @description Workspace browsing (gateway read-only endpoints): a
+ * @description Workspace endpoints against the gateway: a read-only
  * machine-wide directory picker used to choose a new workspace root, and
  * the hot-switch endpoint that rebuilds the agent around the new root
  * without restarting the service.
