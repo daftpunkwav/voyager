@@ -10,6 +10,7 @@
 
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ModalOverlay } from '@/components/common/ModalOverlay';
 
 interface ImportAgentModalProps {
   open: boolean;
@@ -33,10 +34,9 @@ export function ImportAgentModal({
   agentPanel,
 }: ImportAgentModalProps) {
   const { t } = useTranslation('sources');
-  if (!open) return null;
 
   return (
-    <div className="modal-overlay import-modal-overlay" role="presentation" onClick={onClose}>
+    <ModalOverlay open={open} onClose={onClose} className="import-modal-overlay">
       <div
         className={`import-agent-modal glass-card glass-card--dialog ${size === 'large' ? 'import-agent-modal--large' : ''}${!agentPanel ? ' import-agent-modal--no-agent' : ''}`}
         role="dialog"
@@ -62,6 +62,6 @@ export function ImportAgentModal({
           {agentPanel && <div className="import-agent-modal__agent">{agentPanel}</div>}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

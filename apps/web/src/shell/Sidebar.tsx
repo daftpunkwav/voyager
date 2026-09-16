@@ -1,8 +1,8 @@
 /**
  * @file Sidebar.tsx
- * @description Sidebar: brand mark (click to collapse/expand the rail), the
- * three domain nav entries, the chat session list, and the footer quick
- * entries (notifications / activity / team / usage / settings).
+ * @description Sidebar: brand mark (click to open the overview page) with a
+ * rail collapse toggle beside it, the three domain nav entries, the chat
+ * session list, and the footer quick entries (notifications / settings).
  *
  * Responsibilities:
  * - Highlight the active route, falling back to the parent item on detail pages
@@ -190,18 +190,30 @@ export function Sidebar({ activePage }: SidebarProps) {
 
   return (
     <aside className={`sidebar${collapsed ? ' is-collapsed' : ''}`}>
-      <button
-        type="button"
-        className="sidebar-brand"
-        title={collapsed ? t('nav.expand') : t('nav.collapse')}
-        aria-expanded={!collapsed}
-        onClick={toggleSidebar}
-      >
-        <div className="sidebar-logo">
-          <BrandLogo />
-        </div>
-        {!collapsed && <span className="sidebar-name">{PRODUCT_NAME}</span>}
-      </button>
+      <div className="sidebar-head">
+        <button
+          type="button"
+          className="sidebar-brand"
+          title={t('nav.overview')}
+          aria-label={t('nav.overview')}
+          onClick={() => void navigate(routes.overview)}
+        >
+          <div className="sidebar-logo">
+            <BrandLogo />
+          </div>
+          {!collapsed && <span className="sidebar-name">{PRODUCT_NAME}</span>}
+        </button>
+        <button
+          type="button"
+          className="sidebar-collapse"
+          title={collapsed ? t('nav.expand') : t('nav.collapse')}
+          aria-label={collapsed ? t('nav.expand') : t('nav.collapse')}
+          aria-expanded={!collapsed}
+          onClick={toggleSidebar}
+        >
+          <NavIcons.panel />
+        </button>
+      </div>
 
       <nav className="sidebar-section" aria-label={t('nav.group.domain')}>
         {NAV_ITEMS.map((item) => {

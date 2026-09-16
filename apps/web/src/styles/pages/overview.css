@@ -797,13 +797,13 @@
   background: #a1a1aa;
 }
 .fill-learning {
-  background: linear-gradient(90deg, #ff9f0a, #ffb340);
+  background: #ff9f0a;
 }
 .fill-learned {
-  background: linear-gradient(90deg, #007aff, #2e8dff);
+  background: var(--brand-500);
 }
 .fill-mastered {
-  background: linear-gradient(90deg, #34c759, #30d158);
+  background: #34c759;
 }
 
 /* Recent activity · each row is an independent overview-inner pill */

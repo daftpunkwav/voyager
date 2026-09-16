@@ -16,22 +16,17 @@
 @import './sources-stream.css';
 @import './chat-sessions.css';
 
-/* Unified overlays: near-solid liquid glass; masks never dim the whole page (local depth comes only from panel shadows) */
-.modal-overlay,
+/* Unified overlays. Modal dialogs (.modal-overlay, ask/question/graph modals)
+   dim to focus per the Apple material guidance: the scrim + blur is owned by
+   global.css. Side drawers keep a transparent mask — parallel, non-blocking
+   panels must not break the flow. */
 .drawer-overlay,
-.ask-mask,
-.question-modal-backdrop,
-.graph-index-modal-backdrop,
 .chat-drawer-backdrop {
   background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
-[data-theme='dark'] .modal-overlay,
 [data-theme='dark'] .drawer-overlay,
-[data-theme='dark'] .ask-mask,
-[data-theme='dark'] .question-modal-backdrop,
-[data-theme='dark'] .graph-index-modal-backdrop,
 [data-theme='dark'] .chat-drawer-backdrop {
   background: transparent;
 }

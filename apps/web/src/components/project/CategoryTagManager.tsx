@@ -12,6 +12,7 @@
  */
 import { useTranslation } from 'react-i18next';
 import type { Category, Tag } from '@/api/types';
+import { ModalOverlay } from '@/components/common/ModalOverlay';
 
 interface CategoryTagManagerProps {
   open: boolean;
@@ -22,10 +23,9 @@ interface CategoryTagManagerProps {
 
 export function CategoryTagManager({ open, onClose, categories, tags }: CategoryTagManagerProps) {
   const { t } = useTranslation('sources');
-  if (!open) return null;
 
   return (
-    <div className="modal-overlay" role="presentation" onClick={onClose}>
+    <ModalOverlay open={open} onClose={onClose}>
       <div
         className="modal modal--wide edit-project-modal glass-card glass-card--dialog glass-overflow-visible"
         role="dialog"
@@ -92,6 +92,6 @@ export function CategoryTagManager({ open, onClose, categories, tags }: Category
           </button>
         </footer>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

@@ -18,6 +18,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { uploadDocument, saveUrl, importRepo } from '@/api/sources';
 import { useUIStore } from '@/stores/uiStore';
+import { ModalOverlay } from '@/components/common/ModalOverlay';
 
 export type ImportTab = 'files' | 'web' | 'github';
 
@@ -42,7 +43,7 @@ export function ImportCenter({ open, initialTab = 'files', onClose }: ImportCent
     if (open) setTab(initialTab);
   }, [open, initialTab]);
   return (
-    <div className="modal-overlay" onClick={onClose} hidden={!open}>
+    <ModalOverlay open={open} onClose={onClose}>
       {open && (
         <div
           className="modal import-center glass-card glass-card--dialog"
@@ -83,7 +84,7 @@ export function ImportCenter({ open, initialTab = 'files', onClose }: ImportCent
           </div>
         </div>
       )}
-    </div>
+    </ModalOverlay>
   );
 }
 

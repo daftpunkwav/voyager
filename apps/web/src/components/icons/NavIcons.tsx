@@ -106,4 +106,11 @@ export const NavIcons = {
       <path d="M13.7 21a2 2 0 0 1-3.4 0" />
     </IconBase>
   ),
+  /** Sidebar rail toggle: panel with a divider marking the collapsed edge */
+  panel: (props: IconProps) => (
+    <IconBase {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="3" />
+      <path d="M9.5 4v16" />
+    </IconBase>
+  ),
 };

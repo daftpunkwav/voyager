@@ -8,9 +8,9 @@
  */
 
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { formatDateTime } from '@/i18n';
+import { ModalOverlay } from '@/components/common/ModalOverlay';
 import { useNoteVersions, useRestoreVersion } from '@/hooks/useNotes';
 import { useUIStore } from '@/stores/uiStore';
 
@@ -29,19 +29,10 @@ export function VersionPanel({
   const [selected, setSelected] = useState<number | null>(null);
   const addToast = useUIStore((s) => s.addToast);
   useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-  useEffect(() => {
     if (!open) setSelected(null);
   }, [open]);
-  if (!open) return null;
-  return createPortal(
-    <div className="modal-overlay" role="presentation" onClick={onClose}>
+  return (
+    <ModalOverlay open={open} onClose={onClose}>
       <aside
         className="modal modal--wide notes-dialog glass-card glass-card--dialog"
         onClick={(e) => e.stopPropagation()}
@@ -113,7 +104,6 @@ export function VersionPanel({
           </footer>
         )}
       </aside>
-    </div>,
-    document.body
+    </ModalOverlay>
   );
 }

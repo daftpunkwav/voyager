@@ -86,7 +86,7 @@
   background: var(--bg-300);
 }
 .subnav-item.active {
-  background: linear-gradient(135deg, rgba(0, 122, 255, 0.15), rgba(0, 122, 255, 0.08));
+  background: rgba(0, 122, 255, 0.1);
   color: var(--brand-700);
   font-weight: 600;
 }
@@ -705,7 +705,7 @@
   width: 44px;
   height: 44px;
   border-radius: var(--radius-pill);
-  background: linear-gradient(135deg, #24292e, #586069);
+  background: #24292e;
   color: #fff;
   display: grid;
   place-items: center;

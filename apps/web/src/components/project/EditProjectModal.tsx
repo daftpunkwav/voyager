@@ -13,6 +13,7 @@ import type { Category, Project, Tag } from '@/api/types';
 import { useSetProjectTags, useUpdateProject } from '@/hooks/useProjects';
 import { useUIStore } from '@/stores/uiStore';
 import { GlassSelect } from '@/components/common/GlassSelect';
+import { ModalOverlay } from '@/components/common/ModalOverlay';
 
 interface EditProjectModalProps {
   open: boolean;
@@ -46,8 +47,6 @@ export function EditProjectModal({
     setSelectedTags(new Set(project.tags ?? []));
     setNewTag('');
   }, [open, project]);
-
-  if (!open) return null;
 
   const categoryOptions = [
     { value: '', label: t('sources:edit.uncategorized') },
@@ -97,7 +96,7 @@ export function EditProjectModal({
   const pending = updateProject.isPending || setProjectTags.isPending;
 
   return (
-    <div className="modal-overlay" role="presentation" onClick={onClose}>
+    <ModalOverlay open={open} onClose={onClose}>
       <div
         className="modal modal--wide edit-project-modal glass-card glass-card--dialog glass-overflow-visible"
         role="dialog"
@@ -190,6 +189,6 @@ export function EditProjectModal({
           </button>
         </footer>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

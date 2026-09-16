@@ -10,9 +10,9 @@
  */
 
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
+import { ModalOverlay } from '@/components/common/ModalOverlay';
 import { useEmptyTrash, usePurgeNote, useRestoreNote, useTrashNotes } from '@/hooks/useNotes';
 import { useUIStore } from '@/stores/uiStore';
 
@@ -28,21 +28,18 @@ export function TrashPanel({ open, onClose }: { open: boolean; onClose: () => vo
   const [pending, setPending] = useState<Pending>(null);
 
   useEffect(() => {
-    if (!open) {
-      setPending(null);
-      return;
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !pending) onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose, pending]);
+    if (!open) setPending(null);
+  }, [open]);
 
-  if (!open) return null;
-  return createPortal(
+  // Escape and overlay clicks must not dismiss the panel while a destructive
+  // confirmation is pending on top of it
+  const requestClose = () => {
+    if (!pending) onClose();
+  };
+
+  return (
     <>
-      <div className="modal-overlay" role="presentation" onClick={onClose}>
+      <ModalOverlay open={open} onClose={requestClose}>
         <aside
           className="modal modal--wide notes-dialog trash-panel glass-card glass-card--dialog"
           onClick={(e) => e.stopPropagation()}
@@ -112,7 +109,7 @@ export function TrashPanel({ open, onClose }: { open: boolean; onClose: () => vo
             </ul>
           )}
         </aside>
-      </div>
+      </ModalOverlay>
       <ConfirmDialog
         open={pending?.kind === 'empty'}
         title={t('notes:trash.emptyConfirmTitle')}
@@ -145,7 +142,6 @@ export function TrashPanel({ open, onClose }: { open: boolean; onClose: () => vo
         }}
         onCancel={() => setPending(null)}
       />
-    </>,
-    document.body
+    </>
   );
 }

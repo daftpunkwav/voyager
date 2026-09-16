@@ -500,7 +500,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #34c759, #30d158);
+  background: #34c759;
   box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.22);
 }
 .notes-rail-trash {
@@ -1823,10 +1823,7 @@
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 0 0 8px;
-  background: linear-gradient(135deg, var(--text-800), var(--brand-600));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-800);
 }
 
 /* Note quotes: light brand surface in light theme, no black backdrop */
@@ -1981,7 +1978,7 @@
   width: 80px;
   height: 80px;
   margin: 0 auto 20px;
-  background: linear-gradient(135deg, var(--brand-100), var(--brand-50));
+  background: var(--brand-100);
   border-radius: var(--radius-bubble);
   display: grid;
   place-items: center;
@@ -2367,7 +2364,7 @@
 
 /* Empty state icon bg */
 [data-theme='dark'] .empty-notes .empty-icon {
-  background: linear-gradient(135deg, rgba(0, 122, 255, 0.22), rgba(0, 122, 255, 0.08));
+  background: rgba(0, 122, 255, 0.16);
 }
 
 /* ---------- Phase 13: CodeMirror editor container ---------- */

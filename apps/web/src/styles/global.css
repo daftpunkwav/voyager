@@ -136,19 +136,51 @@ a {
 
 /* Toast visuals and entrance live in design-system.css; .toast / toast-in are not redefined here to avoid late-loaded overrides breaking centering */
 
-.modal-overlay,
-.drawer-overlay {
+/* Modal shell: dimmed scrim ("dim to focus") + blur so the dialog reads as a
+   material above the page; exit is faster than enter (160ms vs 250ms) */
+.modal-overlay {
+  --modal-out: 160ms;
   position: fixed;
   inset: 0;
-  background: transparent;
+  background: rgba(15, 23, 42, 0.32);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
+  animation: overlayIn var(--dur-fast, 150ms) var(--ease-apple) both;
 }
-.drawer-overlay {
-  justify-content: flex-end;
+[data-theme='dark'] .modal-overlay {
+  background: rgba(0, 0, 0, 0.5);
+}
+.modal-overlay.is-leaving {
+  animation: overlayOut var(--modal-out) ease both;
+}
+.modal-overlay.is-leaving .modal {
+  animation: sheetOut var(--modal-out) ease both;
+}
+@keyframes overlayOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes sheetOut {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+.modal-overlay ~ .modal-overlay {
+  z-index: calc(var(--z-modal) + 8);
 }
 .modal {
   padding: 22px 24px 20px;
@@ -156,6 +188,7 @@ a {
   width: min(440px, 100%);
   border-radius: var(--lg-radius-card, var(--radius-lg));
   box-sizing: border-box;
+  animation: sheetIn var(--dur-base, 200ms) var(--ease-apple) both;
 }
 .modal--wide {
   max-width: 560px;
@@ -187,13 +220,6 @@ a {
 .modal__actions {
   position: relative;
   z-index: 1;
-}
-.drawer {
-  width: 420px;
-  max-width: 90vw;
-  height: 100%;
-  padding: calc(var(--sp) * 5);
-  overflow-y: auto;
 }
 
 .markdown-body {
@@ -301,7 +327,8 @@ a {
    Global motion layer · entrance / press / overlays / theme switch (all animations are covered by reduced-motion)
    ========================================================================== */
 
-/* -- Overlays · Apple sheet pop-in: overlay fades in + panel rises with scale (spring) -- */
+/* -- Overlays · keyframes only; .modal-overlay/.modal rules live in the modal
+   shell section above (enter via overlayIn/sheetIn, exit via overlayOut/sheetOut) -- */
 @keyframes overlayIn {
   from {
     opacity: 0;
@@ -320,29 +347,6 @@ a {
     transform: none;
   }
 }
-@keyframes drawerIn {
-  from {
-    transform: translateX(24px);
-    opacity: 0;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
-}
-.modal-overlay,
-.drawer-overlay {
-  animation: overlayIn var(--dur-fast, 150ms) var(--ease-apple) both;
-}
-.modal-overlay ~ .modal-overlay {
-  z-index: calc(var(--z-modal) + 8);
-}
-.modal {
-  animation: sheetIn var(--dur-base, 250ms) var(--ease-apple) both;
-}
-.drawer {
-  animation: drawerIn var(--dur-base, 250ms) var(--ease-apple) both;
-}
 
 /* -- Dropdown/menu pop-in (class names match GlassSelect / FilterDropdown components) -- */
 @keyframes popIn {
@@ -357,7 +361,38 @@ a {
 }
 .glass-select-menu,
 .filter-dropdown-menu {
+  /* Menus anchor below their trigger: scale grows from that edge, not center */
+  transform-origin: top;
   animation: popIn var(--dur-fast, 150ms) var(--ease-apple) both;
+}
+/* Menu items cascade in with a short stagger; must never block interaction */
+.glass-select-item,
+.filter-dropdown-item {
+  animation: menuItemIn var(--dur-fast, 150ms) ease both;
+}
+.glass-select-item:nth-child(2),
+.filter-dropdown-item:nth-child(2) {
+  animation-delay: 16ms;
+}
+.glass-select-item:nth-child(3),
+.filter-dropdown-item:nth-child(3) {
+  animation-delay: 32ms;
+}
+.glass-select-item:nth-child(4),
+.filter-dropdown-item:nth-child(4) {
+  animation-delay: 48ms;
+}
+.glass-select-item:nth-child(n + 5),
+.filter-dropdown-item:nth-child(n + 5) {
+  animation-delay: 60ms;
+}
+@keyframes menuItemIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* -- Card grid entrance stagger (stat cards / health cards / team cards) -- */

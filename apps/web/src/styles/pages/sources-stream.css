@@ -95,13 +95,13 @@
 }
 
 .source-card__kind--repo {
-  background: linear-gradient(135deg, #5e5ce6, #7d7aff);
+  background: #5e5ce6;
 }
 .source-card__kind--doc {
-  background: linear-gradient(135deg, #ff9f0a, #ffd60a);
+  background: #ff9f0a;
 }
 .source-card__kind--web {
-  background: linear-gradient(135deg, #0a84ff, #64d2ff);
+  background: #0a84ff;
 }
 
 .source-card__status {

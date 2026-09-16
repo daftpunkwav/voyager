@@ -1,16 +1,14 @@
 /**
  * @file ConfirmDialog
- * @description Generic confirmation dialog rendered into document.body so it stays above page layers and floating buttons.
+ * @description Generic confirmation dialog rendered through the shared
+ * ModalOverlay (portal + scrim + enter/exit animation).
  *
  * Responsibilities:
- * - Render the dialog over a modal overlay into document.body
  * - Resolve default button labels through i18n at render time
  * - Cancel on Escape or overlay click while open
  */
-
-import { useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { ModalOverlay } from '@/components/common/ModalOverlay';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -37,19 +35,9 @@ export function ConfirmDialog({
   const { t } = useTranslation('common');
   const confirmText = confirmLabel ?? t('common:dialog.confirm');
   const cancelText = cancelLabel ?? t('common:action.cancel');
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onCancel]);
 
-  if (!open) return null;
-
-  return createPortal(
-    <div className="modal-overlay" role="presentation" onClick={onCancel}>
+  return (
+    <ModalOverlay open={open} onClose={onCancel}>
       <div
         className="modal glass-card glass-card--dialog"
         role="dialog"
@@ -74,7 +62,6 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>,
-    document.body
+    </ModalOverlay>
   );
 }

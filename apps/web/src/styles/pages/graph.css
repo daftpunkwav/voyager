@@ -562,7 +562,7 @@
   width: 40px;
   height: 40px;
   border-radius: var(--radius-icon);
-  background: linear-gradient(135deg, #007aff, #5e5ce6);
+  background: var(--brand-500);
   color: #fff;
   display: grid;
   place-items: center;
@@ -807,7 +807,7 @@
 .similar-bar > span {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, var(--brand-400), var(--brand-500));
+  background: var(--brand-500);
   border-radius: inherit;
 }
 .similar-pager {
@@ -1746,7 +1746,10 @@
   position: fixed;
   inset: 0;
   z-index: 240; /* above Atlas (70) and the toolbar filter layer; portal to body */
-  background: transparent;
+  /* Dim to focus, same scrim as .modal-overlay in global.css */
+  background: rgba(15, 23, 42, 0.32);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: grid;
   place-items: center;
   padding: 24px;

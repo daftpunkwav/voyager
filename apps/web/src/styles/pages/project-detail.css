@@ -58,7 +58,7 @@
   width: 72px;
   height: 72px;
   border-radius: var(--radius-avatar-lg);
-  background: linear-gradient(135deg, #53c1de 0%, #0080ff 60%, #007aff 100%);
+  background: var(--brand-600);
   display: grid;
   place-items: center;
   color: #fff;
@@ -209,7 +209,7 @@
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  background: linear-gradient(135deg, #f3e8ff, #e8f2ff);
+  background: rgba(94, 92, 230, 0.08);
   border: 1px solid rgba(94, 92, 230, 0.18);
   border-radius: var(--radius);
   font-size: 12px;
@@ -569,7 +569,7 @@
 /* Recommended state: brand blue; avoids the "success green" that would clash with the Scout orange brand */
 .pd-agent.recommended {
   border-color: rgba(0, 122, 255, 0.45);
-  background: linear-gradient(135deg, rgba(0, 122, 255, 0.1), var(--bg-50));
+  background: rgba(0, 122, 255, 0.08);
   box-shadow: 0 0 0 1px rgba(0, 122, 255, 0.12);
 }
 .pd-agent-body {
@@ -884,7 +884,7 @@
    (Card shells use the global .card dark glass; inner sub-cards use bg-100 to form an inner layer, creating a two-tier look)
    ========================================================================== */
 [data-theme='dark'] .pd-scribe-tip {
-  background: linear-gradient(135deg, rgba(94, 92, 230, 0.18), rgba(0, 122, 255, 0.12));
+  background: rgba(94, 92, 230, 0.14);
   border-color: rgba(94, 92, 230, 0.28);
 }
 [data-theme='dark'] .pd-agent.recommended {

@@ -1645,11 +1645,17 @@ a.chat-card:hover {
 .ask-mask {
   position: fixed;
   inset: 0;
-  background: transparent;
+  /* Dim to focus, same scrim as .modal-overlay in global.css */
+  background: rgba(15, 23, 42, 0.32);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: var(--z-modal, 1000);
+}
+[data-theme='dark'] .ask-mask {
+  background: rgba(0, 0, 0, 0.5);
 }
 .ask-dialog {
   width: min(480px, 92vw);
