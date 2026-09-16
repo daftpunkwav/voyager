@@ -456,6 +456,18 @@ a {
 .persona-card > p {
   margin: 0;
 }
+.persona-card > p.small {
+  color: var(--text-600);
+  font-size: 12.5px;
+}
+.persona-card .chip.brand {
+  background: var(--brand-50);
+  border-color: transparent;
+  color: var(--brand-700);
+}
+[data-theme='dark'] .persona-card .chip.brand {
+  color: var(--brand-400);
+}
 .persona-card details {
   min-width: 0;
 }

@@ -11,7 +11,6 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listPersonas } from '@/api/agent';
 import { useUIStore } from '@/stores/uiStore';
-import { GlassCard } from '@/components/common/GlassCard';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
 import { extractErrorMessage } from '@/utils/errors';
@@ -83,7 +82,7 @@ export function PersonaGrid() {
           />
         ) : (
           personas.map((p) => (
-            <GlassCard key={p.key} className="persona-card">
+            <div key={p.key} className="persona-card">
               <div className="persona-card__head">
                 <h3 className="h3">{p.display_name}</h3>
                 <span className="chip brand">{p.key}</span>
@@ -101,7 +100,7 @@ export function PersonaGrid() {
                 <summary>{t('team:persona.systemPrompt')}</summary>
                 <pre className="system-prompt">{p.system_prompt}</pre>
               </details>
-            </GlassCard>
+            </div>
           ))
         )}
       </div>

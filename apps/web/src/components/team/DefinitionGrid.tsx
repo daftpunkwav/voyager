@@ -13,7 +13,6 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listPersonas, listSubagents } from '@/api/agent';
 import { useUIStore } from '@/stores/uiStore';
-import { GlassCard } from '@/components/common/GlassCard';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
 import { extractErrorMessage } from '@/utils/errors';
@@ -102,7 +101,7 @@ export function DefinitionGrid() {
           />
         ) : (
           definitions.map((d) => (
-            <GlassCard key={d.name} className="persona-card">
+            <div key={d.name} className="persona-card">
               <div className="persona-card__head">
                 <h3 className="h3">{d.name}</h3>
                 <span className="chip brand">{modeLabel(t, d.mode)}</span>
@@ -133,7 +132,7 @@ export function DefinitionGrid() {
                   <pre className="system-prompt">{d.allowed_tools.join('\n')}</pre>
                 </details>
               )}
-            </GlassCard>
+            </div>
           ))
         )}
       </div>
