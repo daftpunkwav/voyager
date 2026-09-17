@@ -1,4 +1,4 @@
-﻿"""Task completion evaluation and feedback loop.
+"""Task completion evaluation and feedback loop.
 
 Provides deterministic heuristic evaluation and optional LLM-as-a-judge
 evaluation, logging feedback to episodic memory to close the self-improvement
@@ -52,8 +52,8 @@ class TaskEvaluator:
         min_score: float = 0.6,
     ) -> EvaluationResult:
         """Fast, zero-overhead heuristic evaluation."""
-        reply_text = assistant_reply if isinstance(assistant_reply, str) else str(
-            assistant_reply or ""
+        reply_text = (
+            assistant_reply if isinstance(assistant_reply, str) else str(assistant_reply or "")
         )
         score = 1.0
         feedback_parts: list[str] = []
@@ -82,7 +82,9 @@ class TaskEvaluator:
             failure_rate = tools_failed / tools_total
             score -= failure_rate * 0.4
             if failure_rate > 0.0:
-                feedback_parts.append(f"Tool errors observed ({tools_failed}/{tools_total} failed).")
+                feedback_parts.append(
+                    f"Tool errors observed ({tools_failed}/{tools_total} failed)."
+                )
 
         # 3. Check loop or circuit breaking indicators in reply
         if any(mark in reply_text for mark in ("[熔断]", "[循环]", "已达上限")):
@@ -91,7 +93,9 @@ class TaskEvaluator:
 
         score = max(0.0, min(1.0, round(score, 2)))
         passed = score >= min_score
-        feedback = " ".join(feedback_parts) if feedback_parts else "Turn completed cleanly without errors."
+        feedback = (
+            " ".join(feedback_parts) if feedback_parts else "Turn completed cleanly without errors."
+        )
 
         return EvaluationResult(
             score=score,
@@ -134,7 +138,10 @@ class TaskEvaluator:
             )
             reply = await llm.complete(
                 [
-                    {"role": "system", "content": "You are an evaluation engine. Reply strictly in JSON."},
+                    {
+                        "role": "system",
+                        "content": "You are an evaluation engine. Reply strictly in JSON.",
+                    },
                     {"role": "user", "content": judge_prompt},
                 ]
             )
