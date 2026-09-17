@@ -6,10 +6,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from platform_contracts import ActorKind, ActorRef, Event, RuntimeEvent
+from platform_contracts import ActorKind, ActorRef, Event
+from platform_contracts import RuntimeEvent as _BaseRuntimeEvent
 from platform_eventbus import EventBus
 
 AGENT_MAIN = ActorRef(kind=ActorKind.AGENT, id="agent.main")
+
+
+class RuntimeEvent(_BaseRuntimeEvent):
+    """Runtime-level events, extending platform_contracts.RuntimeEvent."""
+
+    TOOL_PROGRESS = "ToolProgress"
+    THINKING_STARTED = "ThinkingStarted"
+    THINKING_DELTA = "ThinkingDelta"
+    THINKING_COMPLETED = "ThinkingCompleted"
 
 
 class RuntimeEvents:

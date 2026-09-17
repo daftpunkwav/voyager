@@ -26,7 +26,7 @@ from platform_contracts import DomainEvent, Event, ServiceError
 from platform_eventbus import EventBus
 
 from agent.contracts import SettingsReader
-from agent.llm import LLMClient
+from agent.llm import LLMClient, content_to_text
 
 if TYPE_CHECKING:
     from agent.master.dispatch import DeferredDispatch
@@ -36,6 +36,7 @@ from agent.master.sessions import CHAT_GOAL, SessionManager
 from agent.personas import PERSONAS
 from agent.policy import PolicyEngine
 from agent.runtime.deadline import Deadline
+from agent.runtime.evaluation import TaskEvaluator, record_evaluation
 from agent.runtime.events import AGENT_MAIN
 from agent.runtime.state import RunStatus
 from agent.subagent import Spawner, SubagentInstance
@@ -48,10 +49,25 @@ def _last_assistant_text(history: list[dict[str, Any]]) -> str:
     """Most recent non-empty assistant message of a turn (tool entries skipped)."""
     for message in reversed(history):
         if message.get("role") == "assistant":
-            content = str(message.get("content") or "").strip()
+            content = content_to_text(message.get("content")).strip()
             if content:
                 return content
     return ""
+
+
+def _eval_setting(settings: Any, key: str, default: Any) -> Any:
+    """Read an evaluation setting through the single-arg SettingsReader.
+
+    The store returns its registered default when unset; unknown keys
+    (unregistered fakes in tests) fall back to the given default instead
+    of failing the turn.
+    """
+    try:
+        value = settings.get(key)
+    except Exception:  # noqa: BLE001  # unknown key in fakes -> default, turn continues
+        log.debug("evaluation setting %s unreadable, using default %r", key, default)
+        return default
+    return default if value is None else value
 
 
 def _guard_allows(guard: Callable[[], bool], session: str) -> bool:
@@ -348,12 +364,39 @@ class Master:
         await self._spawner.start(inst, text)
         self._digests.upsert(inst)
         self.sessions.persist(inst.session)
-        if self._memory is not None:
+        reply = _last_assistant_text(inst.history)
+        if self._memory is not None and reply:
             # Working memory sees both sides of the exchange so distillation
             # can read what the agent actually answered, not only the asks
-            reply = _last_assistant_text(inst.history)
-            if reply:
-                self._memory.working.add("assistant", reply[:2000])
+            self._memory.working.add("assistant", reply[:2000])
+        # Turn evaluation and feedback recording (best effort: evaluation
+        # must never fail the user turn).
+        try:
+            if _eval_setting(self._settings, "agent.evaluation.enabled", True):
+                eval_mode = _eval_setting(self._settings, "agent.evaluation.mode", "heuristic")
+                min_score = float(
+                    _eval_setting(self._settings, "agent.evaluation.min_score_threshold", 0.6)
+                )
+                if eval_mode == "judge":
+                    eval_res = await TaskEvaluator.evaluate_judge(
+                        self._llm,
+                        user_prompt=text,
+                        assistant_reply=reply or "",
+                        task_goal=inst.task.goal if inst.task else "",
+                        min_score=min_score,
+                    )
+                else:
+                    eval_res = TaskEvaluator.evaluate_heuristic(
+                        user_prompt=text,
+                        assistant_reply=reply or "",
+                        steps=inst.state.steps if hasattr(inst, "state") and inst.state else None,
+                        task_goal=inst.task.goal if inst.task else "",
+                        min_score=min_score,
+                    )
+                if self._memory is not None:
+                    record_evaluation(self._memory, eval_res, run_id=inst.id)
+        except Exception:  # evaluation is best effort, never fails the turn
+            log.warning("turn evaluation failed (turn result unaffected)", exc_info=True)
         if self._organizer is not None:
             proposal = self._organizer.maybe_propose()
             if proposal is not None:

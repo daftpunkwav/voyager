@@ -13,6 +13,54 @@ from typing import Any, Protocol
 
 
 @dataclass(frozen=True)
+class TextPart:
+    text: str
+    type: str = "text"
+
+
+@dataclass(frozen=True)
+class ImagePart:
+    url: str
+    detail: str = "auto"
+    type: str = "image_url"
+
+
+@dataclass(frozen=True)
+class FilePart:
+    filename: str
+    data: str
+    mime_type: str = "application/octet-stream"
+    type: str = "file"
+
+
+ContentPart = TextPart | ImagePart | FilePart
+MessageContent = str | list[ContentPart | dict[str, Any]]
+
+
+def content_to_text(content: Any) -> str:
+    """Extract plain text representation from str or multi-modal content parts."""
+    if not content:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, TextPart):
+                parts.append(part.text)
+            elif isinstance(part, dict):
+                text = part.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+            elif isinstance(part, (ImagePart, FilePart)):
+                continue
+            else:
+                parts.append(str(part))
+        return "\n".join(parts) if parts else ""
+    return str(content)
+
+
+@dataclass(frozen=True)
 class ToolSpec:
     name: str
     description: str
@@ -63,6 +111,8 @@ class LLMReply:
     model: str = ""
     reasoning: str = ""
     thinking_blocks: tuple[dict[str, Any], ...] = ()
+    #: Parsed or validated structured data when schema/response_format was requested
+    structured: Any = None
 
     @property
     def final(self) -> bool:
@@ -87,7 +137,10 @@ class StreamReply:
 
 class LLMClient(Protocol):
     async def complete(
-        self, messages: list[dict[str, Any]], tools: list[ToolSpec] | None = None
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[ToolSpec] | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> LLMReply: ...
 
 
@@ -106,7 +159,7 @@ class StreamingLLClient(Protocol):
     ) -> AsyncIterator[StreamReply]: ...
 
 
-ScriptFn = Callable[[list[dict[str, Any]], list[ToolSpec] | None], LLMReply | Awaitable[LLMReply]]
+ScriptFn = Callable[..., LLMReply | Awaitable[LLMReply]]
 
 
 class FakeLLM:
@@ -129,11 +182,20 @@ class FakeLLM:
         self.calls: list[dict[str, Any]] = []
 
     async def complete(
-        self, messages: list[dict[str, Any]], tools: list[ToolSpec] | None = None
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[ToolSpec] | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> LLMReply:
-        self.calls.append({"messages": messages, "tools": tools})
+        call_record: dict[str, Any] = {"messages": messages, "tools": tools}
+        if response_format is not None:
+            call_record["response_format"] = response_format
+        self.calls.append(call_record)
         if self._dynamic is not None:
-            out = self._dynamic(messages, tools)
+            try:
+                out = self._dynamic(messages, tools, response_format=response_format)
+            except TypeError:
+                out = self._dynamic(messages, tools)
             if isinstance(out, LLMReply):
                 return out
             return await out

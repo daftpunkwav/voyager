@@ -256,9 +256,12 @@ class CountingToolbelt:
     async def call(self, call: ToolCall) -> str:
         return await self._inner.call(call)
 
-    async def call_detailed(self, call: ToolCall) -> Any:
+    async def call_detailed(self, call: ToolCall, *args: Any, **kwargs: Any) -> Any:
         self.calls += 1
-        return await self._inner.call_detailed(call)
+        try:
+            return await self._inner.call_detailed(call, *args, **kwargs)
+        except TypeError:
+            return await self._inner.call_detailed(call)
 
 
 def counting_step(on_step: StepCb, budget: ModeBudget) -> StepCb:

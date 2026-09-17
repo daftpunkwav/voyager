@@ -32,14 +32,52 @@ def estimate_text(text: str) -> int:
     return wide + -(-narrow // 4)
 
 
+def _estimate_part(part: Any) -> int:
+    """Estimate tokens for a single ContentPart or dict part.
+
+    Image parts use the provider's fixed tile cost (never the data-URL
+    bytes); file parts use a small placeholder cost for the same reason:
+    stringifying bulk payload bytes here would burn CPU on megabytes of
+    base64 without changing the budget decision.
+    """
+    text = getattr(part, "text", None)
+    if isinstance(text, str):
+        return estimate_text(text)
+    ptype = getattr(part, "type", None) or (part.get("type") if isinstance(part, dict) else "")
+    if ptype == "image_url":
+        detail = getattr(part, "detail", "auto") if hasattr(part, "detail") else (
+            part.get("image_url", {}).get("detail", "auto")
+            if isinstance(part, dict) and isinstance(part.get("image_url"), dict)
+            else "auto"
+        )
+        return 85 if detail == "low" else 255
+    if ptype == "file":
+        return _PER_MESSAGE_FLOOR
+    if isinstance(part, dict):
+        if "text" in part and isinstance(part["text"], str):
+            return estimate_text(part["text"])
+        return estimate_text(json.dumps(part, ensure_ascii=False, default=str)[:2000])
+    return estimate_text(str(part)[:2000])
+
+
 def estimate_messages(messages: list[dict[str, Any]]) -> int:
     """Estimate a messages list: each message gets the framing floor; the JSON arguments of
     assistant.tool_calls are counted too (previously ignored, which skewed budgets on
     multi-tool turns), as is echoed thinking text (extended-thinking replays ride every
-    request while tool use continues)."""
+    request while tool use continues). Supports multi-modal ContentParts."""
     total = 0
     for m in messages:
-        text = str(m.get("content", ""))
+        raw_content = m.get("content", "")
+        extra_tokens = 0
+        text = ""
+        if isinstance(raw_content, list):
+            for part in raw_content:
+                extra_tokens += _estimate_part(part)
+        elif isinstance(raw_content, str):
+            text = raw_content
+        else:
+            text = str(raw_content)
+
         calls = m.get("tool_calls") or ()
         if calls:
             text += json.dumps(calls, ensure_ascii=False, default=str)
@@ -48,7 +86,7 @@ def estimate_messages(messages: list[dict[str, Any]]) -> int:
             for block in thinking:
                 if isinstance(block, dict) and isinstance(block.get("thinking"), str):
                     text += block["thinking"]
-        total += max(estimate_text(text), _PER_MESSAGE_FLOOR)
+        total += max(estimate_text(text) + extra_tokens, _PER_MESSAGE_FLOOR)
     return total
 
 

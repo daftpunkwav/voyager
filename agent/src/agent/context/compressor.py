@@ -60,9 +60,16 @@ def compress(
     # Pass 1: truncate the oldest tool results to placeholders
     for i, m in enumerate(out):
         if m.get("role") == "tool" and i < len(out) - 4:
-            content = str(m.get("content", ""))
-            if len(content) > 200:
-                out[i] = {**m, "content": content[:80] + " …[已压缩]"}
+            content = m.get("content", "")
+            if isinstance(content, str):
+                if len(content) > 200:
+                    out[i] = {**m, "content": content[:80] + " …[已压缩]"}
+            elif isinstance(content, list):
+                # Tool results are text-only on the wire: collapsing an old
+                # multi-modal result to a placeholder string is safe.
+                out[i] = {**m, "content": "…[已压缩]"}
+            elif len(str(content)) > 200:
+                out[i] = {**m, "content": str(content)[:80] + " …[已压缩]"}
         if estimate_tokens(out) <= budget:
             return out
     if not prune:

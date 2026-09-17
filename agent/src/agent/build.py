@@ -48,7 +48,17 @@ from agent.plugins import PluginManager
 from agent.policy import AppPolicy, FsPolicy, NetworkPolicy, PolicyEngine
 from agent.policy.approvals import ApprovalStore
 from agent.policy.shell import ShellPolicy
-from agent.runtime import EventLoop, Meter, MeterStore, RuntimeEvents, Scheduler, metered_llm
+from agent.runtime import (
+    EventLoop,
+    LangfuseSpanExporter,
+    Meter,
+    MeterStore,
+    OtlpHttpSpanExporter,
+    RuntimeEvents,
+    Scheduler,
+    TraceDispatcher,
+    metered_llm,
+)
 from agent.runtime.jobs_view import JobsView
 from agent.runtime.queue_store import QueueStore
 from agent.runtime.session_index import SessionIndex
@@ -747,6 +757,23 @@ def build_agent(
     # pushes the latest event_patterns; a second subscription channel is
     # forbidden
     user_hooks.set_subscription_sync(loop.sync_extra_patterns)
+
+    # Observability and Tracing exporter wiring
+    exporter_type = str(settings.get("agent.observability.exporter") or "memory").lower()
+    span_exporters: list[Any] = []
+    if exporter_type in ("otlp", "all"):
+        otlp_endpoint = str(
+            settings.get("agent.observability.otlp_endpoint") or "http://localhost:4318/v1/traces"
+        )
+        span_exporters.append(OtlpHttpSpanExporter(endpoint=otlp_endpoint))
+    if exporter_type in ("langfuse", "all"):
+        lf_host = str(settings.get("agent.observability.langfuse_host") or "https://cloud.langfuse.com")
+        lf_pk = str(settings.get("agent.observability.langfuse_public_key") or "")
+        lf_sk = str(settings.get("agent.observability.langfuse_secret_key") or "")
+        span_exporters.append(LangfuseSpanExporter(host=lf_host, public_key=lf_pk, secret_key=lf_sk))
+    dispatcher = TraceDispatcher(span_exporters)
+    dispatcher.attach()
+
     return AgentApp(
         bus=bus,
         log=log,
@@ -774,6 +801,7 @@ def build_agent(
         write_journal=write_journal,
         owns_settings=owns_settings,
         owns_log=owns_log,
+        dispatcher=dispatcher,
     )
 
 

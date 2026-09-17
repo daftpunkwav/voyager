@@ -18,6 +18,7 @@ from platform_contracts import DomainEvent, RuntimeEvent
 from agent.context.editor import SUMMARY_MARK
 from agent.runtime.current import current_instance
 from agent.runtime.state import RunStatus
+from agent.runtime.trace import start_span
 from agent.subagent.modes import Mode, ModeLimits, run_mode
 from agent.tools.core.activate import graded_toolbelt, infer_domains, page_preactivate
 
@@ -99,128 +100,136 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
         tools=belt.names(),
     )
     await inst.events.emit(RuntimeEvent.RUN_STARTED, run_id=inst.state.run_id, subagent=inst.id)
-    try:
-        # Meta tools (context_status / compact_context) resolve the live
-        # transcript through this ContextVar; set inside the try so the
-        # finally always resets it, even when the turn is cancelled
-        token = current_instance.set(inst)
-        result = await run_mode(
-            inst.task.mode or Mode.REACT,
-            llm=inst.llm,
-            toolbelt=belt,
-            messages=messages,
-            limits=inst.task.limits or ModeLimits(),
-            on_step=inst._on_step,
-            on_delta=inst._on_delta,
-            on_event=inst._on_event,
-            continue_if_idle=inst.task.conversational,
-            compress_budget=inst.budget.compress_budget,
-            governor=inst.governor(),
-            deadline=inst.deadline,
-        )
-    except asyncio.CancelledError:
-        # Hard cancellation (stop/shutdown): record the terminal state and
-        # emit the event, then re-raise unchanged - swallowing cancellation
-        # would leave the scheduler waiting forever. Event sending is best
-        # effort: telemetry failure must not mask the cancellation itself.
-        # When stopped via cancel_run the status is already CANCELLED; the
-        # terminal state recorded here is not rolled back.
-        if inst.state.status is RunStatus.RUNNING:
-            inst.state.status = RunStatus.CANCELLED
+    turn_span = start_span(
+        "agent:turn",
+        subagent=inst.name or inst.id,
+        session=inst.session,
+        run_id=inst.state.run_id,
+        conversational=inst.task.conversational,
+    )
+    with turn_span:
         try:
-            await inst.events.emit(
-                RuntimeEvent.RUN_CANCELLED, run_id=inst.state.run_id, subagent=inst.id
+            # Meta tools (context_status / compact_context) resolve the live
+            # transcript through this ContextVar; set inside the try so the
+            # finally always resets it, even when the turn is cancelled
+            token = current_instance.set(inst)
+            result = await run_mode(
+                inst.task.mode or Mode.REACT,
+                llm=inst.llm,
+                toolbelt=belt,
+                messages=messages,
+                limits=inst.task.limits or ModeLimits(),
+                on_step=inst._on_step,
+                on_delta=inst._on_delta,
+                on_event=inst._on_event,
+                continue_if_idle=inst.task.conversational,
+                compress_budget=inst.budget.compress_budget,
+                governor=inst.governor(),
+                deadline=inst.deadline,
             )
-        except Exception:  # best effort: the event channel may be gone during shutdown
-            log.debug(
-                "failed to emit RunCancelled event (cancel semantics unaffected)", exc_info=True
-            )
-        # Conversational closure: without a closing chat message the UI waits
-        # in the running state forever (the reply sink is success-only).
-        if inst.task.conversational and inst.reply_sink is not None:
+        except asyncio.CancelledError:
+            # Hard cancellation (stop/shutdown): record the terminal state and
+            # emit the event, then re-raise unchanged - swallowing cancellation
+            # would leave the scheduler waiting forever. Event sending is best
+            # effort: telemetry failure must not mask the cancellation itself.
+            # When stopped via cancel_run the status is already CANCELLED; the
+            # terminal state recorded here is not rolled back.
+            if inst.state.status is RunStatus.RUNNING:
+                inst.state.status = RunStatus.CANCELLED
             try:
-                await inst.reply_sink("[已中断] 本回合被中断;可重新发送或换个说法继续。", "message")
-            except Exception:  # best effort, same as the event above
-                log.debug("failed to emit cancel closure message", exc_info=True)
-        raise
-    except PauseRequested:
-        # Cooperative pause (phase 20): stop at a paired boundary, persist a
-        # mid-turn snapshot for resume_run, and announce it. The transcript
-        # rolls back to the last paired exchange so a resume never continues
-        # from a half-executed tool batch.
-        inst.state.status = RunStatus.PAUSED
-        try:
+                await inst.events.emit(
+                    RuntimeEvent.RUN_CANCELLED, run_id=inst.state.run_id, subagent=inst.id
+                )
+            except Exception:  # best effort: the event channel may be gone during shutdown
+                log.debug(
+                    "failed to emit RunCancelled event (cancel semantics unaffected)", exc_info=True
+                )
+            # Conversational closure: without a closing chat message the UI waits
+            # in the running state forever (the reply sink is success-only).
+            if inst.task.conversational and inst.reply_sink is not None:
+                try:
+                    await inst.reply_sink("[已中断] 本回合被中断;可重新发送或换个说法继续。", "message")
+                except Exception:  # best effort, same as the event above
+                    log.debug("failed to emit cancel closure message", exc_info=True)
+            raise
+        except PauseRequested:
+            # Cooperative pause (phase 20): stop at a paired boundary, persist a
+            # mid-turn snapshot for resume_run, and announce it. The transcript
+            # rolls back to the last paired exchange so a resume never continues
+            # from a half-executed tool batch.
+            inst.state.status = RunStatus.PAUSED
+            try:
+                await inst.events.emit(
+                    RuntimeEvent.AGENT_PAUSED, run_id=inst.state.run_id, subagent=inst.id
+                )
+                if inst.checkpoint_persist is not None:
+                    inst.state.resume = inst.build_resume_snapshot(
+                        in_turn=True,
+                        pending_messages=messages,
+                    ).to_dict()
+                    inst.checkpoint_persist(inst)
+            except Exception:  # the pause itself must not fail the turn bookkeeping
+                log.warning("pause bookkeeping failed for %s", inst.name, exc_info=True)
+            finally:
+                inst.pause_requested = False
+            return "[已暂停] 已在当前步骤完成后暂停并保存检查点;用 resume_run 继续。"
+        except Exception as exc:  # record failure and report; never break the scheduler
+            inst.state.status = RunStatus.FAILED
+            inst.state.error = f"{type(exc).__name__}: {exc}"
             await inst.events.emit(
-                RuntimeEvent.AGENT_PAUSED, run_id=inst.state.run_id, subagent=inst.id
+                RuntimeEvent.RUN_FAILED, run_id=inst.state.run_id, error=inst.state.error
             )
-            if inst.checkpoint_persist is not None:
-                inst.state.resume = inst.build_resume_snapshot(
-                    in_turn=True,
-                    pending_messages=messages,
-                ).to_dict()
-                inst.checkpoint_persist(inst)
-        except Exception:  # the pause itself must not fail the turn bookkeeping
-            log.warning("pause bookkeeping failed for %s", inst.name, exc_info=True)
+            # Conversational closure: a failed turn must still end the chat
+            # exchange, otherwise the UI stays in the running state forever.
+            if inst.task.conversational and inst.reply_sink is not None:
+                try:
+                    await inst.reply_sink(f"[回合失败] {inst.state.error}", "error")
+                except Exception:  # best effort: closure must not mask the failure
+                    log.debug("failed to emit failure closure message", exc_info=True)
+            raise
+        except BaseException as exc:  # catch-all terminal state: the instance never stays RUNNING
+            inst.state.status = RunStatus.FAILED
+            inst.state.error = f"{type(exc).__name__}: {exc}"
+            raise
         finally:
-            inst.pause_requested = False
-        return "[已暂停] 已在当前步骤完成后暂停并保存检查点;用 resume_run 继续。"
-    except Exception as exc:  # record failure and report; never break the scheduler
-        inst.state.status = RunStatus.FAILED
-        inst.state.error = f"{type(exc).__name__}: {exc}"
-        await inst.events.emit(
-            RuntimeEvent.RUN_FAILED, run_id=inst.state.run_id, error=inst.state.error
-        )
-        # Conversational closure: a failed turn must still end the chat
-        # exchange, otherwise the UI stays in the running state forever.
-        if inst.task.conversational and inst.reply_sink is not None:
-            try:
-                await inst.reply_sink(f"[回合失败] {inst.state.error}", "error")
-            except Exception:  # best effort: closure must not mask the failure
-                log.debug("failed to emit failure closure message", exc_info=True)
-        raise
-    except BaseException as exc:  # catch-all terminal state: the instance never stays RUNNING
-        inst.state.status = RunStatus.FAILED
-        inst.state.error = f"{type(exc).__name__}: {exc}"
-        raise
-    finally:
-        # The turn is over (success or failure): start()'s finally already
-        # persisted the turn-boundary snapshot and no further step events
-        # will fire; clear _turn_messages to stop mis-capturing
-        inst._turn_messages = None
-        current_instance.reset(token)
-    if any(SUMMARY_MARK in str(m.get("content") or "") for m in messages):
-        # Persist compaction across turns: the summary has replaced the
-        # condensed middle, so write it back into history and later turns
-        # will not re-summarize the same span; without the write-back every
-        # turn would re-condense the same history.
-        rebuilt: list[dict[str, Any]] = []
-        for m in messages[
-            1:
-        ]:  # skip system; tool entries and empty tool-turn text stay out of history
-            role = m.get("role")
-            if role == "user":
-                rebuilt.append({"role": "user", "content": str(m.get("content", ""))})
-            elif role == "assistant":
-                text = str(m.get("content", ""))
-                if text:
-                    rebuilt.append({"role": "assistant", "content": text})
-        inst.history[:] = rebuilt
-    inst.history.append({"role": "assistant", "content": result})
-    inst._bound_history()
-    inst.state.result = result
-    if inst.task.conversational:
-        inst.state.status = RunStatus.WAITING_INPUT
-        if inst.reply_sink is not None:
-            # Degraded LLM text (quota / provider failure placeholders) must
-            # not masquerade as a normal answer: the latest llm step carries
-            # the degraded flag, so read it back instead of sniffing prefixes.
-            await inst.reply_sink(result, "error" if _turn_degraded(inst) else "message")
-    else:
-        inst.state.status = RunStatus.COMPLETED
-        await inst.events.emit(
-            RuntimeEvent.AGENT_COMPLETED, run_id=inst.state.run_id, subagent=inst.id
-        )
-    return result
+            # The turn is over (success or failure): start()'s finally already
+            # persisted the turn-boundary snapshot and no further step events
+            # will fire; clear _turn_messages to stop mis-capturing
+            inst._turn_messages = None
+            current_instance.reset(token)
+        if any(SUMMARY_MARK in str(m.get("content") or "") for m in messages):
+            # Persist compaction across turns: the summary has replaced the
+            # condensed middle, so write it back into history and later turns
+            # will not re-summarize the same span; without the write-back every
+            # turn would re-condense the same history.
+            rebuilt: list[dict[str, Any]] = []
+            for m in messages[
+                1:
+            ]:  # skip system; tool entries and empty tool-turn text stay out of history
+                role = m.get("role")
+                if role == "user":
+                    rebuilt.append({"role": "user", "content": str(m.get("content", ""))})
+                elif role == "assistant":
+                    text = str(m.get("content", ""))
+                    if text:
+                        rebuilt.append({"role": "assistant", "content": text})
+            inst.history[:] = rebuilt
+        inst.history.append({"role": "assistant", "content": result})
+        inst._bound_history()
+        inst.state.result = result
+        if inst.task.conversational:
+            inst.state.status = RunStatus.WAITING_INPUT
+            if inst.reply_sink is not None:
+                # Degraded LLM text (quota / provider failure placeholders) must
+                # not masquerade as a normal answer: the latest llm step carries
+                # the degraded flag, so read it back instead of sniffing prefixes.
+                await inst.reply_sink(result, "error" if _turn_degraded(inst) else "message")
+        else:
+            inst.state.status = RunStatus.COMPLETED
+            await inst.events.emit(
+                RuntimeEvent.AGENT_COMPLETED, run_id=inst.state.run_id, subagent=inst.id
+            )
+        return result
 
 
 async def on_delta(inst: SubagentInstance, round_n: int, text: str) -> None:

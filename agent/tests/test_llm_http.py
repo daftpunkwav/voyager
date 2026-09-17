@@ -32,7 +32,9 @@ class TestWire:
         ]
         wire = _messages_to_wire(msgs)
         assert wire[1]["tool_calls"][0]["function"]["arguments"] == '{"a": 1}'
-        assert wire[2] == {"role": "tool", "content": "r"}
+        # Tool result keeps its pairing id on the wire (OpenAI requires
+        # tool_call_id); the internal display-only `name` stays out.
+        assert wire[2] == {"role": "tool", "content": "r", "tool_call_id": "c1"}
 
 
 class TestComplete:
@@ -585,3 +587,62 @@ class TestTransientRetry:
         assert calls["n"] == 2
         assert final is not None and final.text == "Final answer"
         assert final.reasoning == ""  # attempt-1 reasoning must not leak into the aggregate
+
+
+class TestStructuredOutput:
+    async def test_complete_with_response_format_payload_and_parsing(self) -> None:
+        fmt = {
+            "type": "json_schema",
+            "json_schema": {"name": "test_schema", "schema": {"type": "object"}},
+        }
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            assert body.get("response_format") == fmt
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [{"message": {"content": '{"result": 42, "status": "ok"}'}}],
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+                },
+            )
+
+        reply = await _client(handler).complete(MSGS, response_format=fmt)
+        assert reply.text == '{"result": 42, "status": "ok"}'
+        assert reply.structured == {"result": 42, "status": "ok"}
+
+    async def test_complete_malformed_json_sets_structured_none(self) -> None:
+        fmt = {"type": "json_object"}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": "not json"}}]},
+            )
+
+        reply = await _client(handler).complete(MSGS, response_format=fmt)
+        assert reply.text == "not json"
+        assert reply.structured is None
+
+    async def test_stream_with_response_format_parses_structured(self) -> None:
+        fmt = {"type": "json_object"}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            assert body.get("response_format") == fmt
+
+            async def stream():
+                yield b'data: {"choices": [{"delta": {"content": "{\\"score\\": "}}]}\n\n'
+                yield b'data: {"choices": [{"delta": {"content": "100}"}}]}\n\n'
+                yield b"data: [DONE]\n\n"
+
+            return httpx.Response(200, content=stream())
+
+        final = None
+        async for ev in _client(handler).complete_stream(MSGS, response_format=fmt):
+            if ev.final is not None:
+                final = ev.final
+
+        assert final is not None
+        assert final.text == '{"score": 100}'
+        assert final.structured == {"score": 100}

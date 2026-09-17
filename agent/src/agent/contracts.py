@@ -70,10 +70,11 @@ class ToolRunner(Protocol):
 
     async def call(self, call: ToolCall) -> str: ...
 
-    async def call_detailed(self, call: ToolCall) -> Any:
+    async def call_detailed(self, call: ToolCall, *args: Any, **kwargs: Any) -> Any:
         """Same pipeline and text as call(), plus the structured outcome
         (Any here: ToolResult lives in the tool layer, which already depends
-        on this module - annotating it would cycle)."""
+        on this module - annotating it would cycle). Accepts optional
+        on_progress kwarg for long-tool progress forwarding."""
 
     def concurrent_safe(self, name: str) -> bool: ...
 

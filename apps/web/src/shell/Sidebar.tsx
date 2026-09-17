@@ -48,7 +48,7 @@ interface SidebarProps {
 }
 
 /**
- * Brand mark: a voyager's trail — the V-shaped flight path fades toward both
+ * Brand mark: a traveler's trail — the V-shaped flight path fades toward both
  * ends while the lowest point burns brightest, with a small star drifting off
  * the upper tip (it breathes via .sidebar-logo-star in design-system.css).
  */

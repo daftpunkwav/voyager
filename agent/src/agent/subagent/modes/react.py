@@ -23,13 +23,12 @@ import re
 import time
 from typing import Any
 
-from platform_contracts import RuntimeEvent
-
 from agent.context.compressor import COMPRESS_BUDGET, compress
 from agent.context.governor import ContextGovernor
 from agent.contracts import ToolRunner
-from agent.llm import LLMClient, ToolCall
+from agent.llm import LLMClient, TextPart, ToolCall, content_to_text
 from agent.runtime.deadline import Deadline
+from agent.runtime.events import RuntimeEvent
 from agent.runtime.loop_advisory import LoopAdvisory
 from agent.runtime.loop_detection import LoopDetector
 from agent.runtime.trace import start_span
@@ -69,16 +68,39 @@ def _emergency_truncate(messages: list[dict[str, Any]], budget: int) -> None:
     """Overflow-recovery last resort: cap every non-system message's content so
     even a single huge entry (a giant pasted input, an unspillable tool row)
     cannot keep the transcript over budget. In-place; truncation is marked so
-    the model knows text is missing."""
+    the model knows text is missing. Multi-modal list content is preserved
+    structurally (only text parts are capped)."""
     cap = max(200, budget // 4)
     for i, m in enumerate(messages):
         if i == 0 and m.get("role") == "system":
             continue
-        content = str(m.get("content") or "")
-        if len(content) > cap:
+        content = m.get("content")
+        if isinstance(content, list):
+            truncated: list[Any] = []
+            changed = False
+            for part in content:
+                if isinstance(part, TextPart) and len(part.text) > cap:
+                    truncated.append(TextPart(text=part.text[:cap] + " …[上下文溢出截断]"))
+                    changed = True
+                elif isinstance(part, dict) and isinstance(part.get("text"), str):
+                    text = part["text"]
+                    if len(text) > cap:
+                        truncated.append(
+                            {**part, "text": text[:cap] + " …[上下文溢出截断]"}
+                        )
+                        changed = True
+                    else:
+                        truncated.append(part)
+                else:
+                    truncated.append(part)
+            if changed:
+                messages[i] = {**m, "content": truncated}
+            continue
+        text = content_to_text(content)
+        if len(text) > cap:
             messages[i] = {
                 **m,
-                "content": content[:cap] + " …[上下文溢出截断]",
+                "content": text[:cap] + " …[上下文溢出截断]",
             }
 
 
@@ -86,7 +108,7 @@ def _last_user_text(messages: list[dict[str, Any]]) -> str:
     for m in reversed(messages):
         if m.get("role") != "user":
             continue
-        content = str(m.get("content") or "")
+        content = content_to_text(m.get("content"))
         if CONTINUE_MARK in content:
             continue
         return content.strip()
@@ -104,7 +126,7 @@ def _should_continue_react(messages: list[dict[str, Any]], tool_calls_used: int)
     """
     if tool_calls_used > 0:
         return False
-    if any(CONTINUE_MARK in str(m.get("content") or "") for m in messages):
+    if any(CONTINUE_MARK in content_to_text(m.get("content")) for m in messages):
         return False
     user = _last_user_text(messages)
     return not (not user or CHITCHAT_RE.match(user))
@@ -121,10 +143,26 @@ async def _run_tool(
     harness deadline backstops calls that declare no per-tool timeout."""
     await on_event(RuntimeEvent.TOOL_STARTED, tool=call.name, tool_call_id=call.id)
     start = time.perf_counter()
+
+    async def _on_progress(progress: float, message: str = "") -> None:
+        await on_event(
+            RuntimeEvent.TOOL_PROGRESS,
+            tool=call.name,
+            tool_call_id=call.id,
+            progress=progress,
+            message=message,
+        )
+
+    async def _call() -> Any:
+        try:
+            return await toolbelt.call_detailed(call, on_progress=_on_progress)
+        except TypeError:
+            return await toolbelt.call_detailed(call)
+
     if deadline is not None:
-        outcome = await deadline.run_tool(lambda: toolbelt.call_detailed(call), tool=call.name)
+        outcome = await deadline.run_tool(_call, tool=call.name)
     else:
-        outcome = await toolbelt.call_detailed(call)
+        outcome = await _call()
     ms = round((time.perf_counter() - start) * 1000, 1)
     await on_event(_tool_event(outcome), tool=call.name, tool_call_id=call.id, ms=ms)
     return outcome, ms
@@ -179,17 +217,34 @@ async def run_react(
         if on_delta is not None:
             round_delta, first_delta_at = delta_timer(on_delta, on_event=on_event, round_n=round_n)
         await on_event(RuntimeEvent.LLM_STARTED, round=round_n, streaming=on_delta is not None)
-        with start_span(f"llm:round-{round_n}"):
+        round_span = start_span(
+            f"llm:round-{round_n}",
+            kind="CLIENT",
+            round_n=round_n,
+            model=getattr(llm, "model", ""),
+        )
+        with round_span:
             if deadline is not None:
                 # default-arg binding: the loop variables must be frozen now,
                 # not whenever wait_for first calls the factory
                 reply = await deadline.run_round(
                     lambda s=specs, r=round_delta, n=round_n: complete_streaming(
-                        llm, messages, s, r, round_n=n
+                        llm, messages, s, r, round_n=n, on_event=on_event
                     )
                 )
             else:
-                reply = await complete_streaming(llm, messages, specs, round_delta, round_n=round_n)
+                reply = await complete_streaming(
+                    llm, messages, specs, round_delta, round_n=round_n, on_event=on_event
+                )
+            round_span.set_attributes(
+                model=reply.model or getattr(llm, "model", ""),
+                **{
+                    "gen_ai.request.model": reply.model or getattr(llm, "model", ""),
+                    "gen_ai.usage.input_tokens": reply.usage.input_tokens,
+                    "gen_ai.usage.output_tokens": reply.usage.output_tokens,
+                    "gen_ai.usage.cached_tokens": reply.usage.cached_tokens,
+                },
+            )
         round_ms = (time.perf_counter() - round_start) * 1000
         tokens_used += reply.usage.input_tokens + reply.usage.output_tokens
         if limits.max_tokens > 0 and tokens_used >= limits.max_tokens:

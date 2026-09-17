@@ -72,7 +72,7 @@ def metered_llm(
         return None
 
     class _MeteredBase:
-        async def complete(self, messages, tools=None) -> LLMReply:
+        async def complete(self, messages, tools=None, response_format=None) -> LLMReply:
             degraded = _quota_degraded()
             if degraded is not None:
                 return degraded
@@ -80,7 +80,10 @@ def metered_llm(
             reply: LLMReply | None = None
             ok = False  # success is recorded only after a full return; exceptions/cancel fail
             try:
-                reply = await llm.complete(messages, tools)
+                try:
+                    reply = await llm.complete(messages, tools, response_format=response_format)
+                except TypeError:
+                    reply = await llm.complete(messages, tools)
                 ok = True
                 return reply
             finally:
@@ -99,10 +102,10 @@ def metered_llm(
                 )
 
     class _MeteredStreaming(_MeteredBase):
-        def complete_stream(self, messages, tools=None):
-            return self._stream(messages, tools)
+        def complete_stream(self, messages, tools=None, response_format=None):
+            return self._stream(messages, tools, response_format=response_format)
 
-        async def _stream(self, messages, tools=None):
+        async def _stream(self, messages, tools=None, response_format=None):
             degraded = _quota_degraded()
             if degraded is not None:
                 yield StreamReply(final=degraded)
@@ -111,7 +114,11 @@ def metered_llm(
             final: LLMReply | None = None
             ok = False  # success is recorded only after the stream ends; mid-stream errors fail
             try:
-                async for ev in llm.complete_stream(messages, tools):
+                try:
+                    stream = llm.complete_stream(messages, tools, response_format=response_format)
+                except TypeError:
+                    stream = llm.complete_stream(messages, tools)
+                async for ev in stream:
                     if ev.final is not None:
                         final = ev.final
                     yield ev

@@ -27,7 +27,17 @@ from typing import Any
 
 import httpx
 
-from agent.llm import LLMReply, StreamReply, ToolCall, ToolSpec, Usage
+from agent.llm import (
+    FilePart,
+    ImagePart,
+    LLMReply,
+    StreamReply,
+    TextPart,
+    ToolCall,
+    ToolSpec,
+    Usage,
+    content_to_text,
+)
 
 log = logging.getLogger("agent.llm_http")
 
@@ -249,25 +259,80 @@ def _assistant_tool_calls_to_wire(calls: list[dict[str, Any]]) -> list[dict[str,
     return out
 
 
+def _content_to_wire(content: Any) -> str | list[dict[str, Any]]:
+    """Convert content (str or list of ContentParts/dicts) to OpenAI content wire format."""
+    if not content:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        wire_parts: list[dict[str, Any]] = []
+        for p in content:
+            if isinstance(p, TextPart):
+                wire_parts.append({"type": "text", "text": p.text})
+            elif isinstance(p, ImagePart):
+                wire_parts.append(
+                    {"type": "image_url", "image_url": {"url": p.url, "detail": p.detail}}
+                )
+            elif isinstance(p, FilePart):
+                # The wire has no file slot: only the descriptor travels, the
+                # bulk bytes stay local (never serialized into the payload).
+                wire_parts.append({"type": "text", "text": f"[File: {p.filename} ({p.mime_type})]"})
+            elif isinstance(p, dict):
+                ptype = p.get("type", "text")
+                if ptype == "text":
+                    wire_parts.append({"type": "text", "text": str(p.get("text", ""))})
+                elif ptype == "image_url":
+                    img_info = p.get("image_url")
+                    if isinstance(img_info, dict):
+                        wire_parts.append({"type": "image_url", "image_url": img_info})
+                    elif isinstance(p.get("url"), str):
+                        wire_parts.append(
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": p["url"], "detail": p.get("detail", "auto")},
+                            }
+                        )
+                    else:
+                        wire_parts.append({"type": "image_url", "image_url": {"url": str(img_info)}})
+                else:
+                    wire_parts.append(p)
+            else:
+                wire_parts.append({"type": "text", "text": str(p)})
+        return wire_parts
+    return str(content)
+
+
 def _messages_to_wire(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Internal message list -> OpenAI chat-completions payload messages.
 
-    Most entries pass through unchanged (system/user/content); only the
-    assistant tool_calls shape and argument dicts need translation.
+    Most entries pass through unchanged (system/user/content); assistant
+    tool_calls shape and multi-modal content parts are translated.
     """
     out: list[dict[str, Any]] = []
     for m in messages:
         role = m.get("role")
+        content = _content_to_wire(m.get("content"))
         if role == "assistant" and m.get("tool_calls"):
             out.append(
                 {
                     "role": "assistant",
-                    "content": str(m.get("content") or ""),
+                    # Assistant content may be multi-modal list; wire keeps
+                    # the list shape (OpenAI accepts string or part array).
+                    "content": content,
                     "tool_calls": _assistant_tool_calls_to_wire(m["tool_calls"]),
                 }
             )
+        elif role == "tool":
+            # Tool results must stay string on the wire: flatten parts.
+            if not isinstance(content, str):
+                content = content_to_text(m.get("content"))
+            tool_msg: dict[str, Any] = {"role": "tool", "content": content}
+            if "tool_call_id" in m:
+                tool_msg["tool_call_id"] = str(m["tool_call_id"])
+            out.append(tool_msg)
         else:
-            out.append({"role": role, "content": str(m.get("content") or "")})
+            out.append({"role": role, "content": content})
     return out
 
 
@@ -371,12 +436,15 @@ class HttpLLM:
         tools: list[ToolSpec] | None,
         *,
         stream: bool,
+        response_format: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "model": self._cfg.model,
             "messages": _messages_to_wire(messages),
             "stream": stream,
         }
+        if response_format is not None:
+            body["response_format"] = response_format
         if stream:
             # Usage in the final SSE chunk; servers not supporting the option
             # are retried once without it (see complete_stream).
@@ -390,12 +458,22 @@ class HttpLLM:
             body["max_tokens"] = self._cfg.max_tokens
         return body
 
-    def _parse_reply(self, data: dict[str, Any]) -> LLMReply:
+    def _parse_reply(
+        self,
+        data: dict[str, Any],
+        response_format: dict[str, Any] | None = None,
+    ) -> LLMReply:
         choices = data.get("choices") or []
         msg = (choices[0].get("message") or {}) if choices else {}
         usage = data.get("usage") or {}
         answer, inline_reasoning, tool_blocks = _split_inline(str(msg.get("content") or ""))
         calls = _parse_tool_calls(msg.get("tool_calls"))
+        structured: Any = None
+        if response_format is not None and answer:
+            try:
+                structured = json.loads(answer)
+            except ValueError:
+                log.warning("failed to parse structured response as JSON: %.80r", answer)
         # Inline <tool_call> markup converts only when the wire field stayed
         # empty (MiniMax echoes the markup alongside the parsed call — the
         # parsed field wins so the call runs exactly once).
@@ -404,14 +482,16 @@ class HttpLLM:
             tool_calls=calls or _parse_tool_blocks(tool_blocks),
             usage=_parse_usage(usage),
             reasoning=str(msg.get("reasoning_content") or "") + inline_reasoning,
+            structured=structured,
         )
 
     async def complete(
         self,
         messages: list[dict[str, Any]],
         tools: list[ToolSpec] | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> LLMReply:
-        body = self._payload(messages, tools, stream=False)
+        body = self._payload(messages, tools, stream=False, response_format=response_format)
         resp: httpx.Response | None = None
         net_error: Exception | None = None
         for attempt in range(_RETRY_ATTEMPTS + 1):
@@ -451,7 +531,7 @@ class HttpLLM:
                 overflow=_is_context_overflow(resp.status_code, resp.text[:2000]),
             )
         try:
-            return self._parse_reply(resp.json())
+            return self._parse_reply(resp.json(), response_format=response_format)
         except ValueError:
             return LLMReply(text=f"{_DEGRADED_PREFIX} malformed response body", degraded=True)
 
@@ -459,13 +539,18 @@ class HttpLLM:
         self,
         messages: list[dict[str, Any]],
         tools: list[ToolSpec] | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> AsyncIterator[StreamReply]:
         """Yield StreamReply events: text deltas then one final aggregate."""
-        body = self._payload(messages, tools, stream=True)
-        async for ev in self._stream_events(body):
+        body = self._payload(messages, tools, stream=True, response_format=response_format)
+        async for ev in self._stream_events(body, response_format=response_format):
             yield ev
 
-    async def _stream_events(self, body: dict[str, Any]) -> AsyncIterator[StreamReply]:
+    async def _stream_events(
+        self,
+        body: dict[str, Any],
+        response_format: dict[str, Any] | None = None,
+    ) -> AsyncIterator[StreamReply]:
         """Drive one SSE request: parse lines, aggregate tool-call fragments,
         emit deltas and a single final block.
 
@@ -615,13 +700,29 @@ class HttpLLM:
             calls = _parse_tool_blocks(splitter.tool_blocks)
         text = "".join(text_parts)
         reasoning = "".join(reasoning_parts)
+        structured: Any = None
+        if response_format is not None and text:
+            try:
+                structured = json.loads(text)
+            except ValueError:
+                log.warning("failed to parse structured streaming response as JSON: %.80r", text)
         if calls:
             yield StreamReply(
-                final=LLMReply(tool_calls=calls, usage=_parse_usage(usage), reasoning=reasoning)
+                final=LLMReply(
+                    tool_calls=calls,
+                    usage=_parse_usage(usage),
+                    reasoning=reasoning,
+                    structured=structured,
+                )
             )
         else:
             yield StreamReply(
-                final=LLMReply(text=text or None, usage=_parse_usage(usage), reasoning=reasoning)
+                final=LLMReply(
+                    text=text or None,
+                    usage=_parse_usage(usage),
+                    reasoning=reasoning,
+                    structured=structured,
+                )
             )
 
     @staticmethod

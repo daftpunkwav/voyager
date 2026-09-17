@@ -11,7 +11,7 @@ wrapper and the public API is unchanged.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -242,9 +242,15 @@ class Toolbelt:
 
         return await invoke_tool(self.invocation_view(), call)
 
-    async def call_detailed(self, call: ToolCall) -> ToolResult:
+    async def call_detailed(
+        self,
+        call: ToolCall,
+        *,
+        on_progress: Callable[[float, str], Awaitable[None]] | None = None,
+    ) -> ToolResult:
         """Execute one tool call and return the full outcome (same pipeline
-        and same LLM-facing text as call())."""
+        and same LLM-facing text as call()). on_progress forwards to long
+        tools declaring `progress_cb`."""
         from agent.tools.core.invoke import invoke_detailed
 
-        return await invoke_detailed(self.invocation_view(), call)
+        return await invoke_detailed(self.invocation_view(), call, on_progress=on_progress)

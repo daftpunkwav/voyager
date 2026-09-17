@@ -57,6 +57,7 @@ class AgentApp:
     )
     owns_log: bool = True  # False when sharing a bus (aggregate runs share the EventLog)
     session_index: Any = None  # SessionIndex: FTS search projection (closed with the app; optional for legacy constructors)
+    dispatcher: Any = None  # TraceDispatcher: span exporter lifecycle (flushed in drain, detached in close)
 
     async def start_queue_loop(self, *, poll_interval: float = 5.0) -> None:
         """Start the durable-job poll loop (host lifespan; needs a running loop)."""
@@ -72,6 +73,11 @@ class AgentApp:
         effort: shutdown must always terminate)."""
         import asyncio
 
+        if self.dispatcher is not None:
+            try:
+                await self.dispatcher.flush()
+            except Exception:  # noqa: BLE001, S110  # best effort: dispatcher flush failure ignored on drain
+                pass
         bg = getattr(self.master, "_bg", None)
         pending = [t for t in tuple(bg) if not t.done()] if bg else []
         if not pending:
@@ -84,6 +90,8 @@ class AgentApp:
         """Close components holding file handles (tests and shutdown paths)."""
         # External MCP sessions: schedule an aclose task when a loop exists,
         # otherwise a best-effort synchronous kill (never blocks pytest)
+        if self.dispatcher is not None:
+            self.dispatcher.detach()
         self.mcp.close_best_effort()
         self.meter.close()  # meter.db persistent connection; in-memory Meter is a no-op
         self.memory.close()

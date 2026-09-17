@@ -16,6 +16,7 @@ import asyncio
 import difflib
 import inspect
 import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -28,6 +29,9 @@ from agent.runtime.trace import start_span
 from agent.tools.core.model import AgentTool, ToolbeltView
 from agent.tools.core.outcome import ToolResult, normalize
 
+#: Long-tool progress outlet: (fraction 0.0-1.0, message) -> None.
+ProgressCb = Callable[[float, str], Awaitable[None]]
+
 
 def _breaker_for(view: ToolbeltView, name: str) -> CircuitBreaker:
     """One circuit breaker per tool name: lazily created; views share the same
@@ -39,7 +43,13 @@ def _breaker_for(view: ToolbeltView, name: str) -> CircuitBreaker:
     return cb
 
 
-async def _invoke_with_recovery(view: ToolbeltView, tool: AgentTool, call: ToolCall) -> Any:
+async def _invoke_with_recovery(
+    view: ToolbeltView,
+    tool: AgentTool,
+    call: ToolCall,
+    *,
+    on_progress: ProgressCb | None = None,
+) -> Any:
     """Wraps handler execution with retry + circuit breaking.
 
     - Read-only / network GET-like tools may retry; write / irreversible tools
@@ -60,16 +70,38 @@ async def _invoke_with_recovery(view: ToolbeltView, tool: AgentTool, call: ToolC
       retried nor counted as breaker failures;
     - Backoff comes from Toolbelt constructor args; unit tests inject 0 to
       avoid real sleeps.
+    - on_progress is forwarded only to handlers declaring a `progress_cb`
+      parameter (long tools: download / scan / bulk IO); other handlers run
+      unchanged. Sync handlers never receive it (async outlet cannot run in
+      a worker thread).
     """
     breaker = _breaker_for(view, tool.name)
     retries = 0 if (tool.write or tool.irreversible) else view.retries
+
+    def _wants_progress() -> bool:
+        try:
+            return "progress_cb" in inspect.signature(tool.handler).parameters
+        except (TypeError, ValueError):
+            return False
+
+    wants_progress = _wants_progress() and on_progress is not None
+    is_async = inspect.iscoroutinefunction(tool.handler)
 
     async def _attempt_once() -> Any:
         # Sync handlers run in a worker thread (same discipline as the
         # capability framework's guards._invoke): blocking IO from fs/sqlite
         # tools directly on the event loop would stall the whole process
-        if inspect.iscoroutinefunction(tool.handler):
-            run = tool.handler(**call.arguments)
+        extra: dict[str, Any] = {}
+        if wants_progress and is_async:
+            # A model-supplied "progress_cb" argument must never win: the
+            # outlet is harness-owned, so drop the colliding key instead of
+            # raising a duplicate-keyword TypeError.
+            args = {k: v for k, v in call.arguments.items() if k != "progress_cb"}
+            extra["progress_cb"] = on_progress
+        else:
+            args = call.arguments
+        if is_async:
+            run = tool.handler(**args, **extra)
         else:
             run = asyncio.to_thread(tool.handler, **call.arguments)
         if tool.timeout_s is not None:
@@ -98,14 +130,16 @@ async def _invoke_with_recovery(view: ToolbeltView, tool: AgentTool, call: ToolC
     )
 
 
-async def invoke_tool(view: ToolbeltView, call: ToolCall) -> str:
+async def invoke_tool(
+    view: ToolbeltView, call: ToolCall, *, on_progress: ProgressCb | None = None
+) -> str:
     """Execute one tool call and return the string result handed to the LLM.
 
     Order: find tool -> validate arguments -> build policy Action ->
     deny / L2 confirm / L1 notify -> pre_tool -> handler (retry + breaker) ->
     meter -> post_tool -> stringify.
     """
-    return (await invoke_detailed(view, call)).text
+    return (await invoke_detailed(view, call, on_progress=on_progress)).text
 
 
 #: JSON-schema type name -> Python check (bool excluded from integer/number:
@@ -177,12 +211,15 @@ def validate_arguments(tool: AgentTool, arguments: Any) -> str | None:
     return None
 
 
-async def invoke_detailed(view: ToolbeltView, call: ToolCall) -> ToolResult:
+async def invoke_detailed(
+    view: ToolbeltView, call: ToolCall, *, on_progress: ProgressCb | None = None
+) -> ToolResult:
     """Execute one tool call and return the full outcome.
 
     Same pipeline and same LLM-facing text as invoke_tool; ok=False marks
     pipeline rejections and handler failures, and metadata carries
     machine facts (currently: truncated when the result budget spilled).
+    on_progress forwards to handlers declaring `progress_cb` (long tools).
     """
     tool = view.tool(call.name)
     if tool is None:
@@ -281,8 +318,13 @@ async def invoke_detailed(view: ToolbeltView, call: ToolCall) -> ToolResult:
     start = time.perf_counter()
     ok = True
     try:
-        with start_span(f"tool:{tool.name}", tool_call_id=call.id):
-            result = await _invoke_with_recovery(view, tool, call)
+        with start_span(
+            f"tool:{tool.name}",
+            kind="INTERNAL",
+            tool_name=tool.name,
+            tool_call_id=call.id,
+        ):
+            result = await _invoke_with_recovery(view, tool, call, on_progress=on_progress)
     except CircuitOpenError:
         # Breaker state must not escape as an unhandled exception into the ReAct
         # loop; fold it into a text result for the LLM

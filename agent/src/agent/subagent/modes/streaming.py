@@ -12,10 +12,11 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from platform_contracts import CONTEXT_OVERFLOW_HINT, RuntimeEvent, ServiceError
+from platform_contracts import CONTEXT_OVERFLOW_HINT, ServiceError
 
 from agent.llm import LLMClient, LLMReply
 from agent.runtime.deadline import Deadline
+from agent.runtime.events import RuntimeEvent
 from agent.subagent.modes.base import DeltaCb, EventCb, ModeBudget, noop_event
 
 #: Delta coalescing interval (seconds): token-level deltas are batched before
@@ -80,11 +81,14 @@ async def complete_streaming(
     on_delta: DeltaCb | None,
     *,
     round_n: int,
+    on_event: EventCb = noop_event,
+    on_reasoning_delta: DeltaCb | None = None,
 ) -> LLMReply:
     """One completion round: when on_delta is available and the llm supports
     streaming, stream and batch-callback deltas; otherwise fall back to a
     single complete (capability tiering, not a silent downgrade - streaming
-    is an optional extension).
+    is an optional extension). Also streams thinking/reasoning deltas and
+    emits THINKING_* runtime events when present.
 
     A ServiceError raised mid-stream (provider refused the call) folds into a
     degraded final reply - same semantics as the aggregate adapter's complete
@@ -92,7 +96,7 @@ async def complete_streaming(
 
     Returns the round's final LLMReply, matching complete's return semantics.
     """
-    if on_delta is None:
+    if on_delta is None and on_reasoning_delta is None:
         return await llm.complete(messages, specs)
     stream_fn = getattr(llm, "complete_stream", None)
     if not callable(stream_fn):
@@ -100,18 +104,36 @@ async def complete_streaming(
     flusher = DeltaFlusher()
     final: LLMReply | None = None
     emitted: list[str] = []  # batches actually handed to on_delta (what the user saw)
+    thinking_started = False
+    thinking_chunks: list[str] = []
     try:
         async for ev in stream_fn(messages, specs):
-            if ev.final is not None:
+            if getattr(ev, "final", None) is not None:
                 final = ev.final
-            elif ev.text_delta:
+            elif getattr(ev, "reasoning_delta", ""):
+                if not thinking_started:
+                    thinking_started = True
+                    await on_event(RuntimeEvent.THINKING_STARTED, round=round_n)
+                thinking_chunks.append(ev.reasoning_delta)
+                await on_event(RuntimeEvent.THINKING_DELTA, round=round_n, delta=ev.reasoning_delta)
+                if on_reasoning_delta is not None:
+                    await on_reasoning_delta(round_n, ev.reasoning_delta)
+            elif getattr(ev, "text_delta", ""):
+                if thinking_started:
+                    thinking_started = False
+                    await on_event(
+                        RuntimeEvent.THINKING_COMPLETED,
+                        round=round_n,
+                        reasoning="".join(thinking_chunks),
+                    )
                 batch = flusher.add(ev.text_delta)
                 if batch:
                     emitted.append(batch)
-                    await on_delta(round_n, batch)
+                    if on_delta is not None:
+                        await on_delta(round_n, batch)
     except ServiceError as exc:
         tail = flusher.flush()
-        if tail:
+        if tail and on_delta is not None:
             await on_delta(round_n, tail)
         return LLMReply(
             text=f"(LLM call failed: {exc.body.message})",
@@ -127,8 +149,14 @@ async def complete_streaming(
             messages.append({"role": "assistant", "content": partial + CANCEL_ANCHOR})
         raise
     tail = flusher.flush()
-    if tail:
+    if tail and on_delta is not None:
         await on_delta(round_n, tail)
+    if thinking_started:
+        await on_event(
+            RuntimeEvent.THINKING_COMPLETED,
+            round=round_n,
+            reasoning="".join(thinking_chunks),
+        )
     if final is None:
         # Out-of-contract case (stream without a final block): end with an empty
         # reply so the loop never hangs
@@ -159,10 +187,14 @@ async def run_phase(
     await on_event(RuntimeEvent.LLM_STARTED, round=round_n, streaming=on_delta is not None)
     if deadline is not None:
         reply = await deadline.run_round(
-            lambda: complete_streaming(llm, messages, None, round_delta, round_n=round_n)
+            lambda: complete_streaming(
+                llm, messages, None, round_delta, round_n=round_n, on_event=on_event
+            )
         )
     else:
-        reply = await complete_streaming(llm, messages, None, round_delta, round_n=round_n)
+        reply = await complete_streaming(
+            llm, messages, None, round_delta, round_n=round_n, on_event=on_event
+        )
     await on_event(
         RuntimeEvent.LLM_COMPLETED,
         round=round_n,
