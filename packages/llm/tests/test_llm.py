@@ -277,6 +277,233 @@ class TestConnectionAndUsage:
         assert stats["by_model"][0]["model"] == "gpt-4o-mini"
 
 
+class TestDefaultModelRetired:
+    """The provider-level default_model is gone: an untagged model resolves
+    to the first enabled entry of the model list."""
+
+    async def test_effective_model_skips_disabled(self) -> None:
+        from llm.capabilities.common import effective_model
+
+        p = {"models": ["m1", "m2", "m3"], "models_meta": {"m1": {"enabled": False}}}
+        assert effective_model(p) == "m2"
+        assert effective_model(p, "m3") == "m3"  # explicit pin wins verbatim
+        # all models disabled: still return the first instead of nothing
+        assert (
+            effective_model({"models": ["m1"], "models_meta": {"m1": {"enabled": False}}}) == "m1"
+        )
+        assert effective_model({"models": [], "models_meta": {}}) == ""
+
+    async def test_models_meta_accepts_enabled_flag(self, deps) -> None:
+        pid = await _add_sample()
+        out = await execute(
+            registry,
+            "update_provider",
+            USER_CTX,
+            {"provider_id": pid, "models_meta": {"m1": {"enabled": False}}},
+        )
+        assert out["models_meta"]["m1"]["enabled"] is False
+
+    async def test_default_model_input_is_rejected(self, deps) -> None:
+        """The retired default_model input no longer binds — stale callers fail
+        loudly instead of the flag being silently ignored."""
+        pid = await _add_sample()
+        with pytest.raises(TypeError, match="default_model"):
+            await execute(
+                registry,
+                "update_provider",
+                USER_CTX,
+                {"provider_id": pid, "default_model": "m1"},
+            )
+
+    async def test_complete_without_model_uses_first_enabled(self, deps, monkeypatch) -> None:
+        import types
+
+        import llm.capabilities.complete as complete_mod
+
+        pid = await _add_sample()
+        await execute(registry, "set_api_key", USER_CTX, {"provider_id": pid, "api_key": "sk-x"})
+        await execute(
+            registry,
+            "update_provider",
+            USER_CTX,
+            {"provider_id": pid, "models_meta": {"m1": {"enabled": False}}},
+        )
+        seen: dict = {}
+
+        async def fake_complete(p, *, api_key, model, **kw):
+            seen.update(model=model)
+            return types.SimpleNamespace(
+                text="pong",
+                model=model,
+                tool_calls=[],
+                input_tokens=3,
+                output_tokens=1,
+                cached_tokens=0,
+                reasoning="",
+                thinking_blocks=[],
+            )
+
+        monkeypatch.setattr(complete_mod, "llm_complete", fake_complete)
+        await execute(
+            registry,
+            "complete",
+            AGENT_CTX,
+            {"provider_id": pid, "messages": [{"role": "user", "content": "hi"}]},
+        )
+        assert seen["model"] == "m2"
+
+    async def test_thinking_variants_and_defaults_round_trip(self, deps) -> None:
+        """ZCode-shaped thinking config: supported variants plus the default
+        variant store as flat meta fields; the retired thinking_levels map is
+        rejected as an unknown key."""
+        pid = await _add_sample()
+        out = await execute(
+            registry,
+            "update_provider",
+            USER_CTX,
+            {
+                "provider_id": pid,
+                "models_meta": {
+                    "m1": {
+                        "thinking_variants": ["low", "high", "max"],
+                        "thinking_default": "max",
+                        "output_modalities": ["text"],
+                    },
+                },
+            },
+        )
+        assert out["models_meta"]["m1"]["thinking_variants"] == ["low", "high", "max"]
+        assert out["models_meta"]["m1"]["thinking_default"] == "max"
+
+        with pytest.raises(ServiceError) as exc:
+            await execute(
+                registry,
+                "update_provider",
+                USER_CTX,
+                {
+                    "provider_id": pid,
+                    "models_meta": {"m1": {"thinking_levels": {"low": "minimal"}}},
+                },
+            )
+        assert exc.value.body.code == "LLM.INVALID_INPUT"
+
+    async def test_compat_and_name_meta_round_trip(self, deps) -> None:
+        pid = await _add_sample()
+        out = await execute(
+            registry,
+            "update_provider",
+            USER_CTX,
+            {
+                "provider_id": pid,
+                "models_meta": {
+                    "m1": {
+                        "name": "DeepSeek Flash",
+                        "compat": {
+                            "maxTokensField": "max_tokens",
+                            "supportsStore": False,
+                        },
+                    },
+                },
+            },
+        )
+        assert out["models_meta"]["m1"]["name"] == "DeepSeek Flash"
+        assert out["models_meta"]["m1"]["compat"]["supportsStore"] is False
+        # nested objects in compat are rejected (flat scalar/null object only)
+        with pytest.raises(ServiceError) as exc:
+            await execute(
+                registry,
+                "update_provider",
+                USER_CTX,
+                {
+                    "provider_id": pid,
+                    "models_meta": {"m1": {"compat": {"bad": {"nested": 1}}}},
+                },
+            )
+        assert exc.value.body.code == "LLM.INVALID_INPUT"
+
+
+class TestRemoteModels:
+    """list_remote_models: one GET /models against the provider base_url."""
+
+    @staticmethod
+    def _fake_client(monkeypatch, payload=None, status=200):
+        import httpx as httpx_mod
+
+        class FakeAsyncClient:
+            def __init__(self, **kw):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def get(self, url, headers=None):
+                if status == 200:
+                    return httpx_mod.Response(200, json=payload or {"data": []})
+                return httpx_mod.Response(status, text="boom")
+
+        monkeypatch.setattr(httpx_mod, "AsyncClient", FakeAsyncClient)
+
+    async def test_returns_sorted_unique_ids(self, deps, monkeypatch) -> None:
+        self._fake_client(monkeypatch, {"data": [{"id": "m-b"}, {"id": "m-a"}, {"id": "m-b"}]})
+        pid = await _add_sample()
+        await execute(registry, "set_api_key", USER_CTX, {"provider_id": pid, "api_key": "sk-x"})
+        out = await execute(registry, "list_remote_models", USER_CTX, {"provider_id": pid})
+        assert out["models"] == ["m-a", "m-b"]
+
+    async def test_requires_key(self, deps) -> None:
+        pid = await _add_sample()
+        with pytest.raises(ServiceError, match="api key"):
+            await execute(registry, "list_remote_models", USER_CTX, {"provider_id": pid})
+
+    async def test_http_error_maps_to_unavailable(self, deps, monkeypatch) -> None:
+        self._fake_client(monkeypatch, status=401)
+        pid = await _add_sample()
+        await execute(registry, "set_api_key", USER_CTX, {"provider_id": pid, "api_key": "sk-x"})
+        with pytest.raises(ServiceError) as exc:
+            await execute(registry, "list_remote_models", USER_CTX, {"provider_id": pid})
+        assert exc.value.body.code == "LLM.UNAVAILABLE"
+
+    async def test_anthropic_base_url_gets_version_segment(self, deps, monkeypatch) -> None:
+        """The anthropic format expects a bare host (chat posts {base}/v1/messages),
+        so the catalog request must mirror that and hit {base}/v1/models."""
+        import httpx as httpx_mod
+
+        seen: dict = {}
+
+        class UrlCaptureClient:
+            def __init__(self, **kw):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def get(self, url, headers=None):
+                seen["url"] = url
+                return httpx_mod.Response(200, json={"data": [{"id": "m-a"}]})
+
+        monkeypatch.setattr(httpx_mod, "AsyncClient", UrlCaptureClient)
+        pid = await _add_sample()
+        await execute(registry, "set_api_key", USER_CTX, {"provider_id": pid, "api_key": "sk-x"})
+        await execute(
+            registry,
+            "update_provider",
+            USER_CTX,
+            {
+                "provider_id": pid,
+                "base_url": "https://api.anthropic.com",
+                "api_format": "anthropic",
+            },
+        )
+        await execute(registry, "list_remote_models", USER_CTX, {"provider_id": pid})
+        assert seen["url"] == "https://api.anthropic.com/v1/models"
+
+
 class TestCompleteWithTools:
     """Dual tool formats: neutral input, request bodies converted per
     api_format, tool_calls parsed uniformly."""

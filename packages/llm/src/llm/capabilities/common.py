@@ -35,30 +35,103 @@ DOMAIN = "llm"
 registry = Registry(DOMAIN)
 
 
-#: Per-model metadata fields (models_meta): booleans are capability flags,
-#: ints are positive token budgets. Unknown keys are rejected so typos never
-#: silently disable a feature the user believes is on.
-_MODEL_META_BOOL_FIELDS = ("image_input", "audio_input", "video_input", "thinking")
+#: Per-model metadata fields (models_meta): booleans are capability flags
+#: (enabled=False disables the model for default resolution), ints are
+#: positive token budgets, strings are display names or the default thinking
+#: variant, string lists are thinking variants / output modalities, and dicts
+#: are free-form extension objects (compat wire tweaks). Unknown keys are
+#: rejected so typos never silently disable a feature the user believes is on.
+_MODEL_META_BOOL_FIELDS = ("image_input", "audio_input", "video_input", "thinking", "enabled")
 _MODEL_META_INT_FIELDS = ("context_window", "max_output_tokens")
+_MODEL_META_STR_FIELDS = ("name", "thinking_default")
+_MODEL_META_STR_LIST_FIELDS = ("thinking_variants", "output_modalities")
+#: JSON-file-only field: compat carries provider-specific wire tweaks the GUI
+#: has no controls for.
+_META_SCALAR_KINDS = (bool, int, float, str)
+
+
+def _valid_plain_object(value: Any) -> bool:
+    """A JSON-ish flat object: non-empty string keys, scalar/null values."""
+    if not isinstance(value, dict):
+        return False
+    return all(
+        isinstance(k, str) and k and (v is None or isinstance(v, _META_SCALAR_KINDS))
+        for k, v in value.items()
+    )
+
+
+MODELS_META_ALLOWED = (
+    "name, image_input, audio_input, video_input, thinking, enabled (bool); "
+    "context_window, max_output_tokens (int>0); thinking_default (string); "
+    "thinking_variants, output_modalities (string[]); compat (flat object)"
+)
+
+
+def _valid_str_list(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(x, str) and x for x in value)
+
+
+def model_enabled(p: dict[str, Any], model: str) -> bool:
+    """A model is enabled unless its models_meta entry says enabled=False
+    (entries default to enabled so legacy metadata keeps working)."""
+    meta = p.get("models_meta") or {}
+    fields = meta.get(model)
+    if not isinstance(fields, dict):
+        return True
+    return fields.get("enabled", True) is not False
+
+
+def effective_model(p: dict[str, Any], model: str = "") -> str:
+    """Resolve the model for one call: an explicit model wins verbatim (agents
+    may pin a disabled model deliberately); otherwise the first enabled model
+    of the provider list, falling back to the first model, else empty."""
+    if model:
+        return model
+    models = p.get("models") or []
+    for m in models:
+        if model_enabled(p, m):
+            return m
+    return models[0] if models else ""
 
 
 def valid_models_meta(meta: Any) -> bool:
     """Shape check for the models_meta map: {model_id: {field: value}}."""
+    return find_bad_models_meta_field(meta) is None
+
+
+def find_bad_models_meta_field(meta: Any) -> str | None:
+    """First validation problem of a models_meta map, as a readable location
+    ("<model>.<field> (<reason>)"), or None when the map is valid. Powers
+    field-level errors instead of a blanket shape message."""
     if not isinstance(meta, dict):
-        return False
+        return "(root) not an object"
     for model, fields in meta.items():
-        if not model or not isinstance(model, str) or not isinstance(fields, dict):
-            return False
+        if not model or not isinstance(model, str):
+            return f"{model!r}: model id must be a non-empty string"
+        if not isinstance(fields, dict):
+            return f"{model}: fields must be an object"
         for k, v in fields.items():
             if k in _MODEL_META_BOOL_FIELDS:
                 if not isinstance(v, bool):
-                    return False
+                    return f"{model}.{k}: expected bool, got {type(v).__name__}"
             elif k in _MODEL_META_INT_FIELDS:
                 if not isinstance(v, int) or isinstance(v, bool) or v <= 0:
-                    return False
+                    return f"{model}.{k}: expected a positive integer"
+            elif k in _MODEL_META_STR_FIELDS:
+                if not isinstance(v, str):
+                    return f"{model}.{k}: expected string, got {type(v).__name__}"
+            elif k in _MODEL_META_STR_LIST_FIELDS:
+                if not _valid_str_list(v):
+                    return f"{model}.{k}: expected an array of non-empty strings"
+            elif k == "compat":
+                if not _valid_plain_object(v):
+                    return (
+                        f"{model}.{k}: expected a flat object of string keys with "
+                        "scalar/null values"
+                    )
             else:
-                return False
-    return True
+                return f"{model}.{k}: unknown field"
+    return None
 
 
 def service_error_for(exc: ProviderError) -> ServiceError:
@@ -177,9 +250,13 @@ def validate_base_url(base_url: str, actor: ActorRef | None) -> str:
 
 __all__ = [
     "DOMAIN",
+    "MODELS_META_ALLOWED",
     "Deps",
+    "effective_model",
+    "find_bad_models_meta_field",
     "init_deps",
     "key_name",
+    "model_enabled",
     "read_api_key",
     "registry",
     "require_deps",

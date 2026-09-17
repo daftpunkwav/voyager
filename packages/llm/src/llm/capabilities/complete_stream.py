@@ -9,6 +9,7 @@ from platform_contracts import ActorRef, ErrorSuffix, ServiceError
 
 from llm.capabilities.common import (
     DOMAIN,
+    effective_model,
     read_api_key,
     registry,
     require_deps,
@@ -54,7 +55,7 @@ async def complete_stream(
     key = read_api_key(provider_id)
     if not key:
         raise ServiceError(DOMAIN, ErrorSuffix.INVALID_INPUT, "api key not configured")
-    use_model = model or p["default_model"]
+    use_model = effective_model(p, model)
 
     async def _gen() -> AsyncIterator[dict]:
         ok = False

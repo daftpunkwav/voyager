@@ -17,7 +17,9 @@ DEFS = [
         module="llm",
         type=SettingType.STR,
         default="",
-        description="Default model (empty = provider's default_model)",
+        description=(
+            "Model chosen in the chat composer picker; empty = the provider's first enabled model"
+        ),
     ),
     SettingDef(
         key="llm.pricing",

@@ -30,7 +30,6 @@ CREATE TABLE IF NOT EXISTS providers (
     api_format   TEXT NOT NULL,
     models       TEXT NOT NULL DEFAULT '[]',
     models_meta  TEXT NOT NULL DEFAULT '{}',
-    default_model TEXT NOT NULL DEFAULT '',
     enabled      INTEGER NOT NULL DEFAULT 1,
     custom       INTEGER NOT NULL DEFAULT 0,
     created_ts   REAL NOT NULL,
@@ -58,7 +57,6 @@ _COLS = (
     "api_format",
     "models",
     "models_meta",
-    "default_model",
     "enabled",
     "custom",
     "created_ts",
@@ -113,12 +111,11 @@ class ProviderStore:
         with self._lock:
             self._conn.execute(
                 "INSERT INTO providers (id, display_name, preset_id, base_url, api_format,"
-                " models, models_meta, default_model, enabled, custom, created_ts, updated_ts)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                " models, models_meta, enabled, custom, created_ts, updated_ts)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 " ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,"
                 " base_url=excluded.base_url, api_format=excluded.api_format,"
                 " models=excluded.models, models_meta=excluded.models_meta,"
-                " default_model=excluded.default_model,"
                 " enabled=excluded.enabled, updated_ts=excluded.updated_ts",
                 (
                     pid,
@@ -128,7 +125,6 @@ class ProviderStore:
                     p["api_format"],
                     json.dumps(p.get("models", []), ensure_ascii=False),
                     json.dumps(p.get("models_meta", {}), ensure_ascii=False),
-                    p.get("default_model", ""),
                     int(p.get("enabled", True)),
                     int(p.get("custom", False)),
                     now,

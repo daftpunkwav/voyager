@@ -94,8 +94,9 @@
   --lg-control-blur: 15px;
   --lg-control-inset-glow: inset 0 0 4px 2px rgba(255, 255, 255, 0.08);
 
-  /* Dark dialogs use a solid black base: a gray tint + inner glow gets muddy on a #000 page. */
-  --lg-dialog-tint: #000;
+  /* Dark dialogs sit on the same gray family as the settings panels (#1c1c1e):
+     a pure #000 dialog reads as a hole cut into the page. */
+  --lg-dialog-tint: rgba(28, 28, 30, 0.98);
   --lg-dialog-blur: 0px;
   --lg-dialog-border: rgba(255, 255, 255, 0.14);
   --lg-dialog-shadow-outer: 0 16px 48px rgba(0, 0, 0, 0.55);

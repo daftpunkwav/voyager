@@ -1,11 +1,11 @@
 /**
  * @file LlmProviderList
- * @description Flat provider rail for the LLM settings: selection, default tag,
- * config status dot, and the add-provider entry. Sits directly on the section
- * panel (single top-layer glass) — no nested card surface.
+ * @description Flat provider rail for the LLM settings: selection, config
+ * status dot, and the add-provider entry. Sits directly on the section panel
+ * (single top-layer glass) — no nested card surface.
  *
  * Responsibilities:
- * - List providers with selection, default tag and config status
+ * - List providers with selection and config status
  * - Provide the add-provider entry
  */
 
@@ -15,7 +15,8 @@ import type { LlmProvider } from '@/api/types';
 interface LlmProviderListProps {
   providers: LlmProvider[];
   selectedId: string | null;
-  defaultProviderId: string;
+  /** A placeholder provider is being created (button locked against spam). */
+  creating?: boolean;
   onSelect: (id: string) => void;
   onAdd: () => void;
 }
@@ -23,7 +24,7 @@ interface LlmProviderListProps {
 export function LlmProviderList({
   providers,
   selectedId,
-  defaultProviderId,
+  creating = false,
   onSelect,
   onAdd,
 }: LlmProviderListProps) {
@@ -37,7 +38,6 @@ export function LlmProviderList({
       <ul className="llm-provider-list">
         {providers.map((p) => {
           const active = p.id === selectedId;
-          const isDefault = p.id === defaultProviderId;
           const usable = p.enabled && p.has_api_key;
           return (
             <li key={p.id}>
@@ -48,9 +48,6 @@ export function LlmProviderList({
                 onClick={() => onSelect(p.id)}
               >
                 <span className="llm-provider-item-name">{p.display_name || p.preset_id}</span>
-                {isDefault ? (
-                  <span className="llm-provider-default-tag">{t('llm.provider.defaultTag')}</span>
-                ) : null}
                 <span
                   className={`llm-provider-status ${usable ? 'is-on' : ''}`}
                   title={
@@ -66,7 +63,7 @@ export function LlmProviderList({
           );
         })}
       </ul>
-      <button type="button" className="llm-provider-add" onClick={onAdd}>
+      <button type="button" className="llm-provider-add" disabled={creating} onClick={onAdd}>
         {t('llm.list.add')}
       </button>
     </aside>

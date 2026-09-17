@@ -2,31 +2,31 @@
  * @file LlmSettingsSection
  * @description Settings -> LLM client for the llm service.
  *
- * llm.* capabilities (list/add/update/remove, API key, connection test) go through
- * the thin api/llm layer; settings.set_setting (llm.default_provider) is the one
- * established exception and is called directly. The legacy settings blob's
- * llm_providers is no longer read or written — the source of truth is the llm store
- * and platform/secrets; keys are never returned, the UI only sees has_api_key.
+ * All provider operations (list/add/update/remove, API key, per-model
+ * connection test) go through the thin api/llm layer. There is no
+ * default-provider concept in this UI anymore: chat's composer picker keeps
+ * its own selection in llm.default_provider/llm.default_model, and the host
+ * adapter resolves "no explicit choice" to the first usable provider.
  *
  * Responsibilities:
- * - Load providers and the default provider id through the thin api/llm layer
+ * - Load providers through the thin api/llm layer
  * - Lay out the provider rail, detail pane, add-provider dialog and delete confirm
  * - Render the Degraded state with retry when llm capabilities fail
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { callCapability, ServiceError } from '@/bridge/client';
+import { ServiceError } from '@/bridge/client';
 import {
+  addProvider,
   listProviders,
   removeProvider as removeProviderApi,
   setApiKey,
   testConnection as testConnectionApi,
   updateProvider,
 } from '@/api/llm';
-import type { LlmProvider, LlmTestOutcome } from '@/api/types';
-import { LLM_PROVIDER_KEY } from '@/api/settings';
-import { LlmProviderAdd } from './llm/LlmProviderAdd';
+import type { LlmProvider } from '@/api/types';
+import { useUIStore } from '@/stores/uiStore';
 import { LlmProviderDetail } from './llm/LlmProviderDetail';
 import { LlmProviderList } from './llm/LlmProviderList';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
@@ -34,39 +34,28 @@ import { Degraded } from '@/shell/Degraded';
 
 /** Settings -> LLM: client for the llm service.
  *
- * llm.* capabilities (list/add/update/remove, key, connection test) go through the
- * thin api/llm layer; settings.set_setting (llm.default_provider) is an established
- * exception called directly. The legacy settings blob's llm_providers is no longer
- * read or written — the backend source of truth is the llm store and platform/secrets;
- * the key is never returned and the UI only reads has_api_key.
+ * Provider CRUD, keys and per-model tests ride the thin api/llm layer; the
+ * backend source of truth is the llm store and platform/secrets — the key is
+ * never returned and the UI only reads has_api_key.
  */
 export function LlmSettingsSection() {
   const { t } = useTranslation('settings');
   const [providers, setProviders] = useState<LlmProvider[]>([]);
-  const [defaultId, setDefaultId] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
-  const [addOpen, setAddOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<LlmProvider | null>(null);
-  const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<LlmTestOutcome | null>(null);
-  // Guards late test responses: a result is only rendered while its provider
-  // is still selected (see testConnection below)
-  const selectedIdRef = useRef<string | null>(null);
-  selectedIdRef.current = selectedId;
+  // Direct-create guard: rapid clicks on the rail button must not spawn
+  // several placeholder providers.
+  const [creating, setCreating] = useState(false);
+  const creatingRef = useRef(false);
+  const addToast = useUIStore((s) => s.addToast);
 
   const reload = useCallback(async () => {
     setError(null);
     try {
-      const [list, defItem] = await Promise.all([
-        listProviders(),
-        callCapability<{ value?: unknown }>('settings', 'get_setting', {
-          key: LLM_PROVIDER_KEY,
-        }),
-      ]);
+      const list = await listProviders();
       setProviders(list);
-      setDefaultId(String(defItem?.value ?? ''));
       setLoading(false);
       return list;
     } catch (err) {
@@ -81,17 +70,11 @@ export function LlmSettingsSection() {
     void reload();
   }, [reload]);
 
-  // Keep the selection in sync with the list: preserve the current choice when possible, otherwise fall back to default/first
+  // Keep the selection in sync with the list: preserve the current choice when possible, otherwise fall back to the first provider
   useEffect(() => {
     if (selectedId && providers.some((p) => p.id === selectedId)) return;
-    setSelectedId(providers.find((p) => p.id === defaultId)?.id ?? providers[0]?.id ?? null);
-  }, [providers, defaultId, selectedId]);
-
-  // The connection verdict belongs to one provider: clear it on switch so the
-  // previous provider's result never renders under the newly selected one
-  useEffect(() => {
-    setTestResult(null);
-  }, [selectedId]);
+    setSelectedId(providers[0]?.id ?? null);
+  }, [providers, selectedId]);
 
   if (loading) {
     return <p className="muted small">{t('llm.loading')}</p>;
@@ -109,13 +92,7 @@ export function LlmSettingsSection() {
     patch: Partial<
       Pick<
         LlmProvider,
-        | 'display_name'
-        | 'base_url'
-        | 'api_format'
-        | 'models'
-        | 'models_meta'
-        | 'default_model'
-        | 'enabled'
+        'display_name' | 'base_url' | 'api_format' | 'models' | 'models_meta' | 'enabled'
       >
     >
   ) => updateProvider(id, patch).then(() => reload());
@@ -125,42 +102,36 @@ export function LlmSettingsSection() {
     await reload();
   };
 
-  const testConnection = async (id: string, model: string) => {
-    setIsTesting(true);
-    setTestResult(null);
-    try {
-      const out = await testConnectionApi(id, model);
-      if (selectedIdRef.current !== id) return;
-      setTestResult(out);
-    } catch (err) {
-      if (selectedIdRef.current !== id) return;
-      // Capability-layer errors (e.g. missing key) surface the backend error as-is instead of fabricating success/reply fields
-      const e = err as ServiceError;
-      setTestResult({ ok: false, error: e.hint ? `${e.message}(${e.hint})` : e.message });
-    } finally {
-      setIsTesting(false);
-    }
-  };
-
   const removeProvider = async (id: string) => {
     await removeProviderApi(id);
-    // When removing the default provider, clear the setting so ServiceLLM does not resolve to a deleted id (it would fall back automatically, but the setting should stay honest)
-    if (defaultId === id) {
-      await callCapability('settings', 'set_setting', {
-        key: LLM_PROVIDER_KEY,
-        value: '',
-      });
-      setDefaultId('');
-    }
     await reload();
   };
 
-  const setDefault = async (id: string) => {
-    await callCapability('settings', 'set_setting', {
-      key: LLM_PROVIDER_KEY,
-      value: id,
-    });
-    setDefaultId(id);
+  /** No add dialog: one click spawns a placeholder provider and selects it;
+   *  renaming, endpoint and key all happen on the detail pane. */
+  const addProviderDirect = async () => {
+    if (creatingRef.current) return;
+    creatingRef.current = true;
+    setCreating(true);
+    try {
+      const created = await addProvider({
+        display_name: t('llm.add.unnamedName'),
+        base_url: 'https://api.example.com/v1',
+        api_format: 'chat',
+      });
+      const list = await reload();
+      if (created?.id) setSelectedId(created.id);
+      else if (list.length) setSelectedId(list[list.length - 1].id);
+    } catch (err) {
+      const e = err as ServiceError;
+      addToast({
+        type: 'warning',
+        message: e.hint ? `${e.message}(${e.hint})` : (e.message ?? t('llm.provider.actionFailed')),
+      });
+    } finally {
+      creatingRef.current = false;
+      setCreating(false);
+    }
   };
 
   return (
@@ -175,22 +146,18 @@ export function LlmSettingsSection() {
         <LlmProviderList
           providers={providers}
           selectedId={selected?.id ?? null}
-          defaultProviderId={defaultId}
+          creating={creating}
           onSelect={setSelectedId}
-          onAdd={() => setAddOpen(true)}
+          onAdd={() => void addProviderDirect()}
         />
         <div className="llm-detail-pane" key={selected?.id ?? 'empty'}>
           {selected ? (
             <LlmProviderDetail
               provider={selected}
-              isDefault={selected.id === defaultId}
-              isTesting={isTesting}
-              testResult={testResult}
               onPatch={(patch) => patchProvider(selected.id, patch)}
               onSaveKey={(key) => saveKey(selected.id, key)}
-              onSetDefault={() => void setDefault(selected.id)}
               onDelete={() => setConfirmDelete(selected)}
-              onTest={(model) => void testConnection(selected.id, model)}
+              onTestModel={(model) => testConnectionApi(selected.id, model)}
             />
           ) : (
             <div className="llm-empty">
@@ -199,16 +166,6 @@ export function LlmSettingsSection() {
           )}
         </div>
       </div>
-
-      <LlmProviderAdd
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onDone={async (id) => {
-          setAddOpen(false);
-          await reload();
-          if (id) setSelectedId(id);
-        }}
-      />
 
       <ConfirmDialog
         open={confirmDelete !== null}

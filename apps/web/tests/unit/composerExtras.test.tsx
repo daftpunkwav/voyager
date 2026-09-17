@@ -40,7 +40,6 @@ const PROVIDERS = [
     has_api_key: true,
     models: ['glm-think', 'glm-plain'],
     models_meta: { 'glm-think': { thinking: true, image_input: true } },
-    default_model: 'glm-think',
   },
 ] as unknown as LlmProvider[];
 
@@ -66,7 +65,14 @@ beforeEach(() => {
 });
 
 function renderComposer() {
-  return render(<ChatComposer composer={composerStub} placeholder="" className="chat-input" providers={PROVIDERS} />);
+  return render(
+    <ChatComposer
+      composer={composerStub}
+      placeholder=""
+      className="chat-input"
+      providers={PROVIDERS}
+    />
+  );
 }
 
 describe('ChatComposer extras', () => {
@@ -96,7 +102,9 @@ describe('ChatComposer extras', () => {
     // default model glm-plain has no thinking meta -> disabled
     fireEvent.click(screen.getByRole('button', { name: '选择模型' }));
     fireEvent.click(screen.getByText('glm-plain'));
-    await waitFor(() => expect(screen.getByRole('button', { name: '思考强度' })).toHaveProperty('disabled', true));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '思考强度' })).toHaveProperty('disabled', true)
+    );
     // switch back to the thinking-capable model and pick 高
     fireEvent.click(screen.getByRole('button', { name: '选择模型' }));
     fireEvent.click(screen.getByText('glm-think'));

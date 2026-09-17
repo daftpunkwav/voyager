@@ -16,7 +16,7 @@ def _call_with_provider(reply: dict, calls: list):
     async def call(domain: str, name: str, args: dict) -> Any:
         calls.append((domain, name, args))
         if name == "list_providers":
-            return [{"id": "p1", "enabled": True, "has_api_key": True, "default_model": "m9"}]
+            return [{"id": "p1", "enabled": True, "has_api_key": True, "models": ["m9"]}]
         return reply
 
     return call
@@ -99,7 +99,7 @@ class TestDegraded:
     async def test_provider_error_degrades_to_text(self) -> None:
         async def call(domain: str, name: str, args: dict) -> Any:
             if name == "list_providers":
-                return [{"id": "p1", "enabled": True, "has_api_key": True, "default_model": "m9"}]
+                return [{"id": "p1", "enabled": True, "has_api_key": True, "models": ["m9"]}]
             raise ServiceError("llm", ErrorSuffix.UNAVAILABLE, "connection timed out")
 
         llm = ServiceLLM(call)
@@ -113,7 +113,7 @@ class TestDegraded:
 
         async def call(domain: str, name: str, args: dict) -> Any:
             if name == "list_providers":
-                return [{"id": "p1", "enabled": True, "has_api_key": True, "default_model": "m9"}]
+                return [{"id": "p1", "enabled": True, "has_api_key": True, "models": ["m9"]}]
             raise ServiceError(
                 "llm",
                 ErrorSuffix.INVALID_INPUT,
@@ -127,7 +127,7 @@ class TestDegraded:
 
         async def plain_call(domain: str, name: str, args: dict) -> Any:
             if name == "list_providers":
-                return [{"id": "p1", "enabled": True, "has_api_key": True, "default_model": "m9"}]
+                return [{"id": "p1", "enabled": True, "has_api_key": True, "models": ["m9"]}]
             raise ServiceError("llm", ErrorSuffix.INVALID_INPUT, "bad input")
 
         plain = ServiceLLM(plain_call)
@@ -154,8 +154,8 @@ class TestDefaultProvider:
     async def test_setting_default_provider_wins(self) -> None:
         calls: list = []
         providers = [
-            {"id": "p1", "enabled": True, "has_api_key": True, "default_model": "m1"},
-            {"id": "p2", "enabled": True, "has_api_key": True, "default_model": "m2"},
+            {"id": "p1", "enabled": True, "has_api_key": True, "models": ["m1"]},
+            {"id": "p2", "enabled": True, "has_api_key": True, "models": ["m2"]},
         ]
         llm = ServiceLLM(self._call_with_default(providers, "p2", calls))
         reply = await llm.complete(MSGS)
@@ -169,8 +169,8 @@ class TestDefaultProvider:
         the first usable one without raising or emitting the degraded sentence."""
         calls: list = []
         providers = [
-            {"id": "p1", "enabled": True, "has_api_key": True, "default_model": "m1"},
-            {"id": "p2", "enabled": False, "has_api_key": True, "default_model": "m2"},
+            {"id": "p1", "enabled": True, "has_api_key": True, "models": ["m1"]},
+            {"id": "p2", "enabled": False, "has_api_key": True, "models": ["m2"]},
         ]
         llm = ServiceLLM(self._call_with_default(providers, "p2", calls))
         await llm.complete(MSGS)
@@ -183,7 +183,7 @@ class TestDefaultProvider:
             if name == "complete":
                 return {"text": "ok", "tool_calls": [], "usage": {}}
             return [
-                {"id": "p1", "enabled": True, "has_api_key": True, "default_model": "m1"}
+                {"id": "p1", "enabled": True, "has_api_key": True, "models": ["m1"]}
             ]  # list_providers
 
         calls: list = []

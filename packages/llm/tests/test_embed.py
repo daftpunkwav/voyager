@@ -39,7 +39,6 @@ def wired(tmp_path, monkeypatch):
             "base_url": "https://api.example.com/v1",
             "api_format": "chat",
             "models": ["m"],
-            "default_model": "m",
             "custom": True,
         }
     )

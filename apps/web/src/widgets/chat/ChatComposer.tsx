@@ -23,7 +23,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { callCapability } from '@/bridge/client';
 import type { LlmProvider } from '@/api/types';
-import { listProviders } from '@/api/llm';
+import { listProviders, firstEnabledModel } from '@/api/llm';
 import { LLM_MODEL_KEY, LLM_PROVIDER_KEY, LLM_REASONING_EFFORT_KEY } from '@/api/settings';
 import type { UseChatSendReturn } from '@/hooks/useChatSend';
 import { ContextRing } from '@/widgets/chat/ContextRing';
@@ -187,7 +187,7 @@ export function ChatComposer({
   }, [providersProp]);
 
   const currentProvider = providers.find((p) => p.id === providerId) ?? null;
-  const selectedModel = model || currentProvider?.default_model || '';
+  const selectedModel = model || firstEnabledModel(currentProvider);
   const meta = currentProvider?.models_meta?.[selectedModel];
   const thinkingSupported = meta ? meta.thinking === true : false;
 

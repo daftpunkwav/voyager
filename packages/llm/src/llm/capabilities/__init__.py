@@ -17,6 +17,7 @@ from llm.capabilities import (  # noqa: F401  # registration side effects
     list_builtin_providers,
     list_models,
     list_providers,
+    list_remote_models,
     remove_provider,
     set_api_key,
     test_connection,

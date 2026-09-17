@@ -61,5 +61,6 @@ def _apply_costs(stats: dict) -> dict:
     name="get_usage_stats",
     description="Usage statistics (last N days, grouped by model; source for the usage page)",
 )
-def get_usage_stats(days: int = 30) -> dict:
-    return _apply_costs(require_deps().store.usage_stats(days))
+def get_usage_stats(days: int = 30, recent_limit: int = 20) -> dict:
+    recent_limit = max(1, min(int(recent_limit), 100))
+    return _apply_costs(require_deps().store.usage_stats(days, recent_limit=recent_limit))

@@ -7,6 +7,7 @@ from platform_contracts import ErrorSuffix, ServiceError
 
 from llm.capabilities.common import (
     DOMAIN,
+    effective_model,
     read_api_key,
     registry,
     require_provider,
@@ -30,7 +31,7 @@ async def test_connection(provider_id: str, model: str = "") -> dict:
             "This provider has no api key configured",
             hint="Fill in the api key in the settings page before testing",
         )
-    result = await llm_test(p, api_key=key, model=model or p["default_model"])
+    result = await llm_test(p, api_key=key, model=effective_model(p, model))
     return {
         "ok": result.ok,
         "latency_ms": round(result.latency_ms, 1),

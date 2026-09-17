@@ -1,62 +1,140 @@
 /**
  * @file LlmAgentOverrides
- * @description Per-agent provider/model/speaking-style override table for the LLM settings.
- *
- * KNOWN GAP: the backend has no storage for per-agent overrides yet (no
- * agent_llm_configs key or equivalent capability), so the table is
- * presentation-local: edits update this component's state and toast an
- * explicit "not persisted" warning instead of silently failing against a
- * fictional settings-blob contract. Wiring a real backend key is future work.
+ * @description Per-agent provider/model/speaking-style override table for the
+ * LLM settings, backed by two agent settings keys:
+ * - agent.llm.overrides: {"<persona key>": {"provider": id, "model": name}}
+ *   — consulted per turn by the host's persona-aware chat transport;
+ * - agent.style.overrides: {"<persona key>": "<style text>"} — layered over
+ *   the global agent.style when the system prompt is rebuilt.
+ * Empty provider/model fields and an absent style entry mean "follow the
+ * default"; saving drops empty entries so the stored maps stay clean.
  *
  * Responsibilities:
- * - Render the per-agent provider / model / speaking-style override table as a
- *   flat inner block (single top-layer glass principle: the section panel is
- *   the only glass surface; titles live at section level)
- * - Keep edits presentation-local and toast the explicit not-persisted warning
+ * - Load both override maps once and render one row per catalog persona
+ * - Persist edits straight to the settings keys (single-user local setup)
+ * - Reset a provider switch when its stored model no longer exists there
+ * - Surface stale stored provider/model entries instead of showing the default
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AgentLlmConfig, AgentSpeakingStyle, LlmProvider } from '@/api/types';
+import { callCapability } from '@/bridge/client';
+import type { LlmProvider } from '@/api/types';
+import { firstEnabledModel } from '@/api/llm';
 import { GlassSelect } from '@/components/common/GlassSelect';
 import { AGENT_CATALOG } from '@/constants/agentCatalog';
-import { SPEAKING_STYLE_OPTIONS } from '@/constants/llmConfig';
-import { useUIStore } from '@/stores/uiStore';
+import { STYLE_PRESETS } from '@/components/settings/agent/constants';
 
-interface LlmAgentOverridesProps {
-  /** Provider list from the llm service's source of truth (list_providers) */
-  providers: LlmProvider[];
-  /** Current value of the llm.default_provider setting */
-  defaultProviderId: string;
+/** Settings keys (values must match the backend SettingDef registries). */
+export const AGENT_LLM_OVERRIDES_KEY = 'agent.llm.overrides';
+export const AGENT_STYLE_OVERRIDES_KEY = 'agent.style.overrides';
+
+interface ModelOverride {
+  provider: string;
+  model: string;
 }
 
-function defaultConfig(agentId: string): AgentLlmConfig {
-  return {
-    agent_id: agentId,
-    provider_id: null,
-    model_override: null,
-    speaking_style: 'default' as AgentSpeakingStyle,
-  };
-}
+type ModelOverrideMap = Record<string, ModelOverride>;
+type StyleOverrideMap = Record<string, string>;
 
-/** Per-agent provider and style override table: the provider dropdowns draw from the llm.* source of truth;
- *  per-agent overrides are presentation-local until a backend contract exists. */
-export function LlmAgentOverrides({ providers, defaultProviderId }: LlmAgentOverridesProps) {
-  const { t } = useTranslation('settings');
-  const addToast = useUIStore((s) => s.addToast);
-  const [configs, setConfigs] = useState<AgentLlmConfig[]>(() =>
-    AGENT_CATALOG.map((a) => defaultConfig(a.id))
+function normalizeMap(value: unknown): Record<string, Record<string, unknown>> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).filter(
+      (entry): entry is [string, Record<string, unknown>] =>
+        Boolean(entry[0]) && typeof entry[1] === 'object' && entry[1] !== null
+    )
   );
+}
 
-  const agentConfigsMap = useMemo(() => new Map(configs.map((c) => [c.agent_id, c])), [configs]);
+function normalizeStyles(value: unknown): StyleOverrideMap {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const out: StyleOverrideMap = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (k && typeof v === 'string' && v.trim()) out[k] = v;
+  }
+  return out;
+}
+
+/** Per-agent provider / model / speaking-style override table. */
+export function LlmAgentOverrides({ providers }: LlmAgentOverridesProps) {
+  const { t } = useTranslation('settings');
+  const [modelOverrides, setModelOverrides] = useState<ModelOverrideMap>({});
+  const [styleOverrides, setStyleOverrides] = useState<StyleOverrideMap>({});
+  const [loaded, setLoaded] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all([
+      callCapability<{ value?: unknown }>('settings', 'get_setting', {
+        key: AGENT_LLM_OVERRIDES_KEY,
+      }),
+      callCapability<{ value?: unknown }>('settings', 'get_setting', {
+        key: AGENT_STYLE_OVERRIDES_KEY,
+      }),
+    ])
+      .then(([llmItem, styleItem]) => {
+        if (!alive) return;
+        const raw = normalizeMap(llmItem?.value);
+        const models: ModelOverrideMap = {};
+        for (const [k, entry] of Object.entries(raw)) {
+          models[k] = {
+            provider: typeof entry.provider === 'string' ? entry.provider : '',
+            model: typeof entry.model === 'string' ? entry.model : '',
+          };
+        }
+        setModelOverrides(models);
+        setStyleOverrides(normalizeStyles(styleItem?.value));
+        setLoaded(true);
+      })
+      .catch(() => {
+        // Unreadable keys behave like "no overrides"; edits still save over them
+        if (alive) setLoaded(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const persist = async (key: string, value: unknown) => {
+    setSaveError(null);
+    try {
+      await callCapability('settings', 'set_setting', { key, value });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  // Handlers read the latest render state directly (they are recreated each
+  // render), so the persist side effect stays out of the state updater —
+  // StrictMode double-invokes updaters and would double-write the setting.
+  const updateModelOverride = (agentId: string, patch: Partial<ModelOverride>) => {
+    const current = modelOverrides[agentId] ?? { provider: '', model: '' };
+    const next: ModelOverride = { ...current, ...patch };
+    const map: ModelOverrideMap = { ...modelOverrides };
+    if (!next.provider && !next.model) delete map[agentId];
+    else map[agentId] = next;
+    setModelOverrides(map);
+    void persist(AGENT_LLM_OVERRIDES_KEY, map);
+  };
+
+  const updateStyleOverride = (agentId: string, style: string) => {
+    const map: StyleOverrideMap = { ...styleOverrides };
+    if (!style) delete map[agentId];
+    else map[agentId] = style;
+    setStyleOverrides(map);
+    void persist(AGENT_STYLE_OVERRIDES_KEY, map);
+  };
 
   const enabledProviders = providers.filter((p) => p.enabled);
-  const defaultProvider = providers.find((p) => p.id === defaultProviderId) ?? enabledProviders[0];
+  // No default-provider concept: an unspecified agent rides the system
+  // resolution, which lands on the first usable provider.
+  const fallbackProvider = enabledProviders[0];
 
-  const updateAgentConfig = (agentId: string, patch: Partial<AgentLlmConfig>) => {
-    setConfigs((prev) => prev.map((c) => (c.agent_id === agentId ? { ...c, ...patch } : c)));
-    addToast({ type: 'warning', message: t('toast.agentOverridesNotPersisted') });
-  };
+  if (!loaded) {
+    return <p className="muted small">{t('llm.loading')}</p>;
+  }
 
   return (
     <div className="llm-settings-block">
@@ -72,17 +150,22 @@ export function LlmAgentOverrides({ providers, defaultProviderId }: LlmAgentOver
           </thead>
           <tbody>
             {AGENT_CATALOG.map((agent) => {
-              const cfg = agentConfigsMap.get(agent.id) ?? {
-                agent_id: agent.id,
-                provider_id: null,
-                model_override: null,
-                speaking_style: 'default' as AgentSpeakingStyle,
-              };
+              const override = modelOverrides[agent.id] ?? { provider: '', model: '' };
               const provider =
-                enabledProviders.find((p) => p.id === cfg.provider_id) ?? defaultProvider;
+                enabledProviders.find((p) => p.id === override.provider) ?? fallbackProvider;
               const modelOptions = provider?.models?.length
                 ? provider.models
-                : ([provider?.default_model].filter(Boolean) as string[]);
+                : ([firstEnabledModel(provider)].filter(Boolean) as string[]);
+              // A stored provider that is gone or disabled would silently route
+              // nowhere: keep it visible instead of masquerading as the default
+              const storedProviderMissing =
+                Boolean(override.provider) &&
+                !enabledProviders.some((p) => p.id === override.provider);
+              // A stored model that no longer exists on the selected provider
+              // would silently route nowhere: surface it as the fallback entry
+              const storedModelMissing =
+                Boolean(override.model) && !modelOptions.includes(override.model);
+              const styleValue = styleOverrides[agent.id] ?? '';
 
               return (
                 <tr key={agent.id}>
@@ -104,24 +187,27 @@ export function LlmAgentOverrides({ providers, defaultProviderId }: LlmAgentOver
                   <td>
                     <GlassSelect
                       size="sm"
-                      value={cfg.provider_id ?? ''}
+                      value={override.provider}
                       options={[
                         {
                           value: '',
                           label: t('llm.overrides.defaultProvider', {
-                            name: defaultProvider?.display_name ?? '—',
+                            name: fallbackProvider?.display_name ?? '—',
                           }),
                         },
                         ...enabledProviders.map((p) => ({
                           value: p.id,
                           label: p.display_name,
                         })),
+                        ...(storedProviderMissing
+                          ? [{ value: override.provider, label: override.provider }]
+                          : []),
                       ]}
                       onChange={(v) =>
-                        updateAgentConfig(agent.id, {
-                          provider_id: v || null,
+                        updateModelOverride(agent.id, {
+                          provider: v,
                           // Clear the model override when switching providers so it cannot point at a nonexistent model
-                          model_override: null,
+                          model: '',
                         })
                       }
                       aria-label={t('llm.overrides.providerAria', { name: agent.name })}
@@ -130,33 +216,32 @@ export function LlmAgentOverrides({ providers, defaultProviderId }: LlmAgentOver
                   <td>
                     <GlassSelect
                       size="sm"
-                      value={cfg.model_override ?? ''}
+                      value={override.model}
                       options={[
                         {
                           value: '',
                           label: t('llm.overrides.useDefaultModel', {
-                            name: provider?.default_model || '—',
+                            name: firstEnabledModel(provider) || '—',
                           }),
                         },
                         ...modelOptions.map((m) => ({ value: m, label: m })),
+                        ...(storedModelMissing
+                          ? [{ value: override.model, label: override.model }]
+                          : []),
                       ]}
-                      onChange={(v) => updateAgentConfig(agent.id, { model_override: v || null })}
+                      onChange={(v) => updateModelOverride(agent.id, { model: v })}
                       aria-label={t('llm.overrides.modelAria', { name: agent.name })}
                     />
                   </td>
                   <td>
                     <GlassSelect
                       size="sm"
-                      value={cfg.speaking_style}
-                      options={SPEAKING_STYLE_OPTIONS.map((opt) => ({
-                        value: opt.value,
-                        label: `${t(opt.labelKey)} — ${t(opt.descKey)}`,
-                      }))}
-                      onChange={(v) =>
-                        updateAgentConfig(agent.id, {
-                          speaking_style: v as AgentSpeakingStyle,
-                        })
-                      }
+                      value={styleValue}
+                      options={[
+                        { value: '', label: t('llm.overrides.styleFollowGlobal') },
+                        ...STYLE_PRESETS.map((s) => ({ value: s, label: s })),
+                      ]}
+                      onChange={(v) => updateStyleOverride(agent.id, v)}
                       aria-label={t('llm.overrides.styleAria', { name: agent.name })}
                     />
                   </td>
@@ -166,6 +251,16 @@ export function LlmAgentOverrides({ providers, defaultProviderId }: LlmAgentOver
           </tbody>
         </table>
       </div>
+      {saveError ? (
+        <p className="setting-field__error small" role="alert">
+          {saveError}
+        </p>
+      ) : null}
     </div>
   );
+}
+
+interface LlmAgentOverridesProps {
+  /** Provider list from the llm service's source of truth (list_providers) */
+  providers: LlmProvider[];
 }

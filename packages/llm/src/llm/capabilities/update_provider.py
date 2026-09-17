@@ -7,6 +7,8 @@ from platform_contracts import ActorKind, ActorRef, ErrorSuffix, ServiceError
 
 from llm.capabilities.common import (
     DOMAIN,
+    MODELS_META_ALLOWED,
+    find_bad_models_meta_field,
     registry,
     require_deps,
     require_provider,
@@ -27,7 +29,6 @@ def update_provider(
     api_format: str | None = None,
     models: list[str] | None = None,
     models_meta: dict | None = None,
-    default_model: str | None = None,
     enabled: bool | None = None,
     _actor: ActorRef | None = None,
 ) -> dict:
@@ -55,8 +56,8 @@ def update_provider(
         raise ServiceError(
             DOMAIN,
             ErrorSuffix.INVALID_INPUT,
-            "models_meta must be {model_id: {image_input|audio_input|video_input|thinking: bool, "
-            "context_window|max_output_tokens: int>0}}",
+            f"invalid models_meta: {find_bad_models_meta_field(models_meta)}",
+            hint=f"allowed fields: {MODELS_META_ALLOWED}",
         )
     merged = {
         **current,
@@ -68,7 +69,6 @@ def update_provider(
                 "api_format": api_format,
                 "models": models,
                 "models_meta": models_meta,
-                "default_model": default_model,
                 "enabled": enabled,
             }.items()
             if v is not None

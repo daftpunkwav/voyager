@@ -24,6 +24,18 @@ NO_PROVIDER_TEXT = (
 LateBoundCall = Callable[[str, str, dict[str, Any]], Awaitable[Any]]
 
 
+def _fallback_model(provider: dict[str, Any]) -> str:
+    """First enabled model of the provider's list (models_meta enabled=False
+    entries are skipped; absent metadata means enabled)."""
+    models = provider.get("models") or []
+    meta = provider.get("models_meta") or {}
+    for m in models:
+        fields = meta.get(m)
+        if not isinstance(fields, dict) or fields.get("enabled", True) is not False:
+            return str(m)
+    return str(models[0]) if models else ""
+
+
 class ServiceLLM:
     """complete capability -> LLMReply.
 
@@ -51,7 +63,7 @@ class ServiceLLM:
 
     async def _resolve_provider(self) -> dict[str, Any] | None:
         if self._provider_id:
-            return {"id": self._provider_id, "default_model": self._model}
+            return {"id": self._provider_id, "model": self._model}
         raw = await self._call(self._llm_domain, "list_providers", {})
         if not isinstance(raw, list):
             return None
@@ -89,10 +101,10 @@ class ServiceLLM:
                     break
         provider = provider or usable[0]
         # llm.default_model (composer model picker) wins over the provider's
-        # own default; an explicit constructor model still wins over both
+        # first enabled model; an explicit constructor model still wins over both
         return {
             **provider,
-            "default_model": self._model or default_model or provider.get("default_model", ""),
+            "model": self._model or default_model or _fallback_model(provider),
         }
 
     def _tool_payload(self, tools: list[ToolSpec] | None) -> list[dict] | None:
@@ -114,7 +126,7 @@ class ServiceLLM:
                 "complete",
                 {
                     "provider_id": provider["id"],
-                    "model": self._model or provider.get("default_model", ""),
+                    "model": self._model or provider.get("model", ""),
                     "messages": messages,
                     "tools": self._tool_payload(tools),
                 },
@@ -174,7 +186,7 @@ class ServiceLLM:
                 "complete_stream",
                 {
                     "provider_id": provider["id"],
-                    "model": self._model or provider.get("default_model", ""),
+                    "model": self._model or provider.get("model", ""),
                     "messages": messages,
                     "tools": self._tool_payload(tools),
                 },
