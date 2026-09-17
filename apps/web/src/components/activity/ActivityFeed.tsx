@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { GlassCard } from '@/components/common/GlassCard';
+import { GlassSelect } from '@/components/common/GlassSelect';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
 import { summarize, type FeedEvent } from '@/bridge/feed';
@@ -73,18 +74,16 @@ export function ActivityFeed({ kind, onKindChange, onLoaded }: ActivityFeedProps
     <>
       {hasContent && (
         <div className="activity-page__toolbar">
-          <select
-            className="filter-native-select"
+          {/* A real select (not the projects page's invisible overlay): the
+              invisible absolute-position variant used here before rendered as
+              a full-bleed native blue dropdown. */}
+          <GlassSelect
+            size="sm"
             value={kind}
-            onChange={(e) => onKindChange(e.target.value)}
+            options={KIND_OPTIONS.map((o) => ({ value: o.value, label: t(o.key) }))}
+            onChange={(v) => onKindChange(v)}
             aria-label={t('filter.aria')}
-          >
-            {KIND_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {t(o.key)}
-              </option>
-            ))}
-          </select>
+          />
         </div>
       )}
 

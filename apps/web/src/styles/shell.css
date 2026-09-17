@@ -2402,109 +2402,76 @@ a.chat-card:hover {
   display: flex;
   justify-content: flex-end;
 }
+/* GlassSelect defaults to width:100%; as a lone toolbar filter it stays compact */
+.activity-page__toolbar .glass-select {
+  width: 200px;
+}
+/* Activity feed rows (shared widget: standalone page + settings tab).
+   Hairline row list with a tone dot per entry; the card surface comes from
+   GlassCard. */
+.activity-card {
+  padding: 4px 0;
+  min-height: 0;
+}
 .activity-list {
+  list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 6px;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
 }
-.event-row {
+.activity-row {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   gap: 10px;
   padding: 8px 12px;
-  border-radius: var(--radius);
-  border: 1px solid var(--bg-200);
-  background: var(--bg-50);
+  font-size: 12.5px;
+  line-height: 1.55;
+  border-bottom: 1px solid var(--bg-200);
   /* Long-list render optimization: skip rendering off-screen rows (CSS approximation of virtual scrolling) */
   content-visibility: auto;
-  contain-intrinsic-size: auto 44px;
+  contain-intrinsic-size: auto 40px;
 }
-.event-row--error {
-  border-color: var(--error);
-  background: var(--error-surface);
+.activity-row:last-child {
+  border-bottom: 0;
 }
-.event-row__actor {
-  flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 1px 8px;
-  border-radius: 999px;
-  margin-top: 1px;
+.activity-row::before {
+  content: '';
+  flex: 0 0 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand-500);
+  align-self: center;
 }
-.event-row__actor--user {
-  background: var(--brand-50);
-  color: var(--brand-700);
+.activity-row--muted::before {
+  background: var(--text-300);
 }
-.event-row__actor--agent {
-  background: #f3e8ff;
-  color: #7c3aed;
-}
-.event-row__actor--system {
-  background: var(--bg-200);
+.activity-row--muted .activity-row__text {
   color: var(--text-500);
 }
-.event-row__body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font: inherit;
-  text-align: left;
-  background: none;
-  border: none;
-  padding: 0;
-  min-width: 0;
+.activity-row--error::before {
+  background: var(--error);
 }
-.event-row__text {
-  font-size: 13px;
-  color: var(--text-800);
-  overflow-wrap: anywhere;
-}
-.event-row--muted .event-row__text {
-  color: var(--text-500);
-}
-.event-row--error .event-row__text {
+.activity-row--error .activity-row__text {
   color: var(--error);
 }
-.event-row__time {
-  font-size: 11px;
+.activity-row .mono {
+  flex: 0 0 auto;
   color: var(--text-400);
+  font-size: 11px;
 }
-.event-row__detail {
-  font-size: 11.5px;
-  background: var(--bg-100);
-  border-radius: var(--radius);
-  padding: 8px;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  color: var(--text-600);
-  max-height: 220px;
-  overflow-y: auto;
+.activity-row__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
-.event-row__confirm {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-}
-.event-row__unsupported {
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-/* ---------- Team page ---------- */
-.team-page {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 0;
-}
-.team-layout {
-  display: grid;
-  grid-template-columns: 190px 1fr 280px;
-  gap: 12px;
-  min-height: 0;
+@media (max-width: 720px) {
+  .activity-row {
+    flex-wrap: wrap;
+  }
 }
 .team-list {
   display: flex;

@@ -74,5 +74,6 @@ export interface LlmUsageSummary {
     prompt_cached_tokens: number;
     prompt_uncached_tokens: number;
     completion_tokens: number;
+    ok: boolean;
   }>;
 }

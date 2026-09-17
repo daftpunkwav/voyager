@@ -1,6 +1,9 @@
 /**
  * @file UsageHeatmap
- * @description GitHub-style activity heatmap of daily LLM calls laid out in week columns.
+ * @description GitHub-style activity heatmap of daily LLM calls laid out in
+ * week columns. The grid always spans the selected day window (from
+ * today-(days-1) to today), so quiet stretches render as empty cells instead
+ * of collapsing the chart to only the days that had traffic.
  *
  * Responsibilities:
  * - Lay per-day call counts out into GitHub-style week columns
@@ -14,6 +17,8 @@ import { GLASS_CHIP } from '@/constants/glassTokens';
 
 interface UsageHeatmapProps {
   heatmap: LlmUsageSummary['heatmap'];
+  /** Selected window length in days; the grid covers exactly this range. */
+  days: number;
 }
 
 interface HeatCell {
@@ -30,40 +35,36 @@ function ymdLocal(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function normalizeHeatmap(raw: LlmUsageSummary['heatmap']): HeatCell[] {
-  if (!raw || raw.length === 0) return [];
-  const maxCalls = Math.max(...raw.map((c) => c.calls), 1);
-  return raw.map((c) => ({
-    date: c.date,
-    calls: c.calls,
-    intensity: c.intensity ?? c.calls / maxCalls,
-  }));
+function normalizeHeatmap(raw: LlmUsageSummary['heatmap']): Map<string, number> {
+  const calls = new Map<string, number>();
+  if (!raw) return calls;
+  for (const c of raw) calls.set(c.date, c.calls);
+  return calls;
 }
 
-/** Lays the per-day data out into GitHub-style week columns (7 rows x N weeks) */
-function buildWeekColumns(heatmap: HeatCell[]) {
-  if (!heatmap.length) return [] as Array<Array<HeatCell | null>>;
+/** Lays the selected window out into GitHub-style week columns (7 rows x N
+ *  weeks, Sunday-aligned). Days outside the window become null pads. */
+function buildWeekColumns(calls: Map<string, number>, days: number) {
+  if (days <= 0) return [] as Array<Array<HeatCell | null>>;
 
-  const byDate = new Map(heatmap.map((c) => [c.date, c]));
-  const first = new Date(`${heatmap[0]?.date ?? ''}T12:00:00`);
-  const last = new Date(`${heatmap[heatmap.length - 1]?.date ?? ''}T12:00:00`);
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const first = new Date(today);
+  first.setDate(first.getDate() - (days - 1));
 
   // Align the start to Sunday
   const start = new Date(first);
   start.setDate(start.getDate() - start.getDay());
 
-  const end = new Date(last);
-  end.setDate(end.getDate() + (6 - end.getDay()));
-
   const columns: Array<Array<HeatCell | null>> = [];
   const cursor = new Date(start);
   let col: Array<HeatCell | null> = [];
 
-  while (cursor <= end) {
+  while (cursor <= today) {
     const key = ymdLocal(cursor);
-    const inRange =
-      key >= (heatmap[0]?.date ?? '') && key <= (heatmap[heatmap.length - 1]?.date ?? '');
-    col.push(inRange ? (byDate.get(key) ?? { date: key, calls: 0, intensity: 0 }) : null);
+    const inWindow = cursor >= first;
+    const dayCalls = calls.get(key) ?? 0;
+    col.push(inWindow ? { date: key, calls: dayCalls, intensity: dayCalls } : null);
     if (col.length === 7) {
       columns.push(col);
       col = [];
@@ -74,17 +75,26 @@ function buildWeekColumns(heatmap: HeatCell[]) {
   return columns;
 }
 
-function levelOf(intensity: number): 0 | 1 | 2 | 3 {
-  if (intensity <= 0) return 0;
-  if (intensity < 0.34) return 1;
-  if (intensity < 0.67) return 2;
+/** Intensity by rank within the window: quartile tiers stay readable when a
+ *  single busy day would otherwise flatten every other cell to level 1. */
+function levelOf(calls: number, maxCalls: number): 0 | 1 | 2 | 3 {
+  if (calls <= 0 || maxCalls <= 0) return 0;
+  const ratio = calls / maxCalls;
+  if (ratio < 0.25) return 1;
+  if (ratio < 0.6) return 2;
   return 3;
 }
 
 /** GitHub-style activity heatmap (week-column layout) */
-export function UsageHeatmap({ heatmap }: UsageHeatmapProps) {
+export function UsageHeatmap({ heatmap, days }: UsageHeatmapProps) {
   const { t } = useTranslation('usage');
-  const weeks = useMemo(() => buildWeekColumns(normalizeHeatmap(heatmap)), [heatmap]);
+  const { weeks, maxCalls } = useMemo(() => {
+    const calls = normalizeHeatmap(heatmap);
+    return {
+      weeks: buildWeekColumns(calls, days),
+      maxCalls: Math.max(1, ...[...calls.values()]),
+    };
+  }, [heatmap, days]);
 
   return (
     <div className={`${GLASS_CHIP} usage-panel usage-heat-panel`}>
@@ -108,7 +118,7 @@ export function UsageHeatmap({ heatmap }: UsageHeatmapProps) {
                   <div
                     key={cell.date}
                     className="usage-heat-cell"
-                    data-level={levelOf(cell.intensity)}
+                    data-level={levelOf(cell.calls, maxCalls)}
                     title={t('usage:heat.cellTitle', { date: cell.date, calls: cell.calls })}
                   />
                 ) : (

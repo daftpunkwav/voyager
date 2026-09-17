@@ -6,7 +6,7 @@
 /* Usage page: compact single-screen dashboard */
 
 .content:has(.usage-page) {
-  overflow: hidden;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -23,9 +23,15 @@
   margin: 0 auto;
 }
 
-/* Remove the liquid glass outer gray drop-shadow, keep only the inset highlight */
+/* Remove the liquid glass gray drop-shadow (the heavy arcs the dashboard read
+   as floating cards), keep only the inset highlight. Covers both surfaces the
+   dashboard renders in: the standalone usage page and the embedded settings
+   tab (there the dashboard root is itself the glass card, with no
+   .usage-page ancestor). */
 .usage-page .glass-card.glass-card--overview-outer,
-.usage-page .glass-card.glass-card--overview-inner {
+.usage-page .glass-card.glass-card--overview-inner,
+.usage-dashboard.glass-card--overview-outer,
+.usage-dashboard .glass-card--overview-inner {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
     inset 0 -1px 0 rgba(255, 255, 255, 0.12),
@@ -33,7 +39,9 @@
 }
 
 [data-theme='dark'] .usage-page .glass-card.glass-card--overview-outer,
-[data-theme='dark'] .usage-page .glass-card.glass-card--overview-inner {
+[data-theme='dark'] .usage-page .glass-card.glass-card--overview-inner,
+[data-theme='dark'] .usage-dashboard.glass-card--overview-outer,
+[data-theme='dark'] .usage-dashboard .glass-card--overview-inner {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
     inset 0 -1px 0 rgba(255, 255, 255, 0.06),
@@ -45,9 +53,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 12px 14px;
-  gap: 10px;
-  overflow: hidden;
+  padding: 14px 16px;
+  gap: 12px;
 }
 
 .usage-dashboard-body {
@@ -55,8 +62,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  overflow: hidden;
+  gap: 12px;
 }
 
 .usage-toolbar {
@@ -177,7 +183,9 @@
 
 .usage-mid-row {
   display: grid;
-  grid-template-columns: 1.1fr 1fr;
+  /* Heatmap cells are fixed-size (GitHub-style): the heat card hugs its
+     content and the donut panel takes the remaining width. */
+  grid-template-columns: auto 1fr;
   gap: 10px;
   min-height: 0;
   flex: 0 1 auto;
@@ -223,12 +231,18 @@
   color: var(--text-500);
 }
 
-.usage-heat-swatch,
-.usage-heat-cell {
+.usage-heat-swatch {
   width: 12px;
   height: 12px;
   border-radius: 3px;
   /* Empty-cell base color visible in light theme (do not use near-white transparent) */
+  background: #e5e7eb;
+}
+
+.usage-heat-cell {
+  width: 15px;
+  height: 15px;
+  border-radius: 3px;
   background: #e5e7eb;
 }
 
@@ -238,17 +252,17 @@
 
 .usage-heat-swatch[data-level='1'],
 .usage-heat-cell[data-level='1'] {
-  background: rgba(91, 141, 239, 0.35);
+  background: rgba(0, 122, 255, 0.28);
 }
 
 .usage-heat-swatch[data-level='2'],
 .usage-heat-cell[data-level='2'] {
-  background: rgba(91, 141, 239, 0.65);
+  background: rgba(0, 122, 255, 0.58);
 }
 
 .usage-heat-swatch[data-level='3'],
 .usage-heat-cell[data-level='3'] {
-  background: #5b8def;
+  background: var(--brand-500);
 }
 
 [data-theme='dark'] .usage-heat-swatch,
@@ -258,17 +272,17 @@
 
 [data-theme='dark'] .usage-heat-swatch[data-level='1'],
 [data-theme='dark'] .usage-heat-cell[data-level='1'] {
-  background: rgba(91, 141, 239, 0.35);
+  background: rgba(10, 132, 255, 0.3);
 }
 
 [data-theme='dark'] .usage-heat-swatch[data-level='2'],
 [data-theme='dark'] .usage-heat-cell[data-level='2'] {
-  background: rgba(91, 141, 239, 0.65);
+  background: rgba(10, 132, 255, 0.6);
 }
 
 [data-theme='dark'] .usage-heat-swatch[data-level='3'],
 [data-theme='dark'] .usage-heat-cell[data-level='3'] {
-  background: #5b8def;
+  background: var(--brand-400);
 }
 
 .usage-heat-panel {
@@ -286,21 +300,17 @@
 .usage-heat-grid {
   display: flex;
   flex-direction: row;
-  gap: 3px;
-  align-items: flex-start;
-  /* 7 cells (12px) + 6 gaps (3px): keep the panel from collapsing to zero
-     height while there is no heatmap data yet */
-  min-height: 102px;
+  gap: 4px;
 }
 
 .usage-heat-week {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .usage-donut-panel {
-  min-height: 160px;
+  min-height: 190px;
 }
 
 .usage-donut-body {
@@ -401,9 +411,9 @@
   display: flex;
   align-items: flex-end;
   gap: 3px;
-  height: 88px;
+  height: 140px;
   flex: 1;
-  min-height: 72px;
+  min-height: 110px;
 }
 
 .usage-bar-col {
@@ -454,9 +464,9 @@
 }
 
 .usage-recent {
-  padding: 8px 12px;
+  padding: 10px 14px;
   flex-shrink: 0;
-  max-height: 110px;
+  max-height: 320px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -525,4 +535,30 @@
   .usage-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* Segmented switches flatten on the usage dashboard: no pill frame of their
+   own, the active step is a quiet brand tint (the solid blue pill elsewhere
+   reads as a third chrome layer on these cards). */
+.usage-dashboard .layout-switch {
+  height: 26px;
+  background: transparent;
+  border-color: var(--bg-300);
+  padding: 2px;
+}
+.usage-dashboard .layout-switch button {
+  height: 20px;
+  padding: 0 10px;
+  font-size: 11px;
+  color: var(--text-500);
+  box-shadow: none;
+}
+.usage-dashboard .layout-switch button.active {
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--brand-700);
+  box-shadow: none;
+}
+[data-theme='dark'] .usage-dashboard .layout-switch button.active {
+  background: rgba(10, 132, 255, 0.18);
+  color: var(--brand-200);
 }

@@ -16,7 +16,7 @@ import type { LlmUsageSummary } from '@/api/types';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
 import { backendUnreachable } from '@/utils/errors';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
-import { GLASS_CHIP, GLASS_INNER, GLASS_OUTER } from '@/constants/glassTokens';
+import { GLASS_CHIP, GLASS_OUTER } from '@/constants/glassTokens';
 import { formatTokenCount } from '@/utils/formatTokens';
 import { formatDateTime } from '@/i18n';
 import { DailyTokenQuotaCard } from './DailyTokenQuotaCard';
@@ -26,6 +26,9 @@ import { UsageKpiCards } from './UsageKpiCards';
 import { UsageStackedBars } from './UsageStackedBars';
 
 const DAYS_OPTIONS = [7, 30] as const;
+
+/** Recent calls rendered before the list scrolls (backend default caps at 20). */
+const RECENT_VISIBLE = 10;
 
 function fmtTs(ts: string | null): string {
   if (!ts) return '—';
@@ -125,7 +128,7 @@ export function LlmUsageDashboard() {
           <div className="usage-toolbar">
             <div className="usage-toolbar-left">
               <span className="usage-toolbar-label">{t('usage:dashboard.range')}</span>
-              <div className={`layout-switch ${GLASS_INNER}`}>
+              <div className="layout-switch">
                 {DAYS_OPTIONS.map((d) => (
                   <button
                     key={d}
@@ -140,7 +143,7 @@ export function LlmUsageDashboard() {
             </div>
             <button
               type="button"
-              className={`btn btn-sm ${GLASS_INNER}`}
+              className="btn btn-sm btn-ghost"
               disabled={isFetching}
               onClick={() => {
                 // The daily quota is a separate query (agent Meter); invalidate and refetch it together on refresh
@@ -155,7 +158,7 @@ export function LlmUsageDashboard() {
           <div className="usage-dashboard-body">
             <UsageKpiCards usage={usage} />
             <div className="usage-mid-row">
-              <UsageHeatmap heatmap={usage.heatmap} />
+              <UsageHeatmap heatmap={usage.heatmap} days={days} />
               <UsageDonut usage={usage} />
             </div>
             <UsageStackedBars usage={usage} />
@@ -163,7 +166,7 @@ export function LlmUsageDashboard() {
               <div className={`${GLASS_CHIP} usage-recent`}>
                 <h3 className="usage-panel-title">{t('usage:recent.title')}</h3>
                 <ul className="usage-recent-list">
-                  {usage.recent.slice(0, 5).map((call) => (
+                  {usage.recent.slice(0, RECENT_VISIBLE).map((call) => (
                     <li key={call.id}>
                       <span className="usage-recent-ts">{fmtTs(call.created_at)}</span>
                       <span className="usage-recent-model">

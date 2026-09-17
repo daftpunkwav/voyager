@@ -1,22 +1,28 @@
 /**
  * @file usageChartColors
- * @description Chart color palette tuned for the dark liquid-glass theme.
+ * @description Chart palette anchored on the theme brand family (iOS system
+ * hues, shared with the design tokens) so the charts, heatmap and legend read
+ * as one instrument panel. The hues are dual-theme safe: vivid enough on dark
+ * glass, not neon on the light surface.
  */
 
-/** Usage chart palette (dark liquid glass). */
+/** Multi-series palette (per-model donut / stacked bars): brand blue first,
+ *  then semantic-adjacent hues ordered to keep neighbors distinguishable. */
 export const USAGE_CHART_COLORS = [
-  '#5b8def',
-  '#3ecf8e',
-  '#a78bfa',
-  '#f87171',
-  '#fb923c',
-  '#22d3ee',
-  '#f472b6',
-  '#94a3b8',
+  '#0a84ff',
+  '#34c759',
+  '#ff9f0a',
+  '#af52de',
+  '#64d2ff',
+  '#ff375f',
+  '#5e5ce6',
+  '#8e8e93',
 ] as const;
 
+/** Cached / uncached / completion split: semantic trio shared with the app's
+ *  success / brand / warning accents. */
 export const USAGE_TOKEN_COLORS = {
-  cached: '#3ecf8e',
-  uncached: '#5b8def',
-  completion: '#fb923c',
+  cached: '#34c759',
+  uncached: '#0a84ff',
+  completion: '#ff9f0a',
 } as const;
