@@ -262,11 +262,12 @@ a {
    Global interaction quality layer · focus ring / scrollbars / reduced motion
    ========================================================================== */
 
-/* Focus ring visible for keyboard navigation only (not on mouse clicks; component-specific focus styles are unaffected) */
+/* Focus ring visible for keyboard navigation only (not on mouse clicks; component-specific focus styles are unaffected).
+   The ring follows each element's own border-radius — never override the radius
+   here, or fields visibly morph their corners on focus. */
 :where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: none;
   box-shadow: var(--focus-ring, 0 0 0 4px rgba(0, 122, 255, 0.18));
-  border-radius: var(--radius-sm, 8px);
 }
 
 /* Search boxes embedded in existing containers: the focus ring is drawn on the shell, do not add another layer */

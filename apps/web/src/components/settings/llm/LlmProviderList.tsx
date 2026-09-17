@@ -1,6 +1,8 @@
 /**
  * @file LlmProviderList
- * @description Sidebar rail listing LLM providers with selection, default tag, config status, and an add button.
+ * @description Flat provider rail for the LLM settings: selection, default tag,
+ * config status dot, and the add-provider entry. Sits directly on the section
+ * panel (single top-layer glass) — no nested card surface.
  *
  * Responsibilities:
  * - List providers with selection, default tag and config status
@@ -9,7 +11,6 @@
 
 import { useTranslation } from 'react-i18next';
 import type { LlmProvider } from '@/api/types';
-import { GLASS_INNER } from '@/constants/glassTokens';
 
 interface LlmProviderListProps {
   providers: LlmProvider[];
@@ -28,30 +29,33 @@ export function LlmProviderList({
 }: LlmProviderListProps) {
   const { t } = useTranslation('settings');
   return (
-    <aside className="llm-provider-rail glass-card glass-card--overview-inner">
-      <div className="llm-provider-rail-title">{t('llm.list.title')}</div>
+    <aside className="llm-rail">
+      <div className="llm-rail-title">
+        {t('llm.list.title')}
+        <span className="llm-rail-count">{providers.length}</span>
+      </div>
       <ul className="llm-provider-list">
         {providers.map((p) => {
           const active = p.id === selectedId;
           const isDefault = p.id === defaultProviderId;
+          const usable = p.enabled && p.has_api_key;
           return (
             <li key={p.id}>
               <button
                 type="button"
-                className={`llm-provider-item ${active ? 'is-active' : ''} ${GLASS_INNER}`}
+                className={`llm-provider-item ${active ? 'is-active' : ''}`}
+                aria-current={active ? 'true' : undefined}
                 onClick={() => onSelect(p.id)}
               >
-                <span className="llm-provider-item-name">
-                  {p.display_name || p.preset_id}
-                  {isDefault ? (
-                    <span className="llm-provider-default-tag">{t('llm.provider.defaultTag')}</span>
-                  ) : null}
-                </span>
+                <span className="llm-provider-item-name">{p.display_name || p.preset_id}</span>
+                {isDefault ? (
+                  <span className="llm-provider-default-tag">{t('llm.provider.defaultTag')}</span>
+                ) : null}
                 <span
-                  className={`llm-provider-status ${p.enabled && p.has_api_key ? 'is-on' : ''}`}
+                  className={`llm-provider-status ${usable ? 'is-on' : ''}`}
                   title={
                     p.enabled
-                      ? p.has_api_key
+                      ? usable
                         ? t('llm.list.keySet')
                         : t('llm.list.keyMissing')
                       : t('llm.list.disabled')
@@ -62,11 +66,7 @@ export function LlmProviderList({
           );
         })}
       </ul>
-      <button
-        type="button"
-        className={`btn btn-sm llm-provider-add ${GLASS_INNER}`}
-        onClick={onAdd}
-      >
+      <button type="button" className="llm-provider-add" onClick={onAdd}>
         {t('llm.list.add')}
       </button>
     </aside>

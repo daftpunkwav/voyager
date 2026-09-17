@@ -37,9 +37,6 @@ export function SkillsBlock() {
   return (
     <div className="agent-settings-block">
       <h3 className="agent-settings-subtitle">{t('skills.title')}</h3>
-      <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-        {t('skills.desc')}
-      </p>
       {skillsLoadFailed ? (
         <p className="muted" style={{ fontSize: 12 }}>
           {t('common.loadFailed')}

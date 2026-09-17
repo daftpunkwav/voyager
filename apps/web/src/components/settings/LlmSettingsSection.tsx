@@ -10,12 +10,11 @@
  *
  * Responsibilities:
  * - Load providers and the default provider id through the thin api/llm layer
- * - Lay out the provider rail, add form, detail card and per-agent overrides
+ * - Lay out the provider rail, detail pane, add-provider dialog and delete confirm
  * - Render the Degraded state with retry when llm capabilities fail
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { callCapability, ServiceError } from '@/bridge/client';
 import {
@@ -30,6 +29,7 @@ import { LLM_PROVIDER_KEY } from '@/api/settings';
 import { LlmProviderAdd } from './llm/LlmProviderAdd';
 import { LlmProviderDetail } from './llm/LlmProviderDetail';
 import { LlmProviderList } from './llm/LlmProviderList';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Degraded } from '@/shell/Degraded';
 
 /** Settings -> LLM: client for the llm service.
@@ -47,9 +47,14 @@ export function LlmSettingsSection() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
-  const [adding, setAdding] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<LlmProvider | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<LlmTestOutcome | null>(null);
+  // Guards late test responses: a result is only rendered while its provider
+  // is still selected (see testConnection below)
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedId;
 
   const reload = useCallback(async () => {
     setError(null);
@@ -81,6 +86,12 @@ export function LlmSettingsSection() {
     if (selectedId && providers.some((p) => p.id === selectedId)) return;
     setSelectedId(providers.find((p) => p.id === defaultId)?.id ?? providers[0]?.id ?? null);
   }, [providers, defaultId, selectedId]);
+
+  // The connection verdict belongs to one provider: clear it on switch so the
+  // previous provider's result never renders under the newly selected one
+  useEffect(() => {
+    setTestResult(null);
+  }, [selectedId]);
 
   if (loading) {
     return <p className="muted small">{t('llm.loading')}</p>;
@@ -119,8 +130,10 @@ export function LlmSettingsSection() {
     setTestResult(null);
     try {
       const out = await testConnectionApi(id, model);
+      if (selectedIdRef.current !== id) return;
       setTestResult(out);
     } catch (err) {
+      if (selectedIdRef.current !== id) return;
       // Capability-layer errors (e.g. missing key) surface the backend error as-is instead of fabricating success/reply fields
       const e = err as ServiceError;
       setTestResult({ ok: false, error: e.hint ? `${e.message}(${e.hint})` : e.message });
@@ -158,31 +171,15 @@ export function LlmSettingsSection() {
         </div>
       )}
 
-      <p className="section-desc" style={{ marginTop: 0 }}>
-        {t('llm.multiProviderHint')}
-        <Link to="/usage" style={{ marginLeft: 8 }}>
-          {t('llm.viewUsage')}
-        </Link>
-      </p>
-
-      <div className="llm-multi-layout">
+      <div className="llm-layout">
         <LlmProviderList
           providers={providers}
           selectedId={selected?.id ?? null}
           defaultProviderId={defaultId}
           onSelect={setSelectedId}
-          onAdd={() => setAdding((v) => !v)}
+          onAdd={() => setAddOpen(true)}
         />
-        <div>
-          {adding ? (
-            <LlmProviderAdd
-              onDone={async (id) => {
-                setAdding(false);
-                await reload();
-                if (id) setSelectedId(id);
-              }}
-            />
-          ) : null}
+        <div className="llm-detail-pane" key={selected?.id ?? 'empty'}>
           {selected ? (
             <LlmProviderDetail
               provider={selected}
@@ -192,16 +189,39 @@ export function LlmSettingsSection() {
               onPatch={(patch) => patchProvider(selected.id, patch)}
               onSaveKey={(key) => saveKey(selected.id, key)}
               onSetDefault={() => void setDefault(selected.id)}
-              onDelete={() => void removeProvider(selected.id)}
+              onDelete={() => setConfirmDelete(selected)}
               onTest={(model) => void testConnection(selected.id, model)}
             />
           ) : (
-            <div className="glass-card glass-card--overview-inner" style={{ padding: 24 }}>
+            <div className="llm-empty">
               {providers.length === 0 ? t('llm.emptyProviders') : t('llm.selectProviderPrompt')}
             </div>
           )}
         </div>
       </div>
+
+      <LlmProviderAdd
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onDone={async (id) => {
+          setAddOpen(false);
+          await reload();
+          if (id) setSelectedId(id);
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title={t('llm.provider.deleteTitle')}
+        message={t('llm.delete.confirm', { name: confirmDelete?.display_name ?? '' })}
+        confirmLabel={t('llm.delete.confirmBtn')}
+        danger
+        onConfirm={() => {
+          if (confirmDelete) void removeProvider(confirmDelete.id);
+          setConfirmDelete(null);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 }

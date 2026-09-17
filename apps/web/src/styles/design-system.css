@@ -595,6 +595,10 @@ svg {
 .app.sidebar-collapsed {
   grid-template-columns: var(--sidebar-w-collapsed, 72px) minmax(0, 1fr);
 }
+/* Settings page: the app rail is not rendered, the settings subnav takes over */
+.app--settings-only {
+  grid-template-columns: minmax(0, 1fr);
+}
 
 .sidebar {
   position: sticky;

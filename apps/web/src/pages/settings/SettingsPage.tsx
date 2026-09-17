@@ -12,7 +12,7 @@
  * - Own GitHub binding and data-export flows; delegated blocks own their state
  */
 
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettings } from '@/hooks/useSettings';
@@ -205,6 +205,12 @@ export function SettingsPage() {
     <div className="page-scaffold settings-page">
       <div className="settings-shell">
         <nav className="subnav" aria-label={t('nav.aria')}>
+          <button type="button" className="subnav-item subnav-back" onClick={() => navigate('/')}>
+            <span className="subnav-icon" aria-hidden>
+              ←
+            </span>
+            {t('nav.back')}
+          </button>
           <div className="subnav-title">{t('nav.categories')}</div>
           {NAV_GROUPS.map((group) => (
             <div key={group.labelKey} className="subnav-group">
@@ -233,7 +239,6 @@ export function SettingsPage() {
           {section === 'general' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('general.title')}</h2>
-              <p className="section-desc">{t('general.desc')}</p>
               <h3 className="settings-group-title">GitHub</h3>
               {accounts.map((a) => (
                 <div key={a.id} className="gh-card" style={{ marginBottom: 16 }}>
@@ -279,7 +284,6 @@ export function SettingsPage() {
           {section === 'appearance' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('appearance.title')}</h2>
-              <p className="section-desc">{t('appearance.desc')}</p>
               <div className="theme-cards">
                 {(['light', 'dark', 'system'] as const).map((th) => (
                   <button
@@ -401,27 +405,13 @@ export function SettingsPage() {
           {section === 'llm' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('llm.title')}</h2>
-              <p className="section-desc">{t('llm.desc')}</p>
               <LlmSettingsSection />
-              <p style={{ marginTop: 12, fontSize: 13 }}>
-                <Link
-                  to="/usage"
-                  style={{ color: 'var(--brand-500)' }}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setSection('usage');
-                  }}
-                >
-                  {t('llm.viewUsage')}
-                </Link>
-              </p>
             </section>
           )}
 
           {section === 'agents' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('agents.title')}</h2>
-              <p className="section-desc">{t('agents.desc')}</p>
               <PersonaGrid />
             </section>
           )}
@@ -429,7 +419,6 @@ export function SettingsPage() {
           {section === 'agentLlm' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('llm.overrides.title')}</h2>
-              <p className="section-desc">{t('llm.overrides.desc')}</p>
               <AgentLlmOverridesPanel />
             </section>
           )}
@@ -437,7 +426,6 @@ export function SettingsPage() {
           {section === 'subagents' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('subagents.title')}</h2>
-              <p className="section-desc">{t('subagents.desc')}</p>
               <DefinitionGrid />
               <SpawnForm />
               <InstanceList />
@@ -448,7 +436,6 @@ export function SettingsPage() {
           {section === 'plugins' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('plugins.title')}</h2>
-              <p className="section-desc">{t('plugins.desc')}</p>
               <PluginsBlock />
             </section>
           )}
@@ -456,7 +443,6 @@ export function SettingsPage() {
           {section === 'mcp' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('mcp.title')}</h2>
-              <p className="section-desc">{t('mcp.desc')}</p>
               <McpBlock />
             </section>
           )}
@@ -464,7 +450,6 @@ export function SettingsPage() {
           {section === 'skills' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('skills.title')}</h2>
-              <p className="section-desc">{t('skills.desc')}</p>
               <SkillsBlock />
             </section>
           )}
@@ -472,7 +457,6 @@ export function SettingsPage() {
           {section === 'commands' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('commands.title')}</h2>
-              <p className="section-desc">{t('commands.desc')}</p>
               <UserHooksBlock />
             </section>
           )}
@@ -480,7 +464,6 @@ export function SettingsPage() {
           {section === 'tools' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('tools.title')}</h2>
-              <p className="section-desc">{t('tools.desc')}</p>
               <ToolCatalog />
             </section>
           )}
@@ -488,7 +471,6 @@ export function SettingsPage() {
           {section === 'health' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('health.title')}</h2>
-              <p className="section-desc">{t('health.desc')}</p>
               <button
                 type="button"
                 className="btn btn-primary"
@@ -502,7 +484,6 @@ export function SettingsPage() {
           {section === 'usage' && (
             <section className="settings-section settings-section--embedded">
               <h2>{t('usage.title')}</h2>
-              <p className="section-desc">{t('usage.desc')}</p>
               <LlmUsageDashboard />
             </section>
           )}
@@ -510,7 +491,6 @@ export function SettingsPage() {
           {section === 'activity' && (
             <section className="settings-section settings-section--embedded">
               <h2>{t('activity.title')}</h2>
-              <p className="section-desc">{t('activity.desc')}</p>
               <ActivityFeed kind={activityKind} onKindChange={setActivityKind} />
             </section>
           )}
@@ -518,7 +498,6 @@ export function SettingsPage() {
           {section === 'data' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('data.title')}</h2>
-              <p className="section-desc">{t('data.desc')}</p>
               <button
                 type="button"
                 className="btn btn-primary"

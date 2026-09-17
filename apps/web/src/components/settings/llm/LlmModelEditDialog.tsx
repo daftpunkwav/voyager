@@ -4,12 +4,14 @@
  * (image/audio/video input, thinking) plus the token budgets (context window,
  * max output tokens). Pure form state; saving hands the assembled LlmModelMeta
  * to the caller, which patches models_meta and mirrors the budgets into
- * agent.context.model_profiles.
+ * agent.context.model_profiles. Shell is the shared ModalOverlay (portal +
+ * scrim + enter/exit animation).
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LlmModelMeta } from '@/api/types';
+import { ModalOverlay } from '@/components/common/ModalOverlay';
 
 interface LlmModelEditDialogProps {
   model: string;
@@ -32,15 +34,6 @@ export function LlmModelEditDialog({ model, meta, onSave, onClose }: LlmModelEdi
   const [thinking, setThinking] = useState(!!meta.thinking);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Escape closes; the mask click is intentionally inert against misclicks
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   /** undefined = leave unset; null = invalid input (blocks saving). */
   const parseBudget = (raw: string): number | null | undefined => {
@@ -82,9 +75,15 @@ export function LlmModelEditDialog({ model, meta, onSave, onClose }: LlmModelEdi
   ];
 
   return (
-    <div className="ask-mask" role="dialog" aria-modal="true" aria-label={t('llm.modelEdit.title', { model })}>
-      <div className="llm-model-dialog glass-card glass-card--dialog">
-        <h3 className="llm-model-dialog__title">{t('llm.modelEdit.title', { model })}</h3>
+    <ModalOverlay open onClose={onClose}>
+      <div
+        className="modal glass-card--dialog llm-model-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('llm.modelEdit.title', { model })}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="modal__title">{t('llm.modelEdit.title', { model })}</h3>
 
         <div className="form-row">
           <label htmlFor="llm-model-id">{t('llm.modelEdit.modelId')}</label>
@@ -118,7 +117,11 @@ export function LlmModelEditDialog({ model, meta, onSave, onClose }: LlmModelEdi
 
         <div className="form-row">
           <label>{t('llm.modelEdit.inputTypes')}</label>
-          <div className="llm-model-dialog__toggles">
+          <div
+            className="llm-model-dialog__toggles"
+            role="group"
+            aria-label={t('llm.modelEdit.inputTypes')}
+          >
             {toggles.map((tg) => (
               <button
                 key={tg.label}
@@ -127,6 +130,9 @@ export function LlmModelEditDialog({ model, meta, onSave, onClose }: LlmModelEdi
                 aria-pressed={tg.on}
                 onClick={() => tg.set(!tg.on)}
               >
+                <span className="llm-model-toggle__check" aria-hidden>
+                  ✓
+                </span>
                 {tg.label}
               </button>
             ))}
@@ -135,13 +141,20 @@ export function LlmModelEditDialog({ model, meta, onSave, onClose }: LlmModelEdi
 
         <div className="form-row">
           <label>{t('llm.modelEdit.capabilities')}</label>
-          <div className="llm-model-dialog__toggles">
+          <div
+            className="llm-model-dialog__toggles"
+            role="group"
+            aria-label={t('llm.modelEdit.capabilities')}
+          >
             <button
               type="button"
               className={`llm-model-toggle ${thinking ? 'is-on' : ''}`}
               aria-pressed={thinking}
               onClick={() => setThinking(!thinking)}
             >
+              <span className="llm-model-toggle__check" aria-hidden>
+                ✓
+              </span>
               {t('llm.modelEdit.thinking')}
             </button>
           </div>
@@ -153,7 +166,7 @@ export function LlmModelEditDialog({ model, meta, onSave, onClose }: LlmModelEdi
           </div>
         ) : null}
 
-        <div className="llm-model-dialog__actions">
+        <div className="modal__actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             {t('llm.modelEdit.cancel')}
           </button>
@@ -167,6 +180,6 @@ export function LlmModelEditDialog({ model, meta, onSave, onClose }: LlmModelEdi
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

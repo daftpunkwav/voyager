@@ -8,30 +8,45 @@
 /* ============================================================
        SettingsPage local styles (page-private styles only; global tokens still come from design-system.css)
        ============================================================ */
+/* Two-surface split (see the reference layout): the category rail is its own
+   full-height colored band, the content area sits on a lighter/darker surface */
+.settings-page {
+  --settings-rail-bg: var(--bg-200);
+  --settings-rail-border: var(--bg-300);
+  --settings-main-bg: var(--bg-50);
+}
+[data-theme='dark'] .settings-page {
+  --settings-rail-bg: #121214;
+  --settings-rail-border: rgba(255, 255, 255, 0.08);
+  --settings-main-bg: #1c1c1e;
+}
+
 .settings-shell {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 32px;
+  grid-template-columns: 232px minmax(0, 1fr);
   width: 100%;
-  /* Full-bleed like the notes page: .content drops its centered max-width for
-     this page, and the shell's own padding provides the gutters */
-  padding: 24px clamp(20px, 3vw, 48px) 48px;
+  min-height: 100%;
 }
 @media (max-width: 1280px) {
   .settings-shell {
     grid-template-columns: 200px minmax(0, 1fr);
-    gap: 24px;
   }
 }
 
-/* ---------- Subnav (left 200px sticky) ---------- */
+/* ---------- Subnav: full-height colored rail ---------- */
 .subnav {
   position: sticky;
-  top: 24px;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
   align-self: start;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding: 24px 14px;
+  background: var(--settings-rail-bg);
+  border-right: 1px solid var(--settings-rail-border);
 }
 .subnav-title {
   font-size: 11px;
@@ -40,6 +55,12 @@
   text-transform: uppercase;
   color: var(--text-400);
   padding: 0 12px 8px;
+}
+/* Back to the app: the settings shell hides the app rail, so the rail owns
+   the only exit back to chat/notes/team */
+.subnav-back {
+  color: var(--text-500);
+  margin-bottom: 10px;
 }
 .subnav-group {
   display: flex;
@@ -126,6 +147,14 @@
 /* ---------- Content right side: section spacing ---------- */
 .settings-main {
   min-width: 0;
+  padding: 28px clamp(24px, 4vw, 56px) 56px;
+  background: var(--settings-main-bg);
+}
+/* The settings column is narrow (232px rail + section padding): persona /
+   definition cards stack single-column here. The team page keeps the global
+   multi-column .team-grid. */
+.settings-main .team-grid {
+  grid-template-columns: 1fr;
 }
 .settings-section {
   margin-bottom: 24px;
@@ -926,6 +955,9 @@
     position: static;
     flex-direction: row;
     flex-wrap: wrap;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--settings-rail-border);
   }
   .theme-cards {
     grid-template-columns: 1fr;
@@ -969,7 +1001,8 @@
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
 }
 [data-theme='dark'] .settings-page .settings-section.glass-card {
-  background: rgba(28, 28, 30, 0.72);
+  /* one step lighter than the settings content surface (#1c1c1e) so cards read as raised */
+  background: rgba(44, 44, 46, 0.6);
   border-color: rgba(255, 255, 255, 0.1);
   box-shadow:
     0 24px 48px -24px rgba(0, 0, 0, 0.6),
@@ -980,47 +1013,46 @@
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
 }
 
-/* ---------- LLM config extensions ---------- */
-/* Model tab internals keep the inset-only glass treatment (not yet migrated) */
-.llm-settings .glass-card.glass-card--overview-outer,
-.llm-settings .glass-card.glass-card--overview-inner {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 0 2px 1px rgba(255, 255, 255, 0.1);
-}
-
-[data-theme='dark'] .llm-settings .glass-card.glass-card--overview-outer,
-[data-theme='dark'] .llm-settings .glass-card.glass-card--overview-inner {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
-    inset 0 0 2px 1px rgba(255, 255, 255, 0.06);
-}
-
+/* ---------- LLM tab (models) ----------
+   Single top-layer glass: the settings section panel is the only glass surface.
+   Rail, detail groups, chips and rows sit flat on it; separation is hairlines. */
 .llm-settings {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
-.llm-multi-layout {
+.llm-layout {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 208px minmax(0, 1fr);
   align-items: start;
 }
-.llm-provider-rail {
-  padding: 12px;
+
+/* Provider rail: flat column with a hairline divider toward the detail pane */
+.llm-rail {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 70vh;
-  overflow: auto;
+  padding: 2px 18px 2px 0;
+  border-right: 1px solid var(--bg-300);
+  align-self: stretch;
 }
-.llm-provider-rail-title {
-  font-size: 12px;
+[data-theme='dark'] .llm-rail {
+  border-right-color: rgba(255, 255, 255, 0.08);
+}
+.llm-rail-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-500);
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.llm-rail-count {
   font-weight: 600;
+  color: var(--text-400);
 }
 .llm-provider-list {
   list-style: none;
@@ -1028,240 +1060,302 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
 }
 .llm-provider-item {
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 6px;
+  padding: 7px 10px;
   border: 0;
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
-  color: inherit;
+  color: var(--text-700);
   background: transparent;
-  transition: background var(--dur-fast, 150ms) var(--ease);
+  transition:
+    background var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease);
 }
 .llm-provider-item:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(127, 127, 127, 0.1);
 }
-[data-theme='dark'] .llm-provider-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+.llm-provider-item:active {
+  background: rgba(127, 127, 127, 0.16);
 }
 .llm-provider-item.is-active {
   background: rgba(0, 122, 255, 0.1);
-  outline: 1px solid var(--brand-500);
+  color: var(--brand-700);
 }
 [data-theme='dark'] .llm-provider-item.is-active {
   background: rgba(10, 132, 255, 0.16);
+  color: var(--brand-400);
 }
 .llm-provider-item-name {
   font-size: 13px;
   font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
 }
 .llm-provider-status {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--bg-400);
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--text-300);
   flex-shrink: 0;
 }
 .llm-provider-status.is-on {
   background: #34c759;
+  box-shadow: none;
 }
 .llm-provider-add {
   width: 100%;
+  padding: 7px 10px;
+  border: 1px dashed var(--bg-400);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-500);
+  font: 600 12px/1.2 var(--font-sans);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease),
+    background var(--dur-fast, 150ms) var(--ease);
 }
-.llm-provider-detail {
-  padding: 16px 18px;
+.llm-provider-add:hover {
+  border-color: var(--brand-400);
+  color: var(--brand-600);
+  background: rgba(0, 122, 255, 0.05);
 }
-.llm-provider-detail-head {
+.llm-provider-add:active {
+  background: rgba(0, 122, 255, 0.1);
+}
+[data-theme='dark'] .llm-provider-add {
+  border-color: rgba(255, 255, 255, 0.16);
+  color: var(--text-400);
+}
+[data-theme='dark'] .llm-provider-add:hover {
+  border-color: var(--brand-400);
+  color: var(--brand-400);
+  background: rgba(10, 132, 255, 0.08);
+}
+
+/* Detail pane: enters softly when switching providers */
+.llm-detail-pane {
+  min-width: 0;
+  padding-left: 18px;
+  animation: llm-detail-in 180ms var(--ease-out) both;
+}
+@keyframes llm-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.llm-empty {
+  padding: 32px 0;
+  color: var(--text-500);
+  font-size: 13px;
+}
+
+/* Identity header: name + tags on the left, enable switch and actions on the right */
+.llm-detail-head {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
   align-items: flex-start;
-  margin-bottom: 14px;
+  gap: 12px;
   flex-wrap: wrap;
 }
-.llm-provider-detail-title-row {
+.llm-detail-title-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
-.llm-provider-enable-row {
+.llm-detail-name {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.llm-detail-meta {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-.llm-enable-pill {
-  border: 0;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 12px;
-  cursor: pointer;
-  background: var(--bg-200);
-  color: var(--text-600);
-}
-.llm-enable-pill.is-on {
-  background: #34c759;
-  color: #0a0a0a;
-  font-weight: 600;
-}
-.llm-enable-pill.is-off {
-  background: rgba(255, 255, 255, 0.1);
-}
-.llm-provider-default-tag {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--brand-50);
-  color: var(--brand-700);
-  font-weight: 600;
-}
-[data-theme='dark'] .llm-provider-default-tag {
-  color: var(--brand-400);
-}
-.llm-format-list {
-  list-style: none;
-  margin: 0;
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.llm-format-item {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  text-align: left;
-  font-size: 13px;
-  transition: background var(--dur-fast, 150ms) var(--ease);
-}
-.llm-format-item > * {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.llm-format-item:hover {
-  background: rgba(0, 0, 0, 0.04);
-}
-.llm-format-item.is-selected {
-  background: rgba(0, 0, 0, 0.06);
-  box-shadow: inset 0 0 0 1px var(--brand-500);
-}
-[data-theme='dark'] .llm-format-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-[data-theme='dark'] .llm-format-item.is-selected {
-  background: rgba(10, 132, 255, 0.14);
-  box-shadow: inset 0 0 0 1px var(--brand-500);
-}
-.llm-key-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.llm-key-row .field {
-  flex: 1;
-}
-.llm-settings-block {
-  /* Flat inner block under the single top-layer glass: separation comes from
-     a hairline divider, not a nested card */
-  padding: 18px 0 0;
-  overflow: visible;
-  background: transparent;
-  border: 0;
-  border-top: 1px solid var(--bg-300);
-  border-radius: 0;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-.llm-block-title {
-  margin: 0 0 4px;
-  font-size: 15px;
-  font-weight: 600;
-}
-.llm-block-desc {
-  margin: 0 0 16px;
+  margin-top: 4px;
   font-size: 12px;
   color: var(--text-500);
 }
-.field-hint {
-  margin: 6px 0 0;
+.llm-detail-meta-host {
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
-  color: var(--text-400);
-  line-height: 1.4;
 }
-.llm-key-masked {
-  font-weight: 400;
-  color: var(--text-500);
-  margin-left: 6px;
+.llm-detail-meta-warn {
+  color: var(--warning, #ff9f0a);
 }
-.llm-test-panel {
+.llm-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.llm-detail-delete {
+  color: var(--error);
+}
+.llm-detail-delete:hover {
+  background: rgba(255, 59, 48, 0.1);
+  color: var(--error);
+}
+[data-theme='dark'] .llm-detail-delete {
+  color: var(--error);
+}
+
+/* Enable switch */
+.llm-switch {
+  position: relative;
+  width: 40px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bg-400);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background 200ms var(--ease-apple);
+}
+.llm-switch.is-on {
+  background: #34c759;
+}
+.llm-switch__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transform: translateX(0);
+  transition: transform 200ms var(--ease-apple);
+}
+.llm-switch.is-on .llm-switch__knob {
+  transform: translateX(16px);
+}
+.llm-switch:active .llm-switch__knob {
+  transform: translateX(0) scale(0.92);
+}
+.llm-switch.is-on:active .llm-switch__knob {
+  transform: translateX(16px) scale(0.92);
+}
+
+/* Hairline-separated groups with uppercase micro labels.
+   Rhythm: .form-row already carries the inter-field 16px, so groups only add
+   the divider + 16px breathing room on each side. */
+.llm-group {
+  padding: 16px 0 0;
+}
+.llm-group + .llm-group {
+  border-top: 1px solid var(--bg-300);
   margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--bg-300, rgba(255, 255, 255, 0.08));
 }
-.llm-test-result {
-  margin-top: 12px;
-  padding: 12px 14px;
-  border-radius: var(--radius, 10px);
-  font-size: 13px;
-  line-height: 1.45;
+[data-theme='dark'] .llm-group + .llm-group {
+  border-top-color: rgba(255, 255, 255, 0.08);
 }
-.llm-test-result--ok {
-  background: rgba(52, 199, 89, 0.12);
-  border: 1px solid rgba(52, 199, 89, 0.35);
+.llm-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-500);
+  margin-bottom: 12px;
 }
-.llm-test-result--fail {
-  background: rgba(255, 55, 95, 0.1);
-  border: 1px solid rgba(255, 55, 95, 0.3);
+.llm-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
 }
-@media (max-width: 1000px) {
-  .llm-multi-layout {
-    grid-template-columns: 1fr;
+.llm-form-grid .form-row {
+  margin-bottom: 0;
+}
+.llm-form-grid + .form-row,
+.llm-form-grid + .llm-key-field,
+.llm-form-grid + .llm-model-list {
+  margin-top: 16px;
+}
+
+/* Field with an inline trailing action (API key save / model add) */
+.llm-key-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.llm-key-field .field {
+  flex: 1;
+  min-width: 0;
+}
+.llm-key-field .btn {
+  flex-shrink: 0;
+}
+
+/* Connection test: quiet secondary action + inline verdict */
+.llm-test-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.llm-test-btn {
+  min-width: 200px;
+}
+.llm-test-verdict {
+  font-size: 12px;
+  font-weight: 600;
+  animation: llm-verdict-in 200ms var(--ease-out) both;
+}
+.llm-test-verdict.is-ok {
+  color: #248a3d;
+}
+.llm-test-verdict.is-fail {
+  color: var(--error);
+}
+@keyframes llm-verdict-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
-.llm-test-result__head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  align-items: baseline;
-  margin-bottom: 8px;
-}
-.llm-test-result__reply,
 .llm-test-result__error {
-  margin: 0;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 59, 48, 0.08);
+  border: 1px solid rgba(255, 59, 48, 0.25);
   white-space: pre-wrap;
   word-break: break-word;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
-  opacity: 0.95;
+  line-height: 1.45;
+  max-height: 180px;
+  overflow-y: auto;
+  animation: llm-verdict-in 200ms var(--ease-out) both;
 }
-.llm-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin-top: 8px;
-}
-.llm-last-test {
-  font-size: 11px;
-}
+
+/* Model chips */
 .llm-model-list {
   list-style: none;
   margin: 0 0 10px;
@@ -1274,26 +1368,29 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 5px 8px 5px 10px;
   border-radius: var(--radius-pill);
   background: var(--bg-200);
   border: 1px solid var(--bg-300);
   font-size: 12px;
   font-family: var(--font-mono);
+  transition: border-color var(--dur-fast, 150ms) var(--ease);
+}
+.llm-model-chip:hover {
+  border-color: var(--text-300);
+}
+.llm-model-chip__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand-500);
+  flex-shrink: 0;
 }
 .llm-model-chip__default {
   font-size: 10px;
   font-weight: 700;
   color: var(--brand-600);
   font-family: var(--font-sans);
-}
-.llm-model-chip button {
-  border: 0;
-  background: transparent;
-  color: var(--text-400);
-  cursor: pointer;
-  padding: 0 2px;
-  line-height: 1;
 }
 .llm-model-chip__main {
   display: inline-flex;
@@ -1329,31 +1426,72 @@
   border: 1px solid var(--bg-300);
   color: var(--text-500);
 }
-/* Model edit dialog (per-model capabilities + token budgets). */
-.llm-model-dialog {
-  width: min(520px, 92vw);
-  max-height: 86vh;
-  overflow-y: auto;
-  padding: 20px;
+.llm-model-chip__remove {
+  border: 0;
+  background: transparent;
+  color: var(--text-400);
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  border-radius: 50%;
+  font-size: 13px;
+  transition:
+    color var(--dur-fast, 150ms) var(--ease),
+    background var(--dur-fast, 150ms) var(--ease);
+}
+.llm-model-chip__remove:hover {
+  color: var(--error);
+  background: rgba(255, 59, 48, 0.1);
+}
+.llm-model-add {
+  margin-top: 4px;
+}
+
+/* Add-provider dialog: preset chips */
+.llm-preset-row {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
-.llm-model-dialog__title {
-  margin: 0;
-  font-size: 15px;
-  color: var(--text-800);
-  overflow-wrap: anywhere;
+.llm-preset-chip {
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--bg-300);
+  background: var(--bg-100);
+  color: var(--text-600);
+  cursor: pointer;
+  font: 500 13px/1.2 var(--font-sans);
+  transition:
+    border-color var(--dur-fast, 150ms) var(--ease),
+    background var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease),
+    transform 160ms var(--ease);
 }
+.llm-preset-chip:active {
+  transform: scale(0.97);
+}
+.llm-preset-chip.is-active {
+  border-color: var(--brand-400);
+  background: var(--brand-50);
+  color: var(--brand-700);
+  font-weight: 600;
+}
+[data-theme='dark'] .llm-preset-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-300);
+}
+[data-theme='dark'] .llm-preset-chip.is-active {
+  background: rgba(10, 132, 255, 0.18);
+  border-color: var(--brand-400);
+  color: var(--brand-200);
+}
+
+/* Model edit dialog toggles */
 .llm-model-dialog__grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
-}
-@media (max-width: 560px) {
-  .llm-model-dialog__grid {
-    grid-template-columns: 1fr;
-  }
 }
 .llm-model-dialog__toggles {
   display: flex;
@@ -1361,35 +1499,100 @@
   flex-wrap: wrap;
 }
 .llm-model-toggle {
-  padding: 6px 12px;
-  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--bg-300);
-  background: var(--bg-50);
-  color: var(--text-600);
+  background: var(--bg-100);
+  color: var(--text-500);
   cursor: pointer;
-  font-size: 13px;
+  font: 500 13px/1.2 var(--font-sans);
+  transition:
+    border-color var(--dur-fast, 150ms) var(--ease),
+    background var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease),
+    transform 160ms var(--ease);
+}
+.llm-model-toggle:active {
+  transform: scale(0.97);
+}
+.llm-model-toggle__check {
+  font-size: 11px;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: scale(0.5);
+  transition:
+    max-width 200ms var(--ease-out),
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
 }
 .llm-model-toggle.is-on {
   border-color: var(--brand-400);
   background: var(--brand-50);
-  color: var(--text-800);
+  color: var(--brand-700);
   font-weight: 600;
 }
-.llm-model-dialog__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 4px;
+.llm-model-toggle.is-on .llm-model-toggle__check {
+  max-width: 14px;
+  opacity: 1;
+  transform: none;
 }
-.llm-model-add {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+[data-theme='dark'] .llm-model-toggle {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-400);
 }
-.llm-model-add .field.input {
-  flex: 1;
-  min-width: 0;
+[data-theme='dark'] .llm-model-toggle.is-on {
+  background: rgba(10, 132, 255, 0.18);
+  border-color: var(--brand-400);
+  color: var(--brand-200);
 }
+[data-theme='dark'] .llm-model-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 1000px) {
+  .llm-layout {
+    grid-template-columns: 1fr;
+  }
+  .llm-rail {
+    border-right: 0;
+    padding-right: 0;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--bg-300);
+  }
+  [data-theme='dark'] .llm-rail {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+  }
+  .llm-detail-pane {
+    padding-left: 0;
+    padding-top: 14px;
+  }
+}
+@media (max-width: 560px) {
+  .llm-form-grid,
+  .llm-model-dialog__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .llm-detail-pane,
+  .llm-test-verdict,
+  .llm-test-result__error {
+    animation: none;
+  }
+  .llm-switch,
+  .llm-switch__knob,
+  .llm-model-toggle__check {
+    transition-duration: 0ms;
+  }
+}
+
 .llm-agent-table-wrap {
   overflow-x: auto;
 }

@@ -6,11 +6,13 @@
  *
  * Domain side effects (e.g. the notes UI bridge) are assembled and injected
  * as `bridges` by the App root; the shell never imports page-private modules.
- * The .app container always keeps a 2-column layout (Sidebar + main) — never
- * add extra grid columns to it.
+ * The .app container is normally a 2-column layout (Sidebar + main); the
+ * settings route is the one exception — it renders single-column
+ * (.app--settings-only) where the settings subnav (with its back button)
+ * replaces the app rail.
  *
  * Responsibilities:
- * - Keep the two-column shell layout and resolve the active page from the route
+ * - Keep the shell layout and resolve the active page from the route
  * - Wrap routed content in an ErrorBoundary with a page-level retry fallback
  * - Mount ToastContainer, PageProbe and FloatingChat (hidden on chat routes)
  */
@@ -74,13 +76,21 @@ export function AppShell({ bridges }: AppShellProps) {
   const activePage = resolveActivePage(pathname);
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const onChat = pathname === '/' || pathname.startsWith('/chat');
+  // Settings owns the whole viewport: its own category nav replaces the app rail
+  const isSettings = pathname === '/settings' || pathname.startsWith('/settings/');
 
   return (
-    <div className={['app', sidebarCollapsed ? 'sidebar-collapsed' : ''].filter(Boolean).join(' ')}>
+    <div
+      className={
+        isSettings
+          ? 'app app--settings-only'
+          : ['app', sidebarCollapsed ? 'sidebar-collapsed' : ''].filter(Boolean).join(' ')
+      }
+    >
       <a className="skip-link" href="#main-content">
         {t('skipToContent')}
       </a>
-      <Sidebar activePage={activePage} />
+      {!isSettings && <Sidebar activePage={activePage} />}
       <div className="main">
         <main id="main-content" className="content" tabIndex={-1}>
           <ErrorBoundary key={pathname} fallback={pageErrorFallback}>

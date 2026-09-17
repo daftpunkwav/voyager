@@ -1,6 +1,9 @@
 /**
  * @file LlmProviderDetail
- * @description Provider detail card: metadata editing, API key save, model list management, enable/disable, and connection testing.
+ * @description Provider detail pane: identity header (name, format/host/key meta,
+ * enable switch, default and delete actions) over three hairline-separated
+ * groups — provider fields, connection (URL / key / test), models.
+ * Flat by the single top-layer glass principle: no nested card surface.
  *
  * Responsibilities:
  * - Edit provider display name, base URL and API format
@@ -11,11 +14,10 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { callCapability } from '@/bridge/client';
-import type { LlmApiFormat, LlmModelMeta, LlmProvider, LlmTestOutcome } from '@/api/types';
+import type { LlmModelMeta, LlmProvider, LlmTestOutcome } from '@/api/types';
 import { GlassSelect } from '@/components/common/GlassSelect';
 import { LlmModelEditDialog } from '@/components/settings/llm/LlmModelEditDialog';
 import { LLM_API_FORMAT_OPTIONS } from '@/constants/llmConfig';
-import { GLASS_INNER } from '@/constants/glassTokens';
 
 interface LlmProviderDetailProps {
   provider: LlmProvider;
@@ -49,6 +51,15 @@ function formatLatency(ms: number): string {
   return `${sec.toFixed(sec >= 10 ? 1 : 2)} s`;
 }
 
+/** Host of the base URL for the identity meta line; raw string as fallback. */
+function hostOf(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return baseUrl.replace(/^https?:\/\//, '').trim();
+  }
+}
+
 export function LlmProviderDetail({
   provider,
   isDefault,
@@ -64,6 +75,7 @@ export function LlmProviderDetail({
   const [nameDraft, setNameDraft] = useState(provider.display_name);
   const [urlDraft, setUrlDraft] = useState(provider.base_url);
   const [apiKeyDraft, setApiKeyDraft] = useState('');
+  const [keySaving, setKeySaving] = useState(false);
   const [newModel, setNewModel] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
   const [editModel, setEditModel] = useState<string | null>(null);
@@ -78,7 +90,7 @@ export function LlmProviderDetail({
 
   const run = (fn: () => Promise<unknown>) => {
     setActionError(null);
-    fn().catch((err) => {
+    return fn().catch((err) => {
       const e = err as { message?: string; hint?: string };
       setActionError(
         e.hint ? `${e.message}(${e.hint})` : (e.message ?? t('llm.provider.actionFailed'))
@@ -120,9 +132,10 @@ export function LlmProviderDetail({
 
   const saveKey = () => {
     const key = apiKeyDraft.trim();
-    if (!key) return;
+    if (!key || keySaving) return;
     setApiKeyDraft('');
-    run(() => onSaveKey(key));
+    setKeySaving(true);
+    void run(() => onSaveKey(key)).finally(() => setKeySaving(false));
   };
 
   /** Mirror the model's token budgets into agent.context.model_profiles so the
@@ -158,149 +171,197 @@ export function LlmProviderDetail({
   };
 
   const activeModel = provider.default_model || provider.models[0] || '';
+  const formatLabel = t(
+    LLM_API_FORMAT_OPTIONS.find((o) => o.value === provider.api_format)?.labelKey ??
+      'settings:llm.format.chat'
+  );
+  const modelOptions = (
+    provider.models.length ? provider.models : [provider.default_model].filter(Boolean)
+  ).map((m) => ({ value: m, label: m }));
 
   return (
-    <div
-      className={`llm-provider-detail glass-card glass-card--overview-inner glass-overflow-visible`}
-    >
-      <div className="llm-provider-detail-head">
-        <div className="llm-provider-detail-title-row">
-          <h3 className="llm-block-title">{provider.display_name || t('llm.provider.unnamed')}</h3>
+    <div className="llm-detail">
+      <header className="llm-detail-head">
+        <div className="llm-detail-heading">
+          <div className="llm-detail-title-row">
+            <h3 className="llm-detail-name">
+              {provider.display_name || t('llm.provider.unnamed')}
+            </h3>
+            {isDefault ? (
+              <span className="llm-provider-default-tag">{t('llm.provider.defaultTag')}</span>
+            ) : null}
+          </div>
+          <div className="llm-detail-meta">
+            <span>{formatLabel}</span>
+            <span aria-hidden>·</span>
+            <span className="llm-detail-meta-host">{hostOf(provider.base_url) || '—'}</span>
+            <span aria-hidden>·</span>
+            <span className={provider.has_api_key ? '' : 'llm-detail-meta-warn'}>
+              {provider.has_api_key ? t('llm.list.keySet') : t('llm.list.keyMissing')}
+            </span>
+          </div>
+        </div>
+        <div className="llm-detail-actions">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={provider.enabled}
+            aria-label={t('llm.provider.enableSwitchAria')}
+            title={provider.enabled ? t('llm.provider.enabled') : t('llm.provider.disable')}
+            className={`llm-switch ${provider.enabled ? 'is-on' : ''}`}
+            onClick={() => run(() => onPatch({ enabled: !provider.enabled }))}
+          >
+            <span className="llm-switch__knob" />
+          </button>
           {!isDefault ? (
             <button type="button" className="btn btn-ghost btn-sm" onClick={onSetDefault}>
               {t('llm.provider.setDefault')}
             </button>
-          ) : (
-            <span className="llm-provider-default-tag">{t('llm.provider.defaultTag')}</span>
-          )}
-        </div>
-        <div className="llm-provider-enable-row">
+          ) : null}
           <button
             type="button"
-            className={`llm-enable-pill ${provider.enabled ? 'is-on' : ''}`}
-            onClick={() => !provider.enabled && run(() => onPatch({ enabled: true }))}
-          >
-            {t('llm.provider.enabled')}
-          </button>
-          <button
-            type="button"
-            className={`llm-enable-pill ${!provider.enabled ? 'is-off' : ''}`}
-            onClick={() => provider.enabled && run(() => onPatch({ enabled: false }))}
-          >
-            {t('llm.provider.disable')}
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm llm-provider-delete"
+            className="btn btn-ghost btn-sm llm-detail-delete"
             onClick={onDelete}
             aria-label={t('llm.provider.deleteAria')}
           >
             {t('llm.provider.delete')}
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="form-row">
-        <label htmlFor="llm-display-name">{t('llm.provider.displayName')}</label>
-        <input
-          id="llm-display-name"
-          className="field input"
-          value={nameDraft}
-          onChange={(e) => setNameDraft(e.target.value)}
-          onBlur={commitName}
-        />
-      </div>
+      <section className="llm-group">
+        <div className="llm-group-label">{t('llm.group.general')}</div>
+        <div className="llm-form-grid">
+          <div className="form-row">
+            <label htmlFor="llm-display-name">{t('llm.provider.displayName')}</label>
+            <input
+              id="llm-display-name"
+              className="field input"
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={commitName}
+            />
+          </div>
+          <div className="form-row">
+            <label htmlFor="llm-api-format">{t('llm.provider.apiFormat')}</label>
+            <GlassSelect
+              id="llm-api-format"
+              value={provider.api_format}
+              options={LLM_API_FORMAT_OPTIONS.map((opt) => ({
+                value: opt.value,
+                label: `${t(opt.labelKey)}(${opt.hint})`,
+              }))}
+              onChange={(v) =>
+                v !== provider.api_format &&
+                run(() =>
+                  onPatch({ api_format: v as (typeof LLM_API_FORMAT_OPTIONS)[number]['value'] })
+                )
+              }
+              aria-label={t('llm.provider.apiFormat')}
+            />
+          </div>
+        </div>
+      </section>
 
-      <div className="form-row">
-        <label htmlFor="llm-base-url">Base URL</label>
-        <input
-          id="llm-base-url"
-          className="field input"
-          value={urlDraft}
-          onChange={(e) => setUrlDraft(e.target.value)}
-          onBlur={commitBaseUrl}
-          placeholder="https://…"
-        />
-      </div>
-
-      <div className="form-row">
-        <label>{t('llm.provider.apiFormat')}</label>
-        <ul className={`llm-format-list ${GLASS_INNER}`}>
-          {LLM_API_FORMAT_OPTIONS.map((opt) => {
-            const selected = provider.api_format === opt.value;
-            return (
-              <li key={opt.value}>
-                <button
-                  type="button"
-                  className={`llm-format-item ${selected ? 'is-selected' : ''}`}
-                  onClick={() =>
-                    !selected && run(() => onPatch({ api_format: opt.value as LlmApiFormat }))
-                  }
-                >
-                  <span>
-                    {t(opt.labelKey)}
-                    <span className="muted"> {opt.hint}</span>
-                  </span>
-                  {selected ? <span aria-hidden>✓</span> : null}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-
-      <div className="form-row">
-        <label htmlFor="llm-api-key">
-          API Key
-          <span className={`llm-key-masked ${provider.has_api_key ? '' : 'muted'}`}>
-            {provider.has_api_key
-              ? t('llm.provider.keySavedNote')
-              : t('llm.provider.keyMissingNote')}
-          </span>
-        </label>
-        <div className="llm-key-row">
+      <section className="llm-group">
+        <div className="llm-group-label">{t('llm.group.connection')}</div>
+        <div className="form-row">
+          <label htmlFor="llm-base-url">Base URL</label>
           <input
-            id="llm-api-key"
-            type="password"
+            id="llm-base-url"
             className="field input"
-            placeholder={
-              provider.has_api_key
-                ? t('llm.provider.keyOverwritePlaceholder')
-                : t('llm.provider.keyPlaceholder')
-            }
-            value={apiKeyDraft}
-            onChange={(e) => setApiKeyDraft(e.target.value)}
-            autoComplete="off"
+            value={urlDraft}
+            onChange={(e) => setUrlDraft(e.target.value)}
+            onBlur={commitBaseUrl}
+            placeholder="https://…"
+            spellCheck={false}
           />
         </div>
-        <div className="settings-actions llm-actions">
+        <div className="form-row">
+          <label htmlFor="llm-api-key">API Key</label>
+          <div className="llm-key-field">
+            <input
+              id="llm-api-key"
+              type="password"
+              className="field input"
+              placeholder={
+                provider.has_api_key
+                  ? t('llm.provider.keyOverwritePlaceholder')
+                  : t('llm.provider.keyPlaceholder')
+              }
+              value={apiKeyDraft}
+              onChange={(e) => setApiKeyDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  saveKey();
+                }
+              }}
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={!apiKeyDraft.trim() || keySaving}
+              onClick={saveKey}
+            >
+              {t('llm.provider.saveKey')}
+            </button>
+          </div>
+        </div>
+        <div className="llm-test-row">
           <button
             type="button"
-            className="btn btn-primary"
-            disabled={!apiKeyDraft.trim()}
-            onClick={saveKey}
+            className="btn btn-ghost llm-test-btn"
+            disabled={isTesting || !activeModel || !provider.has_api_key}
+            onClick={() => onTest(activeModel)}
+            data-testid="test-llm-btn"
+            title={provider.has_api_key ? undefined : t('llm.provider.testNeedsKey')}
           >
-            {t('llm.provider.saveKey')}
+            {isTesting
+              ? t('llm.provider.testing', { model: activeModel })
+              : t('llm.provider.testBtn', { model: activeModel || t('llm.provider.noModel') })}
           </button>
+          {testResult ? (
+            <span
+              className={`llm-test-verdict ${testResult.ok ? 'is-ok' : 'is-fail'}`}
+              role="status"
+            >
+              {testResult.ok ? t('llm.provider.testOk') : t('llm.provider.testFail')}
+              {typeof testResult.latency_ms === 'number'
+                ? ` · ${formatLatency(testResult.latency_ms)}`
+                : ''}
+            </span>
+          ) : null}
         </div>
-      </div>
+        {testResult && !testResult.ok ? (
+          <pre className="llm-test-result__error" role="status">
+            {testResult.error?.trim() || t('llm.provider.unknownError')}
+          </pre>
+        ) : null}
+        {actionError ? (
+          <div className="setting-field__error small" role="alert">
+            {actionError}
+          </div>
+        ) : null}
+      </section>
 
-      <div className="form-row">
-        <label htmlFor="llm-default-model">{t('llm.provider.defaultModel')}</label>
-        <GlassSelect
-          id="llm-default-model"
-          value={provider.default_model}
-          options={(provider.models.length
-            ? provider.models
-            : [provider.default_model].filter(Boolean)
-          ).map((m) => ({ value: m, label: m }))}
-          onChange={(v) => v !== provider.default_model && run(() => onPatch({ default_model: v }))}
-          aria-label={t('llm.provider.defaultModel')}
-        />
-      </div>
-
-      <div className="form-row">
-        <label>{t('llm.provider.modelList')}</label>
+      <section className="llm-group">
+        <div className="llm-group-label">{t('llm.group.models')}</div>
+        <div className="llm-form-grid">
+          <div className="form-row">
+            <label htmlFor="llm-default-model">{t('llm.provider.defaultModel')}</label>
+            <GlassSelect
+              id="llm-default-model"
+              value={provider.default_model}
+              options={modelOptions}
+              onChange={(v) =>
+                v !== provider.default_model && run(() => onPatch({ default_model: v }))
+              }
+              aria-label={t('llm.provider.defaultModel')}
+            />
+          </div>
+        </div>
         <ul className="llm-model-list">
           {provider.models.map((m) => {
             const meta = provider.models_meta?.[m];
@@ -309,16 +370,18 @@ export function LlmProviderDetail({
             if (meta?.audio_input) badges.push(t('llm.modelEdit.audio'));
             if (meta?.video_input) badges.push(t('llm.modelEdit.video'));
             if (meta?.thinking) badges.push(t('llm.modelEdit.thinkingBadge'));
+            const isDefaultModel = m === provider.default_model;
             return (
-              <li key={m} className={`llm-model-chip ${GLASS_INNER}`}>
+              <li key={m} className="llm-model-chip">
                 <button
                   type="button"
                   className="llm-model-chip__main"
                   title={t('llm.modelEdit.openAria', { model: m })}
                   onClick={() => setEditModel(m)}
                 >
+                  {isDefaultModel ? <span className="llm-model-chip__dot" aria-hidden /> : null}
                   <span className="llm-model-chip__name">{m}</span>
-                  {m === provider.default_model ? (
+                  {isDefaultModel ? (
                     <span className="llm-model-chip__default">{t('llm.provider.defaultTag')}</span>
                   ) : null}
                   {badges.map((b) => (
@@ -329,6 +392,7 @@ export function LlmProviderDetail({
                 </button>
                 <button
                   type="button"
+                  className="llm-model-chip__remove"
                   aria-label={t('llm.provider.removeModelAria', { model: m })}
                   onClick={() => removeModel(m)}
                 >
@@ -338,8 +402,9 @@ export function LlmProviderDetail({
             );
           })}
         </ul>
-        <div className="llm-model-add">
+        <div className="llm-key-field llm-model-add">
           <input
+            id="llm-add-model"
             className="field input"
             placeholder={t('llm.provider.addModelPlaceholder')}
             value={newModel}
@@ -350,12 +415,14 @@ export function LlmProviderDetail({
                 addModel();
               }
             }}
+            spellCheck={false}
+            aria-label={t('llm.provider.addModel')}
           />
           <button type="button" className="btn btn-ghost btn-sm" onClick={addModel}>
             {t('llm.provider.addModel')}
           </button>
         </div>
-      </div>
+      </section>
 
       {editModel ? (
         <LlmModelEditDialog
@@ -365,51 +432,6 @@ export function LlmProviderDetail({
           onClose={() => setEditModel(null)}
         />
       ) : null}
-
-      <div className="llm-test-panel">
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={isTesting || !activeModel || !provider.has_api_key}
-          onClick={() => onTest(activeModel)}
-          data-testid="test-llm-btn"
-          title={provider.has_api_key ? undefined : t('llm.provider.testNeedsKey')}
-        >
-          {isTesting
-            ? t('llm.provider.testing', { model: activeModel })
-            : t('llm.provider.testBtn', { model: activeModel || t('llm.provider.noModel') })}
-        </button>
-
-        {testResult && (
-          <div
-            className={`llm-test-result ${testResult.ok ? 'llm-test-result--ok' : 'llm-test-result--fail'}`}
-            role="status"
-          >
-            <div className="llm-test-result__head">
-              <strong>
-                {testResult.ok ? t('llm.provider.testOk') : t('llm.provider.testFail')}
-              </strong>
-              <span className="muted">
-                {testResult.model ?? activeModel}
-                {typeof testResult.latency_ms === 'number'
-                  ? ` · ${formatLatency(testResult.latency_ms)}`
-                  : ''}
-              </span>
-            </div>
-            {!testResult.ok && (
-              <pre className="llm-test-result__error">
-                {testResult.error?.trim() || t('llm.provider.unknownError')}
-              </pre>
-            )}
-          </div>
-        )}
-
-        {actionError ? (
-          <div className="setting-field__error small" role="alert">
-            {actionError}
-          </div>
-        ) : null}
-      </div>
     </div>
   );
 }
