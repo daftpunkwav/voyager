@@ -18,7 +18,9 @@ from typing import Any
 
 from agent.contracts import Purpose
 from agent.llm import LLMReply, StreamReply, ToolSpec
-from agent.settings import ROUTING_KEY
+from agent.personas import canonical_persona_key
+from agent.runtime.current import current_instance
+from agent.settings import OVERRIDES_KEY, ROUTING_KEY, STYLE_OVERRIDES_KEY
 from platform_contracts import ActorKind, ActorRef, DomainEvent, Event, ServiceError
 
 from .llm_adapter import NO_PROVIDER_TEXT, LateBoundCall, ServiceLLM
@@ -90,11 +92,11 @@ class RoutingServiceLLM(ServiceLLM):
     async def _resolve_provider(self) -> dict[str, Any] | None:
         pinned = self._primary_overrides()["provider"]
         if pinned:
-            return {"id": pinned, "default_model": self._model}
+            return {"id": pinned, "model": self._model}
         return await super()._resolve_provider()
 
     def _model_for(self, provider: dict[str, Any], hop: dict[str, str]) -> str:
-        return hop.get("model") or self._model or str(provider.get("default_model") or "")
+        return hop.get("model") or self._model or str(provider.get("model") or "")
 
     async def _announce(self, failed: dict[str, str], next_hop: dict[str, str], error: str) -> None:
         if self._bus is None:
@@ -123,7 +125,7 @@ class RoutingServiceLLM(ServiceLLM):
         last_error = ""
         for index, hop in enumerate(chain):
             provider = (
-                {"id": hop["provider"], "default_model": self._model}
+                {"id": hop["provider"], "model": self._model}
                 if hop["provider"]
                 else await super()._resolve_provider()
             )
@@ -183,7 +185,7 @@ class RoutingServiceLLM(ServiceLLM):
         last_error = ""
         for index, hop in enumerate(chain):
             provider = (
-                {"id": hop["provider"], "default_model": self._model}
+                {"id": hop["provider"], "model": self._model}
                 if hop["provider"]
                 else await super()._resolve_provider()
             )
@@ -226,4 +228,59 @@ class RoutingServiceLLM(ServiceLLM):
         )
 
 
-__all__ = ["ROUTING_KEY", "RoutingServiceLLM", "resolve_chain"]
+def persona_style_for(settings: Any, persona_key: str) -> str:
+    """Speaking style for one persona: agent.style.overrides[<key>] wins over
+    the global agent.style; unreadable/missing entries degrade to ""."""
+    if settings is None or not persona_key:
+        return ""
+    try:
+        overrides = settings.get(STYLE_OVERRIDES_KEY)
+    except Exception:  # noqa: BLE001  # settings trouble must not block the default style
+        return ""
+    if isinstance(overrides, dict):
+        return str(overrides.get(persona_key) or "")
+    return ""
+
+
+class PersonaRoutingServiceLLM(RoutingServiceLLM):
+    """Chat transport that consults the per-persona override table
+    (agent.llm.overrides) for the persona of the turn currently running.
+
+    The chain logic (fallbacks, bus announcements) is reused verbatim from
+    RoutingServiceLLM: only the table lookup differs — instead of a fixed
+    purpose it reads the current instance's persona key. Outside a turn
+    (proactive, judge) no instance is bound and the default resolution
+    applies, same as an empty override entry.
+    """
+
+    def __init__(self, call: LateBoundCall, **kwargs: Any) -> None:
+        # purpose=CHAT only labels llm.fallback events; the table lookup below
+        # is persona-keyed, not purpose-keyed.
+        super().__init__(call, purpose=Purpose.CHAT, **kwargs)
+
+    def _chain(self) -> list[dict[str, str]]:
+        overrides: Any = None
+        if self._settings is not None:
+            try:
+                overrides = self._settings.get(OVERRIDES_KEY)
+            except Exception:  # noqa: BLE001  # settings trouble must not block the default route
+                overrides = None
+        try:
+            persona = str(getattr(current_instance.get(), "persona", "") or "")
+        except LookupError:  # no turn running
+            persona = ""
+        key = canonical_persona_key(persona) if persona else ""
+        if not key or not isinstance(overrides, dict) or not isinstance(overrides.get(key), dict):
+            return []
+        return resolve_chain({key: overrides[key]}, key)
+
+
+__all__ = [
+    "OVERRIDES_KEY",
+    "ROUTING_KEY",
+    "STYLE_OVERRIDES_KEY",
+    "PersonaRoutingServiceLLM",
+    "RoutingServiceLLM",
+    "persona_style_for",
+    "resolve_chain",
+]

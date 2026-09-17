@@ -8,7 +8,15 @@ import json
 from agent.build import build_agent
 from agent.contracts import Purpose
 from agent.llm import FakeLLM
-from host.llm_routing import ROUTING_KEY, RoutingServiceLLM, resolve_chain
+from agent.runtime.current import current_instance
+from agent.settings import OVERRIDES_KEY, STYLE_OVERRIDES_KEY
+from host.llm_routing import (
+    ROUTING_KEY,
+    PersonaRoutingServiceLLM,
+    RoutingServiceLLM,
+    persona_style_for,
+    resolve_chain,
+)
 from platform_contracts import DomainEvent, ErrorSuffix, ServiceError
 
 
@@ -29,9 +37,7 @@ def _call_factory(fail_provider_ids: set[str], calls: list[dict] | None = None):
     async def call(domain: str, name: str, args: dict):
         assert name in ("complete", "complete_stream", "list_providers", "get_setting")
         if name == "list_providers":
-            return [
-                {"id": "p-main", "enabled": True, "has_api_key": True, "default_model": "m-main"}
-            ]
+            return [{"id": "p-main", "enabled": True, "has_api_key": True, "models": ["m-main"]}]
         if name == "get_setting":
             raise ServiceError("settings", ErrorSuffix.NOT_FOUND, "unknown setting")
         calls.append({"provider": args["provider_id"], "model": args["model"]})
@@ -167,3 +173,86 @@ class TestBuildWiring:
             assert app.master._arbiter._llm is app.master._llm
         finally:
             app.close()
+
+
+class _Instance:
+    """Turn context stand-in: only .persona is consulted."""
+
+    def __init__(self, persona: str) -> None:
+        self.persona = persona
+
+
+class TestPersonaRouting:
+    async def test_persona_override_pins_provider_and_model(self) -> None:
+        calls: list[dict] = []
+        llm = PersonaRoutingServiceLLM(
+            _call_factory(set(), calls=calls),
+            settings=_Settings(
+                {
+                    OVERRIDES_KEY: {
+                        "orchestrator": {"provider": "p-main", "model": "m-forced"},
+                    }
+                }
+            ),
+        )
+        token = current_instance.set(_Instance("orchestrator"))
+        try:
+            reply = await llm.complete([{"role": "user", "content": "hi"}])
+        finally:
+            current_instance.reset(token)
+        assert reply.text == "from p-main/m-forced"
+        assert calls == [{"provider": "p-main", "model": "m-forced"}]
+
+    async def test_alias_and_outside_turn_fall_back_to_default(self) -> None:
+        calls: list[dict] = []
+        llm = PersonaRoutingServiceLLM(
+            _call_factory(set(), calls=calls),
+            settings=_Settings(
+                {
+                    OVERRIDES_KEY: {
+                        "orchestrator": {"provider": "p-main", "model": "m-forced"},
+                    }
+                }
+            ),
+        )
+        # Alias lucien resolves to orchestrator: the override applies
+        token = current_instance.set(_Instance("lucien"))
+        try:
+            await llm.complete([{"role": "user", "content": "hi"}])
+        finally:
+            current_instance.reset(token)
+        assert calls == [{"provider": "p-main", "model": "m-forced"}]
+
+        # Outside a turn (no instance bound) the default resolution runs
+        calls.clear()
+        reply = await llm.complete([{"role": "user", "content": "hi"}])
+        assert reply.text == "from p-main/m-main"
+        assert calls == [{"provider": "p-main", "model": "m-main"}]
+
+    async def test_other_persona_uses_default_route(self) -> None:
+        calls: list[dict] = []
+        llm = PersonaRoutingServiceLLM(
+            _call_factory(set(), calls=calls),
+            settings=_Settings({OVERRIDES_KEY: {"orchestrator": {"provider": "p-main"}}}),
+        )
+        token = current_instance.set(_Instance("scout"))
+        try:
+            await llm.complete([{"role": "user", "content": "hi"}])
+        finally:
+            current_instance.reset(token)
+        assert calls == [{"provider": "p-main", "model": "m-main"}]
+
+
+class TestPersonaStyle:
+    def test_override_wins_and_falls_back(self) -> None:
+        settings = _Settings(
+            {
+                STYLE_OVERRIDES_KEY: {"orchestrator": "毒舌"},
+                "agent.style": "热心",
+            }
+        )
+        assert persona_style_for(settings, "orchestrator") == "毒舌"
+        assert persona_style_for(settings, "scout") == ""
+        broken = _Settings(fail=True)
+        assert persona_style_for(broken, "orchestrator") == ""
+        assert persona_style_for(None, "orchestrator") == ""

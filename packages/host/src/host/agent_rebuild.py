@@ -54,8 +54,7 @@ from .bridge import make_domain_tools
 from .embedder_adapter import ServiceEmbedder
 from .jobs_router import make_job_cancel_router
 from .lifecycle import close_quietly
-from .llm_adapter import ServiceLLM
-from .llm_routing import RoutingServiceLLM
+from .llm_routing import PersonaRoutingServiceLLM, RoutingServiceLLM
 
 log = logging.getLogger("host.agent_rebuild")
 
@@ -127,7 +126,9 @@ class AgentRebuilder:
         return build_agent(
             data_dir=self.data_agent_dir,
             workspace_dir=workspace,
-            llm=self.injected_llm if self.injected_llm is not None else ServiceLLM(self.call),
+            llm=self.injected_llm
+            if self.injected_llm is not None
+            else PersonaRoutingServiceLLM(self.call, settings=self.settings_store, bus=self.bus),
             bus=self.bus,
             settings_store=self.settings_store,
             extra_tools=make_domain_tools(self.domain_mounts, audit=self.audit, quota=self.quota),

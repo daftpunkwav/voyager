@@ -67,7 +67,7 @@ from agent.runtime.trajectory import TrajectoryStore
 from agent.runtime.wake_budget import WakeBudget
 from agent.runtime.wire import bind_event_loop
 from agent.settings import DEFS as AGENT_SETTING_DEFS
-from agent.settings import WORKSPACE_DIR_KEY
+from agent.settings import STYLE_OVERRIDES_KEY, WORKSPACE_DIR_KEY
 from agent.skills import SkillLoader
 from agent.skills.organizer import SkillOrganizer
 from agent.subagent import Spawner, SubagentRegistry
@@ -577,10 +577,18 @@ def build_agent(
                 exclude_summaries=exclude,
                 exclude_profile_keys=profile_keys,
             )
+        # Speaking style: the per-agent override (agent.style.overrides) wins
+        # over the global agent.style, mirroring the guidelines lookup above
+        raw_styles = settings.get(STYLE_OVERRIDES_KEY) or {}
+        style = (
+            str(raw_styles.get(canonical_persona_key(persona_key), "") or "")
+            if isinstance(raw_styles, dict)
+            else ""
+        ) or str(settings.get("agent.style") or "")
         return builder.system(
             persona=persona,
             task=task,
-            style=settings.get("agent.style"),
+            style=style,
             conduct=conduct,
             guideline=guideline,
             memory_cards=cards.memory_cards,

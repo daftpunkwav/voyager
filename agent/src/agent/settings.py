@@ -31,6 +31,8 @@ OUTREACH_QUIET_KEY = "agent.outreach.quiet_hours"
 TRIGGERS_COOLDOWN_KEY = "agent.triggers.cooldown_s"
 SUBAGENTS_MAX_DEPTH_KEY = "agent.subagents.max_depth"
 ROUTING_KEY = "agent.llm.routing"
+OVERRIDES_KEY = "agent.llm.overrides"
+STYLE_OVERRIDES_KEY = "agent.style.overrides"
 WORKSPACE_DIR_KEY = "agent.workspace.dir"
 
 DEFS = [
@@ -598,6 +600,25 @@ DEFS = [
             '"fallbacks": [{"provider": "", "model": ""}]}}; purposes: chat / arbiter / distill / '
             "context_planner / embedding. Empty entries fall back to the default provider/model."
         ),
+    ),
+    SettingDef(
+        key=OVERRIDES_KEY,
+        module="agent",
+        type=SettingType.JSON,
+        default={},
+        description=(
+            'Per-persona model overrides: {"<persona key>": {"provider": "<id>", "model": "<name>", '
+            '"fallbacks": [{"provider": "", "model": ""}]}}. Consulted per turn for the '
+            "conversation's persona; empty provider/model fields fall back to the default resolution."
+        ),
+    ),
+    SettingDef(
+        key=STYLE_OVERRIDES_KEY,
+        module="agent",
+        type=SettingType.JSON,
+        default={},
+        user_only=True,
+        description="Per-agent speaking styles {<persona key>: text}, layered over agent.style for that persona (user-writable only)",
     ),
     SettingDef(
         key="agent.llm.base_url",
