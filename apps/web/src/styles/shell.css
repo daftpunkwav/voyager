@@ -396,19 +396,6 @@
   overflow-y: auto;
   padding: clamp(16px, 2.5vw, 32px);
 }
-
-/* Keep legacy class names as fallback */
-.main:has(.chat-page) {
-  height: 100vh;
-  height: 100dvh;
-  min-height: 0;
-}
-.content:has(.chat-page) {
-  max-width: none;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
 .main:has(.notes-page) {
   height: 100vh;
   height: 100dvh;
@@ -467,6 +454,12 @@
 .chat-side__section {
   min-width: 0;
 }
+/* Sections separate with the same hairline rhythm as the settings groups */
+.chat-side__section + .chat-side__section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--bg-200);
+}
 .chat-side__head {
   display: flex;
   align-items: center;
@@ -493,10 +486,12 @@
 }
 .chat-side__title {
   margin: 0;
-  font-size: 12px;
+  /* Same micro-label recipe as the settings group labels */
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--text-600);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-500);
 }
 .chat-side__meta {
   margin-left: auto;
@@ -961,9 +956,6 @@
   font-size: 11.5px;
   color: var(--text-400);
 }
-.chat-turntext {
-  padding: 0 2px;
-}
 
 /* Round block: one ReAct round inside the trace — header (round, model,
    tokens, latency), the round's lead-in text, a meta line, then tool rows. */
@@ -1068,113 +1060,14 @@
   cursor: pointer;
   color: var(--text-500);
   font-size: 12.5px;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease-apple),
+    color var(--dur-fast, 150ms) var(--ease-apple);
 }
 .chat-tabs__tab--active {
   background: var(--bg-100);
   color: var(--text-900);
   font-weight: 600;
-}
-/* Trajectory view: per-turn cards with 输入/模型/工具 rails. */
-.chat-traj {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 4px 2px;
-}
-.chat-traj__empty {
-  padding: 16px 4px;
-}
-.chat-traj__turn {
-  border: 1px solid var(--bg-300);
-  border-radius: 10px;
-  padding: 8px 10px;
-  background: var(--bg-100);
-}
-.chat-traj__head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  width: 100%;
-  padding: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  flex-wrap: wrap;
-}
-.chat-traj__query {
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 40%;
-}
-.chat-traj__running {
-  flex: 0 0 auto;
-  font-size: 11px;
-  color: var(--text-600);
-}
-.chat-traj__stats {
-  margin-left: auto;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-.chat-traj__list {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.chat-traj__row {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-}
-.chat-traj__rail {
-  flex: 0 0 34px; /* fits two CJK glyphs */
-  font-size: 11px;
-  color: var(--text-500);
-}
-.chat-traj__text {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.chat-traj__body {
-  flex: 1;
-  min-width: 0;
-}
-.chat-traj__step {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  width: 100%;
-  padding: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-.chat-traj__label {
-  flex: 0 0 auto;
-  font-weight: 600;
-}
-.chat-traj__caret {
-  flex: 0 0 auto;
-  font-size: 10px;
-  color: var(--text-400);
 }
 /* Step fact sheet (shared by the timeline and the trajectory view). */
 .chat-stepdetail {
@@ -1257,6 +1150,19 @@
   text-align: center;
   padding: 2px 0;
 }
+/* Quiet one-shot entrance for newly mounted rows (streaming turns, receipts);
+   history pages prepend above the anchored viewport, so they never flash. */
+.chat-stream > * {
+  transition:
+    opacity var(--dur-fast, 150ms) var(--ease-out),
+    transform var(--dur-fast, 150ms) var(--ease-out);
+}
+@starting-style {
+  .chat-stream > * {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
 .chat-bubble {
   max-width: 100%;
   font-size: 14.5px;
@@ -1283,7 +1189,7 @@
    explicit error chrome instead of the chromeless document style. */
 .chat-bubble--error {
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--error-surface);
   border: 1px solid var(--error);
   color: var(--error);
@@ -1298,7 +1204,7 @@
   background: var(--md-panel-bg);
   color: var(--md-panel-fg);
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   overflow: auto;
   font-size: 12.5px;
 }
@@ -1387,16 +1293,61 @@ a.chat-card:hover {
   transition: width 0.3s var(--ease);
 }
 /* Composer: one rounded card holding the textarea and the bottom bar
-   (context ring / model / reasoning / send), shared with the floating window. */
+   (context ring / model / reasoning / send), shared with the floating window.
+   On the chat page this is the view's single glass layer; the floating window
+   flattens it because its panel is already glass (single-glass rule). */
 .chat-input,
 .float-panel__input {
   display: flex;
   flex-direction: column;
-  padding: 6px 6px 6px 4px;
-  border: 1px solid var(--bg-300);
-  border-radius: 16px;
+  padding: 8px 8px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  box-shadow:
+    0 8px 24px rgba(30, 50, 90, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  transition:
+    border-color var(--dur-fast, 150ms) var(--ease-apple),
+    box-shadow var(--dur-fast, 150ms) var(--ease-apple);
+}
+.chat-input:focus-within,
+.float-panel__input:focus-within {
+  border-color: rgba(255, 255, 255, 0.85);
+  box-shadow:
+    0 8px 28px rgba(30, 50, 90, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+[data-theme='dark'] .chat-input,
+[data-theme='dark'] .float-panel__input {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+[data-theme='dark'] .chat-input:focus-within {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+/* Floating window: its panel is the glass layer, so the composer sits flat */
+.float-panel__input {
   background: var(--bg-50);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: var(--bg-300);
   box-shadow: var(--shadow-xs);
+}
+.float-panel__input:focus-within {
+  background: var(--bg-100);
+  border-color: var(--bg-400);
+  box-shadow: var(--shadow-xs);
+}
+[data-theme='dark'] .float-panel__input {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
 }
 .chat-input textarea,
 .float-panel__input textarea {
@@ -1458,7 +1409,7 @@ a.chat-card:hover {
   width: 36px;
   height: 36px;
   padding: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1466,7 +1417,7 @@ a.chat-card:hover {
 }
 .chat-stop {
   flex: 0 0 auto;
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
 }
 
 /* Composer bar dropdowns (model / reasoning). */
@@ -1711,6 +1662,12 @@ a.chat-card:hover {
 }
 
 /* Labeled discrete slider + five-star rating */
+.ask-slider {
+  width: 100%;
+}
+.ask-slider-value {
+  text-align: center;
+}
 .ask-scale {
   display: flex;
   justify-content: space-between;

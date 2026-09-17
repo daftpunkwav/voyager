@@ -1,8 +1,10 @@
 /**
- * @file SessionDrawer
- * @description Chat session switcher: a centered modal overlay listing the
- * chat sessions (title / status / active badge) with create, rename, delete,
- * and a one-line context-usage status for the open session.
+ * @file SessionModal
+ * @description Chat session switcher: a centered modal (shared ModalOverlay
+ * shell) listing the chat sessions (title / status / active badge) with
+ * create, rename, delete, and a one-line context-usage status for the open
+ * session. Rows read as hairline regions on the modal glass — the overlay is
+ * the single glass layer, no nested cards.
  *
  * Design constraints (workspace conventions):
  * - Overlay dialog, never squeezing the main chat column
@@ -27,13 +29,14 @@ import { useChatStore } from '@/stores/chatStore';
 import { useUIStore } from '@/stores/uiStore';
 import { ServiceError } from '@/bridge/client';
 import { extractErrorMessage } from '@/utils/errors';
+import { ModalOverlay } from '@/components/common/ModalOverlay';
 
-interface SessionDrawerProps {
+interface SessionModalProps {
   open: boolean;
   onClose: () => void;
 }
 
-export function SessionDrawer({ open, onClose }: SessionDrawerProps) {
+export function SessionModal({ open, onClose }: SessionModalProps) {
   const { t } = useTranslation('chat');
   const sessions = useChatStore((s) => s.sessions);
   const activeId = useChatStore((s) => s.activeSessionId);
@@ -76,8 +79,6 @@ export function SessionDrawer({ open, onClose }: SessionDrawerProps) {
       alive = false;
     };
   }, [open, activeId]);
-
-  if (!open) return null;
 
   const fail = (err: unknown) => {
     const message = err instanceof ServiceError ? extractErrorMessage(err) : String(err);
@@ -157,16 +158,18 @@ export function SessionDrawer({ open, onClose }: SessionDrawerProps) {
   };
 
   return (
-    <div
-      className="session-drawer-mask"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('chat:session.drawerTitle')}
-    >
-      <div className="session-drawer glass-card">
-        <div className="session-drawer__head">
-          <span className="session-drawer__title">{t('chat:session.drawerTitle')}</span>
-          <div className="session-drawer__head-actions">
+    <ModalOverlay open={open} onClose={onClose}>
+      <div
+        className="modal glass-card glass-card--dialog session-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="session-modal-title"
+      >
+        <div className="session-modal__head">
+          <span id="session-modal-title" className="session-modal__title">
+            {t('chat:session.drawerTitle')}
+          </span>
+          <div className="session-modal__head-actions">
             <button
               type="button"
               className="btn btn-sm"
@@ -185,47 +188,52 @@ export function SessionDrawer({ open, onClose }: SessionDrawerProps) {
             </button>
           </div>
         </div>
-        <div className="session-drawer__list">
-          {sessions.length === 0 ? (
-            <div className="session-drawer__empty muted">{t('chat:session.empty')}</div>
-          ) : (
-            sessions.map((row) => {
+        {sessions.length === 0 ? (
+          <div className="session-modal__empty muted">{t('chat:session.empty')}</div>
+        ) : (
+          <div className="session-modal__list">
+            {sessions.map((row) => {
               const isActive = row.session_id === activeId;
               return (
                 <div
                   key={row.session_id}
-                  className={`session-drawer__row${isActive ? ' session-drawer__row--active' : ''}`}
+                  className={`session-modal__row${isActive ? ' session-modal__row--active' : ''}`}
                 >
                   {renamingId === row.session_id ? (
                     <input
-                      className="setting-input session-drawer__rename"
+                      className="setting-input session-modal__rename"
                       value={renameDraft}
                       autoFocus
                       onChange={(e) => setRenameDraft(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') void handleRename(row.session_id);
-                        if (e.key === 'Escape') setRenamingId('');
+                        if (e.key === 'Escape') {
+                          // Cancel the rename only: preventDefault keeps the
+                          // modal-level Escape handler from closing too
+                          e.preventDefault();
+                          setRenamingId('');
+                        }
                       }}
                       onBlur={() => void handleRename(row.session_id)}
                     />
                   ) : (
                     <button
                       type="button"
-                      className="session-drawer__main"
+                      className="session-modal__main"
                       disabled={busy}
                       onClick={() => void handleSwitch(row)}
                       title={t('chat:session.switch')}
                     >
-                      <span className="session-drawer__name">{row.title}</span>
+                      <span className="session-modal__name">{row.title}</span>
                       <span className="small muted">
                         {t(`chat:session.status.${row.status}`, { defaultValue: row.status })}
                         {typeof row.turns === 'number' ? ` · ${row.turns}` : ''}
                       </span>
                     </button>
                   )}
-                  <div className="session-drawer__actions">
+                  <div className="session-modal__actions">
                     {isActive ? (
-                      <span className="session-drawer__badge">{t('chat:session.activeBadge')}</span>
+                      <span className="session-modal__badge">{t('chat:session.activeBadge')}</span>
                     ) : null}
                     <button
                       type="button"
@@ -251,11 +259,11 @@ export function SessionDrawer({ open, onClose }: SessionDrawerProps) {
                   </div>
                 </div>
               );
-            })
-          )}
-        </div>
+            })}
+          </div>
+        )}
         {status ? (
-          <div className="session-drawer__status small muted" role="status">
+          <div className="session-modal__status small muted" role="status">
             {t('chat:session.context', {
               used: Math.round(status.used_tokens),
               pct: status.used_pct,
@@ -272,6 +280,6 @@ export function SessionDrawer({ open, onClose }: SessionDrawerProps) {
           </div>
         ) : null}
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

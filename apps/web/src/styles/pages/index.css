@@ -20,14 +20,12 @@
    dim to focus per the Apple material guidance: the scrim + blur is owned by
    global.css. Side drawers keep a transparent mask — parallel, non-blocking
    panels must not break the flow. */
-.drawer-overlay,
-.chat-drawer-backdrop {
+.drawer-overlay {
   background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
-[data-theme='dark'] .drawer-overlay,
-[data-theme='dark'] .chat-drawer-backdrop {
+[data-theme='dark'] .drawer-overlay {
   background: transparent;
 }
 

@@ -272,16 +272,14 @@ function SliderAsk({
   const [v, setV] = useState(Math.round((lo + hi) / 2));
   return (
     <>
-      <div className="small muted mono" style={{ textAlign: 'center' }}>
-        {v}
-      </div>
+      <div className="small muted mono ask-slider-value">{v}</div>
       <input
         type="range"
+        className="ask-slider"
         min={lo}
         max={hi}
         value={v}
         disabled={busy}
-        style={{ width: '100%' }}
         onChange={(e) => setV(Number(e.target.value))}
       />
       <div className="ask-actions">
@@ -314,11 +312,11 @@ function LabeledSliderAsk({
     <>
       <input
         type="range"
+        className="ask-slider"
         min={1}
         max={labels.length}
         value={idx + 1}
         disabled={busy}
-        style={{ width: '100%' }}
         onChange={(e) => setIdx(Number(e.target.value) - 1)}
       />
       <div className="ask-scale" role="status">

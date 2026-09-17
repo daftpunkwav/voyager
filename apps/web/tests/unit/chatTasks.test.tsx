@@ -18,7 +18,8 @@ vi.mock('@/bridge/client', async (importOriginal) => ({
 }));
 
 import { ServiceError } from '@/bridge/client';
-import { MessageList, TaskCards } from '@/widgets/chat/MessageList';
+import { MessageList } from '@/widgets/chat/MessageList';
+import { TaskCards } from '@/widgets/chat/TaskCards';
 import { useChatStore, type ChatEvent, type ProgressCard } from '@/stores/chatStore';
 import { initI18n } from '@/i18n';
 

@@ -24,13 +24,13 @@ import { useChatStream } from '@/hooks/useChatStream';
 import { useChatSend } from '@/hooks/useChatSend';
 import { interruptInstance } from '@/bridge/chatSend';
 import { MessageList } from '@/widgets/chat/MessageList';
+import { TaskCards } from '@/widgets/chat/TaskCards';
 import { TrajectoryView } from '@/widgets/chat/TrajectoryView';
 import { RightPanel } from '@/widgets/chat/RightPanel';
-import { TaskCards } from '@/widgets/chat/MessageList';
 import { ChatLlmMissingTip } from '@/widgets/chat/ChatLlmMissingTip';
 import { AskDialog } from '@/widgets/chat/AskDialog';
 import { ChatComposer } from '@/widgets/chat/ChatComposer';
-import { SessionDrawer } from '@/widgets/chat/SessionDrawer';
+import { SessionModal } from '@/widgets/chat/SessionModal';
 
 export function ChatPage() {
   const { t } = useTranslation('chat');
@@ -106,7 +106,7 @@ export function ChatPage() {
         )}
       </div>
       <RightPanel taskCards={<TaskCards />} />
-      <SessionDrawer open={sessionsOpen} onClose={() => setSessionsOpen(false)} />
+      <SessionModal open={sessionsOpen} onClose={() => setSessionsOpen(false)} />
     </section>
   );
 }

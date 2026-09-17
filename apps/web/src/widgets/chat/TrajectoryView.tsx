@@ -168,7 +168,7 @@ export function TrajectoryView() {
   };
 
   if (rows.length === 0) {
-    return <div className="chat-traj__empty muted">{t('chat:traj.empty')}</div>;
+    return <div className="chat-traj2__empty muted">{t('chat:traj.empty')}</div>;
   }
 
   return (

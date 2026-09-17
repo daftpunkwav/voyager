@@ -30,6 +30,10 @@ export function ModalOverlay({ open, onClose, className, children }: ModalOverla
   // holds the overlay mounted for the exit animation before it unmounts.
   const seenOpen = useRef(open);
   const [leaving, setLeaving] = useState(false);
+  // Scrim-click close requires press AND release on the scrim itself: a text
+  // selection that starts inside the dialog and ends on the scrim targets its
+  // click at the common ancestor (the overlay root) and must not close.
+  const scrimPressed = useRef(false);
 
   if (open) seenOpen.current = true;
 
@@ -45,7 +49,9 @@ export function ModalOverlay({ open, onClose, className, children }: ModalOverla
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      // Inner Escape consumers (e.g. a rename input cancelling itself) mark
+      // the event handled via preventDefault; the modal must not double-close.
+      if (e.key === 'Escape' && !e.defaultPrevented) onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -57,7 +63,12 @@ export function ModalOverlay({ open, onClose, className, children }: ModalOverla
     <div
       className={`modal-overlay${leaving ? ' is-leaving' : ''}${className ? ` ${className}` : ''}`}
       role="presentation"
-      onClick={onClose}
+      onMouseDown={(e) => {
+        scrimPressed.current = e.target === e.currentTarget;
+      }}
+      onMouseUp={(e) => {
+        if (scrimPressed.current && e.target === e.currentTarget) onClose();
+      }}
     >
       {children}
     </div>,
