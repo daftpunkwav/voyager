@@ -456,7 +456,63 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin: 0 0 8px;
+  margin: 0 0 10px;
+}
+/* Persona fact rows (style / mode / tool surface), aligned with the settings
+   micro-label rhythm */
+.persona-card__facts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.persona-fact {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.persona-fact dt {
+  flex: 0 0 72px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-500);
+}
+.persona-fact dd {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-700);
+  min-width: 0;
+}
+.persona-card__details {
+  margin-top: 8px;
+}
+.persona-card__details summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-500);
+}
+.persona-card__details summary:hover {
+  color: var(--text-700);
+}
+.persona-tool-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0 0;
+}
+.persona-tool-chip {
+  padding: 1px 7px;
+  border-radius: var(--radius-pill, 999px);
+  border: 1px solid var(--bg-300);
+  background: var(--bg-100);
+  color: var(--text-500);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+[data-theme='dark'] .persona-tool-chip {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-400);
 }
 .persona-card__head .h3 {
   font-size: 15px;

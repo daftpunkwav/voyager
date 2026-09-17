@@ -3,7 +3,9 @@
  * @description Persona preset grid; loads list_personas on mount and reports its own toasts.
  *
  * Responsibilities:
- * - Load and render the persona presets (duty, description, tags)
+ * - Load and render the persona presets with their full contract: identity
+ *   (key), speaking style, default reasoning mode, the complete tool
+ *   allow-list (chips, not a count) and the system prompt (collapsed)
  * - Patch the personas count into the team snapshot
  */
 
@@ -82,25 +84,49 @@ export function PersonaGrid() {
           />
         ) : (
           personas.map((p) => (
-            <div key={p.key} className="persona-card">
+            <article key={p.key} className="persona-card">
               <div className="persona-card__head">
                 <h3 className="h3">{p.display_name}</h3>
                 <span className="chip brand">{p.key}</span>
               </div>
-              <p className="muted small">{p.style}</p>
-              <p className="small">{t('team:persona.defaultMode', { mode: p.default_mode })}</p>
-              <p className="small">
-                {t('team:label.tools', {
-                  value: p.tool_allow
-                    ? t('team:tools.count', { n: p.tool_allow.length })
-                    : t('team:tools.unrestricted'),
-                })}
-              </p>
-              <details className="small">
+
+              <dl className="persona-card__facts">
+                <div className="persona-fact">
+                  <dt>{t('team:persona.styleLabel')}</dt>
+                  <dd>{p.style}</dd>
+                </div>
+                <div className="persona-fact">
+                  <dt>{t('team:persona.modeLabel')}</dt>
+                  <dd>{p.default_mode}</dd>
+                </div>
+                <div className="persona-fact">
+                  <dt>{t('team:persona.toolsLabel')}</dt>
+                  <dd>
+                    {p.tool_allow?.length
+                      ? t('team:tools.count', { n: p.tool_allow.length })
+                      : t('team:tools.unrestricted')}
+                  </dd>
+                </div>
+              </dl>
+
+              {p.tool_allow?.length ? (
+                <details className="persona-card__details">
+                  <summary>{t('team:tools.list')}</summary>
+                  <div className="persona-tool-list">
+                    {p.tool_allow.map((tool) => (
+                      <span key={tool} className="persona-tool-chip">
+                        {tool}
+                      </span>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
+
+              <details className="persona-card__details">
                 <summary>{t('team:persona.systemPrompt')}</summary>
                 <pre className="system-prompt">{p.system_prompt}</pre>
               </details>
-            </div>
+            </article>
           ))
         )}
       </div>
