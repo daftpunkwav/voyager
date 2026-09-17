@@ -33,6 +33,7 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { extractErrorMessage } from '@/utils/errors';
 import { PRODUCT_NAME } from '@/brand';
 
+import { SettingsIcons } from '@/components/icons/SettingsIcons';
 import { LlmUsageDashboard } from '@/components/usage/LlmUsageDashboard';
 import { ActivityFeed } from '@/components/activity/ActivityFeed';
 import { PersonaGrid } from '@/components/team/PersonaGrid';
@@ -65,37 +66,40 @@ type Section =
   | 'about';
 
 // Labels resolve through settings:nav.<id> at render time so the active
-// language applies.
-const NAV_GROUPS: { labelKey: string; items: { id: Section; icon: string }[] }[] = [
+// language applies; icons are stroke glyphs keyed into SettingsIcons.
+const NAV_GROUPS: {
+  labelKey: string;
+  items: { id: Section; icon: keyof typeof SettingsIcons }[];
+}[] = [
   {
     labelKey: 'navGroup.basic',
     items: [
-      { id: 'general', icon: '○' },
-      { id: 'appearance', icon: '◐' },
-      { id: 'llm', icon: '◇' },
+      { id: 'general', icon: 'general' },
+      { id: 'appearance', icon: 'appearance' },
+      { id: 'llm', icon: 'llm' },
     ],
   },
   {
     labelKey: 'navGroup.agent',
     items: [
-      { id: 'agents', icon: '⊙' },
-      { id: 'agentLlm', icon: '◈' },
-      { id: 'subagents', icon: '⊕' },
-      { id: 'plugins', icon: '⌗' },
-      { id: 'mcp', icon: '⇄' },
-      { id: 'skills', icon: '✦' },
-      { id: 'commands', icon: '⌘' },
-      { id: 'tools', icon: '⚒' },
+      { id: 'agents', icon: 'agents' },
+      { id: 'agentLlm', icon: 'agentLlm' },
+      { id: 'subagents', icon: 'subagents' },
+      { id: 'plugins', icon: 'plugins' },
+      { id: 'mcp', icon: 'mcp' },
+      { id: 'skills', icon: 'skills' },
+      { id: 'commands', icon: 'commands' },
+      { id: 'tools', icon: 'tools' },
     ],
   },
   {
     labelKey: 'navGroup.system',
     items: [
-      { id: 'health', icon: '♥' },
-      { id: 'usage', icon: '▥' },
-      { id: 'activity', icon: '◔' },
-      { id: 'data', icon: '▤' },
-      { id: 'about', icon: 'i' },
+      { id: 'health', icon: 'health' },
+      { id: 'usage', icon: 'usage' },
+      { id: 'activity', icon: 'activity' },
+      { id: 'data', icon: 'data' },
+      { id: 'about', icon: 'about' },
     ],
   },
 ];
@@ -115,7 +119,6 @@ export function SettingsPage() {
   const addToast = useUIStore((s) => s.addToast);
   const [section, setSection] = useState<Section>('appearance');
   const [activityKind, setActivityKind] = useState('');
-  const [ghUser, setGhUser] = useState('');
   const [ghPat, setGhPat] = useState('');
   const [unbindId, setUnbindId] = useState<string | null>(null);
 
@@ -207,7 +210,7 @@ export function SettingsPage() {
         <nav className="subnav" aria-label={t('nav.aria')}>
           <button type="button" className="subnav-item subnav-back" onClick={() => navigate('/')}>
             <span className="subnav-icon" aria-hidden>
-              ←
+              <SettingsIcons.back />
             </span>
             {t('nav.back')}
           </button>
@@ -215,22 +218,25 @@ export function SettingsPage() {
           {NAV_GROUPS.map((group) => (
             <div key={group.labelKey} className="subnav-group">
               <div className="subnav-group-label">{t(group.labelKey)}</div>
-              {group.items.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`subnav-item ${section === item.id ? 'active' : ''}`}
-                  onClick={() => setSection(item.id)}
-                >
-                  <span className="subnav-icon" aria-hidden>
-                    {item.icon}
-                  </span>
-                  {t(`nav.${item.id}`)}
-                  {item.id === 'llm' && llmAvailability === 'missing' && (
-                    <span className="dot-unset" />
-                  )}
-                </button>
-              ))}
+              {group.items.map((item) => {
+                const Icon = SettingsIcons[item.icon];
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`subnav-item ${section === item.id ? 'active' : ''}`}
+                    onClick={() => setSection(item.id)}
+                  >
+                    <span className="subnav-icon" aria-hidden>
+                      <Icon />
+                    </span>
+                    {t(`nav.${item.id}`)}
+                    {item.id === 'llm' && llmAvailability === 'missing' && (
+                      <span className="dot-unset" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           ))}
         </nav>
@@ -239,97 +245,104 @@ export function SettingsPage() {
           {section === 'general' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('general.title')}</h2>
-              <h3 className="settings-group-title">GitHub</h3>
-              {accounts.map((a) => (
-                <div key={a.id} className="gh-card" style={{ marginBottom: 16 }}>
-                  <div className="gh-avatar">{a.username[0]?.toUpperCase()}</div>
-                  <div className="gh-meta">
-                    <div className="gh-handle">@{a.username}</div>
-                    <div className="gh-sub">{t('github.bound')}</div>
-                  </div>
-                  <div className="gh-actions">
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => setUnbindId(a.id)}
-                    >
-                      {t('github.unbind')}
-                    </button>
-                  </div>
+              <section className="settings-group">
+                <div className="settings-group-label">GitHub</div>
+                {accounts.length > 0 && (
+                  <ul className="settings-rows">
+                    {accounts.map((a) => (
+                      <li key={a.id} className="settings-row">
+                        <div className="gh-avatar">{a.username[0]?.toUpperCase()}</div>
+                        <div className="gh-meta">
+                          <div className="gh-handle">@{a.username}</div>
+                          <div className="gh-sub">{t('github.bound')}</div>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setUnbindId(a.id)}
+                        >
+                          {t('github.unbind')}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="form-row">
+                  <label htmlFor="gh-pat">{t('github.patLabel')}</label>
+                  <input
+                    id="gh-pat"
+                    className="field input"
+                    type="password"
+                    value={ghPat}
+                    onChange={(e) => setGhPat(e.target.value)}
+                    autoComplete="off"
+                  />
                 </div>
-              ))}
-              <div className="form-row">
-                <label>{t('github.username')}</label>
-                <input
-                  className="field input"
-                  value={ghUser}
-                  onChange={(e) => setGhUser(e.target.value)}
-                />
-              </div>
-              <div className="form-row">
-                <label>Personal Access Token</label>
-                <input
-                  className="field input"
-                  type="password"
-                  value={ghPat}
-                  onChange={(e) => setGhPat(e.target.value)}
-                />
-              </div>
-              <button type="button" className="btn btn-primary" onClick={() => void bindGithub()}>
-                {t('github.saveAndBind')}
-              </button>
+                <div className="settings-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => void bindGithub()}
+                  >
+                    {t('github.saveAndBind')}
+                  </button>
+                </div>
+              </section>
             </section>
           )}
 
           {section === 'appearance' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('appearance.title')}</h2>
-              <div className="theme-cards">
-                {(['light', 'dark', 'system'] as const).map((th) => (
-                  <button
-                    key={th}
-                    type="button"
-                    className={`theme-card ${theme === th ? 'active' : ''}`}
-                    onClick={() => {
-                      // Sole theme write path: set_theme persists to the store (including
-                      // "system") and the selected state is written back only on success.
-                      // Must not go through updateSettings — it would pass {theme} into
-                      // set_setting and misalign the parameters.
-                      changeTheme(th).catch((err) => {
-                        addToast({
-                          type: 'error',
-                          message: t('toast.themeSaveFailed', {
-                            message: extractErrorMessage(err),
-                          }),
+              <section className="settings-group">
+                <div className="settings-group-label">{t('appearance.theme.label')}</div>
+                <div className="theme-cards">
+                  {(['light', 'dark', 'system'] as const).map((th) => (
+                    <button
+                      key={th}
+                      type="button"
+                      className={`theme-card ${theme === th ? 'active' : ''}`}
+                      onClick={() => {
+                        // Sole theme write path: set_theme persists to the store (including
+                        // "system") and the selected state is written back only on success.
+                        // Must not go through updateSettings — it would pass {theme} into
+                        // set_setting and misalign the parameters.
+                        changeTheme(th).catch((err) => {
+                          addToast({
+                            type: 'error',
+                            message: t('toast.themeSaveFailed', {
+                              message: extractErrorMessage(err),
+                            }),
+                          });
                         });
-                      });
-                    }}
-                  >
-                    <div className={`theme-preview pv-${th === 'system' ? 'auto' : th}`}>
-                      <div className="pv-side">
-                        <i className="on" />
-                        <i />
-                        <i />
+                      }}
+                    >
+                      <div className={`theme-preview pv-${th === 'system' ? 'auto' : th}`}>
+                        <div className="pv-side">
+                          <i className="on" />
+                          <i />
+                          <i />
+                        </div>
+                        <div className="pv-body">
+                          <i className="t" />
+                          <i />
+                        </div>
                       </div>
-                      <div className="pv-body">
-                        <i className="t" />
-                        <i />
+                      <div className="theme-card-label">
+                        {th === 'light'
+                          ? t('appearance.theme.light')
+                          : th === 'dark'
+                            ? t('appearance.theme.dark')
+                            : t('appearance.theme.system')}
+                        <span className="theme-card-check">✓</span>
                       </div>
-                    </div>
-                    <div className="theme-card-label">
-                      {th === 'light'
-                        ? t('appearance.theme.light')
-                        : th === 'dark'
-                          ? t('appearance.theme.dark')
-                          : t('appearance.theme.system')}
-                      <span className="theme-card-check">✓</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
+                    </button>
+                  ))}
+                </div>
+              </section>
 
-              <div className="form-row" style={{ marginTop: 24 }}>
-                <span className="field-label">{t('appearance.locale.label')}</span>
+              <section className="settings-group">
+                <div className="settings-group-label">{t('appearance.locale.label')}</div>
                 <div className="theme-cards">
                   {LOCALE_CARDS.map((item) => (
                     <button
@@ -358,14 +371,14 @@ export function SettingsPage() {
                     </button>
                   ))}
                 </div>
-              </div>
+              </section>
 
-              <div className="font-row" style={{ marginTop: 24 }}>
-                <div className="font-slider-block form-row">
-                  <label className="field-label">
-                    {t('appearance.fontScale.label')}{' '}
-                    <span className="val">{fontScale.toFixed(1)}×</span>
-                  </label>
+              <section className="settings-group">
+                <div className="settings-group-head">
+                  <div className="settings-group-label">{t('appearance.fontScale.label')}</div>
+                  <span className="settings-group-value">{fontScale.toFixed(1)}×</span>
+                </div>
+                <div className="font-row">
                   <input
                     type="range"
                     className="slider"
@@ -390,15 +403,15 @@ export function SettingsPage() {
                       });
                     }}
                   />
-                </div>
-                <div className="font-preview">
-                  <div className="fp-sample">
-                    <span className="fp-aa">Aa</span>
-                    <span className="fp-cn">{t('appearance.fontScale.preview')}</span>
+                  <div className="font-preview">
+                    <div className="fp-sample">
+                      <span className="fp-aa">Aa</span>
+                      <span className="fp-cn">{t('appearance.fontScale.preview')}</span>
+                    </div>
+                    <div className="fp-en">The quick brown fox</div>
                   </div>
-                  <div className="fp-en">The quick brown fox</div>
                 </div>
-              </div>
+              </section>
             </section>
           )}
 
@@ -471,13 +484,15 @@ export function SettingsPage() {
           {section === 'health' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('health.title')}</h2>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => navigate('/system/health')}
-              >
-                {t('health.open')}
-              </button>
+              <section className="settings-group">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => navigate('/system/health')}
+                >
+                  {t('health.open')}
+                </button>
+              </section>
             </section>
           )}
 
@@ -498,31 +513,40 @@ export function SettingsPage() {
           {section === 'data' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('data.title')}</h2>
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ marginRight: 8 }}
-                onClick={() => void exportProjects()}
-              >
-                {t('data.exportProjects')}
-              </button>
-              <button type="button" className="btn btn-ghost" onClick={() => void exportNotes()}>
-                {t('data.exportNotes')}
-              </button>
+              <section className="settings-group">
+                <div className="settings-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => void exportProjects()}
+                  >
+                    {t('data.exportProjects')}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => void exportNotes()}
+                  >
+                    {t('data.exportNotes')}
+                  </button>
+                </div>
+              </section>
             </section>
           )}
 
           {section === 'about' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('about.title', { name: PRODUCT_NAME })}</h2>
-              <div className="about-row">
-                <span className="k">{t('about.versionLabel')}</span>
-                <span>v1.0.0</span>
-              </div>
-              <div className="about-row">
-                <span className="k">{t('about.positioningLabel')}</span>
-                <span>{t('about.positioning')}</span>
-              </div>
+              <section className="settings-group">
+                <div className="about-row">
+                  <span className="k">{t('about.versionLabel')}</span>
+                  <span>v1.0.0</span>
+                </div>
+                <div className="about-row">
+                  <span className="k">{t('about.positioningLabel')}</span>
+                  <span>{t('about.positioning')}</span>
+                </div>
+              </section>
             </section>
           )}
         </div>

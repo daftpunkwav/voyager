@@ -93,9 +93,11 @@
   font: 500 13px/1.2 var(--font-sans);
   color: var(--text-800);
   text-align: left;
+  transform-origin: left center;
   transition:
-    background 0.15s var(--ease),
-    color 0.15s var(--ease);
+    background var(--dur-fast, 150ms) var(--ease-apple),
+    color var(--dur-fast, 150ms) var(--ease-apple),
+    transform var(--dur-fast, 150ms) var(--ease-apple);
   cursor: pointer;
 }
 .subnav-icon {
@@ -105,15 +107,21 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 14px;
-  line-height: 1;
-  opacity: 0.9;
+  color: var(--text-500);
+  transition: color var(--dur-fast, 150ms) var(--ease-apple);
+}
+.subnav-item:hover .subnav-icon {
+  color: var(--text-700);
+}
+.subnav-item.active .subnav-icon {
+  color: inherit;
 }
 .subnav-item:hover {
   background: var(--bg-300);
 }
 .subnav-item:active {
   background: var(--bg-400);
+  transform: scale(0.985);
 }
 .subnav-item.active {
   background: rgba(0, 122, 255, 0.1);
@@ -186,16 +194,111 @@
   margin: 0 0 16px;
 }
 /* Category heading inside a section (Agent blocks are grouped in four) */
-.settings-group-title {
-  margin: 24px 0 0;
-  font-size: 12px;
+/* ---------- Group grammar (shared with the LLM tab's .llm-group) ----------
+   Hairline-separated groups with uppercase micro labels; the section panel is
+   the only glass surface, groups sit flat on it. Rhythm: .form-row already
+   carries the inter-field 16px, so groups only add the divider + 16px
+   breathing room on each side. */
+.settings-group,
+.llm-group {
+  padding: 16px 0 0;
+}
+.settings-group + .settings-group,
+.llm-group + .llm-group {
+  border-top: 1px solid var(--bg-300);
+  margin-top: 16px;
+}
+[data-theme='dark'] .settings-group + .settings-group,
+[data-theme='dark'] .llm-group + .llm-group {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+.settings-group-label,
+.llm-group-label {
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-500);
+  margin-bottom: 12px;
 }
-.settings-group-title:first-of-type {
-  margin-top: 10px;
+.settings-group-head,
+.llm-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.settings-group-head .settings-group-label,
+.llm-group-head .llm-group-label {
+  margin-bottom: 0;
+}
+/* Live value shown in a group head (e.g. the font-scale multiplier) */
+.settings-group-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--brand-500);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Row list (hairline container + divided rows, mirrors the LLM
+   model list): bound GitHub accounts and similar entity rows ---------- */
+.settings-rows {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  border: 1px solid var(--bg-300);
+  border-radius: var(--radius, 12px);
+  overflow: hidden;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-50);
+  border-bottom: 1px solid var(--bg-300);
+}
+.settings-row:last-child {
+  border-bottom: 0;
+}
+[data-theme='dark'] .settings-rows {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+[data-theme='dark'] .settings-row {
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+/* Bound-account row content (inside .settings-row) */
+.gh-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  background: #24292e;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.gh-meta {
+  flex: 1;
+  min-width: 0;
+}
+.gh-meta .gh-handle {
+  font-size: 14px;
+  font-weight: 600;
+}
+.gh-meta .gh-sub {
+  font-size: 12px;
+  color: var(--text-500);
+  margin-top: 2px;
+}
+/* Horizontal action row (primary + ghost pairs) */
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* ---------- Agent guidelines / clear memory ---------- */
@@ -277,6 +380,21 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--text-700);
+}
+/* In settings sections the MCP form's inline heading joins the group grammar:
+   same hairline + micro label rhythm instead of a mid-card subheading. */
+.settings-section .memory-subhead {
+  margin: 16px 0 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--bg-300);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-500);
+}
+[data-theme='dark'] .settings-section .memory-subhead {
+  border-top-color: rgba(255, 255, 255, 0.08);
 }
 .memory-summary {
   margin: 0;
@@ -544,10 +662,6 @@
 .theme-card.active .theme-card-check {
   opacity: 1;
 }
-.theme-card-check svg {
-  width: 10px;
-  height: 10px;
-}
 
 /* ---------- Field groups ---------- */
 .form-row {
@@ -604,30 +718,12 @@
   display: grid;
   grid-template-columns: 1fr 280px;
   gap: 24px;
-  align-items: start;
-}
-.font-slider-block .field-label {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-.font-slider-block .field-label .val {
-  color: var(--brand-500);
-  font-weight: 700;
-}
-.slider-row {
-  display: flex;
   align-items: center;
-  gap: 12px;
+  /* sits directly under a group head (label carries none of the gap) */
+  margin-top: 12px;
 }
-.slider-row .slider {
-  flex: 1;
-}
-.slider-row .scale {
-  font-size: 11px;
-  color: var(--text-500);
-  width: 36px;
-  text-align: center;
+.font-row .slider {
+  width: 100%;
 }
 .font-preview {
   background: var(--bg-50);
@@ -693,106 +789,6 @@
   font-weight: 700;
 }
 
-/* ---------- API key input + show/hide button ---------- */
-.field-with-action {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 6px 0 14px;
-  background: var(--bg-50);
-  border: 1px solid var(--bg-300);
-  border-radius: var(--radius-field);
-  transition:
-    border-color 0.15s var(--ease),
-    box-shadow 0.15s var(--ease);
-}
-.field-with-action:focus-within {
-  border-color: rgba(0, 0, 0, 0.24);
-  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
-}
-[data-theme='dark'] .field-with-action:focus-within {
-  border-color: rgba(255, 255, 255, 0.32);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
-}
-.field-with-action input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  font: 14px/1 var(--font-mono);
-  color: var(--text-800);
-}
-.field-with-action input::placeholder {
-  color: var(--text-400);
-  font-family: var(--font-sans);
-}
-.icon-btn {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-500);
-  cursor: pointer;
-}
-.icon-btn:hover {
-  background: var(--bg-300);
-  color: var(--text-800);
-}
-.icon-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-/* ---------- GitHub account binding card ---------- */
-.gh-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px;
-  background: var(--bg-50);
-  border: 1px solid var(--bg-300);
-  border-radius: var(--radius);
-}
-.gh-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-pill);
-  background: #24292e;
-  color: #fff;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-}
-.gh-meta {
-  flex: 1;
-  min-width: 0;
-}
-.gh-meta .gh-handle {
-  font-size: 15px;
-  font-weight: 600;
-}
-.gh-meta .gh-sub {
-  font-size: 12px;
-  color: var(--text-500);
-  margin-top: 2px;
-}
-.gh-meta .gh-scopes {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-600);
-  margin-top: 6px;
-}
-.gh-actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
 /* ---------- Test button: loading state ---------- */
 .btn .spinner {
   width: 12px;
@@ -808,141 +804,19 @@
   }
 }
 
-/* ---------- Configured info card (key/value list) ---------- */
-.kv-list {
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 10px 16px;
-  font-size: 13px;
-}
-.kv-list dt {
-  color: var(--text-500);
-  font-weight: 500;
-}
-.kv-list dd {
-  margin: 0;
-  color: var(--text-800);
-  font-weight: 500;
-}
-.kv-list dd.mono {
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-/* ---------- Danger zone ---------- */
-.danger-zone {
-  border: 1px solid rgba(255, 59, 48, 0.25);
-  background: rgba(255, 59, 48, 0.03);
-  border-radius: var(--radius);
-  padding: 16px;
-}
-.danger-zone-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--error);
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.danger-zone-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 0;
-  border-top: 1px solid rgba(255, 59, 48, 0.15);
-  font-size: 13px;
-}
-.danger-zone-row:first-of-type {
-  border-top: 0;
-}
-.danger-zone-row .desc {
-  color: var(--text-500);
-  font-size: 12px;
-  margin-top: 2px;
-}
-.btn-danger-outline {
-  background: transparent;
-  border: 1px solid var(--error);
-  color: var(--error);
-  height: 32px;
-  padding: 0 14px;
-  border-radius: var(--radius-pill);
-  font: 600 12px/1 var(--font-sans);
-  cursor: pointer;
-}
-.btn-danger-outline:hover {
-  background: rgba(255, 59, 48, 0.08);
-}
-
-/* ---------- Strength meter ---------- */
-.pwd-strength {
-  display: flex;
-  gap: 4px;
-  margin-top: 6px;
-}
-.pwd-strength i {
-  flex: 1;
-  height: 4px;
-  border-radius: var(--radius-2xs);
-  background: var(--bg-300);
-}
-.pwd-strength.s2 i:nth-child(-n + 2) {
-  background: var(--error);
-}
-.pwd-strength.s3 i:nth-child(-n + 3) {
-  background: var(--warning);
-}
-.pwd-strength.s4 i {
-  background: var(--success);
-}
-
 /* ---------- About section ---------- */
-.about-card {
-  background: var(--bg-50);
-  border: 1px solid var(--bg-300);
-  border-radius: var(--radius);
-  padding: 18px;
-}
 .about-row {
   display: flex;
   justify-content: space-between;
   padding: 6px 0;
   font-size: 13px;
-  border-bottom: 1px dashed var(--bg-300);
+  border-bottom: 1px solid var(--bg-300);
 }
 .about-row:last-child {
   border-bottom: 0;
 }
 .about-row .k {
   color: var(--text-500);
-}
-.about-links {
-  display: flex;
-  gap: 16px;
-  margin-top: 12px;
-  flex-wrap: wrap;
-}
-.about-links a {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--brand-500);
-  font-size: 13px;
-  font-weight: 500;
-}
-.about-links a:hover {
-  text-decoration: underline;
-}
-.about-links svg {
-  width: 12px;
-  height: 12px;
-}
-
-/* tooltip (visual only: title attribute + dashed focus outline as substitute) */
-.tip {
-  cursor: help;
-  border-bottom: 1px dashed var(--text-300);
 }
 
 /* ---------- Mobile fallback (desktop design first; mobile gets only basic responsiveness) ---------- */
@@ -965,12 +839,6 @@
   .font-row {
     grid-template-columns: 1fr;
   }
-  .gh-card {
-    flex-wrap: wrap;
-  }
-  .gh-actions {
-    width: 100%;
-  }
   .llm-agent-table-wrap {
     overflow-x: auto;
   }
@@ -990,12 +858,12 @@
   background: rgba(255, 255, 255, 0.66);
   backdrop-filter: blur(28px) saturate(170%);
   -webkit-backdrop-filter: blur(28px) saturate(170%);
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  /* Light theme is white-on-white: any outer blur shadow reads as a gray halo
+     hugging the card edge, so separation here is the hairline border only.
+     Dark theme keeps its elevation shadow (masked by the dark surface). */
+  border: 1px solid var(--bg-300);
   border-radius: var(--lg-radius-card, 20px);
-  box-shadow:
-    0 24px 48px -24px rgba(15, 23, 42, 0.16),
-    0 2px 6px -2px rgba(15, 23, 42, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 .settings-page .settings-section.glass-card::before {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
@@ -1011,6 +879,102 @@
 }
 [data-theme='dark'] .settings-page .settings-section.glass-card::before {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+}
+
+/* ---------- Nested surfaces flatten ----------
+   Team widgets (SpawnForm / InstanceList / ResumableList / ToolCatalog) bring
+   their own GlassCard; inside the section panel that glass loses blur, shadow
+   and sheen and reads as a hairline region on the panel — one glass layer per
+   view, matching the LLM tab. Embedded sections (usage / activity) host no
+   glass panel themselves — their widget IS the single glass layer, so the
+   flatten must not touch them. */
+.settings-section:not(.settings-section--embedded) .glass-card {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  border-color: var(--bg-300);
+}
+.settings-section:not(.settings-section--embedded) .glass-card::before {
+  display: none;
+}
+[data-theme='dark'] .settings-section:not(.settings-section--embedded) .glass-card {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ---------- Team blocks in settings context ----------
+   Team section titles step down from page headings to the shared group-label
+   rhythm; consecutive sections separate with the same hairline. */
+.settings-main .team-section > .h3 {
+  margin: 0 0 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-500);
+}
+.settings-main .team-section + .team-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--bg-300);
+}
+[data-theme='dark'] .settings-main .team-section + .team-section {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+/* Persona cards sit on glass: hairline tiles instead of solid elevated cards
+   (solid-on-glass reads as a card inside a card). */
+.settings-section .persona-card,
+.settings-section .persona-card:hover {
+  background: transparent;
+  border-color: var(--bg-300);
+  box-shadow: none;
+}
+.settings-section .persona-card:hover {
+  border-color: var(--bg-400);
+}
+[data-theme='dark'] .settings-section .persona-card,
+[data-theme='dark'] .settings-section .persona-card:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+[data-theme='dark'] .settings-section .persona-card:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+/* Inventory lists (skills / hooks / plugins) use the row-list shape: hairline
+   container, divided full-bleed rows. */
+.settings-section .memory-entry-list {
+  /* 12px off the preceding label/head line, matching the group rhythm */
+  margin: 12px 0 0;
+  padding: 0;
+  border: 1px solid var(--bg-300);
+  border-radius: var(--radius, 12px);
+  overflow: hidden;
+}
+.settings-section .memory-entry {
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  background: var(--bg-50);
+  border-bottom: 1px solid var(--bg-300);
+}
+.settings-section .memory-entry:last-child {
+  border-bottom: 0;
+}
+[data-theme='dark'] .settings-section .memory-entry-list {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+[data-theme='dark'] .settings-section .memory-entry {
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+/* Plugin scope picker flattens: hairline region, no fill */
+.settings-section .plugin-picker {
+  background: transparent;
+}
+[data-theme='dark'] .settings-section .plugin-picker {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 /* ---------- LLM tab (models) ----------
@@ -1045,7 +1009,7 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-500);
-  padding: 0 10px;
+  padding: 0 10px 10px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1115,6 +1079,7 @@
 }
 .llm-provider-add {
   width: 100%;
+  margin-top: 10px;
   padding: 7px 10px;
   border: 1px dashed var(--bg-400);
   border-radius: var(--radius-sm);
@@ -1133,8 +1098,12 @@
   color: var(--brand-600);
   background: rgba(0, 122, 255, 0.05);
 }
-.llm-provider-add:active {
+.llm-provider-add:active:not(:disabled) {
   background: rgba(0, 122, 255, 0.1);
+}
+.llm-provider-add:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 [data-theme='dark'] .llm-provider-add {
   border-color: rgba(255, 255, 255, 0.16);
@@ -1175,6 +1144,7 @@
   align-items: flex-start;
   gap: 12px;
   flex-wrap: wrap;
+  margin-bottom: 16px;
 }
 .llm-detail-title-row {
   display: flex;
@@ -1258,27 +1228,7 @@
   transform: translateX(16px) scale(0.92);
 }
 
-/* Hairline-separated groups with uppercase micro labels.
-   Rhythm: .form-row already carries the inter-field 16px, so groups only add
-   the divider + 16px breathing room on each side. */
-.llm-group {
-  padding: 16px 0 0;
-}
-.llm-group + .llm-group {
-  border-top: 1px solid var(--bg-300);
-  margin-top: 16px;
-}
-[data-theme='dark'] .llm-group + .llm-group {
-  border-top-color: rgba(255, 255, 255, 0.08);
-}
-.llm-group-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-500);
-  margin-bottom: 12px;
-}
+/* Field groups + LLM form grid: two columns on the group grammar above */
 .llm-form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1291,6 +1241,13 @@
 .llm-form-grid + .llm-key-field,
 .llm-form-grid + .llm-model-list {
   margin-top: 16px;
+}
+
+/* Auto-saving hint for the API key field */
+.llm-key-saving {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-500);
 }
 
 /* Field with an inline trailing action (API key save / model add) */
@@ -1307,38 +1264,8 @@
   flex-shrink: 0;
 }
 
-/* Connection test: quiet secondary action + inline verdict */
-.llm-test-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-.llm-test-btn {
-  min-width: 200px;
-}
-.llm-test-verdict {
-  font-size: 12px;
-  font-weight: 600;
-  animation: llm-verdict-in 200ms var(--ease-out) both;
-}
-.llm-test-verdict.is-ok {
-  color: #248a3d;
-}
-.llm-test-verdict.is-fail {
-  color: var(--error);
-}
-@keyframes llm-verdict-in {
-  from {
-    opacity: 0;
-    transform: translateY(2px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
+/* Per-model test verdict shares the model-row styles; the shared error block
+   below renders inside the row (flex-basis 100% wraps it to its own line). */
 .llm-test-result__error {
   margin: 10px 0 0;
   padding: 10px 12px;
@@ -1355,68 +1282,60 @@
   animation: llm-verdict-in 200ms var(--ease-out) both;
 }
 
-/* Model chips */
+/* Model list: one row per model with inline test / edit / delete / switch */
+@keyframes llm-verdict-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 .llm-model-list {
   list-style: none;
-  margin: 0 0 10px;
+  margin: 12px 0 0;
   padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.llm-model-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 8px 5px 10px;
-  border-radius: var(--radius-pill);
-  background: var(--bg-200);
   border: 1px solid var(--bg-300);
-  font-size: 12px;
-  font-family: var(--font-mono);
-  transition: border-color var(--dur-fast, 150ms) var(--ease);
+  border-radius: var(--radius, 12px);
+  overflow: hidden;
 }
-.llm-model-chip:hover {
-  border-color: var(--text-300);
-}
-.llm-model-chip__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--brand-500);
-  flex-shrink: 0;
-}
-.llm-model-chip__default {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--brand-600);
-  font-family: var(--font-sans);
-}
-.llm-model-chip__main {
-  display: inline-flex;
+.llm-model-row {
+  display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  background: var(--bg-50);
+  border-bottom: 1px solid var(--bg-300);
+}
+.llm-model-row:last-child {
+  border-bottom: 0;
+}
+.llm-model-row__main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  cursor: pointer;
-  color: inherit;
-  font: inherit;
+  flex: 1;
+}
+.llm-model-row__name {
   font-family: var(--font-mono);
-  text-align: left;
-}
-.llm-model-chip__main:hover .llm-model-chip__name {
-  color: var(--brand-600);
-  text-decoration: underline;
-}
-.llm-model-chip__name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-700);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.llm-model-chip__badge {
+.llm-model-row.is-disabled .llm-model-row__name {
+  color: var(--text-400);
+  text-decoration: line-through;
+}
+.llm-model-row__badge {
   flex: 0 0 auto;
   font-size: 10px;
   font-family: var(--font-sans);
@@ -1426,68 +1345,113 @@
   border: 1px solid var(--bg-300);
   color: var(--text-500);
 }
-.llm-model-chip__remove {
+/* Verdict stays inline after the badges: the main cell is flex:1, so it
+   grows into free space without moving the action buttons. It may shrink
+   (ellipsis) on narrow rows but never wraps. */
+.llm-model-row__result {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  animation: llm-verdict-in 200ms var(--ease-out) both;
+}
+.llm-model-row__result.is-ok {
+  color: #248a3d;
+}
+.llm-model-row__result.is-fail {
+  color: var(--error);
+}
+@keyframes llm-verdict-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* In-flight state of the per-model test button: the spinner replaces the icon
+   inside the same 28px hit target, so the row never reflows. */
+.llm-test-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--bg-300);
+  border-top-color: var(--text-400);
+  border-radius: 50%;
+  animation: llm-test-spin 700ms linear infinite;
+}
+@keyframes llm-test-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.llm-model-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.llm-model-row .llm-test-result__error {
+  flex-basis: 100%;
+}
+.llm-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-400);
   cursor: pointer;
-  padding: 0 2px;
-  line-height: 1;
-  border-radius: 50%;
-  font-size: 13px;
   transition:
     color var(--dur-fast, 150ms) var(--ease),
     background var(--dur-fast, 150ms) var(--ease);
 }
-.llm-model-chip__remove:hover {
+.llm-icon-btn:hover:not(:disabled) {
+  color: var(--text-700);
+  background: var(--bg-200);
+}
+.llm-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.llm-icon-btn.is-danger:hover:not(:disabled) {
   color: var(--error);
   background: rgba(255, 59, 48, 0.1);
 }
-.llm-model-add {
-  margin-top: 4px;
+.llm-model-empty {
+  margin: 10px 0 0;
 }
 
-/* Add-provider dialog: preset chips */
-.llm-preset-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+/* Small switch variant for model rows */
+.llm-switch--sm {
+  width: 34px;
+  height: 20px;
+  margin-left: 4px;
 }
-.llm-preset-chip {
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--bg-300);
-  background: var(--bg-100);
-  color: var(--text-600);
-  cursor: pointer;
-  font: 500 13px/1.2 var(--font-sans);
-  transition:
-    border-color var(--dur-fast, 150ms) var(--ease),
-    background var(--dur-fast, 150ms) var(--ease),
-    color var(--dur-fast, 150ms) var(--ease),
-    transform 160ms var(--ease);
-}
-.llm-preset-chip:active {
-  transform: scale(0.97);
-}
-.llm-preset-chip.is-active {
-  border-color: var(--brand-400);
-  background: var(--brand-50);
-  color: var(--brand-700);
-  font-weight: 600;
-}
-[data-theme='dark'] .llm-preset-chip {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
-  color: var(--text-300);
-}
-[data-theme='dark'] .llm-preset-chip.is-active {
-  background: rgba(10, 132, 255, 0.18);
-  border-color: var(--brand-400);
-  color: var(--brand-200);
+.llm-switch--sm .llm-switch__knob {
+  width: 14px;
+  height: 14px;
 }
 
 /* Model edit dialog toggles */
+/* Model edit dialog: wider + scrollable to fit the JSON config editor
+   (max-width must override the .modal base cap of 440px) */
+.llm-model-dialog {
+  width: min(880px, 94vw);
+  max-width: min(880px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+}
 .llm-model-dialog__grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1518,27 +1482,11 @@
 .llm-model-toggle:active {
   transform: scale(0.97);
 }
-.llm-model-toggle__check {
-  font-size: 11px;
-  max-width: 0;
-  opacity: 0;
-  overflow: hidden;
-  transform: scale(0.5);
-  transition:
-    max-width 200ms var(--ease-out),
-    opacity 200ms var(--ease-out),
-    transform 200ms var(--ease-out);
-}
 .llm-model-toggle.is-on {
   border-color: var(--brand-400);
   background: var(--brand-50);
   color: var(--brand-700);
   font-weight: 600;
-}
-.llm-model-toggle.is-on .llm-model-toggle__check {
-  max-width: 14px;
-  opacity: 1;
-  transform: none;
 }
 [data-theme='dark'] .llm-model-toggle {
   background: rgba(255, 255, 255, 0.06);
@@ -1550,9 +1498,20 @@
   border-color: var(--brand-400);
   color: var(--brand-200);
 }
-[data-theme='dark'] .llm-model-chip {
-  background: rgba(255, 255, 255, 0.06);
+[data-theme='dark'] .llm-model-list {
   border-color: rgba(255, 255, 255, 0.1);
+}
+[data-theme='dark'] .llm-model-row {
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+[data-theme='dark'] .llm-model-row__badge {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+[data-theme='dark'] .llm-icon-btn:hover:not(:disabled) {
+  color: var(--text-200);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 @media (max-width: 1000px) {
@@ -1582,15 +1541,125 @@
 
 @media (prefers-reduced-motion: reduce) {
   .llm-detail-pane,
-  .llm-test-verdict,
+  .llm-model-row__result,
   .llm-test-result__error {
     animation: none;
   }
+  .llm-test-spinner {
+    animation: none;
+  }
   .llm-switch,
-  .llm-switch__knob,
-  .llm-model-toggle__check {
+  .llm-switch__knob {
     transition-duration: 0ms;
   }
+}
+
+/* JSON config editors (model dialog + provider config file) */
+.llm-json-editor {
+  width: 100%;
+  min-height: 220px;
+  padding: 10px 12px;
+  border: 1px solid var(--bg-300);
+  border-radius: var(--radius, 12px);
+  background: var(--bg-50);
+  color: var(--text-700);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  resize: vertical;
+  white-space: pre;
+  overflow: auto;
+}
+.llm-json-editor:focus {
+  outline: none;
+  border-color: var(--text-300);
+}
+[data-theme='dark'] .llm-json-editor {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-200);
+}
+.llm-config-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.llm-config-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.llm-config-block {
+  margin-top: 12px;
+}
+/* Thinking variants: chips added via the + button; click a chip to make it
+   the default (highlighted with a badge), × removes it. */
+.llm-variant-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.llm-variant-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--bg-300);
+  background: var(--bg-100);
+  color: var(--text-600);
+  font: 500 12px/1.4 var(--font-mono);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast, 150ms) var(--ease),
+    background var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease);
+}
+.llm-variant-chip:hover {
+  border-color: var(--text-300);
+}
+.llm-variant-chip.is-default {
+  border-color: var(--brand-400);
+  background: var(--brand-50);
+  color: var(--brand-700);
+  font-weight: 600;
+}
+.llm-variant-chip__default {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--brand-600);
+}
+.llm-variant-chip__remove {
+  border: 0;
+  background: transparent;
+  color: var(--text-400);
+  cursor: pointer;
+  padding: 0 1px;
+  line-height: 1;
+  border-radius: 50%;
+  font-size: 13px;
+  transition: color var(--dur-fast, 150ms) var(--ease);
+}
+.llm-variant-chip__remove:hover {
+  color: var(--error);
+}
+.llm-level-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px 16px;
+}
+.llm-level-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.llm-level-row__key {
+  flex: 0 0 58px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-500);
 }
 
 .llm-agent-table-wrap {
@@ -1647,10 +1716,6 @@
   min-height: 32px;
   font-size: 12px;
   padding: 6px 10px;
-}
-[data-theme='dark'] .llm-model-chip {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .content:has(.settings-shell) {

@@ -43,7 +43,6 @@ export function McpBlock() {
 
   return (
     <div className="agent-settings-block">
-      <h3 className="agent-settings-subtitle">{t('mcp.title')}</h3>
       {loadFailed ? (
         <p className="muted" style={{ fontSize: 12 }}>
           {t('common.loadFailed')}

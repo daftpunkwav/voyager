@@ -70,11 +70,8 @@ export function UserHooksBlock() {
 
   return (
     <div className="agent-settings-block">
-      <h3 className="agent-settings-subtitle">{t('hooks.title')}</h3>
-      <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-        {t('hooks.desc')}
-      </p>
-      <div style={{ marginBottom: 12 }}>
+      <div className="settings-group-head">
+        <div className="settings-group-label">{t('hooks.title')}</div>
         <button
           type="button"
           className="btn btn-sm btn-primary"

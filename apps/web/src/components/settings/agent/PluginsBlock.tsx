@@ -317,7 +317,6 @@ export function PluginsBlock() {
 
   return (
     <div className="agent-settings-block">
-      <h3 className="agent-settings-subtitle">{t('plugins.title')}</h3>
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <input
