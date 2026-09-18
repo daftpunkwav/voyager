@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from typing import Protocol
 
 from fastapi import APIRouter, Request
@@ -88,6 +88,11 @@ _HISTORY_TYPES = (DomainEvent.USER_MESSAGE, DomainEvent.AGENT_MESSAGE, DomainEve
 _TRAJECTORY_TYPES = (DomainEvent.AGENT_STEP,)
 #: Chunk size for session-filtered scans (multiple of any sane page size)
 _FILTER_CHUNK = 400
+#: Page size for SSE catch-up replays (read_after caps each call; a short
+#: page marks the caught-up tail)
+_REPLAY_PAGE = 500
+#: Idle seconds before a live SSE stream emits a keep-alive comment line
+_SSE_IDLE_PING_S = 15.0
 
 
 def _in_session(event: Event, session: str) -> bool:
@@ -305,37 +310,89 @@ def build_chat_router(
             return not sid or _in_session(event, sid)
 
         async def gen() -> AsyncIterator[str]:
-            cursor = start_seq
-            sub = bus.subscribe(*_STREAM_TYPES)
             try:
-                for seq, event in log.read_after(after_seq=cursor, types=_STREAM_TYPES):
-                    cursor = max(cursor, seq)
-                    if _wanted(event):
-                        yield _frame(event, seq)
-                if once:
-                    return
-                while not await request.is_disconnected():
-                    if sub.lagged:  # fell behind: replay missing events from the log
-                        for seq, event in log.read_after(after_seq=cursor, types=_STREAM_TYPES):
-                            cursor = max(cursor, seq)
-                            if _wanted(event):
-                                yield _frame(event, seq)
-                        sub.lagged = False
-                    try:
-                        event = await sub.get(timeout=15.0)
-                    except TimeoutError:
+                async for item in _stream_events(
+                    bus,
+                    start_seq=start_seq,
+                    types=_STREAM_TYPES,
+                    wanted=_wanted,
+                    once=once,
+                    is_disconnected=request.is_disconnected,
+                ):
+                    if item is None:
                         yield ": ping\n\n"  # keep-alive heartbeat
-                        continue
-                    cursor = max(cursor, sub.last_seq)
-                    if _wanted(event):
-                        yield _frame(event, cursor)
+                    else:
+                        seq, event = item
+                        yield _frame(event, seq)
             finally:
-                bus.unsubscribe(sub)
                 limiter.release_sse()
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
     return router
+
+
+async def _stream_events(
+    bus: EventBus,
+    *,
+    start_seq: int,
+    types: tuple[str, ...],
+    wanted: Callable[[Event], bool],
+    once: bool = False,
+    is_disconnected: Callable[[], Awaitable[bool]] | None = None,
+) -> AsyncGenerator[tuple[int, Event] | None, None]:
+    """SSE delivery loop shared by live streaming and once-replay.
+
+    Delivery: replay the log from start_seq to the live tail (page by page,
+    so a backlog larger than one page is not stranded), then follow the
+    subscription. The subscription is created before replaying, so rows the
+    replay covered may still sit in the queue; queue deliveries at or below
+    the replayed cursor are skipped, which is what keeps a lagged client
+    from receiving an event twice. Yields (seq, event) pairs, or None as a
+    keep-alive marker when the subscription idles out.
+    """
+    cursor = start_seq
+    sub = bus.subscribe(*types)
+
+    async def replay_to_tail() -> AsyncGenerator[tuple[int, Event] | None, None]:
+        nonlocal cursor
+        while True:
+            rows = bus.log.read_after(after_seq=cursor, types=types, limit=_REPLAY_PAGE)
+            for seq, event in rows:
+                cursor = max(cursor, seq)
+                if wanted(event):
+                    yield seq, event
+            if len(rows) < _REPLAY_PAGE:
+                return
+
+    try:
+        async for item in replay_to_tail():
+            yield item
+        if once:
+            return
+        while is_disconnected is None or not await is_disconnected():
+            if sub.lagged:  # queue overflowed: dropped events must be
+                # replayed from the log (source of truth); the flag is
+                # cleared first so an overflow during the replay itself is
+                # not lost
+                sub.lagged = False
+                async for item in replay_to_tail():
+                    yield item
+                continue
+            try:
+                event = await sub.get(timeout=_SSE_IDLE_PING_S)
+            except TimeoutError:
+                yield None
+                continue
+            if sub.last_seq <= cursor:
+                # Already delivered by a replay (the queue can still hold
+                # rows the lag replay covered)
+                continue
+            cursor = sub.last_seq
+            if wanted(event):
+                yield cursor, event
+    finally:
+        bus.unsubscribe(sub)
 
 
 def _frame(event: Event, seq: int) -> str:

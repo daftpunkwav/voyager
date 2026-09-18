@@ -220,6 +220,89 @@ class TestChat:
         assert "task.progress" in r.text and "parsing 50%" in r.text
 
 
+class TestSseReplay:
+    def test_sse_lag_replay_skips_queue_duplicates(self, tmp_path) -> None:
+        """After a queue overflow (lagged) the dropped range is replayed from
+        the log; queue-resident rows the replay already covered are skipped,
+        so the consumer sees each seq exactly once."""
+        from gateway.chat import _stream_events
+        from platform_eventbus import EventBus, EventLog
+
+        async def scenario() -> list[int]:
+            event_log = EventLog(tmp_path / "sse.db")
+            bus = EventBus(event_log, queue_size=2)
+            agent = ActorRef(kind=ActorKind.AGENT, id="agent.main")
+
+            async def publish(tag: str) -> int:
+                return await bus.publish(
+                    Event(type=DomainEvent.AGENT_MESSAGE, actor=agent, payload={"content": tag})
+                )
+
+            for i in range(3):
+                await publish(f"e{i}")
+
+            seqs: list[int] = []
+            agen = _stream_events(
+                bus, start_seq=0, types=("agent.message",), wanted=lambda _e: True
+            )
+
+            def _seq(item: tuple[int, Event] | None) -> int:
+                assert item is not None
+                return item[0]
+
+            # Consume two backlog rows; the generator is now suspended on the
+            # third (before its queue-consumption loop)
+            for _ in range(2):
+                seqs.append(_seq(await agen.__anext__()))
+            # Overflow the queue while the consumer is slow: e4/e5 land in the
+            # queue (capacity 2), e5+ is dropped and lagged=True
+            for i in range(3, 6):
+                await publish(f"e{i}")
+            # Resume: row 3 from the pending replay, then the lag replay
+            # re-delivers 4..6 from the log, and the queued copies of 4/5
+            # must be skipped
+            for _ in range(4):
+                seqs.append(_seq(await agen.__anext__()))
+            # Grace window: no further delivery may arrive (drives the dedup
+            # branch; without it the queued 4/5 would show up here)
+            with pytest.raises(asyncio.TimeoutError):
+                await asyncio.wait_for(agen.__anext__(), timeout=0.5)
+            await agen.aclose()
+            event_log.close()
+            return seqs
+
+        assert asyncio.run(scenario()) == [1, 2, 3, 4, 5, 6]
+
+    def test_sse_replay_pages_through_large_backlog(self, tmp_path) -> None:
+        """The catch-up replay loops page by page: a backlog larger than one
+        replay page is fully delivered, not stranded past the first page."""
+        from gateway.chat import _REPLAY_PAGE, _stream_events
+        from platform_eventbus import EventBus, EventLog
+
+        async def scenario() -> list[int]:
+            event_log = EventLog(tmp_path / "sse.db")
+            bus = EventBus(event_log, queue_size=10)
+            agent = ActorRef(kind=ActorKind.AGENT, id="agent.main")
+            for i in range(_REPLAY_PAGE + 40):
+                await bus.publish(
+                    Event(type=DomainEvent.AGENT_MESSAGE, actor=agent, payload={"n": i})
+                )
+            agen = _stream_events(
+                bus, start_seq=0, types=("agent.message",), wanted=lambda _e: True
+            )
+            seqs = []
+            for _ in range(_REPLAY_PAGE + 40):
+                item = await agen.__anext__()
+                assert item is not None
+                seqs.append(item[0])
+            await agen.aclose()
+            event_log.close()
+            return seqs
+
+        seqs = asyncio.run(scenario())
+        assert seqs == list(range(1, _REPLAY_PAGE + 41))
+
+
 class TestTrajectory:
     def _step(self, bus, name: str, **extra):
         payload = {
