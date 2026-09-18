@@ -47,8 +47,7 @@ export function ToolsCatalog() {
       if (category && toolGroupKey(tool) !== category) return false;
       if (!q) return true;
       return (
-        tool.name.toLowerCase().includes(q) ||
-        (tool.description ?? '').toLowerCase().includes(q)
+        tool.name.toLowerCase().includes(q) || (tool.description ?? '').toLowerCase().includes(q)
       );
     });
   }, [tools, search, category]);
@@ -68,11 +67,14 @@ export function ToolsCatalog() {
       describeTool<ToolDetail>(name)
         .then((info) => setDetails((prev) => ({ ...prev, [name]: info })))
         .catch((err) => {
+          // No cached detail: collapse the row so it does not sit on a
+          // perpetual "loading" hint; re-expanding retries the fetch.
           setDetails((prev) => {
             const next = { ...prev };
             delete next[name];
             return next;
           });
+          setExpanded((cur) => (cur === name ? null : cur));
           addToast({
             type: 'error',
             message: t('tools.detailFailed', { message: extractErrorMessage(err) }),
@@ -150,7 +152,10 @@ export function ToolsCatalog() {
                 const open = expanded === tool.name;
                 const detail = details[tool.name];
                 return (
-                  <li key={tool.name} className={`settings-row entity-row${open ? ' is-open' : ''}`}>
+                  <li
+                    key={tool.name}
+                    className={`settings-row entity-row${open ? ' is-open' : ''}`}
+                  >
                     <button
                       type="button"
                       className="entity-row__main entity-row__open"

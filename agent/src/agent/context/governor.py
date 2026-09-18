@@ -25,11 +25,11 @@ from agent.context.usage import (
 )
 from agent.llm import LLMClient
 
-#: A plan compaction that fails to shrink the transcript by at least this
-#: ratio counts as a failed attempt for the backoff guard (grok-style
-#: max_reduction_ratio): low-yield planner calls must not keep burning
-#: planner tokens round after round.
-MIN_REDUCTION_RATIO = 0.8
+#: A plan compaction that leaves more than this fraction of the original
+#: transcript (shrinks by less than 20%) counts as a failed attempt for the
+#: backoff guard (grok-style max_reduction_ratio): low-yield planner calls
+#: must not keep burning planner tokens round after round.
+MAX_REMAINING_RATIO = 0.8
 
 
 class ContextGovernor:
@@ -150,9 +150,9 @@ class ContextGovernor:
             if report["mode"] == "plan":
                 before = int(report.get("before_tokens") or 0)
                 after = int(report.get("after_tokens") or 0)
-                worthwhile = not (before > 0 and after > int(before * MIN_REDUCTION_RATIO))
+                worthwhile = not (before > 0 and after > int(before * MAX_REMAINING_RATIO))
             self._guard.record(plan_applied=report["mode"] == "plan" and worthwhile)
         return report
 
 
-__all__ = ["ContextGovernor"]
+__all__ = ["MAX_REMAINING_RATIO", "ContextGovernor"]

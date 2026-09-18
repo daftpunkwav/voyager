@@ -5,7 +5,7 @@ anchor reset + the low-yield plan guard feeding the backoff)."""
 from __future__ import annotations
 
 from agent.context.backoff import CompactionBackoff
-from agent.context.governor import MIN_REDUCTION_RATIO, ContextGovernor
+from agent.context.governor import MAX_REMAINING_RATIO, ContextGovernor
 from agent.context.prune import PRUNE_MARK, prune_tool_results
 from agent.context.usage import ContextWindow, UsageTracker
 from agent.llm import FakeLLM, LLMReply
@@ -126,7 +126,7 @@ class TestGovernorPruneWiring:
         assert llm.calls == []  # no planner call spent
 
     async def test_low_yield_plan_counts_as_guard_failure(self) -> None:
-        """A plan that shrinks the transcript by less than MIN_REDUCTION_RATIO
+        """A plan that leaves more than MAX_REMAINING_RATIO of the transcript
         feeds the backoff as a failure, so repeated low-yield planner calls
         get suppressed and the mechanical path takes over."""
         from agent.context.tokenizer import estimate_messages
@@ -147,7 +147,7 @@ class TestGovernorPruneWiring:
         target = estimate_messages(msgs) - 1
         first = await gov.compact(msgs, target=target)
         assert first is not None and first["mode"] == "plan"
-        assert first["after_tokens"] > int(first["before_tokens"] * MIN_REDUCTION_RATIO)
+        assert first["after_tokens"] > int(first["before_tokens"] * MAX_REMAINING_RATIO)
         assert len(llm.calls) == 1
         # New input pushes the transcript over the target again; the low-yield
         # failure recorded by the first plan suppresses the planner: the next

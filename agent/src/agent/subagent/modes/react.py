@@ -134,6 +134,20 @@ def _tool_event(outcome: Any) -> str:
     return RuntimeEvent.TOOL_COMPLETED if outcome.ok else RuntimeEvent.TOOL_FAILED
 
 
+def _context_step(report: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Step-trail entry for one governor.enforce/compact report: a prune
+    (cleared old tool results) gets its own wording — it is not an LLM
+    compaction. Returns (summary, detail)."""
+    mode = report.get("mode", "mechanical")
+    if mode == "prune":
+        summary = f"旧工具结果已清理(回收约 {report.get('recovered_tokens', 0)} tokens)"
+        op = "prune"
+    else:
+        summary = f"上下文已自动压缩({mode})"
+        op = "compact"
+    return summary, {"op": op, "mode": mode}
+
+
 async def _run_tool(
     toolbelt: ToolRunner, call: ToolCall, on_event: EventCb, deadline: Deadline | None = None
 ) -> tuple[Any, float]:
@@ -197,14 +211,8 @@ async def run_react(
         if governor is not None:
             report = await governor.enforce(messages)
             if report is not None:
-                mode = report.get("mode", "mechanical")
-                if mode == "prune":
-                    summary = f"旧工具结果已清理(回收约 {report.get('recovered_tokens', 0)} tokens)"
-                    op = "prune"
-                else:
-                    summary = f"上下文已自动压缩({mode})"
-                    op = "compact"
-                await on_step("system", "compact", summary, {"op": op, "mode": mode})
+                summary, detail = _context_step(report)
+                await on_step("system", "compact", summary, detail)
         else:
             messages[:] = compress(messages, budget=compress_budget, prune=False)
         # Round timing: wall latency always; TTFT only when the caller
@@ -475,12 +483,8 @@ async def run_step(
     if governor is not None:
         report = await governor.enforce(messages)
         if report is not None:
-            await on_step(
-                "system",
-                "compact",
-                f"上下文已自动压缩({report.get('mode', 'mechanical')})",
-                {"op": "compact", "mode": report.get("mode", "mechanical")},
-            )
+            summary, detail = _context_step(report)
+            await on_step("system", "compact", summary, detail)
     if toolbelt is not None and belt is not None:
         before_calls = belt.calls
         result = await run_react(
