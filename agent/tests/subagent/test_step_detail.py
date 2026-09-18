@@ -131,7 +131,8 @@ class TestToolStepDetail:
         )
         tools = [s for s in seen if s[0] == "tool"]
         assert len(tools) == 1
-        assert len(tools[0][3]["args"]) <= 2000 + len("…[截断]")
+        # args are kept verbatim now (nothing truncated in trace details)
+        assert tools[0][3]["args"] == '"it * 3000"' or len(tools[0][3]["args"]) > 2000
 
 
 class TestLlmStepDetail:
@@ -190,8 +191,9 @@ class TestLlmStepDetail:
         rounds = [s for s in seen if s[0] == "llm" and s[1].startswith("round-")]
         assert rounds[0][3]["text"] == "先看一下目录。"
         second = rounds[1][3]
-        assert second["text_truncated"] is True
-        assert len(second["text"]) == 8000
+        # full fidelity: round text is stored verbatim, nothing truncated
+        assert second["text"] == big
+        assert "text_truncated" not in second
         # the 120-char summary stays a preview; the full text lives in detail
         assert len(rounds[1][2]) <= 120
 

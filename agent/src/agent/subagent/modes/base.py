@@ -58,8 +58,6 @@ DeltaCb = Callable[[int, str], Awaitable[None]]  # (round, delta text)
 #: it to RuntimeEvents.emit with its run context; modes never see the bus.
 EventCb = Callable[..., Awaitable[None]]
 
-#: Cap on serialized tool arguments kept in a step detail (characters).
-_MAX_DETAIL_ARGS_CHARS = 2000
 
 
 async def noop_step(kind: str, name: str, summary: str, detail: dict[str, Any]) -> None:
@@ -75,43 +73,27 @@ def sys_message(content: str) -> list[dict[str, Any]]:
 
 
 def capped_args(arguments: Any) -> str:
-    """Tool arguments as compact JSON for step details; capped so a pasted
-    document never bloats the trajectory."""
+    """Tool arguments as compact JSON for step details, kept verbatim: the
+    user asked for full fidelity (nothing truncated) in the trace details."""
     try:
-        text = json.dumps(arguments, ensure_ascii=False, default=str)
+        return json.dumps(arguments, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
-        text = str(arguments)
-    if len(text) > _MAX_DETAIL_ARGS_CHARS:
-        return text[:_MAX_DETAIL_ARGS_CHARS] + "…[截断]"
-    return text
-
-
-_MAX_ROUND_TEXT_CHARS = 8000
-
-#: Cap on model thinking kept in a step detail (characters): thinking can
-#: dwarf the answer on reasoning models, and the trajectory is a display
-#: projection, not a log - the full transcript stays in the event log.
-_MAX_REASONING_CHARS = 4000
+        return str(arguments)
 
 
 def round_text_detail(text: str) -> dict[str, Any]:
-    """Full round output for the UI thinking block; capped like capped_args so
-    an unusually long round never bloats the trajectory DB / SSE frames."""
+    """Full round output for the UI thinking block, verbatim."""
     if not text:
         return {}
-    if len(text) > _MAX_ROUND_TEXT_CHARS:
-        return {"text": text[:_MAX_ROUND_TEXT_CHARS], "text_truncated": True}
     return {"text": text}
 
 
 def reasoning_detail(reasoning: str) -> dict[str, Any]:
     """Model thinking for the UI thinking block, kept separate from the
-    answer text; capped like round_text_detail. Empty when the provider
-    sent no separate reasoning channel."""
+    answer text, verbatim. Empty when the provider sent no separate
+    reasoning channel."""
     if not reasoning:
         return {}
-    if len(reasoning) > _MAX_REASONING_CHARS:
-        return {"reasoning": reasoning[:_MAX_REASONING_CHARS], "reasoning_truncated": True}
     return {"reasoning": reasoning}
 
 
@@ -316,19 +298,19 @@ async def run_mode(
     batched through the coalescer; other modes' multi-way calls stay
     non-streaming (their intermediate products never face the user)."""
     runner = runner_for(mode)
-    kwargs: dict[str, Any] = dict(
-        llm=llm,
-        toolbelt=toolbelt,
-        messages=messages,
-        limits=limits,
-        on_step=on_step,
-        on_delta=on_delta,
-        on_event=on_event,
-        continue_if_idle=continue_if_idle,
-        compress_budget=compress_budget,
-        governor=governor,
-        deadline=deadline,
-    )
+    kwargs: dict[str, Any] = {
+        "llm": llm,
+        "toolbelt": toolbelt,
+        "messages": messages,
+        "limits": limits,
+        "on_step": on_step,
+        "on_delta": on_delta,
+        "on_event": on_event,
+        "continue_if_idle": continue_if_idle,
+        "compress_budget": compress_budget,
+        "governor": governor,
+        "deadline": deadline,
+    }
     if mode is Mode.REACT:
         # The raw round log is a REACT-only surface: other modes' intermediate
         # products never face the user, so recording them buys nothing.

@@ -295,19 +295,20 @@ def build_chat_router(
 
     @router.get("/api/chat/rawllm")
     async def get_raw_llm(run_id: str = "", round: int = -1, session: str = "") -> dict:
-        """Raw LLM round log: with `round` the full request transcript and
-        response of that round; without it, the round index (sizes only) for
-        the run. Backed by the trajectory store's raw_rounds table; empty
-        when raw logging recorded nothing for the run."""
+        """Raw LLM round log. With `session`: every recorded round of the
+        session with full bodies (the chat log page). With `run_id` (+ optional
+        `round`): the run's round index or one round's bodies."""
+        sid = _session_or_400(session)
+        if trajectory is None:
+            return {"rounds": [], "round": None}
+        if sid and not run_id:
+            return {"rounds": trajectory.raw_rounds_for_session(sid), "round": None}
         if not run_id:
             raise ServiceError(
                 _DOMAIN,
                 ErrorSuffix.INVALID_INPUT,
-                "run_id query parameter is required",
+                "run_id or session query parameter is required",
             )
-        _session_or_400(session)
-        if trajectory is None:
-            return {"rounds": [], "round": None}
         if round >= 0:
             row = trajectory.raw_round(run_id, round)
             return {"rounds": [], "round": row}

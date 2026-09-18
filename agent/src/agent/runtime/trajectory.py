@@ -79,10 +79,6 @@ _TERMINAL = {
 }
 _PAGE = 500
 
-#: Per-side cap for stored raw round bodies (characters). The raw log is a
-#: debugging surface, not an archive: oversized transcripts are truncated.
-_RAW_CAP_CHARS = 400_000
-
 
 class TrajectoryStore:
     def __init__(self, db_path: str | Path, log: EventLog) -> None:
@@ -290,10 +286,9 @@ class TrajectoryStore:
 
     # -- raw LLM round log ----------------------------------------------------
     #
-    # The steps projection caps round text/reasoning for display; the raw
-    # table keeps one full request transcript + response per round so the UI
-    # can show exactly what the model saw and answered. Bodies are stored
-    # pre-serialized (JSON strings) and capped at _RAW_CAP_CHARS per side.
+    # The steps projection is a display surface; the raw table keeps one full
+    # request transcript + response per round (verbatim, nothing truncated)
+    # so the UI can show exactly what the model saw and answered.
 
     def record_raw_round(
         self,
@@ -308,14 +303,7 @@ class TrajectoryStore:
             self._conn.execute(
                 "INSERT OR REPLACE INTO raw_rounds (run_id, round, session, ts, request, response)"
                 " VALUES (?, ?, ?, ?, ?, ?)",
-                (
-                    run_id,
-                    int(round),
-                    session,
-                    time.time(),
-                    request[:_RAW_CAP_CHARS],
-                    response[:_RAW_CAP_CHARS],
-                ),
+                (run_id, int(round), session, time.time(), request, response),
             )
             self._conn.commit()
 
@@ -330,6 +318,27 @@ class TrajectoryStore:
             ).fetchall()
         return [
             {"round": r[0], "ts": r[1], "request_bytes": r[2], "response_bytes": r[3]} for r in rows
+        ]
+
+    def raw_rounds_for_session(self, session: str) -> list[dict[str, Any]]:
+        """Full raw bodies of every recorded round in one session, oldest
+        first (the chat log page renders this verbatim)."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT run_id, round, session, ts, request, response"
+                " FROM raw_rounds WHERE session = ? ORDER BY ts ASC",
+                (session,),
+            ).fetchall()
+        return [
+            {
+                "run_id": r[0],
+                "round": r[1],
+                "session": r[2],
+                "ts": r[3],
+                "request": r[4],
+                "response": r[5],
+            }
+            for r in rows
         ]
 
     def raw_round(self, run_id: str, round: int) -> dict[str, Any] | None:
