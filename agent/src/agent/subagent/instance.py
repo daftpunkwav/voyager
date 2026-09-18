@@ -265,6 +265,8 @@ class SubagentInstance:
             llm=self.llm,
             planner=self.planner_llm,
             guard=self.compaction_backoff,
+            prune_protect_tokens=self.budget.prune_protect_tokens,
+            prune_min_tokens=self.budget.prune_min_tokens,
         )
 
     def feed(self, text: str) -> None:

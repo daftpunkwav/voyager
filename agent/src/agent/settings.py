@@ -516,6 +516,28 @@ DEFS = [
         max=1_000_000,
         description="Tokens kept after an LLM compaction; 0 = auto (40% of the usable window)",
     ),
+    # Rolling tool-result prune (microcompact): the newest window of tool
+    # output always stays intact; older oversized results are replaced by a
+    # sentinel. A prune only fires when at least the recovery floor can be
+    # reclaimed, so it never costs a cache break for a handful of tokens.
+    SettingDef(
+        key="agent.context.prune_protect_tokens",
+        module="agent",
+        type=SettingType.INT,
+        default=4000,
+        min=0,
+        max=1_000_000,
+        description="Rolling prune: newest tool-output tokens (per round) always kept intact",
+    ),
+    SettingDef(
+        key="agent.context.prune_min_tokens",
+        module="agent",
+        type=SettingType.INT,
+        default=2000,
+        min=0,
+        max=1_000_000,
+        description="Rolling prune: minimum recoverable tokens before old tool results are cleared",
+    ),
     # External MCP: stdio/URL servers the user added in the settings page.
     # One record: {id,name,kind,command,args,url,approval,approved,enabled};
     # remote schemas / local absolute paths never enter this JSON; connection

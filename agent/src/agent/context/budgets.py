@@ -59,6 +59,13 @@ TASK_CHARS = 1500
 #: Page-awareness layer character cap (0 = off).
 PAGE_CHARS = 800
 
+#: Rolling tool-result prune (microcompact): the newest window of tool output
+#: always stays intact, and a prune only fires when at least the recovery
+#: floor can be reclaimed — below it the cache break costs more than the
+#: bytes saved.
+PRUNE_PROTECT_TOKENS = 4000
+PRUNE_MIN_TOKENS = 2000
+
 
 @dataclass(frozen=True)
 class ContextBudget:
@@ -86,6 +93,8 @@ class ContextBudget:
     profile_chars: int = PROFILE_CHARS  # character cap of the user profile layer
     task_chars: int = TASK_CHARS  # character cap of the task-brief layer
     page_chars: int = PAGE_CHARS  # character cap of the page-awareness layer
+    prune_protect_tokens: int = PRUNE_PROTECT_TOKENS  # newest tool output kept intact
+    prune_min_tokens: int = PRUNE_MIN_TOKENS  # recovery floor below which pruning never fires
 
 
 def budget_from_settings(settings: SettingsReader, model_name: str = "") -> ContextBudget:
@@ -130,6 +139,8 @@ def budget_from_settings(settings: SettingsReader, model_name: str = "") -> Cont
         profile_chars=_int_or_zero("agent.memory.profile_chars", PROFILE_CHARS),
         task_chars=_int_or_zero("agent.context.task_chars", TASK_CHARS),
         page_chars=_int_or_zero("agent.context.page_chars", PAGE_CHARS),
+        prune_protect_tokens=_int("agent.context.prune_protect_tokens", PRUNE_PROTECT_TOKENS),
+        prune_min_tokens=_int("agent.context.prune_min_tokens", PRUNE_MIN_TOKENS),
     )
 
 
@@ -139,6 +150,8 @@ __all__ = [
     "MEMORY_CARDS",
     "MEMORY_CARD_CHARS",
     "PAGE_CHARS",
+    "PRUNE_MIN_TOKENS",
+    "PRUNE_PROTECT_TOKENS",
     "PROFILE_CHARS",
     "RECALL_CHARS",
     "RECALL_FACTS",

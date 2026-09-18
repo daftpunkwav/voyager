@@ -16,6 +16,7 @@ from typing import Any
 
 from agent.context.backoff import CompactionBackoff
 from agent.context.editor import compact_transcript
+from agent.context.prune import prune_tool_results
 from agent.context.usage import (
     ContextWindow,
     UsageTracker,
@@ -23,6 +24,12 @@ from agent.context.usage import (
     usage_status,
 )
 from agent.llm import LLMClient
+
+#: A plan compaction that fails to shrink the transcript by at least this
+#: ratio counts as a failed attempt for the backoff guard (grok-style
+#: max_reduction_ratio): low-yield planner calls must not keep burning
+#: planner tokens round after round.
+MIN_REDUCTION_RATIO = 0.8
 
 
 class ContextGovernor:
@@ -45,6 +52,8 @@ class ContextGovernor:
         llm: LLMClient,
         planner: LLMClient | None = None,
         guard: CompactionBackoff | None = None,
+        prune_protect_tokens: int = 4000,
+        prune_min_tokens: int = 2000,
     ) -> None:
         self._window = window
         self._auto_compact_at = auto_compact_at
@@ -54,6 +63,8 @@ class ContextGovernor:
         self._llm = llm
         self._planner = planner
         self._guard = guard
+        self._prune_protect_tokens = prune_protect_tokens
+        self._prune_min_tokens = prune_min_tokens
 
     @property
     def window(self) -> ContextWindow:
@@ -78,10 +89,28 @@ class ContextGovernor:
     def over_threshold(self, messages: list[dict[str, Any]]) -> bool:
         return over_threshold(self.status(messages))
 
+    def prune(self, messages: list[dict[str, Any]]) -> int:
+        """Rolling microcompact: clear oversized old tool results in place
+        when the recovery floor is met; the provider anchor is dropped on a
+        change (the prefix bytes the anchor measured no longer exist).
+        Returns the recovered token estimate (0 = transcript untouched)."""
+        recovered = prune_tool_results(
+            messages,
+            protect_tokens=self._prune_protect_tokens,
+            min_tokens=self._prune_min_tokens,
+        )
+        if recovered > 0:
+            self._tracker.reset()
+        return recovered
+
     async def enforce(self, messages: list[dict[str, Any]]) -> dict[str, Any] | None:
-        """Per-round hook: compact only when the threshold is crossed;
-        returns the editor report or None when nothing fired."""
+        """Per-round hook: prune first (cheap, deterministic), then compact
+        only when the threshold is still crossed; returns the report or None
+        when nothing fired."""
+        recovered = self.prune(messages)
         if not self.over_threshold(messages):
+            if recovered > 0:
+                return {"mode": "prune", "recovered_tokens": recovered}
             return None
         return await self.compact(messages)
 
@@ -113,8 +142,16 @@ class ContextGovernor:
             self._tracker.reset()
         if self._guard is not None and allow and report is not None:
             # Only LLM attempts feed the guard; suppressed compactions ran
-            # mechanically and prove nothing about the planner
-            self._guard.record(plan_applied=report["mode"] == "plan")
+            # mechanically and prove nothing about the planner. A plan that
+            # did shrink but not by MIN_REDUCTION_RATIO counts as a failure:
+            # repeated low-yield plans get suppressed and the deterministic
+            # path takes over.
+            worthwhile = True
+            if report["mode"] == "plan":
+                before = int(report.get("before_tokens") or 0)
+                after = int(report.get("after_tokens") or 0)
+                worthwhile = not (before > 0 and after > int(before * MIN_REDUCTION_RATIO))
+            self._guard.record(plan_applied=report["mode"] == "plan" and worthwhile)
         return report
 
 
