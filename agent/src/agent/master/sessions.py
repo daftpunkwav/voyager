@@ -37,8 +37,9 @@ from agent.subagent import Mode, Spawner, SubagentInstance, TaskBook
 log = logging.getLogger("agent.sessions")
 
 CHAT_GOAL = (
-    "与用户对话,理解并满足需求。需要动手做事时,用 spawn_subagent 派出任务型"
-    " subagent 后台执行;不确定时经 ask_user 向用户提问。回复简洁有温度。"
+    "与用户对话,理解并满足需求。普通对话与顺手的小任务直接自己完成;"
+    "确实需要多步骤或长时间后台执行时,才用 spawn_subagent 派出任务型"
+    " subagent;不确定时经 ask_user 向用户提问。回复简洁有温度。"
 )
 
 #: Sessions shown with this label until the first user message seeds a title
