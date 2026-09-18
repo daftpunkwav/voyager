@@ -162,3 +162,52 @@ class TestSecurity:
                 use_host_fallback=True,
                 workspace=tmp_path,
             )
+
+
+class TestExecutorDiscipline:
+    """Output retention and timeout-reaping discipline of the shared
+    subprocess executor."""
+
+    @staticmethod
+    def _host_runtime() -> dict:
+        return {"id": "python", "image": "python:3.11-slim", "file_ext": ".py", "cmd": ["python"]}
+
+    async def test_output_cap_truncates_kept_stdout(self, tmp_path, monkeypatch) -> None:
+        """Output beyond the per-stream retention cap is truncated: what is
+        stored/emitted stays bounded while the child is still drained to EOF
+        (no pipe-full deadlock)."""
+        from code_exec import executor
+
+        monkeypatch.setattr(executor.shutil, "which", lambda name: None)  # no docker
+        result = await run_in_runtime(
+            self._host_runtime(),
+            "print('A' * (3 * 1024 * 1024))",
+            timeout=30,
+            memory_mb=256,
+            network=False,
+            use_host_fallback=True,
+            workspace=tmp_path,
+        )
+        assert result.status == "completed", result.stderr
+        assert result.stdout.count("A") == 1024 * 1024
+        assert result.stdout.endswith("\n...[output truncated]")
+
+    async def test_timeout_kills_and_reaps_child(self, tmp_path, monkeypatch) -> None:
+        """The timeout path kills the child AND reaps it (proc.wait), leaving
+        no lingering process handle behind."""
+        import asyncio
+
+        from code_exec import executor
+
+        monkeypatch.setattr(executor.shutil, "which", lambda name: None)  # no docker
+        result = await run_in_runtime(
+            self._host_runtime(),
+            "import time; time.sleep(30)",
+            timeout=2,
+            memory_mb=256,
+            network=False,
+            use_host_fallback=True,
+            workspace=tmp_path,
+        )
+        assert result.status == "timeout" and result.stdout == ""
+        await asyncio.sleep(0.1)  # reap completes; the suite must not hang

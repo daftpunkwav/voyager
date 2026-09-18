@@ -77,6 +77,82 @@ class RunResult:
     artifact_dir: str
 
 
+#: Per-stream retained output cap. Output past the cap is still drained
+#: (and discarded) so a chatty child never blocks on a full pipe; only what
+#: is kept -- and later stored / emitted -- is bounded.
+_MAX_OUTPUT_BYTES = 1024 * 1024
+_TRUNCATED_MARK = "\n...[output truncated]"
+
+
+async def _read_capped(stream: asyncio.StreamReader) -> bytes:
+    """Read one output pipe to EOF, keeping at most _MAX_OUTPUT_BYTES.
+
+    Draining continues past the cap (discarding the excess): stopping the
+    reads instead would let the child block forever on a full pipe while
+    the parent waits for it to exit.
+    """
+    buf = bytearray()
+    while True:
+        chunk = await stream.read(65536)
+        if not chunk:
+            break
+        if len(buf) <= _MAX_OUTPUT_BYTES:
+            buf.extend(chunk)
+    if len(buf) > _MAX_OUTPUT_BYTES:
+        return bytes(buf[:_MAX_OUTPUT_BYTES]) + _TRUNCATED_MARK.encode()
+    return bytes(buf)
+
+
+async def _collect(proc: asyncio.subprocess.Process) -> tuple[bytes, bytes]:
+    """Read both pipes concurrently to EOF (retention bounded per stream)."""
+    if proc.stdout is None or proc.stderr is None:  # unreachable: both are PIPE
+        raise RuntimeError("subprocess was not created with piped output")
+    out_task = asyncio.create_task(_read_capped(proc.stdout))
+    err_task = asyncio.create_task(_read_capped(proc.stderr))
+    # gather cancels both readers when this await is cancelled (the timeout
+    # path), so no reader task outlives _collect
+    out, err = await asyncio.gather(out_task, err_task)
+    return out, err
+
+
+async def _execute(
+    args: list[str],
+    *,
+    artifact_dir: Path,
+    cwd: Path | None,
+    timeout: int,
+    stderr_prefix: str = "",
+) -> RunResult:
+    """Run one subprocess under the shared output/timeout discipline."""
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=str(cwd) if cwd is not None else None,
+    )
+    try:
+        stdout_b, stderr_b = await asyncio.wait_for(_collect(proc), timeout=timeout)
+    except TimeoutError:
+        proc.kill()
+        # Reap the killed child; without this the process handle lingers
+        # until garbage collection
+        await proc.wait()
+        return RunResult(
+            status="timeout",
+            exit_code=-1,
+            stdout="",
+            stderr="execution timed out",
+            artifact_dir=str(artifact_dir),
+        )
+    return RunResult(
+        status="completed" if proc.returncode == 0 else "failed",
+        exit_code=proc.returncode or 0,
+        stdout=stdout_b.decode(errors="replace"),
+        stderr=stderr_prefix + stderr_b.decode(errors="replace"),
+        artifact_dir=str(artifact_dir),
+    )
+
+
 async def run_in_runtime(
     runtime: dict[str, Any],
     code: str,
@@ -151,29 +227,7 @@ async def _run_docker(
         *cmd,
         "main" + src.suffix,
     ]
-    proc = await asyncio.create_subprocess_exec(
-        *args,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    try:
-        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except TimeoutError:
-        proc.kill()
-        return RunResult(
-            status="timeout",
-            exit_code=-1,
-            stdout="",
-            stderr="execution timed out",
-            artifact_dir=str(artifact_dir),
-        )
-    return RunResult(
-        status="completed" if proc.returncode == 0 else "failed",
-        exit_code=proc.returncode or 0,
-        stdout=stdout_b.decode(errors="replace"),
-        stderr=stderr_b.decode(errors="replace"),
-        artifact_dir=str(artifact_dir),
-    )
+    return await _execute(args, artifact_dir=artifact_dir, cwd=None, timeout=timeout)
 
 
 async def _run_host(
@@ -193,32 +247,14 @@ async def _run_host(
             f"(custom runtimes require docker): {interpreter}",
         )
     args = [*args, str(src)]
-
-    proc = await asyncio.create_subprocess_exec(
-        *args,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=str(artifact_dir),
-    )
-    try:
-        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except TimeoutError:
-        proc.kill()
-        return RunResult(
-            status="timeout",
-            exit_code=-1,
-            stdout="",
-            stderr="execution timed out",
-            artifact_dir=str(artifact_dir),
-        )
     warning = (
         "WARN: currently executing via host-process fallback, container sandbox "
         "not enabled; install docker for production and disable the host fallback.\n"
     )
-    return RunResult(
-        status="completed" if proc.returncode == 0 else "failed",
-        exit_code=proc.returncode or 0,
-        stdout=stdout_b.decode(errors="replace"),
-        stderr=warning + stderr_b.decode(errors="replace"),
-        artifact_dir=str(artifact_dir),
+    return await _execute(
+        args,
+        artifact_dir=artifact_dir,
+        cwd=artifact_dir,
+        timeout=timeout,
+        stderr_prefix=warning,
     )
