@@ -22,7 +22,7 @@ from agent.subagent import TaskBook
 class TestGlobalRules:
     def test_shape_locked(self) -> None:
         """Locks only the count and the first rule's prefix, not the full text."""
-        assert len(GLOBAL_RULES) == 8
+        assert len(GLOBAL_RULES) == 9
         assert GLOBAL_RULES[0].startswith("诚实第一")
 
 

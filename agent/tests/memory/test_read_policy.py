@@ -156,3 +156,24 @@ def test_turn_system_prompt_skips_duplicate_profile_line(tmp_path) -> None:
         assert "[画像] 部署约束" not in system
     finally:
         app.memory.close()
+
+
+def test_aged_hits_carry_freshness_suffix_and_stale_note(tmp_path) -> None:
+    """Hits older than a day render "(N天前)" and the staleness caveat; fresh
+    hits stay clean (content-addressed rendering keeps prefix cache stable)."""
+    app, memory = _memory(tmp_path)
+    try:
+        memory.semantic.add("redis", "密码", "secret-x")
+        # Backdate the fact beyond the freshness boundary by rewriting ts
+        with memory.semantic._conn as conn:  # noqa: SLF001  # test backdoor
+            conn.execute("UPDATE facts SET ts = ts - 86400 * 30")
+        out = render_relevant_recall(memory, "redis 密码")
+        assert "(30天前)" in out
+        assert "以当前实际状态为准" in out
+        # Fresh rendering carries neither the suffix nor the caveat
+        memory.semantic.add("vacation", "政策", "年假五天")
+        fresh = render_relevant_recall(memory, "vacation 政策")
+        assert "天前" not in fresh
+        assert "以当前实际状态为准" not in fresh
+    finally:
+        app.close()
