@@ -33,6 +33,10 @@ def build_session_router(issuer: LocalTokenIssuer | None) -> APIRouter:
             token,
             httponly=True,
             samesite="lax",
+            # secure stays off deliberately: this app serves plain http on
+            # loopback (single-user local deployment), and browsers refuse
+            # to send Secure cookies over http. Non-loopback access needs a
+            # Bearer token instead (no cookie is issued there).
             secure=False,
             max_age=_TTL,
             path="/",

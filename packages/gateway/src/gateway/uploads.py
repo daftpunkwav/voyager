@@ -10,6 +10,7 @@ sources.add_document, notes.add_asset) inside their guard chains.
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import UTC
 from pathlib import Path
@@ -17,6 +18,8 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from starlette.datastructures import UploadFile
+
+log = logging.getLogger("gateway.uploads")
 
 #: Hard cap of 1GB (transport-level limit; domains enforce smaller limits)
 _MAX_BYTES = 1024 * 1024 * 1024
@@ -87,14 +90,17 @@ def build_upload_router(workspace: Path) -> APIRouter:
                     }
                 },
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             dest.unlink(missing_ok=True)
+            # Exception detail (paths, permission errors) goes to the server
+            # log only; the client gets a generic message
+            log.warning("upload stream failed: %s", exc, exc_info=True)
             return JSONResponse(
                 status_code=400,
                 content={
                     "error": {
                         "code": "GATEWAY.INVALID_INPUT",
-                        "message": f"failed to read the upload stream: {exc}",
+                        "message": "failed to read the upload stream",
                     }
                 },
             )
