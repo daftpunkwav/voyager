@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import pytest
 from agent.llm import FakeLLM, LLMReply
+from agent.llm_structured import StructuredResult
 from agent.llm_structured import (
     SchemaSpec,
     complete_structured,
@@ -114,7 +115,7 @@ class TestValidation:
 class TestCompleteStructured:
     async def test_success_direct_dict(self) -> None:
         fake_llm = FakeLLM([LLMReply(text='{"summary": "passed", "score": 100}')])
-        res = await complete_structured(
+        res: StructuredResult[dict] = await complete_structured(
             fake_llm,
             [{"role": "user", "content": "analyze this test"}],
             schema=DICT_SCHEMA,
@@ -126,9 +127,9 @@ class TestCompleteStructured:
         assert fake_llm.calls[0].get("response_format") is not None
 
     async def test_success_pydantic_model(self) -> None:
-        fake_llm = FakeLLM([
-            LLMReply(text='```json\n{"name": "Alice", "age": 30, "interests": ["ai"]}\n```')
-        ])
+        fake_llm = FakeLLM(
+            [LLMReply(text='```json\n{"name": "Alice", "age": 30, "interests": ["ai"]}\n```')]
+        )
         res = await complete_structured(
             fake_llm,
             [{"role": "user", "content": "extract profile"}],
@@ -142,10 +143,12 @@ class TestCompleteStructured:
 
     async def test_retry_on_malformed_json(self) -> None:
         # First round returns garbled text, second round returns valid JSON
-        fake_llm = FakeLLM([
-            LLMReply(text="Sure! Here is the JSON: {name: 'Alice', invalid}"),
-            LLMReply(text='{"name": "Alice", "age": 30}'),
-        ])
+        fake_llm = FakeLLM(
+            [
+                LLMReply(text="Sure! Here is the JSON: {name: 'Alice', invalid}"),
+                LLMReply(text='{"name": "Alice", "age": 30}'),
+            ]
+        )
         res = await complete_structured(
             fake_llm,
             [{"role": "user", "content": "get user"}],
@@ -159,14 +162,19 @@ class TestCompleteStructured:
         assert len(fake_llm.calls) == 2
         # Check that error feedback was injected in 2nd call
         second_call_msgs = fake_llm.calls[1]["messages"]
-        assert any("Your previous response was not valid JSON" in str(m.get("content")) for m in second_call_msgs)
+        assert any(
+            "Your previous response was not valid JSON" in str(m.get("content"))
+            for m in second_call_msgs
+        )
 
     async def test_retry_on_schema_violation(self) -> None:
         # First round returns missing required 'age' field, second round corrects it
-        fake_llm = FakeLLM([
-            LLMReply(text='{"name": "Alice"}'),
-            LLMReply(text='{"name": "Alice", "age": 22}'),
-        ])
+        fake_llm = FakeLLM(
+            [
+                LLMReply(text='{"name": "Alice"}'),
+                LLMReply(text='{"name": "Alice", "age": 22}'),
+            ]
+        )
         res = await complete_structured(
             fake_llm,
             [{"role": "user", "content": "get user"}],
@@ -174,14 +182,17 @@ class TestCompleteStructured:
             max_retries=2,
         )
         assert res.ok is True
+        assert res.value is not None
         assert res.value.age == 22
         assert res.retries_used == 1
 
     async def test_retries_exhausted(self) -> None:
-        fake_llm = FakeLLM([
-            LLMReply(text="Bad 1"),
-            LLMReply(text="Bad 2"),
-        ])
+        fake_llm = FakeLLM(
+            [
+                LLMReply(text="Bad 1"),
+                LLMReply(text="Bad 2"),
+            ]
+        )
         res = await complete_structured(
             fake_llm,
             [{"role": "user", "content": "get user"}],
@@ -205,18 +216,21 @@ class TestCompleteStructured:
 
     async def test_structured_field_already_present(self) -> None:
         # Test when the client adapter has already populated reply.structured
-        fake_llm = FakeLLM([
-            LLMReply(
-                text='{"name": "Bob", "age": 40}',
-                structured={"name": "Bob", "age": 40},
-            )
-        ])
+        fake_llm = FakeLLM(
+            [
+                LLMReply(
+                    text='{"name": "Bob", "age": 40}',
+                    structured={"name": "Bob", "age": 40},
+                )
+            ]
+        )
         res = await complete_structured(
             fake_llm,
             [{"role": "user", "content": "get user"}],
             schema=UserProfile,
         )
         assert res.ok is True
+        assert res.value is not None and res.value.name is not None
         assert res.value.name == "Bob"
         assert res.value.age == 40
 
@@ -225,12 +239,14 @@ class TestCompleteStructured:
         from agent.runtime import Meter, metered_llm
 
         meter = Meter()
-        fake = FakeLLM([
-            LLMReply(
-                text='{"name": "Eve", "age": 35}',
-                usage=Usage(input_tokens=15, output_tokens=10),
-            )
-        ])
+        fake = FakeLLM(
+            [
+                LLMReply(
+                    text='{"name": "Eve", "age": 35}',
+                    usage=Usage(input_tokens=15, output_tokens=10),
+                )
+            ]
+        )
         metered = metered_llm(fake, meter, model="gpt-4o")
 
         res = await complete_structured(
@@ -239,6 +255,7 @@ class TestCompleteStructured:
             schema=UserProfile,
         )
         assert res.ok is True
+        assert res.value is not None
         assert res.value.name == "Eve"
         assert res.value.age == 35
         # Verify meter recorded the tokens

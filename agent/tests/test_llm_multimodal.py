@@ -48,7 +48,7 @@ def test_content_to_text() -> None:
 
 def test_content_to_wire_and_messages_to_wire() -> None:
     # Single string content
-    msgs = [{"role": "user", "content": "hello"}]
+    msgs: list[dict[str, Any]] = [{"role": "user", "content": "hello"}]
     wire = _messages_to_wire(msgs)
     assert wire == [{"role": "user", "content": "hello"}]
 

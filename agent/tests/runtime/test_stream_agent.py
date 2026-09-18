@@ -10,7 +10,7 @@ import asyncio
 from typing import cast
 
 import pytest
-from agent.llm import FakeLLM, LLMReply, StreamingLLClient, StreamReply, ToolCall
+from agent.llm import FakeLLM, LLMClient, LLMReply, StreamingLLClient, StreamReply, ToolCall
 from agent.policy import PolicyEngine
 from agent.runtime import Meter, metered_llm
 from agent.runtime.events import RuntimeEvents
@@ -206,7 +206,7 @@ class TestMeteredStreaming:
             async def complete(self, messages, tools=None):
                 raise RuntimeError("boom")
 
-        wrapped = metered_llm(BoomLLM(), meter, model="m1")
+        wrapped = metered_llm(cast(LLMClient, BoomLLM()), meter, model="m1")
         with pytest.raises(RuntimeError):
             await wrapped.complete([{"role": "user", "content": "hi"}])
         (rec,) = [r for r in meter.records if r.kind == "llm"]

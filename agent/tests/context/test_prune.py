@@ -4,6 +4,8 @@ anchor reset + the low-yield plan guard feeding the backoff)."""
 
 from __future__ import annotations
 
+from typing import Any
+
 from agent.context.backoff import CompactionBackoff
 from agent.context.governor import MAX_REMAINING_RATIO, ContextGovernor
 from agent.context.prune import PRUNE_MARK, prune_tool_results
@@ -67,7 +69,7 @@ class TestPruneToolResults:
         assert msgs[3]["content"] == _big("x", 4000)  # untouched
 
     def test_short_results_never_cleared(self) -> None:
-        msgs = [
+        msgs: list[dict[str, Any]] = [
             {"role": "system", "content": "s"},
             {"role": "user", "content": "old"},
             {
@@ -83,7 +85,7 @@ class TestPruneToolResults:
 
     def test_keep_turns_boundary_protects_tail(self) -> None:
         big = _big("z", 50_000)
-        msgs = [
+        msgs: list[dict[str, Any]] = [
             {"role": "system", "content": "s"},
             {"role": "user", "content": "solo turn"},
             {

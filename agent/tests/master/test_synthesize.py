@@ -3,7 +3,9 @@ through verbatim, long results get condensed via the LLM, and any synthesis
 failure degrades to the capped excerpt without losing the notice."""
 
 import pytest
-from agent.llm import FakeLLM, LLMReply
+from typing import cast
+
+from agent.llm import FakeLLM, LLMClient, LLMReply
 from agent.master.synthesize import FALLBACK_CHARS, SYNTHESIZE_THRESHOLD, synthesize_result
 
 _LONG = "结论:迁移完成。" + "细节 " * 200  # well over the threshold
@@ -35,7 +37,7 @@ async def test_llm_failure_falls_back_without_raising() -> None:
         async def complete(self, messages, tools=None):
             raise RuntimeError("down")
 
-    out = await synthesize_result(_Boom(), "t", _LONG)
+    out = await synthesize_result(cast(LLMClient, _Boom()), "t", _LONG)
     assert out == _LONG[:FALLBACK_CHARS] + " …[已截断]"
 
 

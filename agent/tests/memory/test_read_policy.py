@@ -165,7 +165,7 @@ def test_aged_hits_carry_freshness_suffix_and_stale_note(tmp_path) -> None:
     try:
         memory.semantic.add("redis", "密码", "secret-x")
         # Backdate the fact beyond the freshness boundary by rewriting ts
-        with memory.semantic._conn as conn:  # noqa: SLF001  # test backdoor
+        with memory.semantic._conn as conn:  # test backdoor
             conn.execute("UPDATE facts SET ts = ts - 86400 * 30")
         out = render_relevant_recall(memory, "redis 密码")
         assert "(30天前)" in out

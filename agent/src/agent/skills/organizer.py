@@ -86,6 +86,9 @@ class SkillOrganizer:
         """Publish skill.proposed events for repeated flows; each flow is
         surfaced only once per process lifetime (a restart may re-surface it,
         which is acceptable for a notification)."""
+        emit = self._emit
+        if emit is None:
+            return []  # detection-only caller: nothing to publish to
         out: list[dict] = []
         for hit in self.detect(min_count=min_count, seq_len=seq_len):
             seq = tuple(hit["sequence"])
@@ -98,7 +101,7 @@ class SkillOrganizer:
                 "count": hit["count"],
             }
             try:
-                await self._emit(SKILL_PROPOSED_EVENT, **proposal)
+                await emit(SKILL_PROPOSED_EVENT, **proposal)
             except Exception:  # a failed notification must not break the turn
                 log.warning("publishing skill proposal failed", exc_info=True)
                 self._proposed.discard(seq)

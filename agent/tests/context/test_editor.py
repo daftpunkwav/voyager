@@ -4,6 +4,7 @@ fallback, and the governor's threshold gating.
 """
 
 import json
+from typing import cast
 
 from agent.context.backoff import CompactionBackoff
 from agent.context.editor import (
@@ -16,7 +17,7 @@ from agent.context.editor import (
 )
 from agent.context.governor import ContextGovernor
 from agent.context.usage import ContextWindow, UsageTracker
-from agent.llm import FakeLLM, LLMReply
+from agent.llm import FakeLLM, LLMClient, LLMReply
 from agent.subagent import Mode, ModeLimits, run_mode
 
 
@@ -117,7 +118,9 @@ class TestCompactTranscript:
                 raise RuntimeError("planner down")
 
         msgs = _msgs()
-        report = await compact_transcript(msgs, _Boom(), target=10, fallback_budget=200)
+        report = await compact_transcript(
+            msgs, cast(LLMClient, _Boom()), target=10, fallback_budget=200
+        )
         assert report is not None
         assert report["mode"] == "fallback"
         assert _pairs_intact(msgs)
