@@ -15,6 +15,18 @@
   "markdown.copied": "Copied",
   "markdown.archDiagram": "Architecture layer diagram",
   "markdown.wikiLinkTitle": "Internal link: {{target}}",
+  "markdown.run": "Run",
+  "markdown.stop": "Stop",
+  "markdown.running": "Running…",
+  "markdown.output": "Output",
+  "markdown.statusOk": "Done",
+  "markdown.statusError": "Error",
+  "markdown.statusTimeout": "Timed out",
+  "markdown.statusCancelled": "Cancelled",
+  "markdown.statusUnavailable": "Unavailable",
+  "markdown.durationMs": "{{ms}} ms",
+  "markdown.truncated": "Output was too long and has been truncated",
+  "markdown.closeOutput": "Close output",
   "app.pageExportMissing": "Missing page export: {{key}}",
   "app.loadingPage": "Loading page…"
 }

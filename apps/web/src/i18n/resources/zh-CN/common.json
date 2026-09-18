@@ -15,6 +15,18 @@
   "markdown.copied": "已复制",
   "markdown.archDiagram": "架构层级图",
   "markdown.wikiLinkTitle": "内链:{{target}}",
+  "markdown.run": "运行",
+  "markdown.stop": "停止",
+  "markdown.running": "运行中…",
+  "markdown.output": "输出",
+  "markdown.statusOk": "完成",
+  "markdown.statusError": "出错",
+  "markdown.statusTimeout": "超时",
+  "markdown.statusCancelled": "已取消",
+  "markdown.statusUnavailable": "不可用",
+  "markdown.durationMs": "{{ms}} ms",
+  "markdown.truncated": "输出过长,已截断",
+  "markdown.closeOutput": "关闭输出",
   "app.pageExportMissing": "页面导出缺失: {{key}}",
   "app.loadingPage": "载入页面…"
 }

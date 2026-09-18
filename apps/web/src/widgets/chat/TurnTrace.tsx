@@ -452,7 +452,7 @@ function RoundBlockView({ block }: { block: RoundBlock }) {
       ) : null}
       {bodyText ? (
         <div className={`chat-round__text chat-md${long && !textOpen ? ' is-clamped' : ''}`}>
-          <ChatMarkdown content={bodyText} />
+          <ChatMarkdown content={bodyText} runCode={false} />
         </div>
       ) : null}
       {long ? (
@@ -470,7 +470,7 @@ function RoundBlockView({ block }: { block: RoundBlock }) {
           <div
             className={`chat-round__reasontext chat-md${reasonLong && !reasonOpen ? ' is-clamped' : ''}`}
           >
-            <ChatMarkdown content={reasoning} />
+            <ChatMarkdown content={reasoning} runCode={false} />
           </div>
           {reasonLong ? (
             <button

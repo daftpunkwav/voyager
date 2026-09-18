@@ -2387,34 +2387,8 @@
   outline: none;
 }
 
-/* ---------- Render enhancements: code block bar / copy button / images / wiki links / lightbox ---------- */
-
-.md-codeblock__bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 4px 0 0;
-}
-
-.md-codeblock__copy {
-  border: 0;
-  background: transparent;
-  color: var(--text-3);
-  font-size: 11.5px;
-  cursor: pointer;
-  padding: 3px 8px;
-  border-radius: 6px;
-  transition:
-    background var(--dur-fast, 150ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)),
-    color var(--dur-fast, 150ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)),
-    border-color var(--dur-fast, 150ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)),
-    box-shadow var(--dur-fast, 150ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1));
-}
-
-.md-codeblock__copy:hover {
-  color: var(--text-1);
-  background: rgba(120, 120, 128, 0.14);
-}
+/* ---------- Render enhancements: code block bar / copy button / images / wiki links / lightbox ----------
+   (code block bar + button chrome moved to design-system.css — shared with chat now) */
 
 .md-img {
   max-width: 100%;

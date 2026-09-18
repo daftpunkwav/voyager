@@ -66,7 +66,7 @@ export function StepDetail({ step }: { step: TurnStep }) {
             <div className="chat-stepdetail__thinkwrap">
               <span className="chat-stepdetail__key muted">{t('chat:traj.thinking')}</span>
               <div className="chat-stepdetail__think chat-md">
-                <ChatMarkdown content={step.text} />
+                <ChatMarkdown content={step.text} runCode={false} />
               </div>
               {step.textTruncated ? (
                 <div className="chat-stepdetail__note muted">{t('chat:traj.thinkTruncated')}</div>
@@ -77,7 +77,7 @@ export function StepDetail({ step }: { step: TurnStep }) {
             <div className="chat-stepdetail__thinkwrap">
               <span className="chat-stepdetail__key muted">{t('chat:traj.reasoning')}</span>
               <div className="chat-stepdetail__think chat-md">
-                <ChatMarkdown content={step.reasoning} />
+                <ChatMarkdown content={step.reasoning} runCode={false} />
               </div>
               {step.reasoningTruncated ? (
                 <div className="chat-stepdetail__note muted">

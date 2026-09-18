@@ -13,16 +13,7 @@
  * - Resolve wiki links and internal paths in-app; open external links in new tabs
  */
 
-import {
-  Children,
-  isValidElement,
-  memo,
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from 'react';
+import { Children, memo, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown, { type Options as MarkdownOptions } from 'react-markdown';
@@ -33,7 +24,9 @@ import type { Options as SanitizeOptions } from 'rehype-sanitize';
 import GithubSlugger from 'github-slugger';
 import { cn } from '@/utils/cn';
 import { tryParseAsciiArchLayers, looksLikeMarkdownTable } from '@/utils/asciiArch';
+import { extractCodeLang, nodeText } from '@/utils/markdownNodes';
 import { looksLikeMermaid, MermaidBlock } from '@/components/common/MermaidBlock';
+import { MdCodeBlock } from '@/components/common/MdCodeBlock';
 import { Lightbox } from '@/components/common/Lightbox';
 import { safeHttpUrl, safeImgSrc, safeInternalPath } from '@/utils/safeUrl';
 import { routes } from '@/utils/routes';
@@ -81,26 +74,6 @@ const sanitizeSchema: SanitizeOptions = {
   },
 };
 
-function nodeText(node: ReactNode): string {
-  if (node == null || typeof node === 'boolean') return '';
-  if (typeof node === 'string' || typeof node === 'number') return String(node);
-  if (Array.isArray(node)) return node.map(nodeText).join('');
-  if (isValidElement<{ children?: ReactNode }>(node)) {
-    return nodeText(node.props.children);
-  }
-  return '';
-}
-
-function extractCodeLang(children: ReactNode): string | null {
-  for (const child of Children.toArray(children)) {
-    if (!isValidElement<{ className?: string }>(child)) continue;
-    const cls = child.props.className ?? '';
-    const m = /\blanguage-([a-z0-9_+-]+)\b/i.exec(cls) || /\bhljs\s+([a-z0-9_+-]+)\b/i.exec(cls);
-    if (m?.[1] && m[1].toLowerCase() !== 'hljs') return m[1].toLowerCase();
-  }
-  return null;
-}
-
 /** Converts [[target|alias]] into Markdown links (#wiki: scheme); skips code fences (same semantics as the backend resolve_links). */
 export function preprocessWikiLinks(content: string): string {
   const segments = content.split(/(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/);
@@ -114,40 +87,6 @@ export function preprocessWikiLinks(content: string): string {
       });
     })
     .join('');
-}
-
-function CodeCopyButton({ text }: { text: string }) {
-  const { t } = useTranslation('common');
-  const [copied, setCopied] = useState(false);
-  const timerRef = useRef<number | null>(null);
-  useEffect(
-    () => () => {
-      if (timerRef.current != null) window.clearTimeout(timerRef.current);
-    },
-    []
-  );
-  return (
-    <button
-      type="button"
-      className="md-codeblock__copy"
-      aria-label={t('common:markdown.copyCode')}
-      onClick={async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          // Clear the previous timer on rapid clicks, otherwise the earlier 1500ms reset would cut the second "copied" state short
-          if (timerRef.current != null) window.clearTimeout(timerRef.current);
-          timerRef.current = window.setTimeout(() => setCopied(false), 1500);
-        } catch {
-          /* Clipboard unavailable (insecure context): keep button state unchanged instead of faking success */
-        }
-      }}
-    >
-      {copied ? t('common:markdown.copied') : t('common:markdown.copy')}
-    </button>
-  );
 }
 
 function ArchStack({
@@ -357,13 +296,9 @@ function MarkdownRendererInner({
               return <MermaidBlock code={recovered} />;
             }
             return (
-              <div className="md-codeblock">
-                <div className="md-codeblock__bar">
-                  {lang && <div className="md-codeblock__lang">{lang}</div>}
-                  <CodeCopyButton text={text} />
-                </div>
-                <pre className="hljs">{children}</pre>
-              </div>
+              <MdCodeBlock lang={lang} text={text}>
+                {children}
+              </MdCodeBlock>
             );
           },
         }}

@@ -1974,12 +1974,15 @@ textarea.field {
   color: var(--brand-700);
 }
 
-/* Unified panel shell: code / quote / table / arch */
+/* Unified panel shell: code / quote / table / arch
+   (chat bubbles share the code block + table wrap chrome via :is()) */
 .markdown pre,
 .markdown .md-codeblock,
+.chat-md .md-codeblock,
 .markdown .md-arch-stack,
 .markdown blockquote,
-.markdown .markdown-table-wrap {
+.markdown .markdown-table-wrap,
+.chat-md .markdown-table-wrap {
   margin: 12px 0;
   border-radius: var(--md-panel-radius);
   border: 1px solid var(--md-panel-border);
@@ -2038,7 +2041,7 @@ textarea.field {
   color: var(--md-panel-muted);
   pointer-events: none;
 }
-.md-codeblock > pre {
+:is(.markdown, .chat-md) .md-codeblock > pre {
   margin: 0;
   border: none;
   border-radius: 0;
@@ -2046,11 +2049,11 @@ textarea.field {
   box-shadow: none;
   padding: 16px 16px 14px;
 }
-.md-codeblock > pre.hljs,
+:is(.markdown, .chat-md) .md-codeblock > pre.hljs,
 .md-codeblock code.hljs {
   background: transparent !important;
 }
-.md-codeblock:has(.md-codeblock__lang) > pre {
+:is(.markdown, .chat-md) .md-codeblock:has(.md-codeblock__lang) > pre {
   padding-top: 28px;
 }
 
@@ -2250,6 +2253,224 @@ textarea.field {
 }
 .md-mermaid--fallback {
   margin: 0.75em 0;
+}
+
+/* --------------------------------------------------------------------------
+   Code block chrome (bar / actions / run output) — shared by chat bubbles and
+   the markdown renderer; moved here from the notes page so every container
+   gets the same block header and execution panel.
+   -------------------------------------------------------------------------- */
+.md-codeblock__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 0 0;
+}
+.md-codeblock__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.md-codeblock__btn {
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 6px;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)),
+    color var(--dur-fast, 150ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1));
+}
+.md-codeblock__btn:hover {
+  color: var(--text-1);
+  background: rgba(120, 120, 128, 0.14);
+}
+.md-codeblock__output {
+  border-top: 1px solid var(--md-panel-border);
+  background: var(--md-panel-bg-elevated);
+  border-radius: 0 0 var(--md-panel-radius) var(--md-panel-radius);
+}
+.md-codeblock__output-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+}
+.md-codeblock__output-head .md-codeblock__btn {
+  margin-left: auto;
+}
+.md-codeblock__output-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--md-panel-muted);
+}
+.md-codeblock__status {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  background: rgba(120, 120, 128, 0.14);
+  color: var(--md-panel-muted);
+}
+.md-codeblock__status--ok {
+  background: rgba(52, 199, 89, 0.15);
+  color: var(--success);
+}
+.md-codeblock__status--error {
+  background: rgba(255, 59, 48, 0.14);
+  color: var(--error);
+}
+:is(.markdown, .chat-md) .md-codeblock__output-pre {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--md-panel-bg);
+  border: 1px solid var(--md-panel-border);
+  border-radius: 8px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.md-codeblock__output-pre code {
+  background: transparent;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+}
+.md-codeblock__output-pre--stderr {
+  color: var(--warning);
+}
+.md-codeblock__output-pre--error {
+  border-color: var(--error);
+  color: var(--error);
+  background: var(--error-surface);
+}
+.md-codeblock__output-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--md-panel-muted);
+}
+
+/* Chat inline code pill: chat containers are not `.markdown`, so the shared
+   inline styling is restated here; pre content resets it back to plain. */
+.chat-md code {
+  background: var(--md-inline-code-bg);
+  color: var(--md-inline-code-fg);
+  padding: 2px 6px;
+  border-radius: var(--radius-2xs);
+}
+.chat-md pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* highlight.js token palette (GitHub-inspired): light defaults, dark theme
+   overrides below. Tokens only occur inside code, so class-level scoping is
+   safe across `.markdown` and `.chat-md` containers. */
+.hljs-comment,
+.hljs-quote {
+  color: #6a737d;
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-doctag,
+.hljs-type,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: #d73a49;
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta .hljs-string {
+  color: #032f62;
+}
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link,
+.hljs-meta,
+.hljs-deletion {
+  color: #005cc5;
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-title.class_,
+.hljs-built_in {
+  color: #6f42c1;
+}
+.hljs-attr,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-params,
+.hljs-property {
+  color: #e36209;
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 600;
+}
+
+[data-theme='dark'] .hljs-comment,
+[data-theme='dark'] .hljs-quote {
+  color: #8b949e;
+}
+[data-theme='dark'] .hljs-keyword,
+[data-theme='dark'] .hljs-selector-tag,
+[data-theme='dark'] .hljs-literal,
+[data-theme='dark'] .hljs-section,
+[data-theme='dark'] .hljs-doctag,
+[data-theme='dark'] .hljs-type,
+[data-theme='dark'] .hljs-name,
+[data-theme='dark'] .hljs-selector-id,
+[data-theme='dark'] .hljs-selector-class {
+  color: #ff7b72;
+}
+[data-theme='dark'] .hljs-string,
+[data-theme='dark'] .hljs-regexp,
+[data-theme='dark'] .hljs-addition,
+[data-theme='dark'] .hljs-attribute,
+[data-theme='dark'] .hljs-meta .hljs-string {
+  color: #a5d6ff;
+}
+[data-theme='dark'] .hljs-number,
+[data-theme='dark'] .hljs-symbol,
+[data-theme='dark'] .hljs-bullet,
+[data-theme='dark'] .hljs-link,
+[data-theme='dark'] .hljs-meta,
+[data-theme='dark'] .hljs-deletion {
+  color: #79c0ff;
+}
+[data-theme='dark'] .hljs-title,
+[data-theme='dark'] .hljs-title.function_,
+[data-theme='dark'] .hljs-title.class_,
+[data-theme='dark'] .hljs-built_in {
+  color: #d2a8ff;
+}
+[data-theme='dark'] .hljs-attr,
+[data-theme='dark'] .hljs-variable,
+[data-theme='dark'] .hljs-template-variable,
+[data-theme='dark'] .hljs-params,
+[data-theme='dark'] .hljs-property {
+  color: #ffa657;
 }
 
 /* ==========================================================================
