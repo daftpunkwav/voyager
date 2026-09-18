@@ -26,6 +26,7 @@ def list_subagents(registry: SubagentRegistry, spawner: Spawner) -> dict:
                 "max_tool_calls": d.max_tool_calls,
                 "network_mode": d.network_mode,
                 "readonly": d.readonly,
+                "enabled": d.enabled,
             }
             for d in registry.list()
         ],
@@ -38,6 +39,11 @@ def list_subagents(registry: SubagentRegistry, spawner: Spawner) -> dict:
                 "started_ts": i.state.started_ts,
                 "last_step": ((i.state.steps[-1].summary or "")[:120] if i.state.steps else ""),
                 "depends_on": list(i.task.depends_on),  # orchestration visibility (T-20.4)
+                # Conversational instances are the chat sessions themselves (the
+                # user talking to Lucien), not dispatched subagents; consumers
+                # use this to keep them out of subagent rosters or label them
+                # as the main conversation.
+                "conversational": i.task.conversational,
             }
             # Only alive instances are listed: terminal ones (completed/failed/
             # cancelled) stay in spawner.instances for memory introspection but

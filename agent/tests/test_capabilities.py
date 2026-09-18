@@ -38,6 +38,8 @@ class TestRegistrySurface:
             "context_status",
             "delete_profile",
             "delete_session",
+            "delete_subagent",
+            "describe_tool",
             "get_memory",
             "get_resource_quota",
             "get_session",
@@ -397,6 +399,7 @@ class TestTeamSurface:
             "max_tool_calls": None,
             "network_mode": "",
             "readonly": False,
+            "enabled": True,
         }  # no tiers given: rounds None, network empty string (inherits global)
         defs = (await execute(app.registry, "list_subagents", USER_CTX, {}))["definitions"]
         mine = next(d for d in defs if d["name"] == "scout")
@@ -515,6 +518,65 @@ class TestTeamSurface:
                 },
             )
         assert exc.value.body.code == "AGENT.INVALID_INPUT"
+
+    async def test_delete_subagent_removes_definition(self, app) -> None:
+        await execute(
+            app.registry, "register_subagent", USER_CTX, {"name": "doomed", "description": "x"}
+        )
+        result = await execute(app.registry, "delete_subagent", USER_CTX, {"name": "doomed"})
+        assert result == {"deleted": "doomed"}
+        defs = (await execute(app.registry, "list_subagents", USER_CTX, {}))["definitions"]
+        assert all(d["name"] != "doomed" for d in defs)
+
+    async def test_delete_subagent_unknown_name_raises(self, app) -> None:
+        with pytest.raises(ServiceError) as exc:
+            await execute(app.registry, "delete_subagent", USER_CTX, {"name": "ghost"})
+        assert exc.value.body.code == "AGENT.NOT_FOUND"
+
+    async def test_disabled_subagent_listed_but_refused_at_dispatch(self, app) -> None:
+        """enabled=False keeps the definition visible; dispatch refuses it until re-enabled."""
+        await execute(
+            app.registry,
+            "register_subagent",
+            USER_CTX,
+            {"name": "sleeper", "description": "x", "enabled": False},
+        )
+        defs = (await execute(app.registry, "list_subagents", USER_CTX, {}))["definitions"]
+        assert next(d for d in defs if d["name"] == "sleeper")["enabled"] is False
+        with pytest.raises(ServiceError) as exc:
+            await app.master.dispatch_task("wake up", persona="sleeper")
+        assert exc.value.body.code == "AGENT.FORBIDDEN"
+        # Re-enable (same register path the settings toggle uses) -> dispatchable again
+        await execute(
+            app.registry,
+            "register_subagent",
+            USER_CTX,
+            {"name": "sleeper", "description": "x", "enabled": True},
+        )
+        inst = await app.master.dispatch_task("wake up", persona="sleeper")
+        assert inst.task.goal == "wake up"
+
+    async def test_describe_tool_returns_metadata_and_schema(self, app) -> None:
+        info = await execute(app.registry, "describe_tool", USER_CTX, {"name": "read_file"})
+        assert info["name"] == "read_file"
+        assert info["dimension"] == "fs"
+        assert info["write"] is False
+        assert isinstance(info["parameters"], dict)
+
+    async def test_describe_tool_unknown_name_raises(self, app) -> None:
+        with pytest.raises(ServiceError) as exc:
+            await execute(app.registry, "describe_tool", USER_CTX, {"name": "not_a_tool"})
+        assert exc.value.body.code == "AGENT.NOT_FOUND"
+
+    async def test_list_tools_entries_carry_classification(self, app) -> None:
+        """list_tools adds dimension/write classification (schema stays behind describe_tool)."""
+        tools = await execute(app.registry, "list_tools", USER_CTX, {})
+        read = next(t for t in tools if t["name"] == "read_file")
+        assert read["dimension"] == "fs"
+        assert read["write"] is False
+        write = next(t for t in tools if t["name"] == "write_file")
+        assert write["write"] is True
+        assert "parameters" not in read
 
     async def test_dispatch_custom_limits_capped_stricter(self, app) -> None:
         """Dispatch clamping to the stricter side: custom rounds stricter than global win; looser ones fall back to global."""

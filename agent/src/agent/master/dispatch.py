@@ -87,6 +87,13 @@ async def dispatch_task(
 
     preset = resolve_persona(persona) if persona else None
     custom = _load_custom(subagents, persona) if persona and preset is None else None
+    if custom is not None and not custom.enabled:
+        raise ServiceError(
+            "agent",
+            ErrorSuffix.FORBIDDEN,
+            f"subagent {persona} is disabled",
+            hint="re-enable it in settings (register_subagent enabled=true) before dispatching",
+        )
     if custom is not None:
         if mode is None:
             mode = custom.mode

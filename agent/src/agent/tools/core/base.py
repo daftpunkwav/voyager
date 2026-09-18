@@ -14,6 +14,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Iterable
 from typing import TYPE_CHECKING, Any
 
+from platform_contracts import ErrorSuffix, ServiceError
+
 if TYPE_CHECKING:
     from agent.runtime.recovery import CircuitBreaker
 
@@ -99,6 +101,38 @@ class Toolbelt:
             ToolSpec(name=t.name, description=t.description, schema=t.schema)
             for t in (self._tools[n] for n in names)
         ]
+
+    def roster(self) -> list[dict[str, Any]]:
+        """Classification roster over the same name set specs() returns: one
+        entry per tool adding the dimension / write metadata the LLM-facing
+        ToolSpec leaves out (frontend tool catalog and allowlist grouping)."""
+        names = self.names()
+        if self._active is not None:
+            names = [n for n in names if n in self._active]
+        return [
+            {
+                "name": t.name,
+                "description": t.description,
+                "dimension": t.dimension,
+                "write": bool(t.write or t.irreversible),
+            }
+            for t in (self._tools[n] for n in names)
+        ]
+
+    def describe(self, name: str) -> dict[str, Any]:
+        """Full metadata for one tool (tool-catalog detail view): identity,
+        classification, and the LLM-facing parameter schema. Unknown names
+        raise AGENT.NOT_FOUND instead of returning an empty entry."""
+        tool = self._tools.get(name)
+        if tool is None:
+            raise ServiceError("agent", ErrorSuffix.NOT_FOUND, f"unknown tool: {name}")
+        return {
+            "name": tool.name,
+            "description": tool.description,
+            "dimension": tool.dimension,
+            "write": bool(tool.write or tool.irreversible),
+            "parameters": dict(tool.schema),
+        }
 
     def trimmed(self, allow: Iterable[str] | None) -> Toolbelt:
         """Capability-surface trimming: allow=None returns self unchanged;

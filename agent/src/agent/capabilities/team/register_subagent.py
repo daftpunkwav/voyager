@@ -25,6 +25,7 @@ def register_subagent(
     max_tool_calls: int | None = None,
     network_mode: str = "",
     readonly: bool = False,
+    enabled: bool = True,
 ) -> dict:
     """Save a SubagentDef; mode must be one of the seven mode enums
     (invalid values raise AGENT.INVALID_INPUT).
@@ -37,6 +38,8 @@ def register_subagent(
     max_rounds / max_tool_calls / network_mode are permission-tier overrides:
     omitted round limits follow the global setting, an empty network tier
     inherits the global one; on spawn, only stricter values are allowed.
+    enabled=False keeps the definition registered and listed but dispatch
+    refuses it until re-enabled (settings toggle).
     """
     d = SubagentDef(
         name=name,
@@ -48,6 +51,7 @@ def register_subagent(
         max_tool_calls=max_tool_calls,
         network_mode=network_mode or "",
         readonly=readonly,
+        enabled=enabled,
     )
     registry.save(d)
     return {
@@ -58,6 +62,7 @@ def register_subagent(
         "max_tool_calls": d.max_tool_calls,
         "network_mode": d.network_mode,
         "readonly": d.readonly,
+        "enabled": d.enabled,
     }
 
 
@@ -78,6 +83,7 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
         max_tool_calls: int | None = None,
         network_mode: str = "",
         readonly: bool = False,
+        enabled: bool = True,
     ) -> dict:
         return register_subagent(
             deps.subagents,
@@ -90,4 +96,5 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
             max_tool_calls=max_tool_calls,
             network_mode=network_mode,
             readonly=readonly,
+            enabled=enabled,
         )

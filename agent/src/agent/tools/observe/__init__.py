@@ -15,6 +15,7 @@ from platform_eventbus import EventLog
 from agent.runtime.session_index import SessionIndex
 from agent.tools.core.base import AgentTool
 from agent.tools.core.self_capability import AuditSinks
+from agent.tools.observe.describe_tool import describe_tool_tool
 from agent.tools.observe.get_resource_quota import get_resource_quota_tool
 from agent.tools.observe.list_tools import list_tools_tool
 from agent.tools.observe.read_events import read_events_tool
@@ -30,6 +31,7 @@ def observe_tools(
         read_events_tool(log),
         get_resource_quota_tool(registry, audit),
         list_tools_tool(registry, audit),
+        describe_tool_tool(registry, audit),
         search_tools_tool(registry, audit),
     )
     return {t.name: t for t in tools}

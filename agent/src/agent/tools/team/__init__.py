@@ -14,6 +14,7 @@ from agent.tools.core.base import AgentTool
 from agent.tools.core.self_capability import AuditSinks
 from agent.tools.team.abandon_resumable_checkpoint import abandon_resumable_checkpoint_tool
 from agent.tools.team.cancel_run import cancel_run_tool
+from agent.tools.team.delete_subagent import delete_subagent_tool
 from agent.tools.team.list_resumable_checkpoints import list_resumable_checkpoints_tool
 from agent.tools.team.list_subagents import list_subagents_tool
 from agent.tools.team.pause_run import pause_run_tool
@@ -42,6 +43,7 @@ def team_tools(
         cancel_run_tool(registry, audit),
         resume_run_tool(registry, audit),
         register_subagent_tool(registry, audit),
+        delete_subagent_tool(registry, audit),
         list_resumable_checkpoints_tool(registry, audit),
         abandon_resumable_checkpoint_tool(registry, audit),
         wait_subagent_tool(registry, audit),

@@ -11,6 +11,7 @@ from agent.capabilities.team.abandon_resumable_checkpoint import (
     register as _abandon_resumable_checkpoint,
 )
 from agent.capabilities.team.cancel_run import register as _cancel_run
+from agent.capabilities.team.delete_subagent import register as _delete_subagent
 from agent.capabilities.team.list_resumable_checkpoints import (
     register as _list_resumable_checkpoints,
 )
@@ -26,6 +27,7 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
     _pause_run(reg, deps)
     _cancel_run(reg, deps)
     _register_subagent(reg, deps)
+    _delete_subagent(reg, deps)
     _list_resumable_checkpoints(reg, deps)
     _abandon_resumable_checkpoint(reg, deps)
     _resume_run(reg, deps)

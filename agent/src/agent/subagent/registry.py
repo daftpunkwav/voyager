@@ -47,6 +47,9 @@ class SubagentDef:
     max_rounds: int | None = None  # ReAct round override; None = follow global
     max_tool_calls: int | None = None  # tool-call limit override; None = follow global
     network_mode: str = ""  # network tier override; empty = inherit global
+    #: Disabled definitions stay registered and listed but dispatch refuses
+    #: them (settings toggle); absent in older JSON files -> defaults to True.
+    enabled: bool = True
 
     def __post_init__(self) -> None:
         _safe_name(self.name)
@@ -83,6 +86,12 @@ class SubagentDef:
                 _DOMAIN,
                 ErrorSuffix.INVALID_INPUT,
                 "readonly must be a boolean",
+            )
+        if not isinstance(self.enabled, bool):
+            raise ServiceError(
+                _DOMAIN,
+                ErrorSuffix.INVALID_INPUT,
+                "enabled must be a boolean",
             )
 
 
