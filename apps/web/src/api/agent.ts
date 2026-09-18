@@ -195,6 +195,8 @@ export interface ChatSessionRow {
   active?: boolean;
   turns?: number | null;
   updated_at?: number | null;
+  pinned?: boolean;
+  archived?: boolean;
 }
 
 export async function listSessions(): Promise<{
@@ -224,11 +226,29 @@ export function setActiveSession(sessionId: string): Promise<unknown> {
   return callCapability('agent', 'set_active_session', { session_id: sessionId });
 }
 
-export function forkSession(sourceSessionId = '', title = ''): Promise<unknown> {
+export function forkSession(
+  sourceSessionId = '',
+  title = '',
+  keepMessages = 0
+): Promise<{ session_id: string; forked_from?: string }> {
   return callCapability('agent', 'session_fork', {
     source_session_id: sourceSessionId,
     title,
+    keep_messages: keepMessages,
   });
+}
+
+export function pinSession(sessionId: string, pinned = true): Promise<unknown> {
+  return callCapability('agent', 'pin_session', { session_id: sessionId, pinned });
+}
+
+export function archiveSession(sessionId: string, archived = true): Promise<unknown> {
+  return callCapability('agent', 'archive_session', { session_id: sessionId, archived });
+}
+
+/** User verdict on a finished agent turn, stored as memory (agent.rate_turn). */
+export function rateTurn(score: number, comment = '', subject = ''): Promise<unknown> {
+  return callCapability('agent', 'rate_turn', { score, comment, subject });
 }
 
 /** Context-window usage of one session (agent.context_status). */

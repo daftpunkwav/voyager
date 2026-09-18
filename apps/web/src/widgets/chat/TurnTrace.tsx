@@ -256,7 +256,7 @@ function StepRow({
     <li className="chat-trace__row">
       <button
         type="button"
-        className={`chat-trace__rowbtn${isSystem ? ' chat-trace__rowbtn--op' : ''}`}
+        className={`chat-trace__rowbtn${isSystem ? ' chat-trace__rowbtn--op' : ' chat-trace__rowbtn--tool'}`}
         aria-expanded={expanded}
         aria-label={`${label} ${t('chat:traj.detailToggle')}`}
         onClick={onToggle}
@@ -331,7 +331,11 @@ export function ClosedTurnTrace({ steps, finalText }: { steps: TurnStep[]; final
   );
 }
 
-/** One round block: an llm round marker with its lead-in text, meta and tools. */
+/** One round block: an llm round marker with its lead-in text, meta and tools.
+ *  `liveText`/`liveRound` carry the currently-streaming round: its text renders
+ *  inside the trace (never as a standalone bubble), so intermediate rounds no
+ *  longer flash as final answers and are not re-rendered when the closing
+ *  message lands. */
 interface RoundBlock {
   key: string;
   round: number | null;
@@ -342,30 +346,43 @@ interface RoundBlock {
   reasoningTruncated: boolean;
   /** Lead-in text identical to the closing message: hidden, not repeated. */
   dup: boolean;
+  /** The turn still streaming this round: shows the live pulse. */
+  live: boolean;
   ops: TurnStep[];
   tools: TurnStep[];
+}
+
+function emptyBlock(partial: Partial<RoundBlock> & { key: string }): RoundBlock {
+  return {
+    round: null,
+    llm: null,
+    text: '',
+    reasoning: '',
+    reasoningTruncated: false,
+    dup: false,
+    live: false,
+    ops: [],
+    tools: [],
+    ...partial,
+  };
 }
 
 /** Group steps into round blocks: an llm marker opens a block, tool steps
  *  belong to the current block, system operations attach to the block they
  *  precede (compaction happens at a round boundary). */
-function buildBlocks(steps: TurnStep[], roundTexts: RoundText[], finalText = ''): RoundBlock[] {
+function buildBlocks(
+  steps: TurnStep[],
+  roundTexts: RoundText[],
+  finalText = '',
+  liveText = '',
+  liveRound: number | null = null
+): RoundBlock[] {
   const blocks: RoundBlock[] = [];
   let pendingOps: TurnStep[] = [];
   let cur: RoundBlock | null = null;
   const pushPending = () => {
     if (pendingOps.length) {
-      blocks.push({
-        key: `ops-${blocks.length}`,
-        round: null,
-        llm: null,
-        text: '',
-        reasoning: '',
-        reasoningTruncated: false,
-        dup: false,
-        ops: pendingOps,
-        tools: [],
-      });
+      blocks.push(emptyBlock({ key: `ops-${blocks.length}`, ops: pendingOps }));
       pendingOps = [];
     }
   };
@@ -373,7 +390,7 @@ function buildBlocks(steps: TurnStep[], roundTexts: RoundText[], finalText = '')
     if (s.kind === 'llm') {
       const text = roundTexts.find((r) => r.round === s.round)?.text ?? '';
       const persisted = text || s.text || '';
-      cur = {
+      cur = emptyBlock({
         // seq in the key: resumed/merged trails can hold two round-1 markers
         key: `r${s.round ?? 'x'}-${s.seq}`,
         round: s.round ?? null,
@@ -382,9 +399,7 @@ function buildBlocks(steps: TurnStep[], roundTexts: RoundText[], finalText = '')
         reasoning: s.reasoning ?? '',
         reasoningTruncated: s.reasoningTruncated ?? false,
         dup: !!finalText && !!persisted && persisted === finalText,
-        ops: pendingOps,
-        tools: [],
-      };
+      });
       pendingOps = [];
       blocks.push(cur);
     } else if (s.kind === 'system') {
@@ -392,17 +407,7 @@ function buildBlocks(steps: TurnStep[], roundTexts: RoundText[], finalText = '')
       else pendingOps.push(s);
     } else {
       if (!cur) {
-        cur = {
-          key: 'head',
-          round: null,
-          llm: null,
-          text: '',
-          reasoning: '',
-          reasoningTruncated: false,
-          dup: false,
-          ops: pendingOps,
-          tools: [],
-        };
+        cur = emptyBlock({ key: 'head', ops: pendingOps });
         pendingOps = [];
         blocks.push(cur);
       }
@@ -410,15 +415,36 @@ function buildBlocks(steps: TurnStep[], roundTexts: RoundText[], finalText = '')
     }
   }
   pushPending();
+  // The in-flight round: its llm marker only lands at round completion, so
+  // the streaming text rides a live pseudo-block unless its own round block
+  // already exists (marker arrived, stream still draining).
+  if (liveText) {
+    const host = blocks.find((b) => b.llm && b.round !== null && b.round === liveRound);
+    if (host) {
+      host.text = host.text || liveText;
+      host.live = true;
+    } else {
+      blocks.push(
+        emptyBlock({
+          key: `live-${liveRound ?? 'x'}`,
+          round: liveRound,
+          text: liveText,
+          live: true,
+        })
+      );
+    }
+  }
   return blocks;
 }
 
 const LONG_TEXT_CHARS = 400;
 
-/** One round block: header (round, model, tokens, latency), lead-in text,
- *  thinking block, meta line, then its tool rows. */
+/** One round block: header (round, model, tokens, tool tally), lead-in text,
+ *  thinking block, meta line, then its tool rows. Colors follow the role:
+ *  assistant rounds (brand), thinking (violet), tools (amber). */
 function RoundBlockView({ block }: { block: RoundBlock }) {
   const { t } = useTranslation('chat');
+  const setRawLog = useChatStore((s) => s.setRawLog);
   const [textOpen, setTextOpen] = useState(false);
   const [reasonOpen, setReasonOpen] = useState(false);
   const llm = block.llm;
@@ -433,6 +459,16 @@ function RoundBlockView({ block }: { block: RoundBlock }) {
     stats.push(t('chat:trace.in', { n: formatCompactCount(llm.inputTokens) }));
   if (llm && typeof llm.outputTokens === 'number')
     stats.push(t('chat:trace.out', { n: formatCompactCount(llm.outputTokens) }));
+  // Per-round tool tally: "read 2 · edit 1" (localized labels, capped list).
+  const toolCounts = new Map<string, number>();
+  for (const s of block.tools) {
+    if (s.kind !== 'tool') continue;
+    toolCounts.set(s.name, (toolCounts.get(s.name) ?? 0) + 1);
+  }
+  const toolStats = [...toolCounts.entries()]
+    .slice(0, 3)
+    .map(([name, n]) => t('chat:trace.toolTally', { name: toolLabel(name, t), n }));
+  if (toolCounts.size > 3) toolStats.push(t('chat:trace.toolMore', { n: toolCounts.size - 3 }));
   const meta: string[] = [];
   if (llm?.ttftMs !== undefined) meta.push(t('chat:trace.ttft', { v: `${llm.ttftMs}ms` }));
   if (llm?.subagent) meta.push(t('chat:trace.subagent', { v: llm.subagent }));
@@ -441,13 +477,22 @@ function RoundBlockView({ block }: { block: RoundBlock }) {
   return (
     <section className={`chat-round${llm ? '' : ' chat-round--ops'}`}>
       {block.ops.length > 0 ? <RoundToolRows steps={block.ops} /> : null}
-      {llm ? (
+      {llm || block.live ? (
         <div className="chat-round__head">
-          <span className="chat-round__no">
+          <span className="chat-round__no chat-role--assistant">
             {block.round ? t('chat:trace.roundN', { n: block.round }) : t('chat:proc.think')}
+            {block.live ? <span className="chat-trace__pulse" aria-hidden /> : null}
           </span>
-          {llm.model ? <span className="chat-round__model">{llm.model}</span> : null}
+          {llm?.model ? <span className="chat-round__model">{llm.model}</span> : null}
           {stats.length ? <span className="chat-round__stats">{stats.join(' · ')}</span> : null}
+          {toolStats.length ? (
+            <span className="chat-round__toolstats chat-role--tool" title={toolStats.join(' · ')}>
+              {t('chat:trace.roundTools', {
+                n: block.tools.filter((s) => s.kind === 'tool').length,
+              })}
+              {toolStats.length ? ` · ${toolStats.join(' · ')}` : ''}
+            </span>
+          ) : null}
         </div>
       ) : null}
       {bodyText ? (
@@ -466,7 +511,9 @@ function RoundBlockView({ block }: { block: RoundBlock }) {
       ) : null}
       {reasoning ? (
         <div className="chat-round__reason">
-          <span className="chat-round__reasonlabel muted">{t('chat:traj.reasoning')}</span>
+          <span className="chat-round__reasonlabel chat-role--think">
+            {t('chat:traj.reasoning')}
+          </span>
           <div
             className={`chat-round__reasontext chat-md${reasonLong && !reasonOpen ? ' is-clamped' : ''}`}
           >
@@ -487,6 +534,15 @@ function RoundBlockView({ block }: { block: RoundBlock }) {
         </div>
       ) : null}
       {meta.length ? <div className="chat-round__meta small muted">{meta.join(' · ')}</div> : null}
+      {llm?.runId ? (
+        <button
+          type="button"
+          className="chat-round__rawbtn"
+          onClick={() => setRawLog({ runId: llm.runId as string, round: block.round ?? -1 })}
+        >
+          {t('chat:rawlog.open')}
+        </button>
+      ) : null}
       <RoundToolRows steps={block.tools} />
     </section>
   );
@@ -494,11 +550,11 @@ function RoundBlockView({ block }: { block: RoundBlock }) {
 
 /** The live turn's inline trace — ONE stable collapsible unit sitting between
  *  the user's message and the final output. It mounts as soon as the turn
- *  starts (thinking flag), before any step lands: the first round's llm step
- *  only arrives at round completion, so gating on steps would leave the
- *  whole first-round streaming without a trace. Position never moves: the
- *  block only grows downward inside a fixed-height, internally-scrolling
- *  body, so streaming output below is never pushed around. */
+ *  starts (thinking flag) and stays open for the whole turn: streaming text
+ *  renders inside its round block (never as a standalone bubble), so the
+ *  trace IS the execution record and nothing flashes as a premature answer.
+ *  The body is fixed-height and scrolls internally, so the page layout below
+ *  is never pushed around. Manual collapse still wins while set. */
 export function LiveTurnTrace() {
   const { t } = useTranslation('chat');
   const steps = useChatStore((s) => s.steps);
@@ -509,25 +565,12 @@ export function LiveTurnTrace() {
   const bodyRef = useRef<HTMLDivElement>(null);
   const hadStepsRef = useRef(false);
 
-  const running = steps.length > 0 || thinking;
+  const running = steps.length > 0 || thinking || !!streaming?.text;
   const hasSteps = steps.length > 0;
-  // "Text is the latest activity": output yields the trace only while text
-  // started flowing after the most recent step; the next tool step (or its
-  // llm marker) flips activity back to the trace and it reopens. State, not
-  // a ref, so the flip itself re-renders even when nothing else changed.
-  const [textSinceStep, setTextSinceStep] = useState(false);
-  useEffect(() => {
-    setTextSinceStep(false);
-  }, [steps.length]);
-  useEffect(() => {
-    if (streaming?.text) setTextSinceStep(true);
-  }, [streaming?.text]);
-  const autoOpen = hasSteps && !textSinceStep;
-  const open = manual ?? autoOpen;
-  const showBody = open && hasSteps;
-  // Pre-step phase (first round streaming / waiting for the first token)
-  // always reads as "working" — there is no step activity to yield to yet.
-  const working = autoOpen || !hasSteps;
+  const open = manual ?? true;
+  // First-round streaming has no steps yet: the live round block must still
+  // render, otherwise the opening text would be invisible until a step lands.
+  const showBody = open && (hasSteps || !!streaming?.text);
 
   // Reset the manual pin when the turn ends so the next turn starts fresh.
   useEffect(() => {
@@ -536,7 +579,7 @@ export function LiveTurnTrace() {
   }, [steps.length]);
 
   // Follow the action inside the fixed-height body only: the page layout
-  // below (streaming output) is never scrolled or resized by trace growth.
+  // below (final output) is never scrolled or resized by trace growth.
   useEffect(() => {
     if (!open) return;
     const el = bodyRef.current;
@@ -544,7 +587,13 @@ export function LiveTurnTrace() {
   }, [open, steps.length, streaming?.text]);
 
   if (!running) return null;
-  const blocks = buildBlocks(steps, roundTexts);
+  const blocks = buildBlocks(
+    steps,
+    roundTexts,
+    '',
+    streaming?.text ?? '',
+    streaming?.round ?? null
+  );
 
   return (
     <div className="chat-trace chat-trace--live">
@@ -558,17 +607,10 @@ export function LiveTurnTrace() {
         <span className="chat-trace__headtext">
           {hasSteps ? groupSummary(steps, t) : t('chat:trace.thinking')}
         </span>
-        {working ? (
-          <span className="chat-trace__livebadge">
-            <span className="chat-trace__pulse" aria-hidden />
-            {t('chat:trace.working')}
-          </span>
-        ) : streaming?.text ? (
-          <span className="chat-trace__livebadge">
-            <span className="chat-trace__pulse" aria-hidden />
-            {t('chat:trace.outputting')}
-          </span>
-        ) : null}
+        <span className="chat-trace__livebadge">
+          <span className="chat-trace__pulse" aria-hidden />
+          {streaming?.text ? t('chat:trace.outputting') : t('chat:trace.working')}
+        </span>
       </button>
       {showBody ? (
         <div className="chat-trace__body" ref={bodyRef}>

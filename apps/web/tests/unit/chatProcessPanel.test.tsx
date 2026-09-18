@@ -115,7 +115,7 @@ describe('inline live trace (MessageList)', () => {
     expect(screen.getByText(/工具 1 次/)).toBeTruthy();
   });
 
-  it('auto-collapses when output text starts streaming; rows come back via the header', () => {
+  it('streams the round text inside the trace; the whole unit collapses only manually', () => {
     const { dispatch } = useChatStore.getState();
     useChatStore.setState({ thinking: true });
     dispatch(stepEvent('llm', 'round-1', 'a', 100));
@@ -128,14 +128,17 @@ describe('inline live trace (MessageList)', () => {
         payload: { round: 1, text: '答案是', subagent: 'chat' },
       });
     });
-    // collapsed: the step rows are hidden, the writing badge shows
+    // The trace stays open: streaming text renders inside the round block
+    // (no standalone typing bubble), and the tool rows stay visible.
     expect(screen.getByText('答案是')).toBeTruthy();
-    expect(screen.queryByText('创建笔记')).toBeNull();
+    expect(screen.getByText('创建笔记')).toBeTruthy();
     expect(screen.getByText(/正在输出/)).toBeTruthy();
-    // manual reopen shows the rows again
+    expect(container.querySelector('.chat-caret')).toBeNull();
+    // manual collapse hides the rows; the header brings them back
+    fireEvent.click(screen.getByText(/工具 1 次/));
+    expect(screen.queryByText('创建笔记')).toBeNull();
     fireEvent.click(screen.getByText(/工具 1 次/));
     expect(screen.getByText('创建笔记')).toBeTruthy();
-    expect(container.querySelector('.chat-caret')).not.toBeNull();
   });
 
   it('agent.message folds the closed trail above the answer; collapsed by default', () => {
@@ -181,6 +184,12 @@ describe('inline live trace (MessageList)', () => {
     const cardEl = card as Element;
     const askEl = secondAsk as Element;
     expect(cardEl.compareDocumentPosition(askEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // re-parented under the answer it belongs to: after the first agent
+    // bubble, before the second user bubble
+    const firstAnswer = [...container.querySelectorAll('.chat-bubble--agent')].at(-1) as Element;
+    expect(
+      firstAnswer.compareDocumentPosition(cardEl) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 });
 

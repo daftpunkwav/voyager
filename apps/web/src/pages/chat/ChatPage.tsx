@@ -11,9 +11,10 @@
  * - Wire the SSE stream with navigation raised to react-router
  * - Tab between the conversation (message list with inline execution traces,
  *   ask dialog, composer) and the full trajectory view (per-turn execution
- *   detail rebuilt from persisted rows), with the session switcher at the far
- *   left of the tab row; a reconnecting hint shows only while the stream is down
- * - Host the right panel: plan (todos), running subagents and deliverables
+ *   detail rebuilt from persisted rows); session management lives in the app
+ *   sidebar, not on this page
+ * - Host the right panel: plan (todos), running subagents and deliverables,
+ *   plus the raw LLM log drawer opened from a trace round block
  */
 
 import { useCallback, useState } from 'react';
@@ -27,10 +28,10 @@ import { MessageList } from '@/widgets/chat/MessageList';
 import { TaskCards } from '@/widgets/chat/TaskCards';
 import { TrajectoryView } from '@/widgets/chat/TrajectoryView';
 import { RightPanel } from '@/widgets/chat/RightPanel';
+import { RawLogPanel } from '@/widgets/chat/RawLogPanel';
 import { ChatLlmMissingTip } from '@/widgets/chat/ChatLlmMissingTip';
 import { AskDialog } from '@/widgets/chat/AskDialog';
 import { ChatComposer } from '@/widgets/chat/ChatComposer';
-import { SessionModal } from '@/widgets/chat/SessionModal';
 
 export function ChatPage() {
   const { t } = useTranslation('chat');
@@ -40,7 +41,6 @@ export function ChatPage() {
   const composer = useChatSend();
   const { llmMissing } = composer;
   const [view, setView] = useState<'chat' | 'trajectory'>('chat');
-  const [sessionsOpen, setSessionsOpen] = useState(false);
 
   const onNavigate = useCallback(
     (path: string) => {
@@ -54,9 +54,6 @@ export function ChatPage() {
     <section className="chat-page chat-layout">
       <div className="chat-main">
         <div className="chat-tabs">
-          <button type="button" className="btn btn-sm" onClick={() => setSessionsOpen(true)}>
-            {t('chat:session.drawerButton')}
-          </button>
           <div className="chat-tabs__group" role="tablist" aria-label={t('chat:traj.tabsLabel')}>
             <button
               type="button"
@@ -106,7 +103,7 @@ export function ChatPage() {
         )}
       </div>
       <RightPanel taskCards={<TaskCards />} />
-      <SessionModal open={sessionsOpen} onClose={() => setSessionsOpen(false)} />
+      <RawLogPanel />
     </section>
   );
 }

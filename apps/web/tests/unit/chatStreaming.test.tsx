@@ -83,23 +83,28 @@ describe('chatStore streaming', () => {
   });
 });
 
-describe('MessageList streaming bubble', () => {
-  it('renders the streaming bubble while typing content exists; it disappears when the final message arrives', () => {
+describe('MessageList streaming', () => {
+  it('streams the round text inside the live trace round block; the final message is the only bubble', () => {
     const { container } = render(
       <MemoryRouter>
         <MessageList />
       </MemoryRouter>
     );
+    // No standalone typing bubble: streaming text lives inside the trace.
     expect(container.querySelector('.chat-caret')).toBeNull();
     act(() => {
       dispatch('agent.delta', { round: 1, text: '打字中', subagent: 'chat' });
     });
-    expect(container.querySelector('.chat-caret')).not.toBeNull();
-    expect(screen.getByText('打字中')).toBeTruthy();
+    // The live round block carries the streaming text.
+    const roundText = container.querySelector('.chat-round__text');
+    expect(roundText).not.toBeNull();
+    expect(roundText?.textContent).toContain('打字中');
+    expect(container.querySelector('.chat-bubble--agent .chat-caret')).toBeNull();
     act(() => {
       dispatch('agent.message', { content: '正式回复' });
     });
-    expect(container.querySelector('.chat-caret')).toBeNull();
+    // The trace folds (live steps cleared) and the closing message renders.
     expect(screen.getByText('正式回复')).toBeTruthy();
+    expect(container.querySelector('.chat-round__text')?.textContent ?? '').not.toContain('打字中');
   });
 });

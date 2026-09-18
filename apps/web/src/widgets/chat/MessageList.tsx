@@ -19,13 +19,17 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, Fragment } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useUIStore } from '@/stores/uiStore';
 import { flushSync } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { type ChatMessage, type NoteArtifact, useChatStore } from '@/stores/chatStore';
-import { fetchChatHistoryBefore } from '@/bridge/chatSend';
+import { fetchChatHistoryBefore, loadChatSessions, loadSessionTimeline } from '@/bridge/chatSend';
 import { ServiceError } from '@/bridge/client';
+import { forkSession, rateTurn, setActiveSession } from '@/api/agent';
 import { getNote } from '@/api/notes';
+import { extractErrorMessage } from '@/utils/errors';
 import { routes } from '@/utils/routes';
 import { ChatMarkdown } from '@/widgets/chat/ChatMarkdown';
 import { ClosedTurnTrace, LiveTurnTrace } from '@/widgets/chat/TurnTrace';
@@ -58,6 +62,40 @@ type TimelineItem =
   | { kind: 'msg'; seq: number; msg: ChatMessage }
   | { kind: 'artifact'; seq: number; artifact: NoteArtifact };
 
+/** Note receipts are emitted while the tools run, i.e. BEFORE the reply that
+ *  produced them; the reply reads better with the results under it, so
+ *  artifacts produced inside a turn are re-parented to follow that turn's
+ *  agent message. Artifacts with no reply yet stay in seq order at the tail. */
+function reParentArtifacts(merged: TimelineItem[]): TimelineItem[] {
+  const out: TimelineItem[] = [];
+  for (const item of merged) {
+    if (item.kind === 'msg') {
+      out.push(item);
+      continue;
+    }
+    // Insert after the newest message with seq <= the artifact's own seq
+    // (its turn's closing answer); already-placed artifacts below the scan
+    // position keep their relative order. No host message yet -> tail.
+    let at = out.length;
+    let lastArtifactEnd = out.length;
+    let hit = false;
+    for (let i = out.length - 1; i >= 0; i--) {
+      const placed = out[i];
+      if (placed.kind === 'artifact') {
+        lastArtifactEnd = i + 1;
+        continue;
+      }
+      if (placed.seq <= item.seq) {
+        at = i + 1;
+        hit = true;
+        break;
+      }
+    }
+    out.splice(hit ? at : Math.min(at, lastArtifactEnd), 0, item);
+  }
+  return out;
+}
+
 function mergeTimeline(messages: ChatMessage[], artifacts: NoteArtifact[]): TimelineItem[] {
   const items: TimelineItem[] = [
     ...messages.map((m) => ({ kind: 'msg' as const, seq: m.seq, msg: m })),
@@ -73,7 +111,7 @@ function mergeTimeline(messages: ChatMessage[], artifacts: NoteArtifact[]): Time
   }
   while (i < messages.length) out.push(items[i++]);
   while (j < artifacts.length) out.push(items[messages.length + j++]);
-  return out;
+  return reParentArtifacts(out);
 }
 
 export function MessageList() {
@@ -205,42 +243,38 @@ export function MessageList() {
           {t('chat:history.loadingOlder')}
         </div>
       ) : null}
-      {mergeTimeline(messages, artifacts).map((item) => {
-        if (item.kind === 'artifact') {
-          return <NoteArtifactCard key={`a${item.seq}`} artifact={item.artifact} />;
-        }
-        const m = item.msg;
-        const trail = m.role === 'agent' ? trailBySeq.get(m.seq) : undefined;
-        return (
-          <Fragment key={`${m.seq ?? `local-${m.ts ?? item.seq}`}-${m.role}`}>
-            {trail ? <ClosedTurnTrace steps={trail.steps} finalText={m.content} /> : null}
-            <Bubble msg={m} />
-          </Fragment>
-        );
-      })}
+      {(() => {
+        let lastUser = '';
+        return mergeTimeline(messages, artifacts).map((item) => {
+          if (item.kind === 'artifact') {
+            return <NoteArtifactCard key={`a${item.seq}`} artifact={item.artifact} />;
+          }
+          const m = item.msg;
+          if (m.role === 'user') lastUser = m.content;
+          const subject = lastUser;
+          const trail = m.role === 'agent' ? trailBySeq.get(m.seq) : undefined;
+          return (
+            <Fragment key={`${m.seq ?? `local-${m.ts ?? item.seq}`}-${m.role}`}>
+              {trail ? <ClosedTurnTrace steps={trail.steps} finalText={m.content} /> : null}
+              <Bubble msg={m} subject={subject} />
+            </Fragment>
+          );
+        });
+      })()}
       <LiveTurnTrace />
       {showInterrupted && tailTrail ? <ClosedTurnTrace steps={tailTrail.steps} /> : null}
-      {streaming?.text ? (
-        // Streaming typing paragraph: same agent-text styling with a caret
-        // indicating generation in progress; the final content arrives via
-        // agent.message, this slot is transient display only
-        <div className="chat-bubble chat-bubble--agent">
-          <div className="chat-md">
-            <ChatMarkdown content={streaming.text} />
-            <span className="chat-caret" aria-hidden>
-              ▍
-            </span>
-          </div>
-        </div>
-      ) : null}
-      {/* Pre-first-token wait indicator lives on the live trace bar
-          ("thinking" + working pulse) — no separate typing-dots bubble. */}
+      {/* Streaming text renders inside the live trace's round block: the trace
+          IS the execution record, and the closing agent.message is the only
+          thing that ever renders as the final answer. */}
       <div ref={bottomRef} />
     </div>
   );
 }
 
-function Bubble({ msg }: { msg: ChatMessage }) {
+function Bubble({ msg, subject }: { msg: ChatMessage; subject: string }) {
+  const { t } = useTranslation('chat');
+  const addToast = useUIStore((s) => s.addToast);
+  const [copied, setCopied] = useState(false);
   if (msg.role === 'system') {
     return <div className="chat-system">{msg.content}</div>;
   }
@@ -249,11 +283,140 @@ function Bubble({ msg }: { msg: ChatMessage }) {
     msg.role === 'user'
       ? 'chat-bubble chat-bubble--user'
       : `chat-bubble chat-bubble--agent${error ? ' chat-bubble--error' : ''}`;
+
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(msg.content);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      addToast({ type: 'error', message: t('chat:msg.copyFailed') });
+    }
+  };
+
   return (
-    <div className={cls} role={error ? 'alert' : undefined}>
+    <div className={`${cls} chat-bubble--hasactions`}>
       <div className="chat-md">
         <ChatMarkdown content={msg.content} />
       </div>
+      <div className="chat-msg-actions">
+        <button type="button" onClick={() => void onCopy()} aria-label={t('chat:msg.copy')}>
+          {copied ? t('chat:msg.copied') : t('chat:msg.copy')}
+        </button>
+        <MessageForkButton msg={msg} />
+      </div>
+      {msg.role === 'agent' && !error ? <RateBar subject={subject} /> : null}
+    </div>
+  );
+}
+
+/** Fork: branch a new session from the conversation up to and including this
+ *  message. keep_messages counts user/assistant entries in the persisted
+ *  history, which maps 1:1 onto the visible non-system timeline. */
+function MessageForkButton({ msg }: { msg: ChatMessage }) {
+  const { t } = useTranslation('chat');
+  const addToast = useUIStore((s) => s.addToast);
+  const navigate = useNavigate();
+  const messages = useChatStore((s) => s.messages);
+  const [busy, setBusy] = useState(false);
+  const index = messages.findIndex((m) => m.seq === msg.seq);
+  const keep = messages
+    .slice(0, index + 1)
+    .filter((m) => m.role === 'user' || m.role === 'agent').length;
+
+  const onFork = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const state = useChatStore.getState();
+      const created = await forkSession(state.activeSessionId, '', keep);
+      const newId = created.session_id;
+      await setActiveSession(newId);
+      const loaded = state.switchSession(newId);
+      if (!loaded) await loadSessionTimeline(newId);
+      await loadChatSessions();
+      navigate(routes.chat);
+      addToast({ type: 'success', message: t('chat:msg.forked') });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof ServiceError ? extractErrorMessage(err) : String(err),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => void onFork()}
+      aria-label={t('chat:msg.fork')}
+    >
+      {t('chat:msg.fork')}
+    </button>
+  );
+}
+
+/** Star rating + comment for the finished turn; the verdict lands in agent
+ *  memory (rate_turn) and guides later execution. Not persisted per message:
+ *  the submission itself is the memory, so a refresh resets the form. */
+function RateBar({ subject }: { subject: string }) {
+  const { t } = useTranslation('chat');
+  const addToast = useUIStore((s) => s.addToast);
+  const [score, setScore] = useState(0);
+  const [comment, setComment] = useState('');
+  const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (done) {
+    return <div className="chat-rate chat-rate--done small muted">{t('chat:rate.done')}</div>;
+  }
+  const submit = async () => {
+    if (busy || score === 0) return;
+    setBusy(true);
+    try {
+      await rateTurn(score, comment.trim(), subject.slice(0, 60));
+      setDone(true);
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof ServiceError ? extractErrorMessage(err) : String(err),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="chat-rate">
+      <span className="chat-rate__stars" role="radiogroup" aria-label={t('chat:rate.title')}>
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            role="radio"
+            aria-checked={score === n}
+            aria-label={t('chat:rate.star', { n })}
+            className={n <= score ? 'is-on' : ''}
+            onClick={() => setScore(n)}
+          >
+            ★
+          </button>
+        ))}
+      </span>
+      <input
+        className="chat-rate__comment"
+        value={comment}
+        placeholder={t('chat:rate.placeholder')}
+        maxLength={200}
+        onChange={(e) => setComment(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void submit();
+        }}
+      />
+      <button type="button" disabled={score === 0 || busy} onClick={() => void submit()}>
+        {t('chat:rate.submit')}
+      </button>
     </div>
   );
 }

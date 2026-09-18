@@ -77,7 +77,9 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
   if (failed || !svg) {
     return (
       <div className="md-codeblock md-mermaid--fallback" data-testid="mermaid-fallback">
-        <div className="md-codeblock__lang">mermaid</div>
+        <div className="md-codeblock__bar">
+          <div className="md-codeblock__lang">mermaid</div>
+        </div>
         <pre className="hljs">
           <code>{code}</code>
         </pre>

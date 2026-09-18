@@ -256,6 +256,8 @@ interface ChatState {
   trails: TurnTrail[];
   /** Trajectory of the previous finished turn, shown collapsed by the timeline. */
   lastSteps: TurnStep[];
+  /** Open raw-LLM log drawer target (run + round); null = closed. */
+  rawLog: { runId: string; round: number } | null;
   /** Frozen lead-in texts of finished rounds of the live turn (round -> text). */
   roundTexts: RoundText[];
   /** Current streaming typing (agent.delta); cleared by agent.message, restarted on round change */
@@ -279,6 +281,8 @@ interface ChatState {
   applyTrajectory: (events: ChatEvent[]) => void;
   /** Backward-page fetch in flight (top loader indicator + trigger re-entry guard). */
   setHistoryLoading: (v: boolean) => void;
+  /** Open (runId+round) or close (null) the raw LLM log drawer. */
+  setRawLog: (v: { runId: string; round: number } | null) => void;
   /** SSE event dispatch (agent.ask, task.*, agent.message, note.created, etc.); pure state transitions, unit-testable. */
   dispatch: (ev: ChatEvent) => void;
   appendLocal: (msg: ChatMessage) => void;
@@ -389,6 +393,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   lastSteps: [],
   roundTexts: [],
   streaming: null,
+  rawLog: null,
   workspaceRev: 0,
   workspaceSwitchMarker: null,
 
@@ -542,6 +547,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   setHistoryLoading: (v) => set({ historyLoading: v }),
+
+  setRawLog: (v) => set({ rawLog: v }),
 
   applyTrajectory: (events) => {
     const incoming = events.filter((e) => e.type === EventType.AGENT_STEP).map(toTurnStep);

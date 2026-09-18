@@ -17,7 +17,17 @@ import { NavIcons } from '@/components/icons/NavIcons';
 import { useUIStore } from '@/stores/uiStore';
 import { useChatStore } from '@/stores/chatStore';
 import { loadChatSessions, loadSessionTimeline } from '@/bridge/chatSend';
-import { createSession, setActiveSession, type ChatSessionRow } from '@/api/agent';
+import {
+  archiveSession,
+  compactSession,
+  createSession,
+  deleteSession,
+  getContextStatus,
+  pinSession,
+  renameSession,
+  setActiveSession,
+  type ChatSessionRow,
+} from '@/api/agent';
 import { ServiceError } from '@/bridge/client';
 import { extractErrorMessage } from '@/utils/errors';
 import { PRODUCT_NAME } from '@/brand';
@@ -75,7 +85,9 @@ function BrandLogo() {
   );
 }
 
-/** Lightweight session list: switch + create only; rename/delete stay in the chat page drawer. */
+/** Full session manager: switch + create + pin / rename / archive / delete
+ *  (the chat page session drawer is gone), an archived section, and the
+ *  active session's context usage with a compact action. */
 function SidebarSessions() {
   const { t } = useTranslation('chat');
   const navigate = useNavigate();
@@ -83,11 +95,32 @@ function SidebarSessions() {
   const sessions = useChatStore((s) => s.sessions);
   const activeId = useChatStore((s) => s.activeSessionId);
   const [busy, setBusy] = useState(false);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [ctxPct, setCtxPct] = useState<number | null>(null);
 
   useEffect(() => {
     // Silent on failure: the store keeps its previous list (same as chatSend).
     void loadChatSessions();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!activeId) return;
+    getContextStatus(activeId)
+      .then((st) => {
+        if (!cancelled) setCtxPct(Math.round(st.used_pct));
+      })
+      .catch(() => {
+        if (!cancelled) setCtxPct(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeId]);
 
   const fail = (err: unknown) => {
     addToast({
@@ -96,18 +129,23 @@ function SidebarSessions() {
     });
   };
 
-  const handleCreate = async () => {
+  const run = async (fn: () => Promise<unknown>) => {
     if (busy) return;
     setBusy(true);
     try {
-      await createSession('');
-      await loadChatSessions();
+      await fn();
     } catch (err) {
       fail(err);
     } finally {
       setBusy(false);
     }
   };
+
+  const handleCreate = () =>
+    run(async () => {
+      await createSession('');
+      await loadChatSessions();
+    });
 
   const handleSwitch = async (row: ChatSessionRow) => {
     if (busy) return;
@@ -128,6 +166,143 @@ function SidebarSessions() {
     }
   };
 
+  const live = sessions.filter((s) => !s.archived);
+  const archived = sessions.filter((s) => s.archived);
+  const closeMenu = () => {
+    setMenuFor(null);
+    setConfirming(null);
+  };
+
+  const renderRow = (row: ChatSessionRow) => {
+    const isActive = row.session_id === activeId;
+    const title = row.title || t('session.untitled');
+    const menuOpen = menuFor === row.session_id;
+    if (renaming === row.session_id) {
+      return (
+        <div key={row.session_id} className="sidebar-sessions__rename">
+          <input
+            autoFocus
+            value={renameDraft}
+            aria-label={t('session.rename')}
+            maxLength={40}
+            onChange={(e) => setRenameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const draft = renameDraft.trim();
+                if (draft) {
+                  void run(async () => {
+                    await renameSession(row.session_id, draft);
+                    await loadChatSessions();
+                  });
+                }
+                setRenaming(null);
+              } else if (e.key === 'Escape') {
+                setRenaming(null);
+              }
+            }}
+          />
+        </div>
+      );
+    }
+    return (
+      <div key={row.session_id} className="sidebar-sessions__row">
+        <button
+          type="button"
+          className={`sidebar-sessions__item${isActive ? ' is-active' : ''}`}
+          disabled={busy}
+          title={title}
+          onClick={() => void handleSwitch(row)}
+        >
+          {row.pinned ? (
+            <span className="sidebar-sessions__pin" aria-hidden>
+              🮌
+            </span>
+          ) : null}
+          <span className="sidebar-sessions__name">{title}</span>
+          {isActive ? <span className="sidebar-sessions__dot" aria-hidden /> : null}
+        </button>
+        <button
+          type="button"
+          className="sidebar-sessions__menu-btn"
+          aria-label={t('session.menu')}
+          aria-expanded={menuOpen}
+          onClick={() => {
+            setMenuFor(menuOpen ? null : row.session_id);
+            setConfirming(null);
+          }}
+        >
+          ⋯
+        </button>
+        {menuOpen ? (
+          <div className="sidebar-sessions__menu" role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                closeMenu();
+                void run(async () => {
+                  await pinSession(row.session_id, !row.pinned);
+                  await loadChatSessions();
+                });
+              }}
+            >
+              {row.pinned ? t('session.unpin') : t('session.pin')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuFor(null);
+                setRenameDraft(row.title || '');
+                setRenaming(row.session_id);
+              }}
+            >
+              {t('session.rename')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                closeMenu();
+                void run(async () => {
+                  await archiveSession(row.session_id, !row.archived);
+                  await loadChatSessions();
+                });
+              }}
+            >
+              {row.archived ? t('session.unarchive') : t('session.archive')}
+            </button>
+            {confirming === row.session_id ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="is-danger"
+                onClick={() => {
+                  closeMenu();
+                  void run(async () => {
+                    await deleteSession(row.session_id);
+                    await loadChatSessions();
+                  });
+                }}
+              >
+                {t('session.confirmDelete')}
+              </button>
+            ) : (
+              <button
+                type="button"
+                role="menuitem"
+                className="is-danger"
+                onClick={() => setConfirming(row.session_id)}
+              >
+                {t('session.delete')}
+              </button>
+            )}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   return (
     <nav className="sidebar-section sidebar-sessions" aria-label={t('session.drawerTitle')}>
       <div className="sidebar-sessions__head">
@@ -144,28 +319,44 @@ function SidebarSessions() {
         </button>
       </div>
       <div className="sidebar-sessions__list">
-        {sessions.length === 0 ? (
+        {live.length === 0 ? (
           <div className="sidebar-sessions__empty">{t('session.empty')}</div>
         ) : (
-          sessions.map((row) => {
-            const isActive = row.session_id === activeId;
-            const title = row.title || t('session.untitled');
-            return (
-              <button
-                key={row.session_id}
-                type="button"
-                className={`sidebar-sessions__item${isActive ? ' is-active' : ''}`}
-                disabled={busy}
-                title={title}
-                onClick={() => void handleSwitch(row)}
-              >
-                <span className="sidebar-sessions__name">{title}</span>
-                {isActive ? <span className="sidebar-sessions__dot" aria-hidden /> : null}
-              </button>
-            );
-          })
+          live.map(renderRow)
         )}
+        {archived.length > 0 ? (
+          <button
+            type="button"
+            className="sidebar-sessions__archtoggle"
+            aria-expanded={showArchived}
+            onClick={() => setShowArchived(!showArchived)}
+          >
+            {showArchived
+              ? t('session.hideArchived')
+              : t('session.archived', { n: archived.length })}
+          </button>
+        ) : null}
+        {showArchived ? archived.map(renderRow) : null}
       </div>
+      {ctxPct !== null ? (
+        <div className="sidebar-sessions__ctx small muted">
+          <span>{t('session.context', { n: ctxPct })}</span>
+          <button
+            type="button"
+            disabled={busy}
+            title={t('session.compact')}
+            onClick={() =>
+              void run(async () => {
+                await compactSession(activeId);
+                const st = await getContextStatus(activeId);
+                setCtxPct(Math.round(st.used_pct));
+              })
+            }
+          >
+            {t('session.compact')}
+          </button>
+        </div>
+      ) : null}
     </nav>
   );
 }

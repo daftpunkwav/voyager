@@ -2029,10 +2029,13 @@ textarea.field {
   margin-bottom: 0;
 }
 .md-codeblock__lang {
-  position: absolute;
-  top: 8px;
-  right: 12px;
-  z-index: 1;
+  position: static;
+  order: -1;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
@@ -2047,14 +2050,11 @@ textarea.field {
   border-radius: 0;
   background: transparent !important;
   box-shadow: none;
-  padding: 16px 16px 14px;
+  padding: 12px 16px 14px;
 }
 :is(.markdown, .chat-md) .md-codeblock > pre.hljs,
 .md-codeblock code.hljs {
   background: transparent !important;
-}
-:is(.markdown, .chat-md) .md-codeblock:has(.md-codeblock__lang) > pre {
-  padding-top: 28px;
 }
 
 .markdown blockquote {
@@ -2263,13 +2263,16 @@ textarea.field {
 .md-codeblock__bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 4px 0 0;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 4px 8px;
+  min-height: 28px;
 }
 .md-codeblock__actions {
   display: flex;
   align-items: center;
   gap: 2px;
+  flex-shrink: 0;
 }
 .md-codeblock__btn {
   border: 0;
