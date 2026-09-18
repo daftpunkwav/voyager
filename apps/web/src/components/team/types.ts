@@ -11,6 +11,9 @@ export interface RunningSubagent {
   goal: string;
   started_ts: number;
   last_step?: string;
+  /** True for chat-session instances: they are the user's conversation with
+   *  Lucien, not dispatched subagents (subagent rosters filter them out). */
+  conversational?: boolean;
 }
 
 /** Resumable/abandonable checkpoint entry (from list_resumable_checkpoints.items).
@@ -44,6 +47,9 @@ export interface SubagentDef {
   max_rounds?: number | null;
   max_tool_calls?: number | null;
   network_mode?: string;
+  readonly?: boolean;
+  /** Disabled definitions stay registered but can no longer be dispatched. */
+  enabled?: boolean;
 }
 
 /** Persona preset entry (from list_personas). */
@@ -56,8 +62,19 @@ export interface PersonaItem {
   system_prompt: string;
 }
 
-/** Tool catalog entry (from list_tools). */
+/** Tool catalog entry (from list_tools); write = write or irreversible. */
 export interface ToolItem {
   name: string;
   description: string;
+  dimension?: string;
+  write?: boolean;
+}
+
+/** describe_tool payload: full metadata including the parameter schema. */
+export interface ToolDetail extends ToolItem {
+  parameters: {
+    type?: string;
+    properties?: Record<string, { type?: string; description?: string; items?: { type?: string } }>;
+    required?: string[];
+  };
 }

@@ -1,13 +1,14 @@
 /**
  * @file agentPlugins
- * @description Settings page plugin block unit tests (phase-72 bundle +
- * phase-74 per-item + phase-77 install/delete): mounting calls list_plugins
- * and renders name/version/approval state/permission list/details, bundle
- * approval, custom per-item checks, revoke, zip/directory install and delete;
- * success/failure toasts; getApi() is never called.
+ * @description Settings page plugin block unit tests: mounting calls
+ * list_plugins and renders name/version/approval state/permission details;
+ * the approval switch hits bundle approve / revoke; per-item approval lives in
+ * the expandable row picker; install runs in the dialog (zip / local dir /
+ * overwrite confirm); delete confirms then uninstalls; success/failure toasts;
+ * getApi() is never called.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import { initI18n } from '@/i18n';
 
@@ -26,30 +27,9 @@ vi.mock('@/bridge/client', async (importOriginal) => ({
 vi.mock('@/api/client', () => ({ getApi: getApiMock }));
 
 import { PluginsBlock } from '@/components/settings/agent/PluginsBlock';
-import { WorkspaceBlock } from '@/components/settings/agent/WorkspaceBlock';
 import { useUIStore } from '@/stores/uiStore';
 
-const SNAPSHOT = {
-  profile: { summary: '', items: [] },
-  episodic: { recent: [], shown: 0 },
-  semantic: { recent: [], shown: 0 },
-  working: { size: 0 },
-  retention_days: 90,
-  purged_episodic: 0,
-};
-
-/** Keyed settings store (same approach as the existing settings page tests to avoid failing other blocks) */
-const SETTINGS: Record<string, unknown> = {
-  'agent.style': '热心',
-  'agent.memory.retention_days': 90,
-  'agent.rounds.max': 20,
-  'agent.rounds.tool_max': 40,
-  'agent.network.mode': 'whitelist',
-  'agent.network.domains': ['github.com'],
-  'agent.workspace.dir': 'workspace',
-};
-
-/** list_plugins sample: unapproved, 2 skills + 1 hook + 1 MCP (kept distinct from phase-72) */
+/** list_plugins sample: unapproved, 2 skills + 1 hook + 1 MCP */
 const PLUGIN = {
   name: 'example',
   version: '0.1.0',
@@ -69,7 +49,7 @@ const PLUGIN = {
   path: 'example',
 };
 
-/** Result payload: bundle loaded 3 skills? skills is an array (names of loaded skills) */
+/** Result payload: skills is an array (names of loaded skills) */
 const RESULT = {
   name: 'example',
   approved: true,
@@ -108,24 +88,15 @@ function backend(
         });
       case 'uninstall_plugin':
         return Promise.resolve({ name: args.name, uninstalled: true, path: args.name });
-      case 'get_memory':
-        return Promise.resolve(SNAPSHOT);
-      case 'get_setting':
-        return Promise.resolve({ value: SETTINGS[String(args.key)] });
       default:
         return Promise.resolve({});
     }
   };
 }
 
-function renderSection(impl: ReturnType<typeof backend>) {
+function renderBlock(impl: ReturnType<typeof backend>) {
   callCapabilityMock.mockImplementation(impl);
-  render(
-    <>
-      <PluginsBlock />
-      <WorkspaceBlock />
-    </>
-  );
+  render(<PluginsBlock />);
 }
 
 const toastTexts = () => useUIStore.getState().toasts.map((t) => t.message);
@@ -137,43 +108,43 @@ beforeEach(() => {
   getApiMock.mockReset();
   uploadFileMock.mockReset();
   useUIStore.setState({ toasts: [] });
-  // Revoking approval goes through window.confirm (phase-76): confirmed by default, individual cases override the return value
+  // Revoking approval goes through window.confirm: confirmed by default, individual cases override the return value
   confirmMock = vi.spyOn(window, 'confirm').mockReturnValue(true);
-  confirmMock.mockClear(); // the spy reuses the same mock: clear the previous case's calls
+  confirmMock.mockClear();
 });
 
 beforeAll(() => {
   initI18n();
 });
 
-describe('settings page plugin block (phase-72)', () => {
-  it('mounts with list_plugins and renders name/version/description/unapproved/permission list and contains; no getApi()', async () => {
-    renderSection(backend());
+describe('settings page plugin block (roster)', () => {
+  it('mounts with list_plugins and renders name/version/description/approval chip/permission list; no getApi()', async () => {
+    renderBlock(backend());
     await waitFor(() => expect(screen.getByText('example v0.1.0')).toBeTruthy());
     expect(screen.getByText('最小插件示例')).toBeTruthy();
-    expect(screen.getByText(/未批准 · 请求权限：notes\.write · 网络 off · 文件 none/)).toBeTruthy();
+    expect(screen.getByText('未批准')).toBeTruthy();
     expect(screen.getByText(/技能 2 · 钩子 1 · MCP 配置/)).toBeTruthy();
+    expect(screen.getByText(/请求权限：notes\.write/)).toBeTruthy();
     expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'list_plugins', {});
     expect(getApiMock).not.toHaveBeenCalled();
   });
 
   it('an empty list shows placement guidance', async () => {
-    renderSection(backend({ items: [] }));
+    renderBlock(backend({ items: [] }));
     await waitFor(() => expect(screen.getByText(/还没有发现插件/)).toBeTruthy());
   });
 
-  it('on load failure shows only the block-level "reload" hint while the other sections stay intact', async () => {
-    renderSection(backend({}, true));
+  it('on load failure shows only the block-level retry hint', async () => {
+    renderBlock(backend({}, true));
     await waitFor(() => expect(screen.getByText('读取失败请刷新。')).toBeTruthy());
-    expect(screen.getByLabelText('工作目录')).toBeTruthy();
   });
 
-  it('"bundle approve" → set_plugin_approval granularity bundle; the success toast mentions pending MCP approval', async () => {
-    renderSection(backend());
+  it('the approval switch on an unapproved plugin → set_plugin_approval granularity bundle; the toast mentions pending MCP approval', async () => {
+    renderBlock(backend());
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '整包批准 example' })).toBeTruthy()
+      expect(screen.getByRole('switch', { name: '整包批准 example' })).toBeTruthy()
     );
-    fireEvent.click(screen.getByRole('button', { name: '整包批准 example' }));
+    fireEvent.click(screen.getByRole('switch', { name: '整包批准 example' }));
     await waitFor(() =>
       expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'set_plugin_approval', {
         name: 'example',
@@ -188,13 +159,13 @@ describe('settings page plugin block (phase-72)', () => {
     );
   });
 
-  it('approved entries show "revoke approval" → approved:false; the toast says it was removed', async () => {
-    renderSection(backend({ plugin: { approved: true, granularity: 'bundle' } }));
+  it('approved entries show the revoke switch → approved:false; the toast says it was removed', async () => {
+    renderBlock(backend({ plugin: { approved: true, granularity: 'bundle' } }));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '撤销批准 example' })).toBeTruthy()
+      expect(screen.getByRole('switch', { name: '撤销批准 example' })).toBeTruthy()
     );
-    expect(screen.getByText(/已批准（整包） · 请求权限/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '撤销批准 example' }));
+    expect(screen.getByText('已批准（整包）')).toBeTruthy();
+    fireEvent.click(screen.getByRole('switch', { name: '撤销批准 example' }));
     await waitFor(() =>
       expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'set_plugin_approval', {
         name: 'example',
@@ -206,28 +177,26 @@ describe('settings page plugin block (phase-72)', () => {
   });
 
   it('approval failure fires an error toast (copy includes the failure reason, no bare error code)', async () => {
-    renderSection(backend({}, false, true));
+    renderBlock(backend({}, false, true));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '整包批准 example' })).toBeTruthy()
+      expect(screen.getByRole('switch', { name: '整包批准 example' })).toBeTruthy()
     );
-    fireEvent.click(screen.getByRole('button', { name: '整包批准 example' }));
+    fireEvent.click(screen.getByRole('switch', { name: '整包批准 example' }));
     await waitFor(() => expect(toastTexts().some((m) => m.startsWith('批准失败：'))).toBe(true));
   });
 });
 
-describe('settings page plugin custom per-item approval (phase-74)', () => {
-  it('expanding custom approval shows skill/hook/MCP detail checkboxes; at least one must be checked to submit', async () => {
-    renderSection(backend());
+describe('settings page plugin custom per-item approval', () => {
+  it('expanding the row shows skill/hook/MCP detail checkboxes; at least one must be checked to submit', async () => {
+    renderBlock(backend());
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '自定义批准 example' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: '修改分项 example' })).toBeTruthy()
     );
-    fireEvent.click(screen.getByRole('button', { name: '自定义批准 example' }));
-    // detail checkboxes render (accessibility labels are generated from text)
+    fireEvent.click(screen.getByRole('button', { name: '修改分项 example' }));
     expect(screen.getByRole('checkbox', { name: 'daily-note' })).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: 'weekly-review' })).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: 'note.created' })).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: /example-search/ })).toBeTruthy();
-    // submit is disabled with nothing checked; enabled after checking one
     const submit = screen.getByRole('button', { name: '自定义批准' });
     expect((submit as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole('checkbox', { name: 'daily-note' }));
@@ -235,11 +204,11 @@ describe('settings page plugin custom per-item approval (phase-74)', () => {
   });
 
   it('submitting after checking → granularity item + the checked names; success toast and refresh', async () => {
-    renderSection(backend());
+    renderBlock(backend());
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '自定义批准 example' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: '修改分项 example' })).toBeTruthy()
     );
-    fireEvent.click(screen.getByRole('button', { name: '自定义批准 example' }));
+    fireEvent.click(screen.getByRole('button', { name: '修改分项 example' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'daily-note' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'note.created' }));
     fireEvent.click(screen.getByRole('button', { name: '自定义批准' }));
@@ -260,8 +229,8 @@ describe('settings page plugin custom per-item approval (phase-74)', () => {
     );
   });
 
-  it('approved (per-item) entries can "edit items" to prefill the checks; resubmitting idempotently reinstalls', async () => {
-    renderSection(
+  it('approved (per-item) entries reopen pre-checked; resubmitting idempotently reinstalls', async () => {
+    renderBlock(
       backend({
         plugin: {
           approved: true,
@@ -285,14 +254,12 @@ describe('settings page plugin custom per-item approval (phase-74)', () => {
       expect(screen.getByRole('button', { name: '修改分项 example' })).toBeTruthy()
     );
     fireEvent.click(screen.getByRole('button', { name: '修改分项 example' }));
-    // approved items are pre-checked
     expect((screen.getByRole('checkbox', { name: 'daily-note' }) as HTMLInputElement).checked).toBe(
       true
     );
     expect(
       (screen.getByRole('checkbox', { name: 'weekly-review' }) as HTMLInputElement).checked
     ).toBe(false);
-    // uncheck one and resubmit → only the remaining checks are installed
     fireEvent.click(screen.getByRole('checkbox', { name: 'daily-note' }));
     fireEvent.click(screen.getByRole('button', { name: '自定义批准' }));
     await waitFor(() =>
@@ -308,20 +275,20 @@ describe('settings page plugin custom per-item approval (phase-74)', () => {
   });
 
   it('per-item approval failure fires an error toast and keeps the checkbox panel open', async () => {
-    renderSection(backend({}, false, true));
+    renderBlock(backend({}, false, true));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '自定义批准 example' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: '修改分项 example' })).toBeTruthy()
     );
-    fireEvent.click(screen.getByRole('button', { name: '自定义批准 example' }));
+    fireEvent.click(screen.getByRole('button', { name: '修改分项 example' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'daily-note' }));
     fireEvent.click(screen.getByRole('button', { name: '自定义批准' }));
     await waitFor(() => expect(toastTexts().some((m) => m.startsWith('批准失败：'))).toBe(true));
   });
 });
 
-describe('settings page plugin revoke reclaims MCP (phase-76)', () => {
+describe('settings page plugin revoke reclaims MCP', () => {
   it('revoking shows a confirm listing the MCP ids with "registered and unapproved tools" before submitting', async () => {
-    renderSection(
+    renderBlock(
       backend({
         plugin: {
           approved: true,
@@ -331,9 +298,9 @@ describe('settings page plugin revoke reclaims MCP (phase-76)', () => {
       })
     );
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '撤销批准 example' })).toBeTruthy()
+      expect(screen.getByRole('switch', { name: '撤销批准 example' })).toBeTruthy()
     );
-    fireEvent.click(screen.getByRole('button', { name: '撤销批准 example' }));
+    fireEvent.click(screen.getByRole('switch', { name: '撤销批准 example' }));
     expect(String(confirmMock.mock.calls[0]?.[0])).toContain('example-search');
     await waitFor(() =>
       expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'set_plugin_approval', {
@@ -346,11 +313,11 @@ describe('settings page plugin revoke reclaims MCP (phase-76)', () => {
 
   it('cancelling the confirm sends no revoke request', async () => {
     confirmMock.mockReturnValue(false);
-    renderSection(backend({ plugin: { approved: true, granularity: 'bundle' } }));
+    renderBlock(backend({ plugin: { approved: true, granularity: 'bundle' } }));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '撤销批准 example' })).toBeTruthy()
+      expect(screen.getByRole('switch', { name: '撤销批准 example' })).toBeTruthy()
     );
-    fireEvent.click(screen.getByRole('button', { name: '撤销批准 example' }));
+    fireEvent.click(screen.getByRole('switch', { name: '撤销批准 example' }));
     await waitFor(() => expect(confirmMock).toHaveBeenCalled());
     expect(callCapabilityMock).not.toHaveBeenCalledWith(
       'agent',
@@ -374,19 +341,14 @@ describe('settings page plugin revoke reclaims MCP (phase-76)', () => {
             mcp_reclaim_skipped: [{ id: 'manual-srv', reason: 'MCP 工具已批准，已保留' }],
           });
         }
-        if (name === 'get_memory') return Promise.resolve(SNAPSHOT);
         return Promise.resolve({});
       }
     );
-    render(
-      <>
-        <PluginsBlock />
-      </>
-    );
+    render(<PluginsBlock />);
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '撤销批准 example' })).toBeTruthy()
+      expect(screen.getByRole('switch', { name: '撤销批准 example' })).toBeTruthy()
     );
-    fireEvent.click(screen.getByRole('button', { name: '撤销批准 example' }));
+    fireEvent.click(screen.getByRole('switch', { name: '撤销批准 example' }));
     await waitFor(() =>
       expect(toastTexts().some((m) => m.includes('已同步移除其外接 MCP：example-search'))).toBe(
         true
@@ -413,19 +375,14 @@ describe('settings page plugin revoke reclaims MCP (phase-76)', () => {
             mcp_reclaimed: ['example-search'],
           });
         }
-        if (name === 'get_memory') return Promise.resolve(SNAPSHOT);
         return Promise.resolve({});
       }
     );
-    render(
-      <>
-        <PluginsBlock />
-      </>
-    );
+    render(<PluginsBlock />);
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '自定义批准 example' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: '修改分项 example' })).toBeTruthy()
     );
-    fireEvent.click(screen.getByRole('button', { name: '自定义批准 example' }));
+    fireEvent.click(screen.getByRole('button', { name: '修改分项 example' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'daily-note' }));
     fireEvent.click(screen.getByRole('button', { name: '自定义批准' }));
     await waitFor(() =>
@@ -436,18 +393,22 @@ describe('settings page plugin revoke reclaims MCP (phase-76)', () => {
   });
 });
 
-describe('settings page plugin install/delete (phase-77)', () => {
-  it('choosing a zip and installing: uploadFile transports first then install_plugin{zip_path}; the success toast includes the plugin name and refreshes the list', async () => {
+describe('settings page plugin install/delete (dialog)', () => {
+  it('choosing a zip in the dialog and installing: uploadFile transports first then install_plugin{zip_path}; the toast includes the plugin name and the list refreshes', async () => {
     uploadFileMock.mockResolvedValue({
       file_path: 'C:/ws/imports/example.zip',
       filename: 'example.zip',
       size: 12,
     });
-    renderSection(backend());
-    await waitFor(() => expect(screen.getByLabelText('选择 zip 安装包')).toBeTruthy());
-    const file = new File(['PK'], 'example.zip');
-    fireEvent.change(screen.getByLabelText('选择 zip 安装包'), { target: { files: [file] } });
+    renderBlock(backend());
+    await waitFor(() => expect(screen.getByRole('button', { name: '安装插件' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '安装插件' }));
+    const dialog = screen.getByRole('dialog');
+    const file = new File(['PK'], 'example.zip');
+    fireEvent.change(within(dialog).getByLabelText('选择 zip 安装包'), {
+      target: { files: [file] },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: '安装插件' }));
     await waitFor(() => expect(uploadFileMock).toHaveBeenCalledWith(file));
     await waitFor(() =>
       expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'install_plugin', {
@@ -460,18 +421,19 @@ describe('settings page plugin install/delete (phase-77)', () => {
         toastTexts().some((m) => m.includes('已安装插件「fresh」') && m.includes('尚未批准'))
       ).toBe(true)
     );
-    // list refresh: list_plugins is called again after install
     const listCalls = callCapabilityMock.mock.calls.filter((c) => c[1] === 'list_plugins');
     expect(listCalls.length).toBeGreaterThanOrEqual(2);
   });
 
   it('pasting a directory path and installing: install_plugin{source_dir}, no upload involved', async () => {
-    renderSection(backend());
-    await waitFor(() => expect(screen.getByLabelText('插件目录路径')).toBeTruthy());
-    fireEvent.change(screen.getByLabelText('插件目录路径'), {
+    renderBlock(backend());
+    await waitFor(() => expect(screen.getByRole('button', { name: '安装插件' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '安装插件' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('插件目录路径'), {
       target: { value: 'C:/plugins-src/example' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '安装插件' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: '安装插件' }));
     await waitFor(() =>
       expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'install_plugin', {
         source_dir: 'C:/plugins-src/example',
@@ -481,19 +443,22 @@ describe('settings page plugin install/delete (phase-77)', () => {
     expect(uploadFileMock).not.toHaveBeenCalled();
   });
 
-  it('the install button is disabled with neither a zip nor a path', async () => {
-    renderSection(backend());
+  it('the install submit is disabled with neither a zip nor a path', async () => {
+    renderBlock(backend());
     await waitFor(() => expect(screen.getByRole('button', { name: '安装插件' })).toBeTruthy());
-    expect((screen.getByRole('button', { name: '安装插件' }) as HTMLButtonElement).disabled).toBe(
-      true
-    );
+    fireEvent.click(screen.getByRole('button', { name: '安装插件' }));
+    const dialog = screen.getByRole('dialog');
+    const submit = within(dialog).getByRole('button', { name: '安装插件' });
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('install failure fires an error toast with the backend-readable message', async () => {
-    renderSection(backend({}, false, false, true));
-    await waitFor(() => expect(screen.getByLabelText('插件目录路径')).toBeTruthy());
-    fireEvent.change(screen.getByLabelText('插件目录路径'), { target: { value: 'C:/x' } });
+    renderBlock(backend({}, false, false, true));
+    await waitFor(() => expect(screen.getByRole('button', { name: '安装插件' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '安装插件' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('插件目录路径'), { target: { value: 'C:/x' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: '安装插件' }));
     await waitFor(() =>
       expect(
         toastTexts().some(
@@ -505,19 +470,23 @@ describe('settings page plugin install/delete (phase-77)', () => {
 
   it('checking "overwrite same-name plugin" confirms before submit; cancelling sends nothing, confirming resends with overwrite:true', async () => {
     confirmMock.mockReturnValue(false);
-    renderSection(backend());
-    await waitFor(() => expect(screen.getByLabelText('覆盖同名插件')).toBeTruthy());
-    fireEvent.click(screen.getByLabelText('覆盖同名插件'));
-    fireEvent.change(screen.getByLabelText('插件目录路径'), { target: { value: 'C:/x' } });
+    renderBlock(backend());
+    await waitFor(() => expect(screen.getByRole('button', { name: '安装插件' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '安装插件' }));
+    let dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByLabelText('覆盖同名插件'));
+    fireEvent.change(within(dialog).getByLabelText('插件目录路径'), { target: { value: 'C:/x' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: '安装插件' }));
     await waitFor(() => expect(confirmMock).toHaveBeenCalled());
     expect(callCapabilityMock).not.toHaveBeenCalledWith(
       'agent',
       'install_plugin',
       expect.anything()
     );
+    // The dialog stays open (the confirm was declined); confirm again with overwrite allowed
     confirmMock.mockReturnValue(true);
-    fireEvent.click(screen.getByRole('button', { name: '安装插件' }));
+    dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: '安装插件' }));
     await waitFor(() =>
       expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'install_plugin', {
         source_dir: 'C:/x',
@@ -526,7 +495,7 @@ describe('settings page plugin install/delete (phase-77)', () => {
     );
   });
 
-  it('busy while the install request is pending: the button is disabled and double click sends once', async () => {
+  it('busy while the install request is pending: the submit is disabled and double click sends once', async () => {
     let resolveInstall!: (v: unknown) => void;
     callCapabilityMock.mockImplementation(
       (_domain: string, name: string, _args: Record<string, unknown>) => {
@@ -536,24 +505,21 @@ describe('settings page plugin install/delete (phase-77)', () => {
             resolveInstall = resolve;
           });
         }
-        if (name === 'get_memory') return Promise.resolve(SNAPSHOT);
         return Promise.resolve({});
       }
     );
-    render(
-      <>
-        <PluginsBlock />
-      </>
-    );
-    await waitFor(() => expect(screen.getByLabelText('插件目录路径')).toBeTruthy());
-    fireEvent.change(screen.getByLabelText('插件目录路径'), { target: { value: 'C:/x' } });
+    render(<PluginsBlock />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '安装插件' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '安装插件' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('插件目录路径'), { target: { value: 'C:/x' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: '安装插件' }));
     await waitFor(() =>
-      expect((screen.getByRole('button', { name: '安装插件' }) as HTMLButtonElement).disabled).toBe(
-        true
-      )
+      expect(
+        (within(dialog).getByRole('button', { name: '安装插件' }) as HTMLButtonElement).disabled
+      ).toBe(true)
     );
-    fireEvent.click(screen.getByRole('button', { name: '安装插件' })); // disabled: no second request
+    fireEvent.click(within(dialog).getByRole('button', { name: '安装插件' })); // disabled: no second request
     const installCalls = callCapabilityMock.mock.calls.filter((c) => c[1] === 'install_plugin');
     expect(installCalls).toHaveLength(1);
     resolveInstall({
@@ -563,17 +529,13 @@ describe('settings page plugin install/delete (phase-77)', () => {
       permissions: { scopes: [], network: '', fs: '' },
       contains_summary: { skills: 0, hooks: 0, mcp: false },
     });
-    // flow completes: the success toast appears; the source is cleared and the button is back to its "disabled without source" initial state
     await waitFor(() =>
       expect(toastTexts().some((m) => m.includes('已安装插件「fresh」'))).toBe(true)
-    );
-    expect((screen.getByRole('button', { name: '安装插件' }) as HTMLButtonElement).disabled).toBe(
-      true
     );
   });
 
   it('unapproved rows have "delete": confirm warns it is irreversible, then uninstall_plugin + toast', async () => {
-    renderSection(backend());
+    renderBlock(backend());
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '删除插件 example' })).toBeTruthy()
     );
@@ -590,9 +552,9 @@ describe('settings page plugin install/delete (phase-77)', () => {
   });
 
   it('approved plugins show no "delete" button (revoke first)', async () => {
-    renderSection(backend({ plugin: { approved: true, granularity: 'bundle' } }));
+    renderBlock(backend({ plugin: { approved: true, granularity: 'bundle' } }));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '撤销批准 example' })).toBeTruthy()
+      expect(screen.getByRole('switch', { name: '撤销批准 example' })).toBeTruthy()
     );
     expect(screen.queryByRole('button', { name: '删除插件 example' })).toBeNull();
   });

@@ -36,7 +36,12 @@ export function InstanceList() {
     setError(null);
     try {
       const s = await listSubagents();
-      const runningArr = (s.running as RunningSubagent[]) ?? [];
+      // Conversational entries are the chat sessions themselves (the user
+      // talking to Lucien), not dispatched subagents: keep them out of the
+      // subagent roster; the chat page's own panel labels them instead.
+      const runningArr = ((s.running as RunningSubagent[]) ?? []).filter(
+        (r) => r.conversational !== true
+      );
       setInstances(runningArr);
       patchTeamSnapshot({ running: runningArr.filter((r) => r.status === 'running').length });
     } catch (err) {
@@ -56,7 +61,9 @@ export function InstanceList() {
       listSubagents()
         .then((s) => {
           if (!alive) return;
-          const runningArr = (s.running as RunningSubagent[]) ?? [];
+          const runningArr = ((s.running as RunningSubagent[]) ?? []).filter(
+            (r) => r.conversational !== true
+          );
           setInstances(runningArr);
           patchTeamSnapshot({ running: runningArr.filter((r) => r.status === 'running').length });
         })

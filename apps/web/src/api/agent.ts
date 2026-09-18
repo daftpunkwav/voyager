@@ -71,6 +71,15 @@ export function registerSubagent(args: Record<string, unknown>): Promise<unknown
   return callCapability('agent', 'register_subagent', args);
 }
 
+export function deleteSubagent(name: string): Promise<{ deleted?: string }> {
+  return callCapability('agent', 'delete_subagent', { name });
+}
+
+/** describe_tool: full metadata for one tool roster entry (parameters schema included). */
+export function describeTool<T = unknown>(name: string): Promise<T> {
+  return callCapability<T>('agent', 'describe_tool', { name });
+}
+
 export function cancelRun(idOrName: string): Promise<{ cancelled?: string[] } | unknown> {
   return callCapability('agent', 'cancel_run', { id_or_name: idOrName });
 }

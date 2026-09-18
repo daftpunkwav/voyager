@@ -313,5 +313,6 @@
   "traj.toolName": "Tool",
   "traj.truncated": "Result spilled to the workspace spill directory; ask the agent to page through it",
   "traj.ttft": "First token",
-  "traj.untitledTurn": "A turn"
+  "traj.untitledTurn": "A turn",
+  "panel.mainAgent": "Lucien (main)"
 }

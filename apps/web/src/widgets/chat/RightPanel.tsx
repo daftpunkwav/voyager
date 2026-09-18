@@ -29,6 +29,8 @@ interface RunningInstance {
   status: string;
   goal: string;
   started_ts: number;
+  /** True = the chat session itself (Lucien), not a dispatched subagent. */
+  conversational?: boolean;
 }
 
 const POLL_MS = 5000;
@@ -203,7 +205,9 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
                   >
                     <span className="chat-side__pulse" aria-hidden />
                     <span className="chat-side__agentmain">
-                      <span className="chat-side__agent-name">{r.name}</span>
+                      <span className="chat-side__agent-name">
+                        {r.conversational === true ? t('chat:panel.mainAgent') : r.name}
+                      </span>
                       {r.goal ? <span className="chat-side__agent-goal">{r.goal}</span> : null}
                     </span>
                     {elapsed !== null ? (

@@ -313,5 +313,6 @@
   "traj.toolName": "工具",
   "traj.truncated": "结果超长已截断，完整输出在工作区 spill 目录，可让 agent 分段查看",
   "traj.ttft": "首 token",
-  "traj.untitledTurn": "一轮对话"
+  "traj.untitledTurn": "一轮对话",
+  "panel.mainAgent": "Lucien(主对话)"
 }

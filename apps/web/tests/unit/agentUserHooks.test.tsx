@@ -114,7 +114,10 @@ describe('settings page user hooks block (phase-78)', () => {
     await waitFor(() => expect(screen.getByText('note-watch.json')).toBeTruthy());
     expect(screen.getByText('offline.json')).toBeTruthy();
     expect(screen.getByText('note.created')).toBeTruthy();
-    expect(screen.getByText(/note\.deleted · 已停用 · 未装载/)).toBeTruthy();
+    // status chips render separately (path + trigger chip + state chips)
+    expect(screen.getByText('note.deleted')).toBeTruthy();
+    expect(screen.getByText('已停用')).toBeTruthy();
+    expect(screen.getByText('未装载')).toBeTruthy();
     expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'list_user_hooks', {});
     expect(getApiMock).not.toHaveBeenCalled();
   });

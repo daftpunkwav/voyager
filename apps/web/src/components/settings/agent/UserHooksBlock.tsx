@@ -1,42 +1,42 @@
 /**
  * @file UserHooksBlock
- * @description Settings block listing user hooks (declarative hook JSON files under workspace/hooks/) with a hot-reload action.
- *
- * Reload takes effect immediately without a restart; hooks from approved
- * plugins are unaffected by the reload.
- *
- * Responsibilities:
- * - List declarative hook files under workspace/hooks with their details
- * - Trigger hot reload and toast the applied load / unload results
- *
- * Backend access goes through the capability bridge and api helpers; no direct fetch.
+ * @description Settings "命令" section: declarative hook JSON files under
+ * workspace/hooks/ rendered as command rows (path + trigger + description) in
+ * the reference toolbar layout, with hot reload. Reload takes effect
+ * immediately without a restart; hooks from approved plugins are unaffected.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listUserHooks, reloadUserHooks } from '@/api/agent';
+import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
+import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { SettingsToolbar } from '@/components/settings/SettingsToolbar';
 import { useUIStore } from '@/stores/uiStore';
 import { extractErrorMessage } from '@/utils/errors';
 import type { UserHookItem, UserHooksReloadResult } from './types';
 
-/** User hooks: declarative hook JSON files under workspace/hooks/; after adding/editing/removing files, click reload for immediate effect (no restart); hooks from approved plugins are unaffected by reload. */
 export function UserHooksBlock() {
   const { t } = useTranslation('settings');
   const addToast = useUIStore((s) => s.addToast);
   const [items, setItems] = useState<UserHookItem[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [reloading, setReloading] = useState(false); // busy flag against double submits
+  const [search, setSearch] = useState('');
 
   const refresh = () =>
     listUserHooks<UserHookItem>()
-      .then((items) => setItems(items))
+      .then((rows) => {
+        setItems(rows);
+        setLoadFailed(false);
+      })
       .catch(() => undefined); // Post-action refresh failure: keep the current list silently; toasts are the caller's job
 
   useEffect(() => {
     let alive = true;
     listUserHooks<UserHookItem>()
-      .then((items) => {
-        if (alive) setItems(items);
+      .then((rows) => {
+        if (alive) setItems(rows);
       })
       .catch(() => {
         if (alive) setLoadFailed(true);
@@ -45,6 +45,17 @@ export function UserHooksBlock() {
       alive = false;
     };
   }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items ?? [];
+    return (items ?? []).filter(
+      (h) =>
+        h.path.toLowerCase().includes(q) ||
+        (h.description ?? '').toLowerCase().includes(q) ||
+        (h.on ?? '').toLowerCase().includes(q)
+    );
+  }, [items, search]);
 
   const onReload = async () => {
     if (reloading) return;
@@ -68,45 +79,68 @@ export function UserHooksBlock() {
     }
   };
 
+  if (loadFailed) {
+    return (
+      <EmptyState
+        title={t('hooks.loadFailedTitle')}
+        description={t('common.loadFailed')}
+        icon={EmptyStateIcons.warning}
+        onRetry={() => void refresh()}
+      />
+    );
+  }
+  if (items === null) {
+    return <LoadingSpinner label={t('hooks.loading')} />;
+  }
+
   return (
-    <div className="agent-settings-block">
-      <div className="settings-group-head">
-        <div className="settings-group-label">{t('hooks.title')}</div>
-        <button
-          type="button"
-          className="btn btn-sm btn-primary"
-          aria-label={t('hooks.reloadAria')}
-          disabled={reloading}
-          onClick={() => void onReload()}
-        >
-          {reloading ? t('hooks.reloading') : t('hooks.reload')}
-        </button>
-      </div>
-      {loadFailed ? (
-        <p className="muted" style={{ fontSize: 12 }}>
-          {t('common.loadFailed')}
-        </p>
-      ) : items === null ? (
-        <p className="muted" style={{ fontSize: 12 }}>
-          {t('hooks.loading')}
-        </p>
-      ) : items.length === 0 ? (
-        <p className="muted" style={{ fontSize: 12 }}>
-          {t('hooks.empty', { example: '{ "on": "note.created", "enabled": true }' })}
-        </p>
+    <div className="hooks-block">
+      <SettingsToolbar
+        countLabel={t('hooks.installed')}
+        count={filtered.length}
+        search={search}
+        onSearch={setSearch}
+        searchPlaceholder={t('hooks.searchPlaceholder')}
+        actions={
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            aria-label={t('hooks.reloadAria')}
+            disabled={reloading}
+            onClick={() => void onReload()}
+          >
+            {reloading ? t('hooks.reloading') : t('hooks.reload')}
+          </button>
+        }
+      />
+      {filtered.length === 0 ? (
+        items.length === 0 ? (
+          <EmptyState
+            title={t('hooks.emptyTitle')}
+            description={t('hooks.empty', {
+              example: '{ "on": "note.created", "enabled": true }',
+            })}
+            icon={EmptyStateIcons.team}
+          />
+        ) : (
+          <p className="muted small">{t('hooks.searchEmpty')}</p>
+        )
       ) : (
-        <ul className="memory-entry-list">
-          {items.map((h) => (
-            <li key={h.path} className="memory-entry">
-              <span className="memory-kind">{h.path}</span>
-              <span className="memory-entry-summary">
-                {h.on || t('hooks.unparsable')}
-                {h.enabled ? '' : ` · ${t('hooks.disabled')}`}
-                {h.loaded ? '' : ` · ${t('hooks.unloaded')}`}
+        <ul className="settings-rows">
+          {filtered.map((h) => (
+            <li key={h.path} className="settings-row entity-row">
+              <span className="entity-icon entity-icon--mono mono" aria-hidden>
+                {'>_'}
               </span>
-              <span className="muted" style={{ fontSize: 12 }}>
-                {h.description}
-              </span>
+              <div className="entity-row__main">
+                <span className="entity-row__title">
+                  <span className="entity-row__name mono">{h.path}</span>
+                  <span className="chip">{h.on || t('hooks.unparsable')}</span>
+                  {h.enabled ? null : <span className="chip">{t('hooks.disabled')}</span>}
+                  {h.loaded ? null : <span className="chip">{t('hooks.unloaded')}</span>}
+                </span>
+                {h.description && <span className="entity-row__desc">{h.description}</span>}
+              </div>
             </li>
           ))}
         </ul>

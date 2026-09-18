@@ -38,10 +38,9 @@ import { LlmUsageDashboard } from '@/components/usage/LlmUsageDashboard';
 import { ActivityFeed } from '@/components/activity/ActivityFeed';
 import { PersonaGrid } from '@/components/team/PersonaGrid';
 import { InstanceList } from '@/components/team/InstanceList';
-import { DefinitionGrid } from '@/components/team/DefinitionGrid';
-import { SpawnForm } from '@/components/team/SpawnForm';
 import { ResumableList } from '@/components/team/ResumableList';
-import { ToolCatalog } from '@/components/team/ToolCatalog';
+import { SubagentsSection } from '@/components/settings/subagents/SubagentsSection';
+import { ToolsCatalog } from '@/components/settings/tools/ToolsCatalog';
 import { PluginsBlock } from '@/components/settings/agent/PluginsBlock';
 import { McpBlock } from '@/components/settings/agent/McpBlock';
 import { SkillsBlock } from '@/components/settings/agent/SkillsBlock';
@@ -439,8 +438,7 @@ export function SettingsPage() {
           {section === 'subagents' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('subagents.title')}</h2>
-              <DefinitionGrid />
-              <SpawnForm />
+              <SubagentsSection />
               <InstanceList />
               <ResumableList />
             </section>
@@ -477,7 +475,7 @@ export function SettingsPage() {
           {section === 'tools' && (
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('tools.title')}</h2>
-              <ToolCatalog />
+              <ToolsCatalog />
             </section>
           )}
 

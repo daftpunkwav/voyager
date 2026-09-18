@@ -13,7 +13,7 @@
 import { PersonaGrid } from '@/components/team/PersonaGrid';
 import { DefinitionGrid } from '@/components/team/DefinitionGrid';
 import { SpawnForm } from '@/components/team/SpawnForm';
-import { ToolCatalog } from '@/components/team/ToolCatalog';
+import { ToolsCatalog } from '@/components/settings/tools/ToolsCatalog';
 import { ResumableList } from '@/components/team/ResumableList';
 import { InstanceList } from '@/components/team/InstanceList';
 
@@ -24,7 +24,7 @@ export function TeamPage() {
         <PersonaGrid />
         <DefinitionGrid />
         <SpawnForm />
-        <ToolCatalog />
+        <ToolsCatalog />
         <ResumableList />
         <InstanceList />
       </div>

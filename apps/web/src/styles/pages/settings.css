@@ -1722,3 +1722,434 @@
   max-width: none;
   padding: 0;
 }
+
+/* ---------- Settings list toolbar (count + search + actions), shared by the
+   agent-capability sections (subagents / plugins / mcp / skills / commands /
+   tools) ---------- */
+.settings-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 4px 0 14px;
+}
+.settings-toolbar__count {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-600);
+  flex-shrink: 0;
+}
+.settings-toolbar__num {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-800);
+  font-variant-numeric: tabular-nums;
+}
+.settings-toolbar__search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 180px;
+  max-width: 320px;
+  margin-left: auto;
+  padding: 0 10px;
+  border: 1px solid var(--bg-300);
+  border-radius: var(--radius-pill);
+  background: var(--bg-50);
+  color: var(--text-400);
+  transition: border-color 0.15s var(--ease);
+}
+.settings-toolbar__search:focus-within {
+  border-color: var(--text-400);
+}
+.settings-toolbar__search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 7px 0;
+  font-size: 13px;
+  color: var(--text-800);
+  outline: none;
+}
+.settings-toolbar__search input::placeholder {
+  color: var(--text-400);
+}
+.settings-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* ---------- Entity row list (subagents / plugins / mcp / skills / commands):
+   .settings-row + two-line content, colored icon, trailing switch/actions ---------- */
+.entity-row {
+  align-items: flex-start;
+  padding: 12px;
+}
+.entity-row.is-disabled .entity-row__name,
+.entity-row.is-disabled .entity-row__desc {
+  color: var(--text-400);
+}
+.entity-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 700;
+  /* Hue comes from the entry name via --h (0-359): same palette in both themes */
+  background: hsl(var(--h, 210) 42% 50% / 0.16);
+  color: hsl(var(--h, 210) 55% 45%);
+}
+[data-theme='dark'] .entity-icon {
+  background: hsl(var(--h, 210) 42% 55% / 0.18);
+  color: hsl(var(--h, 210) 70% 68%);
+}
+.entity-icon--spark {
+  color: var(--text-500);
+  background: var(--bg-200);
+}
+.entity-icon--mono {
+  font-size: 12px;
+  color: var(--text-500);
+  background: var(--bg-200);
+}
+.entity-row__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+}
+.entity-row__open {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.entity-row__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.entity-row__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-800);
+}
+.entity-row__desc {
+  font-size: 12px;
+  color: var(--text-500);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.entity-row__meta {
+  font-size: 11px;
+  color: var(--text-400);
+}
+.entity-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+/* Danger semantic rides the icon hover, not a filled chip */
+.chip--danger {
+  color: var(--error);
+  border-color: rgba(255, 59, 48, 0.35);
+  background: rgba(255, 59, 48, 0.08);
+}
+.settings-rows__more {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 0;
+  border: 1px dashed var(--bg-300);
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  color: var(--text-500);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 0.15s var(--ease),
+    border-color 0.15s var(--ease);
+}
+.settings-rows__more:hover {
+  color: var(--text-800);
+  border-color: var(--text-400);
+}
+
+/* ---------- Subagent create/edit dialog ---------- */
+.subagent-dialog {
+  width: min(880px, 94vw);
+  max-width: min(880px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+.subagent-dialog__title {
+  margin: 0 0 16px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-800);
+}
+.subagent-dialog__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+.subagent-dialog__toolmode {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.subagent-dialog__toolmode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-700);
+  cursor: pointer;
+}
+.subagent-dialog__toggles {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--bg-300);
+}
+.subagent-dialog__toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.subagent-dialog__toggle .llm-switch {
+  margin-top: 2px;
+}
+.subagent-dialog__toggle-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-700);
+}
+.subagent-dialog__toggle-help {
+  font-size: 11px;
+  color: var(--text-400);
+  margin-top: 2px;
+}
+.subagent-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 18px;
+}
+.subagent-dialog__footer-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* ---------- Categorized tool picker (subagent whitelist) ---------- */
+.tool-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid var(--bg-300);
+  border-radius: var(--radius-sm);
+  background: var(--bg-50);
+}
+.tool-picker__group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-700);
+  cursor: pointer;
+}
+.tool-picker__group-count {
+  font-weight: 500;
+  color: var(--text-400);
+}
+.tool-picker__items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 2px 14px;
+  margin: 4px 0 0 22px;
+}
+.tool-picker__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-600);
+  cursor: pointer;
+  min-width: 0;
+}
+.tool-picker__item code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-picker__write {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  color: var(--error);
+  background: rgba(255, 59, 48, 0.08);
+}
+
+/* ---------- MCP block ---------- */
+.mcp-dialog {
+  width: min(560px, 94vw);
+  max-width: min(560px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+.mcp-dialog__title {
+  margin: 0 0 14px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-800);
+}
+.mcp-dialog__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+.mcp-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+.mcp-row__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-400);
+}
+.mcp-row__dot.is-ok {
+  background: var(--success);
+}
+.mcp-row__dot.is-bad {
+  background: var(--error);
+}
+.mcp-row__error {
+  font-size: 12px;
+  color: var(--error);
+}
+.mcp-row__tools {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--bg-300);
+  border-radius: var(--radius-sm);
+  background: var(--bg-50);
+}
+.mcp-row__tool {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-600);
+  cursor: pointer;
+}
+.mcp-row__tool-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+/* ---------- Tools catalog (category chips + expandable parameter detail) ---------- */
+.tools-catalog__filters {
+  margin: 0 0 14px;
+}
+.tools-catalog__chip-count {
+  margin-left: 4px;
+  font-size: 10px;
+  color: var(--text-400);
+}
+.tools-catalog__group {
+  margin-bottom: 16px;
+}
+.tools-catalog__group-count {
+  margin-left: 8px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-400);
+}
+.tools-catalog__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--bg-300);
+  border-radius: var(--radius-sm);
+  background: var(--bg-50);
+  width: 100%;
+}
+.tools-catalog__detail-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-500);
+}
+.tools-catalog__params {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tools-catalog__param {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.tools-catalog__param-type {
+  font-size: 11px;
+  color: var(--text-400);
+}
+.tools-catalog__param-required {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--warning);
+  margin-left: 4px;
+}
+.tools-catalog__param-desc {
+  color: var(--text-500);
+}
