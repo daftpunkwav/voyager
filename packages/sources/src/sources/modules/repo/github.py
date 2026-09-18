@@ -21,7 +21,7 @@ _TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
 #: Owner/repo names feed the clone destination (workspace/repo/{owner}__{repo})
 #: and API paths; anything outside GitHub's charset is rejected up front so a
 #: crafted URL cannot shape local directories or malformed API calls
-_OWNER_REPO_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_OWNER_REPO_RE = re.compile(r"[A-Za-z0-9._-]+")
 
 
 def parse_repo_url(url: str) -> tuple[str, str]:
@@ -41,7 +41,7 @@ def parse_repo_url(url: str) -> tuple[str, str]:
         raise ServiceError("sources", ErrorSuffix.INVALID_INPUT, f"Cannot parse repo URL: {url}")
     owner, repo = parts[0], parts[1]
     if (
-        not (_OWNER_REPO_RE.match(owner) and _OWNER_REPO_RE.match(repo))
+        not (_OWNER_REPO_RE.fullmatch(owner) and _OWNER_REPO_RE.fullmatch(repo))
         or "." in (owner, repo)
         or ".." in (owner, repo)
     ):

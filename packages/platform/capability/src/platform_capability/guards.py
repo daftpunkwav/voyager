@@ -230,7 +230,6 @@ def _run_guards(
 
 def _check_required_params(
     domain: str,
-    name: str,
     params: Mapping[str, inspect.Parameter],
     args: dict[str, Any],
 ) -> None:
@@ -271,7 +270,7 @@ async def _invoke(
     # is calling); handlers that do not declare it never see it.
     params = inspect.signature(cap.handler).parameters
     if cap.input_model is None:
-        _check_required_params(registry.domain, name, params, args)
+        _check_required_params(registry.domain, params, args)
     inject = {"_actor": actor.actor} if (actor is not None and "_actor" in params) else {}
 
     def _call() -> Any:

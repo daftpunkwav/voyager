@@ -237,6 +237,9 @@ class TestRepo:
             "https://github.com/a b/c",
             "https://github.com/../x",
             "https://github.com/./x",
+            # a trailing newline must not slip past the charset check
+            # (match+$ matches before a final \n; fullmatch does not)
+            "https://github.com/abc\n/def",
         ):
             with pytest.raises(ServiceError, match="Invalid GitHub owner/repo"):
                 github_mod.parse_repo_url(bad)
