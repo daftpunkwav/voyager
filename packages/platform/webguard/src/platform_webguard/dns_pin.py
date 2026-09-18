@@ -70,8 +70,12 @@ async def resolve_public(url: str, *, resolver: ResolverFn | None = None) -> str
         resolve = resolver or default_resolver
         try:
             ips = await resolve(host, port)
-        except OSError:
-            return host  # resolution failure: let the HTTP client surface it
+        except OSError as exc:
+            # Failing closed: returning the raw hostname here would send an
+            # unvalidated string back as if it were the pinned IP, reopening
+            # the rebinding window on a second resolution. Callers surface
+            # ValueError in their own error vocabulary.
+            raise ValueError(f"DNS resolution failed for {host}: {exc}") from exc
     if not ips:
         raise ValueError(f"{host} resolves to no address")
     for ip in ips:
