@@ -9,10 +9,14 @@ from typing import Any
 class WorkingMemory:
     def __init__(self, maxlen: int = 200) -> None:
         self._messages: deque[dict[str, Any]] = deque(maxlen=maxlen)
+        self._seq = 0
         self.current_task: str | None = None
 
     def add(self, role: str, content: str) -> None:
-        self._messages.append({"role": role, "content": content})
+        # Monotonic per-entry seq: lets the distiller keep a cursor and never
+        # re-extract an entry it already distilled.
+        self._seq += 1
+        self._messages.append({"role": role, "content": content, "seq": self._seq})
 
     def recent(self, n: int = 20) -> list[dict[str, Any]]:
         items = list(self._messages)

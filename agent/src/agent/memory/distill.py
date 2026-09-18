@@ -5,9 +5,10 @@ Responsibilities:
 - maybe_distill(): turn counter with hot-read interval (0 = off); returns a
   coroutine for the caller to schedule (Master tracks it like any background
   turn) or None when this turn is not a distillation point
-- _distill_once(): render recent working-memory turns -> one LLM call asking
-  for strict JSON (profile key/values + atomic facts) -> write into profile /
-  semantic with source attribution; malformed output and degraded replies are
+- _distill_once(): render working-memory entries newer than the distill
+  cursor -> one LLM call asking for strict JSON (profile key/values + atomic
+  facts) -> write into profile / semantic with source attribution; exact
+  duplicate triples are skipped and malformed or degraded replies are
   silently skipped (a failed distillation must never surface as chat noise)
 
 The distiller shares the metered chat LLM, so daily-token quota applies
@@ -51,7 +52,13 @@ def _render(entries: list[dict[str, Any]]) -> str:
 
 
 class Distiller:
-    """Turn-counting trigger plus the extraction pass; no threads of its own."""
+    """Turn-counting trigger plus the extraction pass; no threads of its own.
+
+    A cursor (seq of the newest distilled working-memory entry) keeps the
+    sliding window from being re-extracted: each distillation renders only
+    entries newer than the cursor, so overlapping windows never duplicate
+    facts (the same guard claude-code implements with hasMemoryWritesSince).
+    """
 
     def __init__(
         self,
@@ -64,6 +71,7 @@ class Distiller:
         self._memory = memory
         self._settings = settings
         self._turns = 0
+        self._cursor = -1
 
     def maybe_distill(self) -> Awaitable[None] | None:
         """Called once per user turn. Returns a distillation coroutine on
@@ -80,7 +88,8 @@ class Distiller:
         return self._distill_once()
 
     async def _distill_once(self) -> None:
-        entries = self._memory.working.recent(_WINDOW)
+        recent = self._memory.working.recent(_WINDOW)
+        entries = [e for e in recent if int(e.get("seq") or 0) > self._cursor]
         if len(entries) < _MIN_ENTRIES:
             return
         try:
@@ -99,6 +108,9 @@ class Distiller:
         if parsed is None:
             log.info("distillation output was not valid JSON; skipped")
             return
+        # Nothing is written before this line, so a failed pass leaves the
+        # cursor untouched and the same entries are retried next time.
+        self._cursor = max(int(e.get("seq") or 0) for e in entries)
         profile = parsed.get("profile")
         if isinstance(profile, dict):
             for key, value in list(profile.items())[:5]:
@@ -113,6 +125,8 @@ class Distiller:
                     and all(str(part).strip() for part in fact[:3])
                 ):
                     subject, relation, obj = (str(part).strip() for part in fact[:3])
+                    if self._memory.semantic.has_fact(subject, relation, obj):
+                        continue  # exact re-extraction, not new knowledge
                     # Optional 4th element: a graph node id the model saw via the
                     # graph tools; stored only, so recall can hand it back for
                     # graph__expand_neighbors without the agent importing graph

@@ -29,6 +29,7 @@ import re
 import shlex
 import shutil
 import sys
+import time
 from contextlib import suppress
 from pathlib import Path
 
@@ -145,6 +146,7 @@ def run_shell_tool(cwd: str | Path) -> AgentTool:
             return f"[失败] 工作目录不可用: {exc}"
         reader = asyncio.ensure_future(_read_capped(proc.stdout, _MAX_COLLECT_BYTES))
         timed_out = False
+        started = time.monotonic()
         try:
             await asyncio.wait_for(proc.wait(), timeout)
         except TimeoutError:
@@ -163,6 +165,7 @@ def run_shell_tool(cwd: str | Path) -> AgentTool:
             with suppress(Exception):
                 await reader
             raise
+        wall = time.monotonic() - started
         out, discarded = await reader
         text = out.decode("utf-8", errors="replace")
         if discarded:
@@ -176,8 +179,11 @@ def run_shell_tool(cwd: str | Path) -> AgentTool:
                 f"[超时] {timeout}s 未结束,已终止(已捕获输出如下);"
                 f"若命令需要更久,可加大 timeout 参数重试{body}"
             )
+        # Structured header (codex-style): exit code, wall time and captured
+        # line count up front, so a truncated preview is still actionable.
+        lines = text.count("\n") + (1 if text and not text.endswith("\n") else 0)
         suffix = f"\n{text}" if text else ""
-        return f"exit={proc.returncode}{suffix}"
+        return f"exit={proc.returncode} wall={wall:.1f}s lines={lines}{suffix}"
 
     return AgentTool(
         name="run_shell",

@@ -58,6 +58,16 @@ class SemanticMemory:
             raise RuntimeError("insert produced no rowid")
         return int(cur.lastrowid)
 
+    def has_fact(self, subject: str, relation: str, obj: str) -> bool:
+        """Whether an identical triple already exists (exact match); lets the
+        distiller skip re-writing a fact it previously extracted."""
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT 1 FROM facts WHERE subject = ? AND relation = ? AND object = ? LIMIT 1",
+                (subject, relation, obj),
+            )
+            return cur.fetchone() is not None
+
     def query(
         self,
         *,

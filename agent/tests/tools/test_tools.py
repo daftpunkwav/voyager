@@ -2,6 +2,7 @@
 L1/L2 confirm channels.
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -262,7 +263,8 @@ class TestShellGuard:
         script.write_text("print('x' * 50000)", encoding="utf-8")
         run_shell = shell_tools(tmp_path)["run_shell"].handler
         out = await run_shell(f"{sys.executable} {script.name}", timeout=15)
-        assert out.startswith("exit=0\n")
+        # codex-style structured header: exit code, wall time, captured lines
+        assert re.match(r"exit=0 wall=\d+\.\d+s lines=\d+\n", out), out
         assert "x" * 50000 in out
         assert "截断" not in out
 

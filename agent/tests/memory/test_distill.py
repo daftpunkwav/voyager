@@ -89,3 +89,79 @@ async def test_degraded_reply_skipped(tmp_path) -> None:
     assert coro is not None
     await coro
     assert memory.profile.all() == {}
+
+
+async def test_cursor_never_re_distills_the_same_entries(tmp_path) -> None:
+    """After one distillation, entries older than the cursor are excluded:
+    a distill point with nothing new costs no LLM call, and the next real
+    extraction renders only the fresh tail."""
+    memory = _memory(tmp_path)
+    payload = {"facts": [["用户", "works_on", "voyager"]]}
+    llm = FakeLLM(default=json.dumps(payload, ensure_ascii=False))
+    d = Distiller(llm=llm, memory=memory, settings=_settings({"agent.memory.distill_interval": 1}))
+    for i in range(4):
+        memory.working.add("user", f"旧消息{i}")
+    coro = d.maybe_distill()
+    assert coro is not None
+    await coro
+    first_calls = len(llm.calls)
+    assert first_calls == 1
+    # distill point with no new entries: skipped before the LLM
+    coro = d.maybe_distill()
+    assert coro is not None
+    await coro
+    assert len(llm.calls) == first_calls
+    # new entries arrive: only they are rendered
+    for i in range(4):
+        memory.working.add("user", f"新消息{i}")
+    coro = d.maybe_distill()
+    assert coro is not None
+    await coro
+    assert len(llm.calls) == first_calls + 1
+    prompt = str(llm.calls[-1]["messages"][1]["content"])
+    assert "新消息0" in prompt
+    assert "旧消息0" not in prompt
+
+
+async def test_failed_pass_keeps_the_cursor(tmp_path) -> None:
+    """Malformed output writes nothing and does not advance the cursor, so the
+    same entries are retried on the next distill point."""
+    memory = _memory(tmp_path)
+    llm = FakeLLM(default="这不是 JSON")
+    d = Distiller(llm=llm, memory=memory, settings=_settings({"agent.memory.distill_interval": 1}))
+    for i in range(4):
+        memory.working.add("user", f"消息{i}")
+    coro = d.maybe_distill()
+    assert coro is not None
+    await coro
+    # same entries again: still above _MIN_ENTRIES and still rendered
+    coro = d.maybe_distill()
+    assert coro is not None
+    await coro
+    assert len(llm.calls) == 2
+    prompt = str(llm.calls[-1]["messages"][1]["content"])
+    assert "消息0" in prompt  # retried, not skipped by the cursor
+
+
+async def test_exact_duplicate_fact_not_rewritten(tmp_path) -> None:
+    """A repeated extraction of an identical triple does not insert a second
+    row (write-side dedup)."""
+    memory = _memory(tmp_path)
+    payload = {"facts": [["用户", "works_on", "voyager"]]}
+    d = Distiller(
+        llm=FakeLLM(default=json.dumps(payload, ensure_ascii=False)),
+        memory=memory,
+        settings=_settings({"agent.memory.distill_interval": 1}),
+    )
+    for i in range(4):
+        memory.working.add("user", f"第一批{i}")
+    coro = d.maybe_distill()
+    assert coro is not None
+    await coro
+    for i in range(4):
+        memory.working.add("user", f"第二批{i}")
+    coro = d.maybe_distill()
+    assert coro is not None
+    await coro  # model repeats the same fact for the new window
+    hits = memory.semantic.query(keyword="voyager")
+    assert len(hits) == 1
