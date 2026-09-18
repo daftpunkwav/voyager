@@ -239,10 +239,16 @@ class SessionManager:
         self._persist_fork_parent(sid, source.session)
         return {**created, "forked_from": source.session}
 
-    def set_flags(self, session_id: str, *, pinned: bool | None = None, archived: bool | None = None) -> dict[str, Any]:
+    def set_flags(
+        self, session_id: str, *, pinned: bool | None = None, archived: bool | None = None
+    ) -> dict[str, Any]:
         """User curation flags on the persisted snapshot (pinned/archived)."""
         sid = self._normalize_target(session_id)
-        snap = self._store.set_flags(sid, pinned=pinned, archived=archived) if self._store is not None else None
+        snap = (
+            self._store.set_flags(sid, pinned=pinned, archived=archived)
+            if self._store is not None
+            else None
+        )
         if snap is None:
             raise ServiceError(
                 "agent",
@@ -427,6 +433,10 @@ class SessionManager:
                     history=[dict(m) for m in inst.history],
                     active_tools=sorted(inst.active) if inst.active else [],
                     created_at=snap.created_at if snap is not None else 0.0,
+                    # Curation flags must survive turn persistence, or a pin
+                    # would be silently dropped by the next chat message.
+                    pinned=snap.pinned if snap is not None else False,
+                    archived=snap.archived if snap is not None else False,
                 )
             )
         except Exception:

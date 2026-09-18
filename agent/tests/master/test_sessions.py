@@ -62,6 +62,27 @@ class TestSessionManager:
         finally:
             app.close()
 
+    def test_curation_flags_survive_rename_and_persist(self, tmp_path) -> None:
+        """Pin/archive must survive a rename and per-turn persistence: both
+        rewrite the snapshot, and dropping the flags there would silently
+        unpin the session on the next chat message."""
+        app = _app(tmp_path, FakeLLM())
+        try:
+            mgr = app.master.sessions
+            created = mgr.create(title="工作")
+            sid = created["session_id"]
+            mgr.set_flags(sid, pinned=True)
+            inst = mgr.resolve(sid)
+            inst.history.append({"role": "user", "content": "你好"})
+            mgr.persist(sid)
+            mgr.rename(sid, "工作改名")
+            row = next(r for r in mgr.list() if r["session_id"] == sid)
+            assert row["title"] == "工作改名"
+            assert row["pinned"] is True
+            assert row["archived"] is False
+        finally:
+            app.close()
+
     def test_active_pointer_and_switch(self, tmp_path) -> None:
         app = _app(tmp_path, FakeLLM())
         try:

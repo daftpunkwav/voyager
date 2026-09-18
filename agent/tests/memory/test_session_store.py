@@ -81,6 +81,25 @@ class TestStore:
         assert store.get("s1") is None
         store.close()
 
+    def test_set_flags_and_rename_preserve_curation(self, tmp_path) -> None:
+        """Flagging keeps updated_at (not conversation activity); renaming
+        keeps the flags (a rename must not silently unpin the session)."""
+        store = SessionStore(tmp_path / "sessions.db")
+        store.create("s1", title="old")
+        before = store.get("s1")
+        assert before is not None
+        snap = store.set_flags("s1", pinned=True, archived=True)
+        assert snap is not None
+        assert snap.pinned and snap.archived
+        assert snap.updated_at == before.updated_at
+        assert store.list()[0].session_id == "s1"  # pinned sorts first
+        store.rename("s1", "renamed")
+        renamed = store.get("s1")
+        assert renamed is not None
+        assert renamed.title == "renamed"
+        assert renamed.pinned and renamed.archived
+        store.close()
+
     def test_invalid_session_id_rejected(self, tmp_path) -> None:
         store = SessionStore(tmp_path / "sessions.db")
         for bad in ("", "../evil", "a" * 100, "has space"):

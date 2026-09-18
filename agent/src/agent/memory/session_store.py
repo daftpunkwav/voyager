@@ -22,7 +22,7 @@ import json
 import re
 import sqlite3
 import time
-from dataclasses import dataclass, replace, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -323,19 +323,9 @@ class SessionStore:
         snap = self.get(session_id)
         if snap is None:
             return
-        self.save(
-            SessionSnapshot(
-                session_id=snap.session_id,
-                title=title,
-                persona=snap.persona,
-                goal=snap.goal,
-                history=snap.history,
-                active_tools=snap.active_tools,
-                created_at=snap.created_at,
-                updated_at=time.time(),
-                saved_at=snap.saved_at,
-            )
-        )
+        # replace() keeps every other field, including the pinned/archived
+        # curation flags (a rename must not silently unpin the session).
+        self.save(replace(snap, title=title, updated_at=time.time()))
 
     def delete(self, session_id: str) -> None:
         self._conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
