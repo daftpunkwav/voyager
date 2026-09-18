@@ -140,10 +140,10 @@ class DocStore:
             wheres.append("status = ?")
             params.append(status)
         if tag:
-            # tags is a JSON-array string: match with quotes as a whole term
-            # to avoid substring false hits
+            # tags is a JSON-array string: wrap the term in the same JSON
+            # quotes it is stored with so tag "ai" cannot hit "ai-tools"
             wheres.append(r"tags LIKE ? ESCAPE '\'")
-            params.append(f"%{escape_like(tag)}%")
+            params.append(f"%{escape_like(json.dumps(tag, ensure_ascii=False))}%")
         if query:
             wheres.append("(title LIKE ? ESCAPE '\\' OR filename LIKE ? ESCAPE '\\')")
             like = f"%{escape_like(query)}%"

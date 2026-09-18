@@ -221,6 +221,26 @@ class TestRepo:
             await execute(registry, "set_github_token", AGENT_CTX, {"token": "t"})
         assert exc.value.body.code == "SOURCES.FORBIDDEN"
 
+    def test_parse_repo_url_rejects_bad_charset(self) -> None:
+        """Owner/repo feed the clone destination and API paths; a crafted
+        name (path separators, dot segments, etc.) is rejected up front."""
+        from platform_contracts import ServiceError
+
+        assert github_mod.parse_repo_url("https://github.com/langchain-ai/langgraph") == (
+            "langchain-ai",
+            "langgraph",
+        )
+        assert github_mod.parse_repo_url("https://github.com/owner/repo.git") == ("owner", "repo")
+        for bad in (
+            "https://github.com/..%2f/x",
+            "https://github.com/a/b+c",
+            "https://github.com/a b/c",
+            "https://github.com/../x",
+            "https://github.com/./x",
+        ):
+            with pytest.raises(ServiceError, match="Invalid GitHub owner/repo"):
+                github_mod.parse_repo_url(bad)
+
 
 class TestRepoWorker:
     async def test_clone_then_ready(self, deps, tmp_path) -> None:

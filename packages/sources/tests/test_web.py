@@ -180,3 +180,36 @@ class TestPages:
             )
         with pytest.raises(ServiceError, match="not found"):
             await execute(registry, "get_page", USER_CTX, {"page_id": "ghost"})
+
+
+class TestTagFilter:
+    def test_tag_filter_matches_whole_term(self, deps) -> None:
+        """tag "ai" must not hit "ai-tools" in list() or summaries() (JSON
+        quote wrapping, aligned with the notes store)."""
+        d, _ = deps
+        d.web_store.add({"title": "P1", "content": "c", "tags": ["ai-tools"]})
+        d.web_store.add({"title": "P2", "content": "c", "tags": ["ai"]})
+        assert [r["title"] for r in d.web_store.list(tag="ai")] == ["P2"]
+        assert [r["title"] for r in d.web_store.list(tag="ai-tools")] == ["P1"]
+        assert [r["title"] for r in d.web_store.summaries(tag="ai")] == ["P2"]
+        assert d.web_store.summaries(tag="tool") == []
+
+
+class TestHtmlToText:
+    def test_unclosed_script_tail_stripped(self) -> None:
+        """A truncated page's unclosed <script> must not leak raw JS into the
+        extracted body text."""
+        from sources.modules.web.store import html_to_text
+
+        html = "<title>T</title><p>keep me</p><script>alert('leak') && document.write('x')"
+        _title, text, _images = html_to_text(html)
+        assert "keep me" in text
+        assert "alert" not in text and "document.write" not in text
+
+    def test_closed_script_blocks_still_stripped(self) -> None:
+        from sources.modules.web.store import html_to_text
+
+        html = "<p>a</p><style>.x{}</style><script>evil()</script><p>b</p>"
+        _title, text, _images = html_to_text(html)
+        assert "evil" not in text and ".x" not in text
+        assert "a" in text and "b" in text

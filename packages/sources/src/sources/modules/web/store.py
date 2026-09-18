@@ -116,8 +116,10 @@ class WebStore:
             wheres.append("(title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\')")
             params += [like, like]
         if tag:
+            # JSON-quote the term like the notes store: tag "ai" must not
+            # hit "ai-tools" inside the stored JSON array
             wheres.append(r"tags LIKE ? ESCAPE '\'")
-            params.append(f"%{escape_like(tag)}%")
+            params.append(f"%{escape_like(json.dumps(tag, ensure_ascii=False))}%")
         with self._lock:
             return self._rows(_LIST_COLS, " AND ".join(wheres), tuple(params), min(limit, 500))
 
@@ -158,7 +160,7 @@ class WebStore:
         params: builtins.list[Any] = []
         if tag:
             wheres.append(r"tags LIKE ? ESCAPE '\'")
-            params.append(f"%{escape_like(tag)}%")
+            params.append(f"%{escape_like(json.dumps(tag, ensure_ascii=False))}%")
         if query:
             like = f"%{escape_like(query)}%"
             wheres.append("(title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\')")
@@ -228,6 +230,10 @@ def html_to_text(html: str, limit: int = 20000) -> tuple[str, str, list[str]]:
     title = _TAG_RE.sub("", m.group(1)).strip() if m else ""
     images = [u for u in _IMG_RE.findall(html)[:5] if u.startswith(("http", "/"))]
     body = _SCRIPT_STYLE_RE.sub(" ", html)
+    # Truncated pages: the paired-tag regex above only strips complete
+    # blocks, so strip an unclosed <script>/<style> tail as well or its raw
+    # JS/CSS leaks into the extracted text
+    body = re.sub(r"<(script|style)\b[^>]*>.*", " ", body, flags=re.IGNORECASE | re.DOTALL)
     body = re.sub(r"</(?:p|div|li|h[1-6]|blockquote)>", "\n", body, flags=re.IGNORECASE)
     text = _TAG_RE.sub(" ", body)
     text = re.sub(r"[ \t]+", " ", text)

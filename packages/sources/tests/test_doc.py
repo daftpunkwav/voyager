@@ -311,6 +311,18 @@ class TestReadAndMeta:
         assert len(by_query) == 1
 
 
+class TestTagFilter:
+    def test_tag_filter_matches_whole_term(self, deps) -> None:
+        """tag "ai" must not hit "ai-tools": the term is wrapped in the JSON
+        quotes it is stored with (aligned with the notes store)."""
+        d, _ = deps
+        d.doc_store.add({"title": "T1", "tags": ["ai-tools"]})
+        d.doc_store.add({"title": "T2", "tags": ["ai"]})
+        assert [r["title"] for r in d.doc_store.list(tag="ai")] == ["T2"]
+        assert [r["title"] for r in d.doc_store.list(tag="ai-tools")] == ["T1"]
+        assert d.doc_store.list(tag="tool") == []
+
+
 class TestExtractor:
     def test_text_chunks_long_content(self, tmp_path) -> None:
         p = tmp_path / "long.md"
