@@ -71,19 +71,22 @@ class LocalTokenIssuer:
             if not hmac.compare_digest(sig, expected):
                 raise ValueError("signature mismatch")
             payload = json.loads(_b64d(body))
+            # Field extraction stays inside the try: a signed-but-malformed
+            # payload (bad exp/kind/scopes) is an auth failure (401), never a
+            # ValueError/KeyError leaking out as a 500.
+            if float(payload.get("exp", 0)) < time.time():
+                raise ServiceError(
+                    _DOMAIN,
+                    ErrorSuffix.AUTH_REQUIRED,
+                    "token expired",
+                    hint="request a new local token",
+                )
+            return ActorRef(
+                kind=ActorKind(payload["kind"]),
+                id=str(payload["id"]),
+                scopes=tuple(payload.get("scopes") or ()),
+            )
         except ServiceError:
             raise
         except Exception as exc:
             raise ServiceError(_DOMAIN, ErrorSuffix.AUTH_REQUIRED, f"invalid token: {exc}") from exc
-        if float(payload.get("exp", 0)) < time.time():
-            raise ServiceError(
-                _DOMAIN,
-                ErrorSuffix.AUTH_REQUIRED,
-                "token expired",
-                hint="request a new local token",
-            )
-        return ActorRef(
-            kind=ActorKind(payload["kind"]),
-            id=str(payload["id"]),
-            scopes=tuple(payload.get("scopes") or ()),
-        )

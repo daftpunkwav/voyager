@@ -2,11 +2,33 @@
 loopback.
 """
 
+import base64
+import hashlib
+import hmac
+import json
+import time
+
 import pytest
 from platform_actor import ActorContext, LocalTokenIssuer, is_loopback
 from platform_contracts import ActorKind, ActorRef, ServiceError
 
 AGENT = ActorRef(kind=ActorKind.AGENT, id="agent.main", scopes=("graph.read", "notes.write"))
+
+
+def _signed_token(issuer: LocalTokenIssuer, payload: dict) -> str:
+    """Craft a correctly-signed token with arbitrary payload fields (the
+    signature path mirrors issuer.issue)."""
+    body = (
+        base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode())
+        .rstrip(b"=")
+        .decode()
+    )
+    sig = (
+        base64.urlsafe_b64encode(hmac.new(issuer._secret, body.encode(), hashlib.sha256).digest())
+        .rstrip(b"=")
+        .decode()
+    )
+    return f"{body}.{sig}"
 
 
 @pytest.fixture()
@@ -42,6 +64,22 @@ class TestToken:
     def test_garbage_rejected(self, issuer) -> None:
         with pytest.raises(ServiceError):
             issuer.verify("not-a-token")
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"kind": "bogus", "id": "x", "scopes": [], "exp": time.time() + 60},  # bad kind
+            {"id": "x", "scopes": []},  # kind missing
+            {"kind": "agent", "id": "x", "exp": "soon"},  # non-numeric exp
+        ],
+    )
+    def test_malformed_signed_payload_is_401_not_500(self, issuer, payload) -> None:
+        """A correctly-signed token with malformed fields is an auth failure
+        (ServiceError/401), never a leaking ValueError/KeyError (500)."""
+        with pytest.raises(ServiceError) as exc:
+            issuer.verify(_signed_token(issuer, payload))
+        assert exc.value.body.code == "ACTOR.AUTH_REQUIRED"
+        assert exc.value.http_status == 401
 
 
 class TestContext:
