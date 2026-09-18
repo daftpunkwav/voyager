@@ -66,6 +66,11 @@ class SessionManager:
     ) -> None:
         self._spawner = spawner
         self._sink_fn = sink_fn  # session_id -> reply sink for that session
+        # session_id -> raw round recorder factory; attached post-construction
+        # by the assembler (the trajectory store does not exist yet earlier).
+        self._raw_fn: Callable[[str], Callable[[str, int, list, Any], Awaitable[None]]] | None = (
+            None
+        )
         self._store = store
         self._chat_goal = chat_goal
         self._instances: dict[str, SubagentInstance] = {}
@@ -73,6 +78,13 @@ class SessionManager:
         # Store-less mode still needs an active pointer and title tracking
         self._active: str = ""
         self._titles: dict[str, str] = {}
+
+    def set_raw_fn(
+        self, fn: Callable[[str], Callable[[str, int, list, Any], Awaitable[None]]]
+    ) -> None:
+        """Attach the per-session raw round recorder factory (assembly-time;
+        instances spawned before this call simply log nothing)."""
+        self._raw_fn = fn
 
     # -- resolution & instances ---------------------------------------------
 
@@ -141,6 +153,7 @@ class SessionManager:
             persona=persona,
             name="chat",
             reply_sink=self._sink_fn(session_id),
+            raw_recorder=self._raw_fn(session_id) if self._raw_fn is not None else None,
         )
         if snap is not None:
             inst.history = [dict(m) for m in snap.history]
@@ -198,7 +211,9 @@ class SessionManager:
             self._titles[sid] = title
         return {"session_id": sid, "title": title, "persona": persona}
 
-    def fork(self, source_session_id: str = "", title: str = "") -> dict[str, Any]:
+    def fork(
+        self, source_session_id: str = "", title: str = "", keep_messages: int = 0
+    ) -> dict[str, Any]:
         """New session seeded with a copy of the source session's history
         (default source: the active session)."""
         source = self.instance_for(self._normalize_target(source_session_id))
@@ -211,13 +226,30 @@ class SessionManager:
         created = self.create(title=title or self._title_of(source.session) + " 分支")
         sid = created["session_id"]
         inst = self._spawn_instance(sid, None)
-        inst.history = [dict(m) for m in source.history]
+        history = [dict(m) for m in source.history]
+        if keep_messages > 0:
+            # Message-level fork: only the first N entries (user/assistant
+            # pairs), so the branch resumes from a chosen point in time.
+            history = history[:keep_messages]
+        inst.history = history
         if source.active:
             inst.active = set(source.active)
         self._instances[sid] = inst
         self.persist(sid)
         self._persist_fork_parent(sid, source.session)
         return {**created, "forked_from": source.session}
+
+    def set_flags(self, session_id: str, *, pinned: bool | None = None, archived: bool | None = None) -> dict[str, Any]:
+        """User curation flags on the persisted snapshot (pinned/archived)."""
+        sid = self._normalize_target(session_id)
+        snap = self._store.set_flags(sid, pinned=pinned, archived=archived) if self._store is not None else None
+        if snap is None:
+            raise ServiceError(
+                "agent",
+                ErrorSuffix.NOT_FOUND,
+                f"session not found: {sid or '(active)'}",
+            )
+        return {"session_id": sid, "pinned": snap.pinned, "archived": snap.archived}
 
     def rename(self, session_id: str, title: str) -> None:
         """Rename an existing session; unknown ids raise instead of silently
@@ -349,6 +381,8 @@ class SessionManager:
                         "active": meta.session_id == active,
                         "status": inst.status.value if inst is not None else "stored",
                         "turns": (len(inst.history) // 2) if inst is not None else None,
+                        "pinned": meta.pinned,
+                        "archived": meta.archived,
                     }
                 )
         else:

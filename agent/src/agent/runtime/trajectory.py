@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +51,15 @@ CREATE TABLE IF NOT EXISTS runs (
     last_seq      INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS raw_rounds (
+    run_id   TEXT NOT NULL,
+    round    INTEGER NOT NULL,
+    session  TEXT NOT NULL DEFAULT '',
+    ts       REAL NOT NULL,
+    request  TEXT NOT NULL DEFAULT '',
+    response TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (run_id, round)
+);
 """
 
 #: Event types the projection folds; everything else is skipped by the read filter.
@@ -68,6 +78,10 @@ _TERMINAL = {
     RuntimeEvent.AGENT_CANCELLED: "cancelled",
 }
 _PAGE = 500
+
+#: Per-side cap for stored raw round bodies (characters). The raw log is a
+#: debugging surface, not an archive: oversized transcripts are truncated.
+_RAW_CAP_CHARS = 400_000
 
 
 class TrajectoryStore:
@@ -273,6 +287,69 @@ class TrajectoryStore:
         with self._lock:
             self._closed = True
             self._conn.close()
+
+    # -- raw LLM round log ----------------------------------------------------
+    #
+    # The steps projection caps round text/reasoning for display; the raw
+    # table keeps one full request transcript + response per round so the UI
+    # can show exactly what the model saw and answered. Bodies are stored
+    # pre-serialized (JSON strings) and capped at _RAW_CAP_CHARS per side.
+
+    def record_raw_round(
+        self,
+        *,
+        run_id: str,
+        session: str,
+        round: int,
+        request: str,
+        response: str,
+    ) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO raw_rounds (run_id, round, session, ts, request, response)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    run_id,
+                    int(round),
+                    session,
+                    time.time(),
+                    request[:_RAW_CAP_CHARS],
+                    response[:_RAW_CAP_CHARS],
+                ),
+            )
+            self._conn.commit()
+
+    def raw_rounds(self, run_id: str) -> list[dict[str, Any]]:
+        """Round index for one run: round numbers, timestamps and body sizes —
+        no bodies, so listing stays cheap."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT round, ts, length(request), length(response)"
+                " FROM raw_rounds WHERE run_id = ? ORDER BY round ASC",
+                (run_id,),
+            ).fetchall()
+        return [
+            {"round": r[0], "ts": r[1], "request_bytes": r[2], "response_bytes": r[3]} for r in rows
+        ]
+
+    def raw_round(self, run_id: str, round: int) -> dict[str, Any] | None:
+        """Full raw bodies of one round; None when not recorded."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT run_id, round, session, ts, request, response"
+                " FROM raw_rounds WHERE run_id = ? AND round = ?",
+                (run_id, int(round)),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "run_id": row[0],
+            "round": row[1],
+            "session": row[2],
+            "ts": row[3],
+            "request": row[4],
+            "response": row[5],
+        }
 
 
 def _step_row(r: tuple) -> dict[str, Any]:

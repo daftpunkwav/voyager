@@ -22,7 +22,7 @@ import json
 import re
 import sqlite3
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, replace, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -56,6 +56,8 @@ class SessionMeta:
     persona: str
     created_at: float
     updated_at: float
+    pinned: bool = False
+    archived: bool = False
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,10 @@ class SessionSnapshot:
     created_at: float = 0.0
     updated_at: float = 0.0
     saved_at: str = ""
+    #: User curation flags (sidebar ordering / archive filtering). Lived in
+    #: the snapshot JSON on purpose: no schema migration for the store.
+    pinned: bool = False
+    archived: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -83,6 +89,8 @@ class SessionSnapshot:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "saved_at": self.saved_at,
+            "pinned": self.pinned,
+            "archived": self.archived,
         }
 
     @classmethod
@@ -100,6 +108,8 @@ class SessionSnapshot:
             created_at=float(raw.get("created_at") or 0.0),
             updated_at=float(raw.get("updated_at") or 0.0),
             saved_at=str(raw.get("saved_at") or ""),
+            pinned=bool(raw.get("pinned")),
+            archived=bool(raw.get("archived")),
         )
 
 
@@ -248,13 +258,20 @@ class SessionStore:
             rows = self._conn.execute(
                 # rowid tie-break: two saves inside one clock tick share updated_at,
                 # and the later insert must still sort first (deterministic listing)
-                "SELECT id, title, persona, created_at, updated_at FROM sessions"
+                "SELECT id, title, persona, created_at, updated_at, snapshot FROM sessions"
                 " ORDER BY updated_at DESC, rowid DESC"
             ).fetchall()
         except sqlite3.DatabaseError:
             return out
         for r in rows:
             try:
+                flags: dict[str, Any] = {}
+                try:
+                    parsed = json.loads(r[5]) if r[5] else {}
+                    if isinstance(parsed, dict):
+                        flags = parsed
+                except ValueError:
+                    pass  # corrupt snapshot row: default the flags, keep the session
                 out.append(
                     SessionMeta(
                         session_id=str(r[0]),
@@ -262,11 +279,37 @@ class SessionStore:
                         persona=str(r[2]),
                         created_at=float(r[3]),
                         updated_at=float(r[4]),
+                        pinned=bool(flags.get("pinned")),
+                        archived=bool(flags.get("archived")),
                     )
                 )
             except (TypeError, ValueError):
                 continue
+        # Pinned first, then recency (the SQL can only order by real columns)
+        out.sort(key=lambda m: (not m.pinned, -m.updated_at))
         return out
+
+    def set_flags(
+        self,
+        session_id: str,
+        *,
+        pinned: bool | None = None,
+        archived: bool | None = None,
+    ) -> SessionSnapshot | None:
+        """Update the user curation flags without touching the history; the
+        original updated_at is preserved (flagging is not a conversation
+        activity). None when the session does not exist."""
+        snap = self.get(session_id)
+        if snap is None:
+            return None
+        updates: dict[str, Any] = {}
+        if pinned is not None:
+            updates["pinned"] = pinned
+        if archived is not None:
+            updates["archived"] = archived
+        snap = replace(snap, **updates)
+        self.save(snap)
+        return snap
 
     def touch(self, session_id: str) -> None:
         """Bump updated_at without a full snapshot rewrite."""

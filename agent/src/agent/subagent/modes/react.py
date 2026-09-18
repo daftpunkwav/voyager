@@ -40,6 +40,7 @@ from agent.subagent.modes.base import (
     Mode,
     ModeBudget,
     ModeLimits,
+    RawCb,
     StepCb,
     counting_step,
     noop_event,
@@ -189,6 +190,7 @@ async def run_react(
     *,
     on_delta: DeltaCb | None = None,
     on_event: EventCb = noop_event,
+    on_raw: RawCb | None = None,
     continue_if_idle: bool = False,
     compress_budget: int = COMPRESS_BUDGET,
     governor: ContextGovernor | None = None,
@@ -325,6 +327,10 @@ async def run_react(
                 **({"model": reply.model} if getattr(reply, "model", "") else {}),
             },
         )
+        if on_raw is not None:
+            # Raw round log: the exact request transcript plus the response,
+            # stored outside the display projection (capped by the store).
+            await on_raw(round_n, messages, reply)
         if reply.final:
             text = reply.text or ""
             # With tool_calls this branch is unreachable - the loop is still

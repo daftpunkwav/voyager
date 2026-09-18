@@ -52,6 +52,7 @@ class ModeLimits:
 
 
 StepCb = Callable[[str, str, str, dict[str, Any]], Awaitable[None]]  # (kind, name, summary, detail)
+RawCb = Callable[[int, list, Any], Awaitable[None]]  # (round, request messages, LLMReply)
 DeltaCb = Callable[[int, str], Awaitable[None]]  # (round, delta text)
 #: Lifecycle event sink: (RuntimeEvent type, **payload). The instance binds
 #: it to RuntimeEvents.emit with its run context; modes never see the bus.
@@ -301,6 +302,7 @@ async def run_mode(
     on_step: StepCb = noop_step,
     on_delta: DeltaCb | None = None,
     on_event: EventCb = noop_event,
+    on_raw: RawCb | None = None,
     continue_if_idle: bool = False,
     compress_budget: int = COMPRESS_BUDGET,
     governor: ContextGovernor | None = None,
@@ -314,7 +316,7 @@ async def run_mode(
     batched through the coalescer; other modes' multi-way calls stay
     non-streaming (their intermediate products never face the user)."""
     runner = runner_for(mode)
-    return await runner(
+    kwargs: dict[str, Any] = dict(
         llm=llm,
         toolbelt=toolbelt,
         messages=messages,
@@ -327,6 +329,11 @@ async def run_mode(
         governor=governor,
         deadline=deadline,
     )
+    if mode is Mode.REACT:
+        # The raw round log is a REACT-only surface: other modes' intermediate
+        # products never face the user, so recording them buys nothing.
+        kwargs["on_raw"] = on_raw
+    return await runner(**kwargs)
 
 
 __all__ = [
@@ -340,6 +347,7 @@ __all__ = [
     "Mode",
     "ModeBudget",
     "ModeLimits",
+    "RawCb",
     "StepCb",
     "budget_reason",
     "capped_args",

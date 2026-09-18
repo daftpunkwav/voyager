@@ -11,6 +11,7 @@ Also used by tests (injected FakeLLM / temp directories).
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -745,6 +746,38 @@ def build_agent(
     # (steps / runs); startup catch-up folds whatever landed while down
     trajectory = TrajectoryStore(data_dir / "trajectory.db", log)
     trajectory.catch_up()
+
+    def _raw_round_fn(session_id: str):
+        """Per-session raw LLM round recorder: the exact request transcript
+        plus the response, stored in the trajectory store for the UI's raw
+        log view. Bodies are serialized once here; the store caps size."""
+
+        async def _record(run_id: str, round_n: int, messages: list, reply: object) -> None:
+            response = json.dumps(
+                {
+                    "text": getattr(reply, "text", "") or "",
+                    "reasoning": getattr(reply, "reasoning", "") or "",
+                    "tool_calls": [
+                        {"name": c.name, "arguments": c.arguments}
+                        for c in (getattr(reply, "tool_calls", None) or [])
+                    ],
+                    "degraded": bool(getattr(reply, "degraded", False)),
+                    "model": getattr(reply, "model", ""),
+                },
+                ensure_ascii=False,
+                default=str,
+            )
+            trajectory.record_raw_round(
+                run_id=run_id,
+                session=session_id,
+                round=round_n,
+                request=json.dumps(messages, ensure_ascii=False, default=str),
+                response=response,
+            )
+
+        return _record
+
+    master.sessions.set_raw_fn(_raw_round_fn)
     session_index.catch_up()  # fold whatever landed while the process was down
     trigger_handler = make_trigger_handler(master, subagent_registry, settings=settings)
     handlers, relay, hook_patterns = bind_event_loop(

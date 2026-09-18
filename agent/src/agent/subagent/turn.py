@@ -122,6 +122,7 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
                 on_step=inst._on_step,
                 on_delta=inst._on_delta,
                 on_event=inst._on_event,
+                on_raw=inst._on_raw,
                 continue_if_idle=inst.task.conversational,
                 compress_budget=inst.budget.compress_budget,
                 governor=inst.governor(),

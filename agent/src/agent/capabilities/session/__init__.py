@@ -6,8 +6,10 @@ from __future__ import annotations
 from platform_capability import Registry
 
 from agent.capabilities.deps import CapabilityDeps
+from agent.capabilities.session.archive_session import register as _archive_session
 from agent.capabilities.session.delete_session import register as _delete_session
 from agent.capabilities.session.get_session import register as _get_session
+from agent.capabilities.session.pin_session import register as _pin_session
 from agent.capabilities.session.rename_session import register as _rename_session
 from agent.capabilities.session.session_create import register as _session_create
 from agent.capabilities.session.session_fork import register as _session_fork
@@ -23,3 +25,5 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
     _set_active_session(reg, deps)
     _session_fork(reg, deps)
     _get_session(reg, deps)
+    _pin_session(reg, deps)
+    _archive_session(reg, deps)

@@ -104,6 +104,7 @@ class Spawner:
         persona: str = "",
         name: str = "",
         reply_sink=None,
+        raw_recorder=None,
     ) -> SubagentInstance:
         toolbelt = self._narrowed_belt(task)
         instance = SubagentInstance(
@@ -115,6 +116,7 @@ class Spawner:
             events=self._events,
             state=RunState(task=task.goal),
             reply_sink=reply_sink,
+            raw_recorder=raw_recorder,
             name=name or task.goal[:16],
             pages=self._pages,
             persona=persona,

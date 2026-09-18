@@ -113,6 +113,10 @@ class SubagentInstance:
     #: "error" (failures and harness degradation text); sinks render errors
     #: distinctly instead of masquerading as normal answers.
     reply_sink: Callable[[str, str], Awaitable[None]] | None = None
+    #: Raw round recorder: (run_id, round, request messages, LLMReply). Wired
+    #: for conversational instances; writes the raw LLM round log in the
+    #: trajectory store. None = no raw log (subagents, tests).
+    raw_recorder: Callable[[str, int, list, Any], Awaitable[None]] | None = None
     name: str = ""
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     history: list[dict[str, Any]] = field(default_factory=list)
@@ -307,6 +311,11 @@ class SubagentInstance:
 
     async def _on_delta(self, round_n: int, text: str) -> None:
         return await turn.on_delta(self, round_n, text)
+
+    async def _on_raw(self, round_n: int, messages: list, reply: Any) -> None:
+        if self.raw_recorder is None:
+            return
+        await self.raw_recorder(self.state.run_id, round_n, messages, reply)
 
     async def _on_event(self, type_: str, **payload: Any) -> None:
         return await turn.on_event(self, type_, **payload)
