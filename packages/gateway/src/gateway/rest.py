@@ -73,9 +73,13 @@ def create_app(
     @app.middleware("http")
     async def _security_headers(request: Request, call_next):
         response = await call_next(request)
+        # Mirrors the index.html meta CSP: 'unsafe-eval' + blob: are required
+        # by the fenced-code runner (skulpt eval; js/ts snippets in a blob
+        # worker). Injection stays guarded by the markdown sanitize allowlist.
         response.headers.setdefault(
             "Content-Security-Policy",
-            "frame-ancestors 'none'; default-src 'self'",
+            "frame-ancestors 'none'; default-src 'self'; "
+            "script-src 'self' 'unsafe-eval' blob:; worker-src 'self' blob:",
         )
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         return response

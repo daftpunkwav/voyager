@@ -57,7 +57,11 @@
     <!--
       Content Security Policy (§4.2 security):
       - default-src 'self'   resources are same-origin by default
-      - script-src 'self' 'unsafe-inline'   Vite dev needs unsafe-inline (HMR); the production build has no inline scripts
+      - script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:   Vite dev needs
+        unsafe-inline (HMR); 'unsafe-eval' + blob: are required by the fenced
+        code runner (skulpt compiles python via eval; js/ts snippets run in a
+        blob: worker via new Function). Injection stays guarded by the
+        markdown sanitize allowlist, not by script-src.
       - style-src 'self' 'unsafe-inline'   CSS allows inline (liquid-glass dynamic tokens); fonts are self-hosted via @fontsource-variable
       - font-src 'self' data:   self-hosted woff2 + embedded fonts
       - img-src 'self' data: https:   avatars/icons/external images
@@ -72,7 +76,8 @@
       http-equiv="Content-Security-Policy"
       content="
         default-src 'self';
-        script-src 'self' 'unsafe-inline';
+        script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:;
+        worker-src 'self' blob:;
         style-src 'self' 'unsafe-inline';
         font-src 'self' data:;
         img-src 'self' data: https:;
