@@ -28,7 +28,7 @@ import { MessageList } from '@/widgets/chat/MessageList';
 import { TaskCards } from '@/widgets/chat/TaskCards';
 import { TrajectoryView } from '@/widgets/chat/TrajectoryView';
 import { RightPanel } from '@/widgets/chat/RightPanel';
-import { RawLogPanel } from '@/widgets/chat/RawLogPanel';
+import { RawLogView } from '@/widgets/chat/RawLogView';
 import { ChatLlmMissingTip } from '@/widgets/chat/ChatLlmMissingTip';
 import { AskDialog } from '@/widgets/chat/AskDialog';
 import { ChatComposer } from '@/widgets/chat/ChatComposer';
@@ -40,7 +40,7 @@ export function ChatPage() {
   const connected = useChatStore((s) => s.connected);
   const composer = useChatSend();
   const { llmMissing } = composer;
-  const [view, setView] = useState<'chat' | 'trajectory'>('chat');
+  const [view, setView] = useState<'chat' | 'trajectory' | 'logs'>('chat');
 
   const onNavigate = useCallback(
     (path: string) => {
@@ -73,6 +73,15 @@ export function ChatPage() {
             >
               {t('chat:traj.tabTrajectory')}
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'logs'}
+              className={`chat-tabs__tab${view === 'logs' ? ' chat-tabs__tab--active' : ''}`}
+              onClick={() => setView('logs')}
+            >
+              {t('chat:traj.tabLog')}
+            </button>
           </div>
           {connected ? null : (
             <span className="small muted" role="status">
@@ -98,12 +107,13 @@ export function ChatPage() {
             />
             <AskDialog />
           </>
-        ) : (
+        ) : view === 'trajectory' ? (
           <TrajectoryView />
+        ) : (
+          <RawLogView />
         )}
       </div>
       <RightPanel taskCards={<TaskCards />} />
-      <RawLogPanel />
     </section>
   );
 }

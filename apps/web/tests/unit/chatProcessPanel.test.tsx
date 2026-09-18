@@ -107,7 +107,8 @@ describe('inline live trace (MessageList)', () => {
     dispatch(stepEvent('tool', 'notes__create_note', 'created', 103));
     const { container } = renderStream();
     expect(container.querySelector('.chat-trace--live')).not.toBeNull();
-    expect(screen.getByText('轮 1')).toBeTruthy(); // round block header
+    // round blocks have no chrome (no round numbers): only foldable rows
+    expect(screen.queryByText('轮 1')).toBeNull();
     expect(screen.getByText('创建笔记')).toBeTruthy();
     expect(screen.queryByText('notes__create_note')).toBeNull(); // display layer humanizes
     // the group header summarizes the turn
@@ -128,11 +129,10 @@ describe('inline live trace (MessageList)', () => {
         payload: { round: 1, text: '答案是', subagent: 'chat' },
       });
     });
-    // The trace stays open: streaming text renders inside the round block
-    // (no standalone typing bubble), and the tool rows stay visible.
-    expect(screen.getByText('答案是')).toBeTruthy();
+    // The trace stays open: streaming text renders inside the round block's
+    // folding row (no standalone typing bubble), tool rows stay visible.
     expect(screen.getByText('创建笔记')).toBeTruthy();
-    expect(screen.getByText(/正在输出/)).toBeTruthy();
+    expect(screen.getAllByText(/正在输出/).length).toBeGreaterThanOrEqual(1);
     expect(container.querySelector('.chat-caret')).toBeNull();
     // manual collapse hides the rows; the header brings them back
     fireEvent.click(screen.getByText(/工具 1 次/));

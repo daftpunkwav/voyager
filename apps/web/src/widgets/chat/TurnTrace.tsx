@@ -17,7 +17,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { type RoundText, type TurnStep, useChatStore } from '@/stores/chatStore';
-import { formatCompactCount, formatDurationSec } from '@/utils/trajectory';
+import { formatDurationSec } from '@/utils/trajectory';
 import { StepDetail } from '@/widgets/chat/StepDetail';
 import { ChatMarkdown } from '@/widgets/chat/ChatMarkdown';
 
@@ -437,111 +437,65 @@ function buildBlocks(
   return blocks;
 }
 
-const LONG_TEXT_CHARS = 400;
-
-/** One round block: header (round, model, tokens, tool tally), lead-in text,
- *  thinking block, meta line, then its tool rows. Colors follow the role:
- *  assistant rounds (brand), thinking (violet), tools (amber). */
+/** One round block: foldable rows only - thinking (full verbatim reasoning),
+ *  the round's lead-in output, and its tool calls; everything is collapsed by
+ *  default and expands in place on click. Rounds are separated by the dashed
+ *  divider; no round numbers, model or token chrome. */
 function RoundBlockView({ block }: { block: RoundBlock }) {
   const { t } = useTranslation('chat');
-  const setRawLog = useChatStore((s) => s.setRawLog);
+  const [thinkOpen, setThinkOpen] = useState(false);
   const [textOpen, setTextOpen] = useState(false);
-  const [reasonOpen, setReasonOpen] = useState(false);
   const llm = block.llm;
   // Live: the frozen round text; closed/refreshed: the persisted step text.
   // Hidden when it repeats the closing message verbatim (dup).
   const bodyText = block.dup ? '' : block.text || llm?.text || '';
-  const long = bodyText.length > LONG_TEXT_CHARS;
   const reasoning = block.reasoning;
-  const reasonLong = reasoning.length > LONG_TEXT_CHARS;
-  const stats: string[] = [];
-  if (llm && typeof llm.inputTokens === 'number')
-    stats.push(t('chat:trace.in', { n: formatCompactCount(llm.inputTokens) }));
-  if (llm && typeof llm.outputTokens === 'number')
-    stats.push(t('chat:trace.out', { n: formatCompactCount(llm.outputTokens) }));
-  // Per-round tool tally: "read 2 · edit 1" (localized labels, capped list).
-  const toolCounts = new Map<string, number>();
-  for (const s of block.tools) {
-    if (s.kind !== 'tool') continue;
-    toolCounts.set(s.name, (toolCounts.get(s.name) ?? 0) + 1);
-  }
-  const toolStats = [...toolCounts.entries()]
-    .slice(0, 3)
-    .map(([name, n]) => t('chat:trace.toolTally', { name: toolLabel(name, t), n }));
-  if (toolCounts.size > 3) toolStats.push(t('chat:trace.toolMore', { n: toolCounts.size - 3 }));
-  const meta: string[] = [];
-  if (llm?.ttftMs !== undefined) meta.push(t('chat:trace.ttft', { v: `${llm.ttftMs}ms` }));
-  if (llm?.subagent) meta.push(t('chat:trace.subagent', { v: llm.subagent }));
-  if (llm?.runId) meta.push(t('chat:trace.runId', { v: llm.runId }));
 
   return (
     <section className={`chat-round${llm ? '' : ' chat-round--ops'}`}>
       {block.ops.length > 0 ? <RoundToolRows steps={block.ops} /> : null}
-      {llm || block.live ? (
-        <div className="chat-round__head">
-          <span className="chat-round__no chat-role--assistant">
-            {block.round ? t('chat:trace.roundN', { n: block.round }) : t('chat:proc.think')}
-            {block.live ? <span className="chat-trace__pulse" aria-hidden /> : null}
-          </span>
-          {llm?.model ? <span className="chat-round__model">{llm.model}</span> : null}
-          {stats.length ? <span className="chat-round__stats">{stats.join(' · ')}</span> : null}
-          {toolStats.length ? (
-            <span className="chat-round__toolstats chat-role--tool" title={toolStats.join(' · ')}>
-              {t('chat:trace.roundTools', {
-                n: block.tools.filter((s) => s.kind === 'tool').length,
-              })}
-              {toolStats.length ? ` · ${toolStats.join(' · ')}` : ''}
-            </span>
+      {reasoning ? (
+        <div className="chat-fold">
+          <button
+            type="button"
+            className="chat-fold__head chat-role--think"
+            aria-expanded={thinkOpen}
+            onClick={() => setThinkOpen(!thinkOpen)}
+          >
+            <Chevron open={thinkOpen} />
+            {t('chat:traj.reasoning')}
+          </button>
+          {thinkOpen ? (
+            <div className="chat-fold__body chat-md">
+              <ChatMarkdown content={reasoning} runCode={false} />
+            </div>
           ) : null}
         </div>
       ) : null}
       {bodyText ? (
-        <div className={`chat-round__text chat-md${long && !textOpen ? ' is-clamped' : ''}`}>
-          <ChatMarkdown content={bodyText} runCode={false} />
-        </div>
-      ) : null}
-      {long ? (
-        <button
-          type="button"
-          className="chat-round__toggle small"
-          onClick={() => setTextOpen(!textOpen)}
-        >
-          {textOpen ? t('chat:trace.collapseText') : t('chat:trace.expandText')}
-        </button>
-      ) : null}
-      {reasoning ? (
-        <div className="chat-round__reason">
-          <span className="chat-round__reasonlabel chat-role--think">
-            {t('chat:traj.reasoning')}
-          </span>
-          <div
-            className={`chat-round__reasontext chat-md${reasonLong && !reasonOpen ? ' is-clamped' : ''}`}
+        <div className="chat-fold">
+          <button
+            type="button"
+            className="chat-fold__head chat-role--assistant"
+            aria-expanded={textOpen}
+            onClick={() => setTextOpen(!textOpen)}
           >
-            <ChatMarkdown content={reasoning} runCode={false} />
-          </div>
-          {reasonLong ? (
-            <button
-              type="button"
-              className="chat-round__toggle small"
-              onClick={() => setReasonOpen(!reasonOpen)}
-            >
-              {reasonOpen ? t('chat:trace.collapseText') : t('chat:trace.expandText')}
-            </button>
-          ) : null}
-          {block.reasoningTruncated ? (
-            <div className="chat-round__note small muted">{t('chat:traj.reasoningTruncated')}</div>
+            <Chevron open={textOpen} />
+            {block.live ? (
+              <>
+                <span className="chat-trace__pulse" aria-hidden />
+                {t('chat:trace.outputting')}
+              </>
+            ) : (
+              t('chat:trace.roundOutput')
+            )}
+          </button>
+          {textOpen ? (
+            <div className="chat-fold__body chat-md">
+              <ChatMarkdown content={bodyText} runCode={false} />
+            </div>
           ) : null}
         </div>
-      ) : null}
-      {meta.length ? <div className="chat-round__meta small muted">{meta.join(' · ')}</div> : null}
-      {llm?.runId ? (
-        <button
-          type="button"
-          className="chat-round__rawbtn"
-          onClick={() => setRawLog({ runId: llm.runId as string, round: block.round ?? -1 })}
-        >
-          {t('chat:rawlog.open')}
-        </button>
       ) : null}
       <RoundToolRows steps={block.tools} />
     </section>

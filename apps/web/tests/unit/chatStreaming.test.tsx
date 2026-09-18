@@ -5,7 +5,7 @@
  * the slot; bubble rendering lives in MessageList.
  */
 
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -95,11 +95,12 @@ describe('MessageList streaming', () => {
     act(() => {
       dispatch('agent.delta', { round: 1, text: '打字中', subagent: 'chat' });
     });
-    // The live round block carries the streaming text.
-    const roundText = container.querySelector('.chat-round__text');
-    expect(roundText).not.toBeNull();
-    expect(roundText?.textContent).toContain('打字中');
+    // The live round folding row carries the streaming text (collapsed until clicked).
+    expect(screen.getAllByText(/正在输出/).length).toBeGreaterThanOrEqual(1);
     expect(container.querySelector('.chat-bubble--agent .chat-caret')).toBeNull();
+    const foldHead = [...container.querySelectorAll('.chat-fold__head')].at(-1) as Element;
+    fireEvent.click(foldHead);
+    expect(container.querySelector('.chat-fold__body')?.textContent).toContain('打字中');
     act(() => {
       dispatch('agent.message', { content: '正式回复' });
     });

@@ -275,6 +275,7 @@ function Bubble({ msg, subject }: { msg: ChatMessage; subject: string }) {
   const { t } = useTranslation('chat');
   const addToast = useUIStore((s) => s.addToast);
   const [copied, setCopied] = useState(false);
+  const [rateOpen, setRateOpen] = useState(false);
   if (msg.role === 'system') {
     return <div className="chat-system">{msg.content}</div>;
   }
@@ -294,18 +295,29 @@ function Bubble({ msg, subject }: { msg: ChatMessage; subject: string }) {
     }
   };
 
+  // The action bar lives OUTSIDE the bubble (below it), so user bubbles keep
+  // their clean pill shape; rating expands in place from the bar.
   return (
-    <div className={`${cls} chat-bubble--hasactions`}>
-      <div className="chat-md">
-        <ChatMarkdown content={msg.content} />
+    <div className="chat-entry">
+      <div className={cls} role={error ? 'alert' : undefined}>
+        <div className="chat-md">
+          <ChatMarkdown content={msg.content} />
+        </div>
       </div>
       <div className="chat-msg-actions">
         <button type="button" onClick={() => void onCopy()} aria-label={t('chat:msg.copy')}>
           {copied ? t('chat:msg.copied') : t('chat:msg.copy')}
         </button>
         <MessageForkButton msg={msg} />
+        {msg.role === 'agent' && !error ? (
+          <button type="button" aria-expanded={rateOpen} onClick={() => setRateOpen(!rateOpen)}>
+            {t('chat:rate.open')}
+          </button>
+        ) : null}
       </div>
-      {msg.role === 'agent' && !error ? <RateBar subject={subject} /> : null}
+      {msg.role === 'agent' && !error && rateOpen ? (
+        <RateBar subject={subject} onDone={() => setRateOpen(false)} />
+      ) : null}
     </div>
   );
 }
@@ -362,22 +374,18 @@ function MessageForkButton({ msg }: { msg: ChatMessage }) {
 /** Star rating + comment for the finished turn; the verdict lands in agent
  *  memory (rate_turn) and guides later execution. Not persisted per message:
  *  the submission itself is the memory, so a refresh resets the form. */
-function RateBar({ subject }: { subject: string }) {
+function RateBar({ subject, onDone }: { subject: string; onDone: () => void }) {
   const { t } = useTranslation('chat');
   const addToast = useUIStore((s) => s.addToast);
   const [score, setScore] = useState(0);
   const [comment, setComment] = useState('');
-  const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
-  if (done) {
-    return <div className="chat-rate chat-rate--done small muted">{t('chat:rate.done')}</div>;
-  }
   const submit = async () => {
     if (busy || score === 0) return;
     setBusy(true);
     try {
       await rateTurn(score, comment.trim(), subject.slice(0, 60));
-      setDone(true);
+      onDone();
     } catch (err) {
       addToast({
         type: 'error',

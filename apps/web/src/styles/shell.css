@@ -2902,15 +2902,20 @@ a.chat-card:hover {
    Chat execution UX: message actions / turn rating / raw LLM log drawer /
    sidebar session management. Appended 2026-09-19.
    ========================================================================== */
+.chat-entry {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
 .chat-msg-actions {
   display: flex;
   gap: 2px;
-  margin-top: 6px;
+  margin-top: 4px;
   opacity: 0;
   transition: opacity var(--dur-fast, 150ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1));
 }
-.chat-bubble--hasactions:hover .chat-msg-actions,
-.chat-bubble--hasactions:focus-within .chat-msg-actions {
+.chat-entry:hover .chat-msg-actions,
+.chat-entry:focus-within .chat-msg-actions {
   opacity: 1;
 }
 .chat-msg-actions button {
@@ -2926,12 +2931,102 @@ a.chat-card:hover {
   color: var(--text-1);
   background: rgba(120, 120, 128, 0.14);
 }
-.chat-bubble--user .chat-msg-actions button {
-  color: rgba(255, 255, 255, 0.75);
+/* Folding rows inside a round: thinking / output collapsed by default */
+.chat-fold {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
-.chat-bubble--user .chat-msg-actions button:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.16);
+.chat-fold__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  border: none;
+  background: none;
+  padding: 3px 6px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-500);
+}
+.chat-fold__head:hover {
+  background: var(--bg-200);
+}
+.chat-fold__body {
+  margin: 4px 0 2px 12px;
+  padding: 6px 10px;
+  border-left: 2px solid var(--bg-300);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-700);
+  max-height: none;
+}
+
+/* Log tab: every recorded LLM round of the session, verbatim */
+.chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 2px 20px;
+  overflow-y: auto;
+}
+.chat-log--empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--text-500);
+  padding: 40px 0;
+}
+.chat-log__round {
+  border: 1px solid var(--bg-300);
+  border-radius: 12px;
+  background: var(--bg-100);
+  overflow: hidden;
+}
+.chat-log__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--bg-300);
+}
+.chat-log__meta {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-500);
+}
+.chat-log__tabs {
+  display: flex;
+  gap: 4px;
+}
+.chat-log__tab {
+  border: none;
+  background: none;
+  color: var(--text-500);
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.chat-log__tab.is-active {
+  background: var(--bg-200);
+  color: var(--text-800);
+  font-weight: 600;
+}
+.chat-log__body {
+  margin: 0;
+  padding: 12px;
+  max-height: 380px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-700);
 }
 
 .chat-rate {
@@ -3000,105 +3095,6 @@ a.chat-card:hover {
 .chat-round__rawbtn:hover {
   color: var(--text-1);
   background: rgba(120, 120, 128, 0.14);
-}
-
-.chat-rawlog {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(520px, 46vw);
-  z-index: var(--z-modal, 1000);
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-100);
-  border-left: 1px solid var(--bg-300);
-  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.18);
-  animation: sheetIn var(--dur-base, 200ms) var(--ease-apple) both;
-}
-.chat-rawlog__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--bg-300);
-}
-.chat-rawlog__title {
-  font-weight: 700;
-  font-size: 13.5px;
-  color: var(--text-800);
-}
-.chat-rawlog__close {
-  border: none;
-  background: none;
-  color: var(--text-500);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 4px 8px;
-  border-radius: 6px;
-}
-.chat-rawlog__close:hover {
-  background: var(--bg-200);
-  color: var(--text-1);
-}
-.chat-rawlog__note {
-  padding: 10px 14px;
-}
-.chat-rawlog__tabs {
-  display: flex;
-  gap: 4px;
-  padding: 8px 14px 0;
-}
-.chat-rawlog__tab {
-  border: none;
-  background: none;
-  color: var(--text-500);
-  font-size: 12.5px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  cursor: pointer;
-}
-.chat-rawlog__tab.is-active {
-  background: var(--bg-200);
-  color: var(--text-800);
-  font-weight: 600;
-}
-.chat-rawlog__body {
-  flex: 1 1 auto;
-  overflow: auto;
-  margin: 10px 14px 14px;
-  padding: 12px;
-  border: 1px solid var(--bg-300);
-  border-radius: 10px;
-  background: var(--bg-200);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--text-700);
-}
-.chat-rawlog__rounds {
-  list-style: none;
-  margin: 8px 14px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.chat-rawlog__rounds button {
-  width: 100%;
-  text-align: left;
-  border: 1px solid var(--bg-300);
-  background: var(--bg-200);
-  color: var(--text-700);
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.chat-rawlog__rounds button:hover {
-  background: var(--bg-300);
 }
 
 .sidebar-sessions__row {
