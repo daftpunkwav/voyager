@@ -1,10 +1,10 @@
 """SkillOrganizer: cadence trigger, repeated-flow detection from episodic
-tool rows, confirmation-gated skill drafts, no re-proposal of saved flows."""
+tool rows, non-blocking skill.proposed notifications, no re-proposal of an
+already-surfaced flow, and exclusion of single-tool loops."""
 
 from __future__ import annotations
 
 from agent.memory.episodic import EpisodicMemory
-from agent.skills.loader import SkillLoader
 from agent.skills.organizer import SkillOrganizer
 
 
@@ -23,36 +23,48 @@ def _seed(episodic: EpisodicMemory, runs: int) -> None:
 
 
 class TestOrganizer:
-    async def test_end_to_end_repeated_flow_becomes_skill(self, tmp_path) -> None:
+    async def test_repeated_flow_is_proposed_once_via_event(self, tmp_path) -> None:
         episodic = EpisodicMemory(tmp_path / "e.db")
         _seed(episodic, 3)
-        asked: list[str] = []
+        published: list[dict] = []
 
-        async def _confirm(prompt: str) -> bool:
-            asked.append(prompt)
-            return True
+        async def _emit(type_: str, **payload) -> None:
+            published.append({"type": type_, **payload})
 
-        org = SkillOrganizer(episodic, tmp_path / "skills", confirm=_confirm, settings=_Settings(1))
+        org = SkillOrganizer(episodic, emit=_emit, settings=_Settings(1))
         hits = org.detect()
         assert hits and hits[0]["sequence"] == ["grep", "read_file"] and hits[0]["count"] == 3
         proposal = org.maybe_propose()
         assert proposal is not None
-        saved = await proposal
-        assert len(saved) == 1 and saved[0].name == "SKILL.md"
-        assert "grep -> read_file" in asked[0]
-        # The user skills directory is scanned by the loader: the draft is a real skill
-        index = SkillLoader([tmp_path / "skills"]).index()
-        assert any(e["name"].startswith("auto-grep-read_file") for e in index)
-        # Second pass: already saved, nothing proposed again
-        assert await org.propose_and_save() == []
+        out = await proposal
+        assert len(published) == 1
+        assert published[0]["type"] == "skill.proposed"
+        assert published[0]["sequence"] == ["grep", "read_file"]
+        assert published[0]["count"] == 3
+        assert out == [
+            {"name": "auto-grep-read_file", "sequence": ["grep", "read_file"], "count": 3}
+        ]
+        # No file is written at proposal time: saving is propose_skill's job
+        assert not (tmp_path / "skills").exists()
+        # Second pass: the same flow is not re-surfaced
+        assert await org.propose() == []
+        episodic.close()
+
+    async def test_single_tool_loop_is_not_a_flow(self, tmp_path) -> None:
+        """A repeated identical call is a loop, not a skill candidate."""
+        episodic = EpisodicMemory(tmp_path / "e.db")
+        for i in range(6):
+            episodic.log("tool", "settings__set_theme", {"ok": True}, run_id=f"r{i % 2}")
+        org = SkillOrganizer(episodic, settings=None)
+        assert org.detect() == []
         episodic.close()
 
     async def test_cadence_and_off_switch(self, tmp_path) -> None:
         episodic = EpisodicMemory(tmp_path / "e.db")
         _seed(episodic, 3)
-        org = SkillOrganizer(episodic, tmp_path / "skills", settings=_Settings(0))
+        org = SkillOrganizer(episodic, emit=None, settings=_Settings(0))
         assert org.maybe_propose() is None  # 0 = off
-        org = SkillOrganizer(episodic, tmp_path / "skills", settings=_Settings(10))
+        org = SkillOrganizer(episodic, emit=_sink, settings=_Settings(10))
         assert org.maybe_propose() is None  # 6 rows < 10
         _seed(episodic, 2)
         proposal = org.maybe_propose()
@@ -61,14 +73,6 @@ class TestOrganizer:
         assert org.maybe_propose() is None  # counter advanced; no new rows yet
         episodic.close()
 
-    async def test_declined_confirmation_writes_nothing(self, tmp_path) -> None:
-        episodic = EpisodicMemory(tmp_path / "e.db")
-        _seed(episodic, 3)
 
-        async def _no(_prompt: str) -> bool:
-            return False
-
-        org = SkillOrganizer(episodic, tmp_path / "skills", confirm=_no)
-        assert await org.propose_and_save() == []
-        assert not (tmp_path / "skills").exists()
-        episodic.close()
+async def _sink(*_a, **_k) -> None:
+    return None

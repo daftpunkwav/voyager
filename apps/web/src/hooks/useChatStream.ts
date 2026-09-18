@@ -31,6 +31,7 @@ const STREAM_PATTERNS = [
   EventType.AGENT_STEP,
   EventType.AGENT_DELTA,
   EventType.AGENT_POLICY_NOTIFY,
+  EventType.SKILL_PROPOSED,
   'task.*', // subscription glob, not a concrete type
   EventType.NOTE_CREATED,
   EventType.WORKSPACE_SWITCHED,
@@ -89,6 +90,22 @@ export function useChatStream(onNavigate: (path: string) => void) {
         // L1 permission notice: surface as an info toast only, never into the chat timeline
         const msg = String(ev.payload?.message ?? '').trim();
         if (msg) useUIStore.getState().addToast({ type: 'info', message: msg });
+        return;
+      }
+      if (ev.type === EventType.SKILL_PROPOSED) {
+        // Skill proposal: a non-blocking sidebar notification (toast + activity
+        // feed), never the ask_user modal — agreeing happens in conversation
+        const sequence = Array.isArray(ev.payload?.sequence) ? ev.payload.sequence : [];
+        const flow = sequence.map((s) => String(s)).join(' → ');
+        if (flow) {
+          useUIStore.getState().addToast({
+            type: 'info',
+            message: i18n.t('chat:skill.proposed', {
+              flow,
+              count: Number(ev.payload?.count ?? 0),
+            }),
+          });
+        }
         return;
       }
       if (ev.type === EventType.WORKSPACE_SWITCHED) {

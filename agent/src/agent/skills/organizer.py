@@ -1,43 +1,54 @@
-"""Skill auto-organization: find repeated tool call sequences and propose
-saving them as skills (L1 with confirmation).
+"""Skill auto-organization: find repeated tool call sequences and surface
+them as non-blocking skill proposals on the event stream.
 
 Responsibilities:
 - detect(): find repeated consecutive tool-call sequences in episodic memory
-- propose_and_save(): draft a skill file from a repeated flow and write it only
-  after user confirmation (L1); flows already saved are not proposed again
+  (a "flow" involves at least two distinct tools — a repeated identical call
+  is a loop for the LoopDetector to break, not a skill candidate)
+- propose(): publish a skill.proposed event per hit via the injected emit
+  callback. Non-blocking by design: no file is written here and the ask_user
+  channel is never used; when the user agrees in conversation, the agent
+  saves the skill through the propose_skill tool.
 - maybe_propose(): cadence trigger - every N new tool episodes (hot-read
   setting, 0 = off) returns the proposal coroutine for the caller to schedule
 """
 
 from __future__ import annotations
 
+import logging
 from collections import Counter
-from collections.abc import Awaitable
-from pathlib import Path
+from collections.abc import Awaitable, Callable
 
-from agent.contracts import ConfirmFn, SettingsReader
+from agent.contracts import SettingsReader
 from agent.memory.episodic import EpisodicMemory
 
-_TEMPLATE = "# {name}\n\nAuto-organized from a repeated flow (occurred {count} times).\n\n## Steps\n{steps}\n"
+log = logging.getLogger("agent.skills.organizer")
+
+#: Emitted per proposal: {name, sequence, count}. The frontend turns it into
+#: a sidebar notification; the vocabulary constant lives in platform_contracts.
+SKILL_PROPOSED_EVENT = "skill.proposed"
 
 
 class SkillOrganizer:
     def __init__(
         self,
         episodic: EpisodicMemory,
-        skills_dir: str | Path,
         *,
-        confirm: ConfirmFn | None = None,
+        emit: Callable[..., Awaitable[None]] | None = None,
         settings: SettingsReader | None = None,
     ) -> None:
+        """emit mirrors RuntimeEvents.emit(type, **payload); None disables
+        proposing (detection-only callers)."""
         self._episodic = episodic
-        self._dir = Path(skills_dir)
-        self._confirm = confirm
+        self._emit = emit
         self._settings = settings
         self._checked_at = 0  # tool-episode count at the last cadence check
+        self._proposed: set[tuple[str, ...]] = set()  # sequences already surfaced
 
     def detect(self, *, min_count: int = 3, seq_len: int = 2) -> list[dict]:
-        """Find repeated consecutive sequences in the episodic memory's tool call stream."""
+        """Find repeated consecutive sequences in the episodic memory's tool
+        call stream; sequences of one repeated identical tool are excluded
+        (that is a loop, not a flow)."""
         entries = self._episodic.recent(limit=500, kind="tool")
         entries.reverse()  # chronological order
         by_run: dict[str, list[str]] = {}
@@ -48,14 +59,16 @@ class SkillOrganizer:
             for i in range(len(names) - seq_len + 1):
                 grams[tuple(names[i : i + seq_len])] += 1
         return [
-            {"sequence": list(seq), "count": n} for seq, n in grams.most_common() if n >= min_count
+            {"sequence": list(seq), "count": n}
+            for seq, n in grams.most_common()
+            if n >= min_count and len(set(seq)) >= 2
         ]
 
-    def maybe_propose(self) -> Awaitable[list[Path]] | None:
+    def maybe_propose(self) -> Awaitable[list[dict]] | None:
         """Cadence: once every `agent.skills.organize_every` new tool episodes
         (0 = off). Returns the proposal coroutine on trigger turns so the
         caller schedules it in the background, None otherwise."""
-        if self._settings is None:
+        if self._settings is None or self._emit is None:
             return None
         try:
             every = int(self._settings.get("agent.skills.organize_every") or 0)
@@ -67,29 +80,31 @@ class SkillOrganizer:
         if total - self._checked_at < every:
             return None
         self._checked_at = total
-        return self.propose_and_save()
+        return self.propose()
 
-    async def propose_and_save(self, *, min_count: int = 3, seq_len: int = 2) -> list[Path]:
-        """For each repeated pattern: ask the user at L1 (when a confirmation channel exists)
-        and write a SKILL.md draft on approval. Already-saved flows are skipped."""
-        saved: list[Path] = []
+    async def propose(self, *, min_count: int = 3, seq_len: int = 2) -> list[dict]:
+        """Publish skill.proposed events for repeated flows; each flow is
+        surfaced only once per process lifetime (a restart may re-surface it,
+        which is acceptable for a notification)."""
+        out: list[dict] = []
         for hit in self.detect(min_count=min_count, seq_len=seq_len):
-            name = "auto-" + "-".join(hit["sequence"])[:40]
-            target = self._dir / name
-            if (target / "SKILL.md").exists():
+            seq = tuple(hit["sequence"])
+            if seq in self._proposed:
                 continue
-            if self._confirm is not None:
-                ok = await self._confirm(
-                    f"Found a repeated flow {' -> '.join(hit['sequence'])} (occurred {hit['count']} times). "
-                    "Save it as a skill?"
-                )
-                if not ok:
-                    continue
-            target.mkdir(parents=True, exist_ok=True)
-            steps = "\n".join(f"{i + 1}. {s}" for i, s in enumerate(hit["sequence"]))
-            (target / "SKILL.md").write_text(
-                _TEMPLATE.format(name=name, count=hit["count"], steps=steps),
-                encoding="utf-8",
-            )
-            saved.append(target / "SKILL.md")
-        return saved
+            self._proposed.add(seq)
+            proposal = {
+                "name": "auto-" + "-".join(hit["sequence"])[:40],
+                "sequence": hit["sequence"],
+                "count": hit["count"],
+            }
+            try:
+                await self._emit(SKILL_PROPOSED_EVENT, **proposal)
+            except Exception:  # a failed notification must not break the turn
+                log.warning("publishing skill proposal failed", exc_info=True)
+                self._proposed.discard(seq)
+                continue
+            out.append(proposal)
+        return out
+
+
+__all__ = ["SKILL_PROPOSED_EVENT", "SkillOrganizer"]

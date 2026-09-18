@@ -34,6 +34,8 @@ export const EventType = {
   AGENT_POLICY_NOTIFY: 'agent.policy.notify',
   /** Agent asks the frontend to navigate */
   AGENT_NAVIGATE: 'agent.navigate',
+  /** Agent detected a repeated tool flow and proposes saving it as a skill */
+  SKILL_PROPOSED: 'skill.proposed',
   /** Note lifecycle */
   NOTE_CREATED: 'note.created',
   NOTE_EDITED: 'note.edited',

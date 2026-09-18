@@ -73,6 +73,7 @@ _STREAM_TYPES = (
     DomainEvent.AGENT_STEP,
     DomainEvent.AGENT_DELTA,
     DomainEvent.AGENT_POLICY_NOTIFY,
+    DomainEvent.SKILL_PROPOSED,
     DomainEvent.NOTE_CREATED,
     DomainEvent.SOURCE_ADDED,
     DomainEvent.SOURCE_READY,

@@ -174,6 +174,19 @@ export function summarize(ev: FeedEvent): RowSummary {
         text: i18n.t('chat:feed.agentNavigate', { who, path: clip(p.path ?? p.to, 20) }),
         tone: 'muted',
       };
+    case EventType.SKILL_PROPOSED: {
+      // Sidebar notification entry: a repeated flow the agent suggests saving as a skill
+      const sequence = Array.isArray(p.sequence) ? p.sequence : [];
+      const flow = sequence.map((s) => String(s)).join(' → ');
+      return {
+        text: i18n.t('chat:feed.skillProposed', {
+          who,
+          flow: clip(flow, 60),
+          count: Number(p.count ?? 0),
+        }),
+        tone: 'normal',
+      };
+    }
     default:
       return { text: ev.type, tone: 'muted' };
   }

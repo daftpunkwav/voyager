@@ -314,5 +314,7 @@
   "traj.truncated": "Result spilled to the workspace spill directory; ask the agent to page through it",
   "traj.ttft": "First token",
   "traj.untitledTurn": "A turn",
-  "panel.mainAgent": "Lucien (main)"
+  "panel.mainAgent": "Lucien (main)",
+  "skill.proposed": "Repeated flow \"{{flow}}\" detected ({{count}} times); tell Lucien to save it as a skill when needed",
+  "feed.skillProposed": "{{who}} suggests turning the repeated flow \"{{flow}}\" into a skill (occurred {{count}} times)"
 }

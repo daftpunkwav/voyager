@@ -140,29 +140,29 @@ class TestOrganizer:
 
     def test_detect_repeated_sequence(self, tmp_path) -> None:
         ep = self._fill(tmp_path / "ep.db")
-        org = SkillOrganizer(ep, tmp_path / "skills")
+        org = SkillOrganizer(ep)
         hits = ep and org.detect(min_count=3, seq_len=2)
         assert hits == [{"sequence": ["read_file", "write_file"], "count": 3}]
         assert org.detect(min_count=4) == []  # below the threshold, nothing reported
 
-    async def test_propose_saves_after_confirm(self, tmp_path) -> None:
+    async def test_propose_publishes_event_without_writing(self, tmp_path) -> None:
+        ep = self._fill(tmp_path / "ep.db")
+        published: list[dict] = []
+
+        async def emit(type_: str, **payload) -> None:
+            published.append({"type": type_, **payload})
+
+        org = SkillOrganizer(ep, emit=emit)
+        proposed = await org.propose(min_count=3)
+        assert len(published) == 1
+        assert published[0]["type"] == "skill.proposed"
+        assert published[0]["sequence"] == ["read_file", "write_file"]
+        assert proposed[0]["count"] == 3
+        assert not (tmp_path / "skills").exists()  # saving is propose_skill's job
+
+    async def test_no_emit_channel_proposes_nothing(self, tmp_path) -> None:
         ep = self._fill(tmp_path / "ep.db")
 
-        async def yes(_prompt: str) -> bool:
-            return True
-
-        org = SkillOrganizer(ep, tmp_path / "skills", confirm=yes)
-        saved = await org.propose_and_save(min_count=3)
-        assert len(saved) == 1
-        text = saved[0].read_text(encoding="utf-8")
-        assert "occurred 3 times" in text and "read_file" in text
-
-    async def test_user_decline_skips(self, tmp_path) -> None:
-        ep = self._fill(tmp_path / "ep.db")
-
-        async def no(_prompt: str) -> bool:
-            return False
-
-        org = SkillOrganizer(ep, tmp_path / "skills", confirm=no)
-        assert await org.propose_and_save(min_count=3) == []
+        org = SkillOrganizer(ep)
+        assert await org.propose(min_count=3) == []
         assert not (tmp_path / "skills").exists()

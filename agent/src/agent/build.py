@@ -627,9 +627,14 @@ def build_agent(
     # fresh data dir simply starts empty. Closed with the app.
     session_store = SessionStore(data_dir / "sessions.db")
     distiller = Distiller(llm=distiller_llm, memory=memory, settings=settings)
-    # Skill self-organization: repeated tool flows in episodic memory become
-    # skill drafts under the user skills dir after an L1 confirmation
-    organizer = SkillOrganizer(memory.episodic, skills_dir, confirm=_confirm, settings=settings)
+
+    # Skill self-organization: repeated tool flows in episodic memory surface
+    # as non-blocking skill.proposed notifications (never the ask_user modal);
+    # saving goes through the propose_skill tool once the user agrees.
+    async def _emit_skill_proposed(**payload: Any) -> None:
+        await events.emit(DomainEvent.SKILL_PROPOSED, **payload)
+
+    organizer = SkillOrganizer(memory.episodic, emit=_emit_skill_proposed, settings=settings)
     task_graph = TaskGraph()  # dependency edges between named task dispatches
     blackboard = Blackboard()  # task-scoped shared notes (read/write tools bind it)
     # One anti-bombing budget shared by every assistant-initiated channel
