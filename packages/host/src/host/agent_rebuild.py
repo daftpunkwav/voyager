@@ -157,12 +157,17 @@ async def _teardown_agent(
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
-    with suppress(Exception):
-        await old.scheduler.stop_queue()
-    with suppress(Exception):
-        await old.drain()
-    with suppress(Exception):
-        await old.scheduler.shutdown()
+    # Teardown must continue past a failed step (same contract as
+    # close_quietly), but the failure is logged instead of vanishing
+    for name, make in (
+        ("scheduler.stop_queue", old.scheduler.stop_queue),
+        ("drain", old.drain),
+        ("scheduler.shutdown", old.scheduler.shutdown),
+    ):
+        try:
+            await make()
+        except Exception:
+            log.warning("agent teardown step %s failed", name, exc_info=True)
     close_quietly(old, what="agent")
 
 
