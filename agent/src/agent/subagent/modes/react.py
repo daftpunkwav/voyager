@@ -85,9 +85,7 @@ def _emergency_truncate(messages: list[dict[str, Any]], budget: int) -> None:
                 elif isinstance(part, dict) and isinstance(part.get("text"), str):
                     text = part["text"]
                     if len(text) > cap:
-                        truncated.append(
-                            {**part, "text": text[:cap] + " …[上下文溢出截断]"}
-                        )
+                        truncated.append({**part, "text": text[:cap] + " …[上下文溢出截断]"})
                         changed = True
                     else:
                         truncated.append(part)
@@ -199,12 +197,14 @@ async def run_react(
         if governor is not None:
             report = await governor.enforce(messages)
             if report is not None:
-                await on_step(
-                    "system",
-                    "compact",
-                    f"上下文已自动压缩({report.get('mode', 'mechanical')})",
-                    {"op": "compact", "mode": report.get("mode", "mechanical")},
-                )
+                mode = report.get("mode", "mechanical")
+                if mode == "prune":
+                    summary = f"旧工具结果已清理(回收约 {report.get('recovered_tokens', 0)} tokens)"
+                    op = "prune"
+                else:
+                    summary = f"上下文已自动压缩({mode})"
+                    op = "compact"
+                await on_step("system", "compact", summary, {"op": op, "mode": mode})
         else:
             messages[:] = compress(messages, budget=compress_budget, prune=False)
         # Round timing: wall latency always; TTFT only when the caller
@@ -388,29 +388,32 @@ async def run_react(
             assistant_entry["thinking_blocks"] = [dict(b) for b in reply.thinking_blocks]
         messages.append(assistant_entry)
         tool_calls_used += len(executable)
-        if len(executable) > 1 and all(toolbelt.concurrent_safe(c.name) for c in executable):
-            # Read-only batch: run in parallel, back-fill in call order so the
-            # transcript stays deterministic
-            batch_start = time.perf_counter()
-            results = await asyncio.gather(
-                *(_run_tool(toolbelt, c, on_event, deadline) for c in executable)
-            )
-            batch_ms = round((time.perf_counter() - batch_start) * 1000, 1)
-            for call, (outcome, _ms) in zip(executable, results):
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": call.id,
-                        "name": call.name,
-                        "content": outcome.text,
-                    }
+        # Consecutive-safe partitioning (claude-code style): runs of
+        # concurrent-safe calls execute in parallel, a write/unsafe call forms
+        # a singleton serial batch — mixed rounds no longer serialize wholly.
+        # Results back-fill in call order either way, so the transcript stays
+        # deterministic.
+        batches: list[list[ToolCall]] = []
+        for call in executable:
+            safe = toolbelt.concurrent_safe(call.name)
+            joins_prev = safe and bool(batches) and toolbelt.concurrent_safe(batches[-1][-1].name)
+            if joins_prev:
+                batches[-1].append(call)
+            else:
+                batches.append([call])
+        for batch in batches:
+            if len(batch) > 1:
+                batch_start = time.perf_counter()
+                outcomes = await asyncio.gather(
+                    *(_run_tool(toolbelt, c, on_event, deadline) for c in batch)
                 )
-                await on_step(
-                    "tool", call.name, outcome.text[:120], tool_detail(call, outcome, batch_ms)
-                )
-        else:
-            for call in executable:
+                batch_ms = round((time.perf_counter() - batch_start) * 1000, 1)
+                pairs = [(call, outcome, batch_ms) for call, (outcome, _ms) in zip(batch, outcomes)]
+            else:
+                call = batch[0]
                 outcome, call_ms = await _run_tool(toolbelt, call, on_event, deadline)
+                pairs = [(call, outcome, call_ms)]
+            for call, outcome, ms in pairs:
                 # The tool entry is appended before reporting: the mid-turn snapshot
                 # is captured inside on_step from messages and must see the just
                 # landed result; in multi-call rounds the tail at on_step time may
@@ -424,9 +427,7 @@ async def run_react(
                         "content": outcome.text,
                     }
                 )
-                await on_step(
-                    "tool", call.name, outcome.text[:120], tool_detail(call, outcome, call_ms)
-                )
+                await on_step("tool", call.name, outcome.text[:120], tool_detail(call, outcome, ms))
         if tripped is not None or truncated:
             if tripped is not None:
                 reminder = advisory.on_trip(

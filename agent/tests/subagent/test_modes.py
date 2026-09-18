@@ -649,6 +649,60 @@ class TestOtherModes:
         assert result == "完成"
         assert events == ["start:read", "end:read", "start:write", "end:write"]
 
+    async def test_mixed_round_partitions_consecutive_safe_runs(self) -> None:
+        """Consecutive safe calls batch and run in parallel; a write splits the
+        round into serial segments (read_a+read_b parallel, write alone, read_c
+        alone) — partitioning instead of all-or-nothing serialization."""
+        events: list[str] = []
+        running: set[str] = set()
+
+        def make(name: str, safe: bool) -> AgentTool:
+            async def work() -> str:
+                running.add(name)
+                events.append(f"start:{name}:{len(running)}")
+                await asyncio.sleep(0.12)
+                running.discard(name)
+                events.append(f"end:{name}")
+                return "ok"
+
+            return AgentTool(name=name, description="w", handler=work, concurrent_safe=safe)
+
+        belt = Toolbelt(
+            {
+                "read_a": make("read_a", True),
+                "read_b": make("read_b", True),
+                "write": make("write", False),
+                "read_c": make("read_c", True),
+            },
+            PolicyEngine(),
+        )
+        llm = FakeLLM(
+            [
+                LLMReply(
+                    tool_calls=(
+                        ToolCall("1", "read_a", {}),
+                        ToolCall("2", "read_b", {}),
+                        ToolCall("3", "write", {}),
+                        ToolCall("4", "read_c", {}),
+                    )
+                ),
+                LLMReply(text="完成"),
+            ]
+        )
+        messages = _msgs()
+        result = await run_mode(
+            Mode.REACT, llm=llm, toolbelt=belt, messages=messages, limits=ModeLimits()
+        )
+        assert result == "完成"
+        # read_a and read_b overlapped: whoever entered second saw 2 in flight
+        assert any(e.startswith("start:read_") and e.endswith(":2") for e in events)
+        # ...while the write and the trailing read ran alone
+        assert "start:write:1" in events
+        assert "start:read_c:1" in events
+        # back-fill keeps call order
+        tool_rows = [m for m in messages if m.get("role") == "tool"]
+        assert [m["tool_call_id"] for m in tool_rows] == ["1", "2", "3", "4"]
+
     async def test_loop_trip_mid_batch_keeps_pairing(self) -> None:
         """A duplicate call tripping mid-batch executes only the prefix and
         leaves no result-less assistant declarations behind."""

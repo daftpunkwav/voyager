@@ -62,7 +62,8 @@ def spill_result(
     head = result[:preview]
     return (
         f"{head}\n…[输出超长已截断,完整输出({len(result)} 字符)已保存到 "
-        f"{path},可用 read_file 分段查看]"
+        f"{path}。用 read_file 的 offset/limit 分段读取需要的部分,"
+        f"或派一个只读 subagent 检索该文件;禁止直接整读。]"
     )
 
 
