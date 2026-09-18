@@ -69,10 +69,14 @@ def build_router(
     @router.post(prefix + "/{name}")
     async def call_capability(name: str, request: Request):
         try:
-            body = await request.json()
-        except Exception:  # noqa: BLE001  # unparseable body treated as empty; validation reports
-            body = {}
-        try:
+            try:
+                body = await request.json()
+            except Exception as exc:  # unparseable body is a 400, not a silent {}
+                from platform_contracts import ErrorSuffix
+
+                raise ServiceError(
+                    registry.domain, ErrorSuffix.INVALID_INPUT, "request body must be valid JSON"
+                ) from exc
             if not isinstance(body, dict):
                 from platform_contracts import ErrorSuffix
 

@@ -16,7 +16,7 @@ import asyncio
 import inspect
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -228,6 +228,31 @@ def _run_guards(
         hook(req)
 
 
+def _check_required_params(
+    domain: str,
+    name: str,
+    params: Mapping[str, inspect.Parameter],
+    args: dict[str, Any],
+) -> None:
+    """Reject a keyword call that would miss required handler parameters with
+    INVALID_INPUT: without an input_model there is no coerce step, so a
+    missing argument would otherwise surface as a TypeError (500)."""
+    missing = [
+        p.name
+        for p in params.values()
+        if p.name != "_actor"
+        and p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+        and p.default is inspect.Parameter.empty
+        and p.name not in args
+    ]
+    if missing:
+        raise ServiceError(
+            domain,
+            ErrorSuffix.INVALID_INPUT,
+            f"missing required inputs: {', '.join(missing)}",
+        )
+
+
 async def _invoke(
     registry: Registry,
     cap,
@@ -245,6 +270,8 @@ async def _invoke(
     # ActorRef is injected (operations like writing secrets need to know who
     # is calling); handlers that do not declare it never see it.
     params = inspect.signature(cap.handler).parameters
+    if cap.input_model is None:
+        _check_required_params(registry.domain, name, params, args)
     inject = {"_actor": actor.actor} if (actor is not None and "_actor" in params) else {}
 
     def _call() -> Any:

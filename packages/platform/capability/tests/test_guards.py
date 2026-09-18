@@ -150,3 +150,30 @@ class TestActorInjection:
             return {"pong": True}
 
         assert await execute(reg, "ping2", AGENT_CTX, {}) == {"pong": True}
+
+
+class TestRequiredParamsWithoutModel:
+    """Without an input_model there is no coerce step: a keyword call missing
+    a required handler parameter must be rejected as INVALID_INPUT, not die
+    as a TypeError (500) inside the invocation."""
+
+    async def test_missing_required_param_400(self) -> None:
+        reg = Registry("agent")
+
+        @capability(reg, name="greet", description="needs a name")
+        async def greet(name: str, greeting: str = "hi") -> dict:
+            return {"text": f"{greeting} {name}"}
+
+        with pytest.raises(ServiceError) as exc:
+            await execute(reg, "greet", USER_CTX, {})
+        assert exc.value.body.code == "AGENT.INVALID_INPUT"
+        assert "name" in exc.value.body.message
+
+    async def test_satisfied_call_still_passes(self) -> None:
+        reg = Registry("agent")
+
+        @capability(reg, name="greet2", description="needs a name")
+        async def greet(name: str) -> dict:
+            return {"text": f"hi {name}"}
+
+        assert await execute(reg, "greet2", USER_CTX, {"name": "x"}) == {"text": "hi x"}

@@ -99,3 +99,19 @@ class TestRest:
         # no token -> local single-user; user actors are always trusted, so guarded passes too
         resp = client.post("/capabilities/guarded", json={})
         assert resp.status_code == 200
+
+    def test_unparseable_body_400(self, client) -> None:
+        """A body that fails JSON parsing is a 400 INVALID_INPUT, never a
+        silent rewrite to {} that resurfaces as 'missing required inputs'."""
+        resp = client.post(
+            "/capabilities/echo", content=b"not json", headers={"Content-Type": "application/json"}
+        )
+        assert resp.status_code == 400
+        assert resp.json()["error"]["code"] == "NOTES.INVALID_INPUT"
+
+    def test_non_object_body_400(self, client) -> None:
+        resp = client.post(
+            "/capabilities/echo", content=b"[1,2]", headers={"Content-Type": "application/json"}
+        )
+        assert resp.status_code == 400
+        assert resp.json()["error"]["code"] == "NOTES.INVALID_INPUT"
