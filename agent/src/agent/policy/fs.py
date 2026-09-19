@@ -53,11 +53,17 @@ def decide_fs(fs: FsPolicy, action) -> Decision:
         if target == root_path or root_path in target.parents:
             if action.irreversible:
                 return Decision(
-                    True, Level.L2_CONFIRM, "Deletion in a user directory requires confirmation"
+                    True,
+                    Level.L2_CONFIRM,
+                    "Deletion in a user directory requires confirmation",
+                    confirm_scope="write_roots",
                 )
             if action.write:
                 return Decision(
-                    True, Level.L2_CONFIRM, "Writes to a user directory require confirmation"
+                    True,
+                    Level.L2_CONFIRM,
+                    "Writes to a user directory require confirmation",
+                    confirm_scope="write_roots",
                 )
             return Decision(True, Level.L0_SILENT)
     # Outside the workspace jail and read-write roots: additional read-only roots allow

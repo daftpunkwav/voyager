@@ -17,7 +17,7 @@ zero-logic aggregation only. The shape is locked by
 
 ```
 core/        mechanism layer: AgentTool/Toolbelt (base), assembly-time source registry (registry),
-             execution pipeline (invoke: validate→policy→confirm→hook→retry→circuit-break→result
+             execution pipeline (invoke: validate→permissions→policy→write_roots confirm→hook→retry→circuit-break→result
              budget), result envelope (outcome), tiered activation (activate), agent
              self-capability binding (self_capability: via execute guard chain + audit)
 workspace/   read · write · edit · grep · glob · bash · todowrite (set/query/update/delete);
@@ -51,8 +51,10 @@ The tools have no settings keys of their own; behavior is affected by
   have the tool bind the same capability via
   `core/self_capability.capability_tool` (human and machine share the same
   source, audit symmetric);
-- Governance-class tools must declare `write` / `irreversible`, tiered by
-  policy (L1 notify / L2 confirm);
+- Governance-class tools must declare `write` / `irreversible` (drives the
+  no-retry rule); permission reachability comes from the central R/D class
+  table plus the `agent.permissions` modes (policy/permissions.py), and the
+  only confirmation left is writes into user-configured write_roots;
 - Exceptions (existing on one side only) must be registered in
   `agent/parity.py` with a written rationale, otherwise the parity freeze
   test goes red.
@@ -62,10 +64,10 @@ The tools have no settings keys of their own; behavior is affected by
 - Tool names strictly match human-side capability names (`install_plugin`,
   not `plugin_install`); descriptions are in Chinese and action-oriented;
 - Call failure taxonomy (verbatim runtime markers): `[参数错误]` (parameter
-  error — schema not satisfied, no side effects) → `[已拒绝]` (rejected —
-  policy / guard) → `[需确认]` / `[已取消]` (needs confirmation / cancelled,
-  L2) → `[已拦截]` (intercepted — circuit breaker) → `[工具失败]` (tool
-  failure)
+  error — schema not satisfied, no side effects) → `[权限拒绝]` (rejected —
+  the user's tool permission policy) → `[已拒绝]` (rejected — policy /
+  guard) → `[已取消]` (cancelled — the write_roots confirmation declined) →
+  `[已拦截]` (intercepted — circuit breaker) → `[工具失败]` (tool failure)
   (handler exception, including ServiceError messages);
 - A conversation instance sees only the CORE activation set on its first turn
   (including `llm__get_usage_stats`); governance tools are activated on

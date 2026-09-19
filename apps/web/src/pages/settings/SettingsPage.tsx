@@ -41,6 +41,7 @@ import { InstanceList } from '@/components/team/InstanceList';
 import { ResumableList } from '@/components/team/ResumableList';
 import { SubagentsSection } from '@/components/settings/subagents/SubagentsSection';
 import { ToolsCatalog } from '@/components/settings/tools/ToolsCatalog';
+import { ToolPermissions } from '@/components/settings/tools/ToolPermissions';
 import { PluginsBlock } from '@/components/settings/agent/PluginsBlock';
 import { McpBlock } from '@/components/settings/agent/McpBlock';
 import { SkillsBlock } from '@/components/settings/agent/SkillsBlock';
@@ -58,6 +59,7 @@ type Section =
   | 'skills'
   | 'commands'
   | 'tools'
+  | 'toolPerms'
   | 'health'
   | 'usage'
   | 'activity'
@@ -89,6 +91,7 @@ const NAV_GROUPS: {
       { id: 'skills', icon: 'skills' },
       { id: 'commands', icon: 'commands' },
       { id: 'tools', icon: 'tools' },
+      { id: 'toolPerms', icon: 'tools' },
     ],
   },
   {
@@ -476,6 +479,13 @@ export function SettingsPage() {
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('tools.title')}</h2>
               <ToolsCatalog />
+            </section>
+          )}
+
+          {section === 'toolPerms' && (
+            <section className="settings-section glass-card glass-card--overview-outer">
+              <h2>{t('toolPerms.title')}</h2>
+              <ToolPermissions />
             </section>
           )}
 

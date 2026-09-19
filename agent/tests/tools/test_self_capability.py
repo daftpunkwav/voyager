@@ -71,7 +71,10 @@ class TestCapabilityTool:
         finally:
             app.close()
 
-    async def test_irreversible_goes_through_l2_confirm(self, tmp_path) -> None:
+    async def test_irreversible_executes_without_confirm(self, tmp_path) -> None:
+        """Confirm retired: an irreversible capability tool runs even with a
+        deny-confirm channel; the write/irreversible flags now only steer the
+        no-retry rule."""
         app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
         try:
             asked: list[str] = []
@@ -86,7 +89,7 @@ class TestCapabilityTool:
             belt = _belt(app, {tool.name: tool}, confirm=_deny)
             app.memory.profile.set("k", "v")
             out = await belt.call(ToolCall("1", "clear_memory", {"zone": "profile"}))
-            assert out.startswith("[已取消]")
-            assert asked and app.memory.profile.all() == {"k": "v"}
+            assert "cleared" in out
+            assert asked == [] and app.memory.profile.all() == {}
         finally:
             app.close()

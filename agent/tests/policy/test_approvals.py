@@ -1,5 +1,6 @@
-"""Approval memory: session/persistent grants shortcut the L2 dialog,
-revocation works end to end, and the default stays ask-every-time."""
+"""Approval memory: session/persistent grants shortcut the write_roots
+confirmation dialog (the one kept confirm), revocation works end to end,
+and the default stays ask-every-time."""
 
 from __future__ import annotations
 
@@ -7,10 +8,12 @@ import pytest
 from agent.build import build_agent
 from agent.llm import FakeLLM, ToolCall
 from agent.policy.approvals import ApprovalStore
+from agent.settings import DEFS as AGENT_SETTING_DEFS
 from agent.tools import Toolbelt
 from platform_actor import ActorContext
 from platform_capability import execute
 from platform_contracts import LOCAL_USER
+from platform_settings import SettingsStore
 
 USER_CTX = ActorContext(actor=LOCAL_USER)
 
@@ -35,6 +38,23 @@ def _belt(app, answers: list[str]) -> tuple[Toolbelt, list[str]]:
         ),
         asked,
     )
+
+
+async def _app_with_write_root(tmp_path):
+    """App with one user-configured write root: writes there keep the confirm
+    dialog (the sole surviving L2), everything else executes directly."""
+    extra = tmp_path / "extra"
+    extra.mkdir()
+    settings = SettingsStore(tmp_path / "settings.db")
+    settings.register_fresh(AGENT_SETTING_DEFS)
+    await settings.set("agent.fs.write_roots", [str(extra)], LOCAL_USER)
+    app = build_agent(
+        data_dir=tmp_path / "rd",
+        workspace_dir=tmp_path / "ws",
+        llm=FakeLLM(),
+        settings_store=settings,
+    )
+    return app, extra
 
 
 class TestApprovalStore:
@@ -69,37 +89,61 @@ class TestApprovalStore:
 
 
 class TestScopedConfirm:
+    """The residual confirmation: writes into user-configured write_roots.
+    clear_memory / bash and the like no longer confirm at all (confirm
+    retired) — only the write_roots branch reaches the dialog."""
+
     async def test_always_allow_skips_future_dialogs(self, tmp_path) -> None:
-        app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
+        app, extra = await _app_with_write_root(tmp_path)
         try:
             answers = ["always"]
             belt, asked = _belt(app, answers)
-            app.memory.profile.set("k", "v")
-            out1 = await belt.call(ToolCall("1", "clear_memory", {"zone": "profile"}))
-            assert "cleared" in out1 and asked == ["clear_memory:clear_memory"]
-            out2 = await belt.call(ToolCall("2", "clear_memory", {"zone": "profile"}))
-            assert "cleared" in out2 and len(asked) == 1  # no second dialog
+            target = extra / "note.txt"
+            out1 = await belt.call(ToolCall("1", "write", {"path": str(target), "content": "x"}))
+            assert "written" in out1 and asked == [f"write:{target}"]
+            out2 = await belt.call(ToolCall("2", "write", {"path": str(target), "content": "y"}))
+            assert "written" in out2 and len(asked) == 1  # remembered grant, no second dialog
         finally:
             app.close()
 
     async def test_session_grant_then_revoke_capability(self, tmp_path) -> None:
-        app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
+        app, extra = await _app_with_write_root(tmp_path)
         try:
             answers = ["session", "deny"]
             belt, asked = _belt(app, answers)
-            out = await belt.call(ToolCall("1", "clear_memory", {"zone": "working"}))
-            assert "cleared" in out  # session grant recorded from answer 1
-            out = await belt.call(ToolCall("2", "clear_memory", {"zone": "working"}))
-            assert "cleared" in out and len(asked) == 1  # remembered for the session
+            target = extra / "note.txt"
+            out = await belt.call(ToolCall("1", "write", {"path": str(target), "content": "a"}))
+            assert "written" in out  # session grant recorded from answer 1
+            out = await belt.call(ToolCall("2", "write", {"path": str(target), "content": "b"}))
+            assert "written" in out and len(asked) == 1  # remembered for the session
             # revoke via the capability, then the dialog is back (answer 2 = deny)
             revoke = await execute(
-                app.registry, "revoke_approval", USER_CTX, {"tool": "clear_memory"}
+                app.registry, "revoke_approval", USER_CTX, {"tool": "write", "target": str(target)}
             )
             assert revoke["revoked"] >= 1
             listed = await execute(app.registry, "list_approvals", USER_CTX, {})
-            assert all(r["tool"] != "clear_memory" for r in listed)
-            out = await belt.call(ToolCall("3", "clear_memory", {"zone": "working"}))
+            assert all(r["tool"] != "write" for r in listed)
+            out = await belt.call(ToolCall("3", "write", {"path": str(target), "content": "c"}))
             assert out.startswith("[已取消]") and len(asked) == 2
+        finally:
+            app.close()
+
+    async def test_outside_write_roots_no_dialog(self, tmp_path) -> None:
+        """Workspace writes and shell commands execute directly: the confirm
+        channel is retired everywhere except write_roots."""
+        app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
+        try:
+            answers: list[str] = []
+            belt, asked = _belt(app, answers)
+            out = await belt.call(
+                ToolCall("1", "write", {"path": "inside-workspace.txt", "content": "x"})
+            )
+            assert "written" in out and asked == []  # no dialog for workspace writes
+            out = await belt.call(ToolCall("2", "bash", {"command": "definitely-not-a-real-cmd"}))
+            # The command reaches the handler (handler-level failure text),
+            # never a confirm branch rejection
+            assert "[需确认]" not in out and "[已取消]" not in out
+            assert asked == []
         finally:
             app.close()
 

@@ -184,8 +184,9 @@ class PolicyEngine:
     def _decide_skill(action: Action) -> Decision:
         """Skill-library dimension: writes land in the resident skill index
         the next turn (the same subtree file/shell tools must not touch), so
-        writes and irreversible ops need an explicit human confirmation;
-        reads stay silent."""
+        writes and irreversible ops are reported at L2 — a level invoke.py no
+        longer confirms (confirm retired; the skills subtree itself stays
+        write-protected via the fs/shell guards). Reads stay silent."""
         if action.write or action.irreversible:
             return Decision(True, Level.L2_CONFIRM, "Skill library writes require confirmation")
         return Decision(allow=True)

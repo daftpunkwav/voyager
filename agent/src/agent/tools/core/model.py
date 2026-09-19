@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from agent.policy.permissions import ToolPermissions
     from agent.runtime.recovery import CircuitBreaker
 
 from agent.contracts import ConfirmFn, NotifyFn
@@ -72,6 +73,7 @@ class ToolbeltView:
     recorder: RecorderFn | None = None
     approvals: Any = None  # policy.approvals.ApprovalStore (remembered L2 grants)
     confirm_scoped: ScopedConfirmFn | None = None
+    permissions: ToolPermissions | None = None  # tool permission modes (agent actor)
 
     def tool(self, name: str) -> AgentTool | None:
         return self.tools.get(name)

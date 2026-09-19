@@ -81,7 +81,10 @@ class TestPolicyGate:
     need an explicit human confirmation (L2); without a confirm channel the
     call is skipped and nothing is written."""
 
-    async def test_requires_confirmation_by_default(self, skills_dir: Path) -> None:
+    async def test_writes_without_confirmation_by_default(self, skills_dir: Path) -> None:
+        """Confirm retired: skill proposals land directly (the permission
+        modes decide reachability; the skills subtree stays shell/file-proof
+        via the fs guards)."""
         tool = propose_skill_tool(skills_dir)
         belt = Toolbelt({tool.name: tool}, PolicyEngine())
         out = await belt.call_detailed(
@@ -91,9 +94,9 @@ class TestPolicyGate:
                 {"name": "gated-skill", "description": "d", "content": "c"},
             )
         )
-        assert out.ok is False
-        assert "[需确认]" in out.text
-        assert not (skills_dir / "gated-skill" / "SKILL.md").exists()
+        assert out.ok is True
+        assert "[需确认]" not in out.text
+        assert (skills_dir / "gated-skill" / "SKILL.md").exists()
 
     async def test_writes_after_confirmation(self, skills_dir: Path) -> None:
         async def _allow(_prompt: str) -> bool:

@@ -19,6 +19,7 @@ from agent.context.budgets import (
     SKILL_MAX,
     TASK_CHARS,
 )
+from agent.policy.permissions import PERMISSIONS_DEFAULT
 
 # Canonical key strings. Readers (outreach budget, trigger spawns, host
 # routing) import these constants instead of repeating the literals, so a
@@ -34,6 +35,9 @@ ROUTING_KEY = "agent.llm.routing"
 OVERRIDES_KEY = "agent.llm.overrides"
 STYLE_OVERRIDES_KEY = "agent.style.overrides"
 WORKSPACE_DIR_KEY = "agent.workspace.dir"
+#: Tool-surface permission modes (policy.permissions): one mode + deny/allow
+#: lists; user_only so the agent cannot raise its own privileges.
+PERMISSIONS_KEY = "agent.permissions"
 
 DEFS = [
     SettingDef(
@@ -572,18 +576,20 @@ DEFS = [
         user_only=True,
         description="In-app capability denylist (deny wins; user-writable only)",
     ),
-    # Shell command-prefix rules: an allow hit skips the L2 confirm only for
-    # commands with no write intent (verbs/redirection); deny always rejects.
-    # Patterns are token prefixes: `git status` matches exactly; a trailing
-    # `*` (`git diff *`) matches the head plus any remaining arguments.
-    # user_only: widening the confirm envelope is the user's prerogative.
+    # Shell command-prefix rules: retired with the confirm channel (the tool
+    # permission modes replace them). allowed is no longer read by the engine;
+    # denied stays registered only as the one-time migration source into
+    # agent.permissions ("bash:" entries).
     SettingDef(
         key="agent.shell.allowed",
         module="agent",
         type=SettingType.JSON,
         default=[],
         user_only=True,
-        description="Shell command prefix allowlist (skips L2 for read-only commands; user-writable only)",
+        description=(
+            "Legacy shell prefix allowlist (unused since the confirm channel retired; "
+            "superseded by agent.permissions)"
+        ),
     ),
     SettingDef(
         key="agent.shell.denied",
@@ -591,7 +597,25 @@ DEFS = [
         type=SettingType.JSON,
         default=[],
         user_only=True,
-        description="Shell command prefix denylist (deny wins over allow; user-writable only)",
+        description=(
+            "Legacy shell prefix denylist (enforced via agent.permissions as bash: deny "
+            "prefixes, merged at read time; kept registered only as the migration source)"
+        ),
+    ),
+    # Tool-surface permission modes: one mode + two lists, default full.
+    # user_only: the agent must not be able to rewrite its own permission
+    # envelope via the settings bridge.
+    SettingDef(
+        key=PERMISSIONS_KEY,
+        module="agent",
+        type=SettingType.JSON,
+        default=PERMISSIONS_DEFAULT,
+        user_only=True,
+        description=(
+            'Tool permission policy {"mode": "full|no_dangerous|read_only", "deny": [...], '
+            '"allow": [...]}: entries are "tool", "tool.action" or "bash:<command prefix>"; '
+            "deny applies in every mode, allow only in no_dangerous (user-writable only)"
+        ),
     ),
     # Daily token quota (resource dimension): hot-read before each complete of
     # the main-conversation LLM; once the current UTC day's input+output total

@@ -68,6 +68,8 @@ export interface ToolItem {
   description: string;
   dimension?: string;
   write?: boolean;
+  /** Permission class from the backend's central table (unknown tools read as 'D'). */
+  class?: 'R' | 'D';
 }
 
 /** describe_tool payload: full metadata including the parameter schema. */

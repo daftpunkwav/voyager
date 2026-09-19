@@ -43,7 +43,9 @@ class TestTeamTools:
         finally:
             app.close()
 
-    async def test_abandon_checkpoint_requires_confirmation(self, tmp_path) -> None:
+    async def test_abandon_checkpoint_executes_without_confirm(self, tmp_path) -> None:
+        """Confirm retired: the destructive abandon reaches the handler (its
+        unknown-run error), never a confirm branch."""
         app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
         try:
             asked: list[str] = []
@@ -56,7 +58,8 @@ class TestTeamTools:
             out = await belt.call(
                 ToolCall("1", "abandon_resumable_checkpoint", {"run_id": "r-none"})
             )
-            assert out.startswith("[已取消]") and asked
+            assert "[已取消]" not in out and "[需确认]" not in out
+            assert asked == []
             listed = await belt.call(ToolCall("2", "list_resumable_checkpoints", {}))
             assert '"items"' in listed
         finally:

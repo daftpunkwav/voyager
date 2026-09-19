@@ -23,6 +23,7 @@ from agent.contracts import ConfirmFn, NotifyFn  # moved to contracts; re-export
 from agent.hooks.triggers import HookRegistry
 from agent.llm import ToolCall, ToolSpec
 from agent.policy import PolicyEngine
+from agent.policy.permissions import ToolPermissions, tool_class
 from agent.runtime.meter import Meter
 from agent.tools.core.model import (
     AgentTool,
@@ -52,6 +53,7 @@ class Toolbelt:
         recorder: RecorderFn | None = None,  # episodic recorder; shared by views
         approvals: Any = None,  # approval memory; shared by views
         confirm_scoped: ScopedConfirmFn | None = None,  # three-way L2 confirm; shared by views
+        permissions: ToolPermissions | None = None,  # tool permission modes; shared by views
     ) -> None:
         self._tools = dict(tools)
         self._policy = policy
@@ -67,6 +69,7 @@ class Toolbelt:
         self._recorder = recorder
         self._approvals = approvals
         self._confirm_scoped = confirm_scoped
+        self._permissions = permissions
 
     def names(self) -> list[str]:
         return sorted(self._tools)
@@ -105,7 +108,9 @@ class Toolbelt:
     def roster(self) -> list[dict[str, Any]]:
         """Classification roster over the same name set specs() returns: one
         entry per tool adding the dimension / write metadata the LLM-facing
-        ToolSpec leaves out (frontend tool catalog and allowlist grouping)."""
+        ToolSpec leaves out (frontend tool catalog and allowlist grouping).
+        `class` is the permission class from the central table (unknown tools
+        read as D), consumed by the permission modes and the settings UI."""
         names = self.names()
         if self._active is not None:
             names = [n for n in names if n in self._active]
@@ -115,6 +120,7 @@ class Toolbelt:
                 "description": t.description,
                 "dimension": t.dimension,
                 "write": bool(t.write or t.irreversible),
+                "class": tool_class(t.name),
             }
             for t in (self._tools[n] for n in names)
         ]
@@ -131,6 +137,7 @@ class Toolbelt:
             "description": tool.description,
             "dimension": tool.dimension,
             "write": bool(tool.write or tool.irreversible),
+            "class": tool_class(tool.name),
             "parameters": dict(tool.schema),
         }
 
@@ -164,6 +171,7 @@ class Toolbelt:
             recorder=self._recorder,
             approvals=self._approvals,
             confirm_scoped=self._confirm_scoped,
+            permissions=self._permissions,
         )
 
     def trimmed_read_only(self) -> Toolbelt:
@@ -189,6 +197,7 @@ class Toolbelt:
             recorder=self._recorder,
             approvals=self._approvals,
             confirm_scoped=self._confirm_scoped,
+            permissions=self._permissions,
         )
 
     def with_active(self, active: set[str], extra: dict[str, AgentTool] | None = None) -> Toolbelt:
@@ -219,6 +228,7 @@ class Toolbelt:
             recorder=self._recorder,
             approvals=self._approvals,
             confirm_scoped=self._confirm_scoped,
+            permissions=self._permissions,
         )
 
     def with_policy(self, policy: PolicyEngine) -> Toolbelt:
@@ -240,6 +250,7 @@ class Toolbelt:
             recorder=self._recorder,
             approvals=self._approvals,
             confirm_scoped=self._confirm_scoped,
+            permissions=self._permissions,
         )
 
     @property
@@ -267,6 +278,7 @@ class Toolbelt:
             recorder=self._recorder,
             approvals=self._approvals,
             confirm_scoped=self._confirm_scoped,
+            permissions=self._permissions,
         )
 
     async def call(self, call: ToolCall) -> str:

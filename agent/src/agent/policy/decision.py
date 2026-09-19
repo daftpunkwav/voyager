@@ -16,6 +16,10 @@ class Decision:
     allow: bool
     level: Level = Level.L0_SILENT
     reason: str = ""
+    #: Why an L2_CONFIRM was raised; the invoke layer retires the confirm
+    #: dialog everywhere except writes into user-configured fs write_roots
+    #: (the one kept confirmation). Empty for every other decision.
+    confirm_scope: str = ""
 
 
 __all__ = ["Decision"]

@@ -296,14 +296,16 @@ class TestShellGuard:
         assert "[已拒绝]" in out
         assert not (workdir / "skills" / "x.txt").exists()
 
-    async def test_shell_readonly_skills_still_needs_confirm(self, workdir) -> None:
-        """Read-only skills commands are not caught by the new gate: with no confirm channel they still yield needs-confirm (L2 unchanged)."""
+    async def test_shell_readonly_skills_execute_without_confirm(self, workdir) -> None:
+        """Confirm retired: read-only skills commands are not caught by the
+        skills guard (a write there is still hard-rejected above) and reach
+        execution without any confirm branch."""
         belt = Toolbelt(
             {**fs_tools([workdir]), **shell_tools(workdir)},
             PolicyEngine(fs=FsPolicy(roots=(str(workdir),))),
         )
         out = await belt.call(ToolCall("1", "bash", {"command": "type skills\\keep\\SKILL.md"}))
-        assert "[需确认]" in out
+        assert "[需确认]" not in out and "[已取消]" not in out
 
 
 class TestFsReadRoots:

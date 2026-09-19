@@ -2153,3 +2153,52 @@
 .tools-catalog__param-desc {
   color: var(--text-500);
 }
+
+/* ---------- Tool permissions (mode cards + class table + deny/allow lists) ---------- */
+.tool-perms__modes {
+  margin: 4px 0 8px;
+}
+.tool-perms__mode-hint {
+  margin: 0 0 4px;
+}
+.tool-perms__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tool-perms__row .entity-row__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.tool-perms__row .entity-row__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-perms__actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.tool-perms__entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tool-perms__entry code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-perms__add {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.tool-perms__add .input {
+  flex: 1;
+}

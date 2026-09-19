@@ -48,6 +48,7 @@ from agent.personas import canonical_persona_key, resolve_persona
 from agent.plugins import PluginManager
 from agent.policy import AppPolicy, FsPolicy, NetworkPolicy, PolicyEngine
 from agent.policy.approvals import ApprovalStore
+from agent.policy.permissions import ToolPermissions
 from agent.policy.shell import ShellPolicy
 from agent.runtime import (
     EventLoop,
@@ -460,6 +461,9 @@ def build_agent(
         recorder=EpisodeRecorder(memory.episodic).record_tool,
         approvals=approval_store,
         confirm_scoped=_confirm_scoped,
+        # Tool permission modes (one mode + deny/allow lists, hot-read): the
+        # agent-actor gate in front of every native tool call
+        permissions=ToolPermissions(settings),
     )
 
     # External MCP: an empty pool is legal; the approve action registers into

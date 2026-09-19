@@ -35,7 +35,9 @@ class TestExtensionTools:
         finally:
             app.close()
 
-    async def test_mutations_are_l2(self, tmp_path) -> None:
+    async def test_mutations_execute_without_confirm(self, tmp_path) -> None:
+        """Confirm retired: mutations run even with a deny-confirm channel;
+        failures come from the handler, never from a confirm branch."""
         app = build_agent(
             data_dir=tmp_path / "rd",
             workspace_dir=tmp_path / "ws",
@@ -53,13 +55,13 @@ class TestExtensionTools:
             for name, args in (
                 ("install_plugin", {"source_dir": str(tmp_path / "ws" / "nope")}),
                 ("uninstall_plugin", {"name": "nope"}),
-                ("reload_user_hooks", {}),
             ):
                 out = await belt.call(ToolCall("1", name, args))
-                assert out.startswith("[已取消]"), name
-            assert len(asked) == 3
-            out = await _belt(app).call(ToolCall("2", "reload_user_hooks", {}))
+                assert "[已取消]" not in out and "[需确认]" not in out, name
+                assert out, name  # handler-level error text for missing targets
+            out = await belt.call(ToolCall("2", "reload_user_hooks", {}))
             assert "loaded" in out
+            assert asked == []
         finally:
             app.close()
 

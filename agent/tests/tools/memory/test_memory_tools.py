@@ -34,7 +34,9 @@ class TestMemoryTools:
         finally:
             app.close()
 
-    async def test_clear_memory_is_l2(self, tmp_path) -> None:
+    async def test_clear_memory_executes_without_confirm(self, tmp_path) -> None:
+        """Confirm retired: the irreversible clear runs even with a
+        deny-confirm channel (the permission modes are the gate now)."""
         app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
         try:
             app.memory.profile.set("k", "v")
@@ -45,8 +47,6 @@ class TestMemoryTools:
             out = await _belt(app, confirm=_deny).call(
                 ToolCall("1", "clear_memory", {"zone": "profile"})
             )
-            assert out.startswith("[已取消]") and app.memory.profile.all() == {"k": "v"}
-            out = await _belt(app).call(ToolCall("2", "clear_memory", {"zone": "profile"}))
             assert "cleared" in out and app.memory.profile.all() == {}
         finally:
             app.close()

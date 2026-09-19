@@ -1,7 +1,9 @@
 """Shell dimension: destructive/skills/read-root guards and the decision
-function (split from policy.engine, phase 21). Everything defaults to L2 —
-command execution is confirmed by a human unless a remembered approval
-(ApprovalStore) says otherwise.
+function (split from policy.engine, phase 21). The default level stays L2 as
+the reported intent, but the confirm dialog is retired: invoke.py executes
+unless the decision carries confirm_scope="write_roots". Command-prefix
+allow/deny rules are confirm-era leftovers — the deny list is superseded by
+the permission resolver's bash: entries (kept until the cleanup phase).
 """
 
 from __future__ import annotations
