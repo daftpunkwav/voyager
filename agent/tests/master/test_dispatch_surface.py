@@ -44,6 +44,11 @@ def _write_tools() -> dict[str, AgentTool]:
     }
 
 
+def _notes_tools() -> dict[str, AgentTool]:
+    """Bridge-domain stand for prefix-grant tests: notes__create/list only."""
+    return {k: v for k, v in _write_tools().items() if k.startswith("notes__")}
+
+
 class TestTrimmedReadOnly:
     def test_write_and_irreversible_dropped(self) -> None:
         belt = Toolbelt(_write_tools(), PolicyEngine()).trimmed_read_only()
@@ -204,3 +209,214 @@ class TestReadonlySurvivesResume:
             assert "[未知工具]" in out
         finally:
             app2.close()
+
+
+class TestSurfaceInheritance:
+    """Assignment-time surface intersection: a dispatch from inside a live
+    instance can narrow but never widen past the dispatcher's own surface;
+    explicit out-of-surface entries are rejected with a readable error."""
+
+    async def _dispatch_under(self, app, parent, **kw):
+        from agent.runtime.current import current_instance
+
+        token = current_instance.set(parent)
+        try:
+            return await app.master.dispatch_task(**kw)
+        finally:
+            current_instance.reset(token)
+
+    async def test_implicit_inherit_is_exact(self, tmp_path) -> None:
+        """allowed_tools omitted: the child inherits exactly the parent surface."""
+        app = _app(tmp_path)
+        try:
+            parent = app.spawner.spawn(
+                TaskBook(goal="parent", allowed_tools=("read", "grep", "glob")), name="parent"
+            )
+            child = await self._dispatch_under(app, parent, goal="child task")
+            assert set(child.toolbelt.names()) == {"glob", "grep", "read"}
+        finally:
+            app.close()
+
+    async def test_explicit_list_narrows_within_parent(self, tmp_path) -> None:
+        """An in-surface allowlist intersects down to exactly those tools."""
+        app = _app(tmp_path)
+        try:
+            parent = app.spawner.spawn(
+                TaskBook(goal="parent", allowed_tools=("read", "grep", "glob")), name="parent"
+            )
+            child = await self._dispatch_under(
+                app, parent, goal="narrower", allowed_tools=("read", "grep")
+            )
+            assert set(child.toolbelt.names()) == {"grep", "read"}
+        finally:
+            app.close()
+
+    async def test_out_of_surface_request_rejects_with_names(self, tmp_path) -> None:
+        from platform_contracts import ServiceError
+
+        app = _app(tmp_path)
+        try:
+            parent = app.spawner.spawn(
+                TaskBook(goal="parent", allowed_tools=("read", "grep")), name="parent"
+            )
+            with pytest.raises(ServiceError) as exc:
+                await self._dispatch_under(
+                    app, parent, goal="widening", allowed_tools=("read", "write")
+                )
+            assert "write" in str(exc.value)
+            assert exc.value.body.code == "AGENT.FORBIDDEN"
+        finally:
+            app.close()
+
+    async def test_prefix_entry_partial_availability_intersects(self, tmp_path) -> None:
+        """A prefix grant resolves against the parent surface, not the root."""
+        notes = _notes_tools()
+        app = _app(tmp_path, extra_tools=notes)
+        try:
+            parent = app.spawner.spawn(
+                TaskBook(goal="parent", allowed_tools=("read", "notes__*")), name="parent"
+            )
+            child = await self._dispatch_under(
+                app, parent, goal="bridged", allowed_tools=("notes__*",)
+            )
+            assert set(child.toolbelt.names()) == set(notes)
+        finally:
+            app.close()
+
+    async def test_grandchild_chain_stays_monotone(self, tmp_path) -> None:
+        """Each link intersects with its own (already narrowed) surface."""
+        app = _app(tmp_path)
+        try:
+            parent = app.spawner.spawn(
+                TaskBook(goal="parent", allowed_tools=("read", "grep", "glob")), name="parent"
+            )
+            child = await self._dispatch_under(
+                app, parent, goal="child", allowed_tools=("read", "grep")
+            )
+            grandchild = await self._dispatch_under(
+                app, child, goal="grandchild", allowed_tools=("read",)
+            )
+            assert set(grandchild.toolbelt.names()) == {"read"}
+        finally:
+            app.close()
+
+    async def test_grandchild_out_of_chain_request_rejects(self, tmp_path) -> None:
+        from platform_contracts import ServiceError
+
+        app = _app(tmp_path)
+        try:
+            parent = app.spawner.spawn(
+                TaskBook(goal="parent", allowed_tools=("read", "grep", "glob")), name="parent"
+            )
+            child = await self._dispatch_under(app, parent, goal="child")
+            with pytest.raises(ServiceError) as exc:
+                await self._dispatch_under(
+                    app, child, goal="grandchild", allowed_tools=("read", "write")
+                )
+            assert "write" in str(exc.value)
+        finally:
+            app.close()
+
+    async def test_top_level_dispatch_keeps_full_surface(self, tmp_path) -> None:
+        """No live parent (queue/goal driver path): the root roster applies, unchanged."""
+        app = _app(tmp_path)
+        try:
+            inst = await app.master.dispatch_task("top level task")
+            assert "write" in inst.toolbelt.names()
+        finally:
+            app.close()
+
+    async def test_preset_enumerating_unmounted_domain_intersects_silently(self, tmp_path) -> None:
+        """Curated persona allowlists (recon names sources__* tools) keep the
+        historical behavior when the domain is not mounted: the missing
+        entries drop silently instead of rejecting the dispatch — only
+        caller-named lists are refused."""
+        app = _app(tmp_path)
+        try:
+            inst = await app.master.dispatch_task("survey the repos", persona="recon")
+            names = inst.toolbelt.names()
+            assert "read" in names
+            assert not any(n.startswith("sources__") for n in names)
+        finally:
+            app.close()
+
+    async def test_frozen_list_survives_resume(self, tmp_path) -> None:
+        """The intersection is frozen into the TaskBook, so a checkpoint
+        resume rebuilds the narrowed surface instead of widening to the root."""
+        app = _app(tmp_path)
+        try:
+            parent = app.spawner.spawn(
+                TaskBook(goal="parent", allowed_tools=("read", "grep")), name="parent"
+            )
+            child = await self._dispatch_under(app, parent, goal="child task")
+            assert set(child.toolbelt.names()) <= {"grep", "read"}
+            child.state.status = RunStatus.PAUSED
+            child.state.resume = child.build_resume_snapshot().to_dict()
+            app.spawner._checkpoints.save(child.state)
+            run_id = child.state.run_id
+        finally:
+            app.close()
+        app2 = build_agent(
+            data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM(default="Done.")
+        )
+        try:
+            revived = app2.spawner.resume_from_checkpoint(run_id)
+            assert set(revived.toolbelt.names()) <= {"grep", "read"}
+        finally:
+            app2.close()
+
+
+class TestRegisterSurfaceValidation:
+    """register_subagent (agent calls): the definition's allowlist may not
+    promise tools beyond the registering instance's surface."""
+
+    async def test_agent_register_beyond_surface_rejects(self, tmp_path) -> None:
+        from agent.runtime.current import current_instance
+        from platform_capability import execute
+        from platform_contracts import ActorKind, ActorRef, ServiceError
+
+        app = _app(tmp_path)
+        try:
+            parent = app.spawner.spawn(
+                TaskBook(goal="parent", allowed_tools=("read", "grep")), name="parent"
+            )
+            token = current_instance.set(parent)
+            agent_ctx = ActorContext(
+                actor=ActorRef(kind=ActorKind.AGENT, id="agent.main", scopes=())
+            )
+            try:
+                with pytest.raises(ServiceError) as exc:
+                    await execute(
+                        app.registry,
+                        "register_subagent",
+                        agent_ctx,
+                        {"name": "cheater", "description": "d", "allowed_tools": ["read", "write"]},
+                    )
+                assert "write" in str(exc.value)
+            finally:
+                current_instance.reset(token)
+        finally:
+            app.close()
+
+    async def test_human_register_is_not_surface_bound(self, tmp_path) -> None:
+        from agent.runtime.current import current_instance
+        from platform_capability import execute
+
+        app = _app(tmp_path)
+        try:
+            parent = app.spawner.spawn(
+                TaskBook(goal="parent", allowed_tools=("read", "grep")), name="parent"
+            )
+            token = current_instance.set(parent)  # instance context, but USER actor
+            try:
+                out = await execute(
+                    app.registry,
+                    "register_subagent",
+                    ActorContext(actor=LOCAL_USER),
+                    {"name": "wide", "description": "d", "allowed_tools": ["read", "write"]},
+                )
+                assert out["name"] == "wide"
+            finally:
+                current_instance.reset(token)
+        finally:
+            app.close()

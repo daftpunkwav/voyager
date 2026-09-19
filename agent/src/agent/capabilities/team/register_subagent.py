@@ -8,9 +8,12 @@ agent's register_subagent tool both bind it.
 from __future__ import annotations
 
 from platform_capability import Registry, capability
+from platform_contracts import ActorKind, ActorRef, ErrorSuffix, ServiceError
 
 from agent.capabilities.deps import CapabilityDeps
+from agent.runtime.current import current_instance
 from agent.subagent.registry import SubagentDef, SubagentRegistry
+from agent.subagent.surface import surface_misses
 
 
 def register_subagent(
@@ -84,7 +87,27 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
         network_mode: str = "",
         readonly: bool = False,
         enabled: bool = True,
+        _actor: ActorRef | None = None,
     ) -> dict:
+        # Assignment-surface validation (agent calls only): a definition
+        # registered by a narrowed instance may not promise tools that
+        # instance does not have — the human path (full surface) skips this.
+        # Dispatch re-checks against the dispatching surface anyway, so this
+        # is early, readable feedback, not the enforcement boundary.
+        if (
+            allowed_tools
+            and _actor is not None
+            and _actor.kind is ActorKind.AGENT
+            and (inst := current_instance.get()) is not None
+        ):
+            missing = surface_misses(allowed_tools, inst.toolbelt.names())
+            if missing:
+                raise ServiceError(
+                    "agent",
+                    ErrorSuffix.FORBIDDEN,
+                    f"tools not available on this instance's surface: {', '.join(missing)}",
+                    hint="register an allowlist within this instance's own tools",
+                )
         return register_subagent(
             deps.subagents,
             name=name,

@@ -25,6 +25,7 @@ from agent.settings import SUBAGENTS_MAX_DEPTH_KEY
 from agent.subagent import Mode, Spawner, SubagentInstance, TaskBook
 from agent.subagent.limits import limits_from_settings
 from agent.subagent.registry import SubagentDef, SubagentRegistry
+from agent.subagent.surface import intersect_surface, surface_misses
 from agent.tools.core.base import Toolbelt
 
 log = logging.getLogger("agent.dispatch")
@@ -87,6 +88,12 @@ async def dispatch_task(
 
     preset = resolve_persona(persona) if persona else None
     custom = _load_custom(subagents, persona) if persona and preset is None else None
+    # Caller-named allowlist (the spawn parameter): authored at call time by
+    # the model, so out-of-surface entries are its own mistake and get a
+    # rejection it can correct. Curated lists (custom definitions, persona
+    # presets) intersect silently — a preset may enumerate bridge tools of a
+    # domain that is simply not mounted in this app.
+    explicit_tools = allowed_tools is not None
     if custom is not None and not custom.enabled:
         raise ServiceError(
             "agent",
@@ -138,6 +145,33 @@ async def dispatch_task(
             f"delegation depth {depth} exceeds the limit ({max_depth})",
             hint="flatten the task plan or ask the user to raise agent.subagents.max_depth",
         )
+    # Assignment-time surface intersection (monotone narrowing): a dispatch
+    # from inside a live instance can never grant a wider surface than the
+    # dispatcher itself has. Caller-named entries are validated first —
+    # anything this instance cannot offer is a readable rejection so the
+    # model corrects its own request — then every allowlist is frozen to the
+    # intersection, so a later checkpoint resume rebuilds the same narrowed
+    # surface instead of widening back to the root roster. A parent without
+    # a readable toolbelt (test fakes) imposes no constraint.
+    parent_belt = getattr(parent, "toolbelt", None) if parent is not None else None
+    if parent_belt is not None:
+        parent_names: list[str] = parent_belt.names()
+        if allowed_tools is not None:
+            if explicit_tools:
+                missing = surface_misses(allowed_tools, parent_names)
+                if missing:
+                    raise ServiceError(
+                        "agent",
+                        ErrorSuffix.FORBIDDEN,
+                        f"tools not available on this instance's surface: {', '.join(missing)}",
+                        hint=(
+                            "dispatch with tools this instance actually has, "
+                            "or omit allowed_tools to inherit its surface"
+                        ),
+                    )
+            allowed_tools = intersect_surface(allowed_tools, parent_names)
+        else:
+            allowed_tools = tuple(parent_names)
     task = TaskBook(
         goal=goal,
         constraints=constraints,
