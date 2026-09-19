@@ -20,14 +20,17 @@ import { extractCodeLang, nodeText } from '@/utils/markdownNodes';
 import { looksLikeMermaid, MermaidBlock } from '@/components/common/MermaidBlock';
 import { MdCodeBlock } from '@/components/common/MdCodeBlock';
 
-/** class names highlight.js may inject; same allowlist line as MarkdownRenderer (defense in depth). */
+/** class names highlight.js may inject; same allowlist line as MarkdownRenderer (defense in depth).
+ *  The unrestricted className entry precedes the defaults: hast-util-sanitize is
+ *  first-match-wins, so appending it after the default code entry ([className,
+ *  /^language-./]) would be dead and strip the hljs class from <code>. */
 const sanitizeSchema: SanitizeOptions = {
   ...defaultSchema,
   attributes: {
     ...defaultSchema.attributes,
-    code: [...(defaultSchema.attributes?.code ?? []), ['className']],
-    span: [...(defaultSchema.attributes?.span ?? []), ['className']],
-    pre: [...(defaultSchema.attributes?.pre ?? []), ['className']],
+    code: ['className', ...(defaultSchema.attributes?.code ?? [])],
+    span: [...(defaultSchema.attributes?.span ?? []), 'className'],
+    pre: [...(defaultSchema.attributes?.pre ?? []), 'className'],
   },
 };
 

@@ -63,6 +63,17 @@ describe('ChatMarkdown code blocks', () => {
     expect(screen.queryByLabelText('运行')).toBeNull(); // runnable=false by default stub
   });
 
+  it('keeps highlight.js classes through the sanitize allowlist', () => {
+    // Regression: the unrestricted code className schema entry must precede
+    // the default [className, /^language-./] entry (first-match-wins), or the
+    // hljs class is stripped from <code>.
+    const { container } = render(<ChatMarkdown content={'```js\nconst x = 1\n```'} />);
+    const code = container.querySelector('code');
+    expect(code?.className).toContain('hljs');
+    expect(code?.className).toContain('language-js');
+    expect(container.querySelector('span.hljs-keyword')).not.toBeNull();
+  });
+
   it('shows the run button only for runnable languages', () => {
     isRunnableMock.mockImplementation((lang?: string) => (lang ?? '') === 'python');
     render(<ChatMarkdown content={'```python\nprint(1)\n```'} />);

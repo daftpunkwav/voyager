@@ -59,10 +59,14 @@ const sanitizeSchema: SanitizeOptions = {
   },
   attributes: {
     ...defaultSchema.attributes,
-    code: [...(defaultSchema.attributes?.code ?? []), ['className']],
-    span: [...(defaultSchema.attributes?.span ?? []), ['className']],
-    pre: [...(defaultSchema.attributes?.pre ?? []), ['className']],
-    mark: [...(defaultSchema.attributes?.mark ?? []), ['className']],
+    // hast-util-sanitize's findDefinition is first-match-wins, so the
+    // unrestricted className entry must precede the default code entry
+    // ([className, /^language-./]) — appended after it, it would be dead and
+    // the hljs class would be stripped from <code>.
+    code: ['className', ...(defaultSchema.attributes?.code ?? [])],
+    span: [...(defaultSchema.attributes?.span ?? []), 'className'],
+    pre: [...(defaultSchema.attributes?.pre ?? []), 'className'],
+    mark: [...(defaultSchema.attributes?.mark ?? []), 'className'],
     a: [...(defaultSchema.attributes?.a ?? []), 'target', 'rel'],
     h1: [...(defaultSchema.attributes?.h1 ?? []), 'id'],
     h2: [...(defaultSchema.attributes?.h2 ?? []), 'id'],
@@ -70,7 +74,10 @@ const sanitizeSchema: SanitizeOptions = {
     h4: [...(defaultSchema.attributes?.h4 ?? []), 'id'],
     h5: [...(defaultSchema.attributes?.h5 ?? []), 'id'],
     h6: [...(defaultSchema.attributes?.h6 ?? []), 'id'],
-    img: [...(defaultSchema.attributes?.img ?? []), ['className', 'loading']],
+    // Plain string entries mean "attribute with any value"; the array form
+    // ['className', 'loading'] would instead mean "className whose value is
+    // exactly 'loading'" and would never allow the loading attribute.
+    img: [...(defaultSchema.attributes?.img ?? []), 'className', 'loading'],
   },
 };
 
