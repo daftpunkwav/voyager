@@ -7,10 +7,16 @@
  * store.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '@/stores/chatStore';
 import { fetchRawLlmRounds, type RawLlmRound } from '@/bridge/chatSend';
+
+/** Newest rounds rendered. The endpoint returns every recorded round of the
+ *  session with full verbatim bodies; a long session can total tens of MB and
+ *  rendering it all as <pre> DOM freezes the tab. Older rounds stay recorded
+ *  server-side — only the rendered window is capped. */
+const RENDER_LIMIT = 50;
 
 function pretty(raw: string): string {
   try {
@@ -24,7 +30,12 @@ function RoundCard({ round }: { round: RawLlmRound }) {
   const { t } = useTranslation('chat');
   const [tab, setTab] = useState<'request' | 'response'>('request');
   const time = new Date(round.ts * 1000).toLocaleTimeString();
-  const body = pretty(tab === 'request' ? round.request : round.response);
+  // Memoized: the raw bodies can be large, and re-parsing on every render of
+  // the card (e.g. the count-note state change above) is wasted work.
+  const body = useMemo(
+    () => pretty(tab === 'request' ? round.request : round.response),
+    [tab, round.request, round.response]
+  );
   return (
     <section className="chat-log__round">
       <div className="chat-log__head">
@@ -79,6 +90,13 @@ export function RawLogView() {
     };
   }, [activeId]);
 
+  // Newest-first render window: rounds arrive ascending, so the reversed tail
+  // is the newest RENDER_LIMIT rounds.
+  const visible = useMemo(
+    () => (rounds ? [...rounds].reverse().slice(0, RENDER_LIMIT) : []),
+    [rounds]
+  );
+
   if (error) return <div className="chat-log chat-log--empty">⚠ {error}</div>;
   if (rounds === null) {
     return <div className="chat-log chat-log--empty">{t('chat:rawlog.loading')}</div>;
@@ -86,9 +104,22 @@ export function RawLogView() {
   if (rounds.length === 0) {
     return <div className="chat-log chat-log--empty">{t('chat:rawlog.empty')}</div>;
   }
+  const hidden = rounds.length - visible.length;
+  if (hidden > 0) {
+    return (
+      <div className="chat-log">
+        <div className="chat-log__hidden small muted" role="note">
+          {t('chat:rawlog.hiddenRounds', { n: hidden, shown: visible.length })}
+        </div>
+        {visible.map((r) => (
+          <RoundCard key={`${r.run_id}-${r.round}-${r.ts}`} round={r} />
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="chat-log">
-      {[...rounds].reverse().map((r) => (
+      {visible.map((r) => (
         <RoundCard key={`${r.run_id}-${r.round}-${r.ts}`} round={r} />
       ))}
     </div>

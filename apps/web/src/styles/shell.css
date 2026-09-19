@@ -2800,6 +2800,9 @@ a.chat-card:hover {
   color: var(--text-500);
   padding: 40px 0;
 }
+.chat-log__hidden {
+  padding: 0 2px;
+}
 .chat-log__round {
   border: 1px solid var(--bg-300);
   border-radius: 12px;

@@ -152,6 +152,7 @@
   "rawlog.close": "Close",
   "rawlog.loading": "Loading…",
   "rawlog.empty": "No raw record for this round",
+  "rawlog.hiddenRounds": "{{n}} older round(s) not rendered (showing the newest {{shown}}) — long sessions are capped to keep the log tab responsive",
   "session.rename": "Rename",
   "session.status.cancelled": "Cancelled",
   "session.status.completed": "Completed",

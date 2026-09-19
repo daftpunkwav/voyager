@@ -18,7 +18,15 @@
  * - Expand note artifact cards inline with on-demand note fetches
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, Fragment } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  Fragment,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '@/stores/uiStore';
 import { flushSync } from 'react-dom';
@@ -218,8 +226,34 @@ export function MessageList() {
   }, [steps.length, streaming]);
 
   // Closed trails keyed by their closing message seq: the trace renders right
-  // above the answer it produced.
-  const trailBySeq = new Map(trails.map((tr) => [tr.msgSeq, tr]));
+  // above the answer it produced. Memoized: the timeline and the rendered rows
+  // below must keep stable identities across streaming renders (see rows).
+  const trailBySeq = useMemo(() => new Map(trails.map((tr) => [tr.msgSeq, tr])), [trails]);
+  const timeline = useMemo(() => mergeTimeline(messages, artifacts), [messages, artifacts]);
+  // The rows element array is memoized on its data inputs only. MessageList
+  // re-renders on every agent.delta / agent.step (streaming + steps are read
+  // for the live trace and scroll follow), and without this each of those
+  // renders rebuilt every Bubble element — an O(messages) render per delta in
+  // long conversations. With stable element identities React bails out of the
+  // whole list subtree and only LiveTurnTrace re-renders per delta.
+  const rows = useMemo(() => {
+    let lastUser = '';
+    return timeline.map((item) => {
+      if (item.kind === 'artifact') {
+        return <NoteArtifactCard key={`a${item.seq}`} artifact={item.artifact} />;
+      }
+      const m = item.msg;
+      if (m.role === 'user') lastUser = m.content;
+      const subject = lastUser;
+      const trail = m.role === 'agent' ? trailBySeq.get(m.seq) : undefined;
+      return (
+        <Fragment key={`${m.seq ?? `local-${m.ts ?? item.seq}`}-${m.role}`}>
+          {trail ? <ClosedTurnTrace steps={trail.steps} finalText={m.content} /> : null}
+          <Bubble msg={m} subject={subject} />
+        </Fragment>
+      );
+    });
+  }, [timeline, trailBySeq]);
   // An interrupted turn closes under a synthetic negative key (no closing
   // message). upsertTrail keeps trails ascending by msgSeq, so negative keys
   // sort FIRST and the newest interruption (largest timestamp = most negative)
@@ -248,24 +282,7 @@ export function MessageList() {
           {t('chat:history.loadingOlder')}
         </div>
       ) : null}
-      {(() => {
-        let lastUser = '';
-        return mergeTimeline(messages, artifacts).map((item) => {
-          if (item.kind === 'artifact') {
-            return <NoteArtifactCard key={`a${item.seq}`} artifact={item.artifact} />;
-          }
-          const m = item.msg;
-          if (m.role === 'user') lastUser = m.content;
-          const subject = lastUser;
-          const trail = m.role === 'agent' ? trailBySeq.get(m.seq) : undefined;
-          return (
-            <Fragment key={`${m.seq ?? `local-${m.ts ?? item.seq}`}-${m.role}`}>
-              {trail ? <ClosedTurnTrace steps={trail.steps} finalText={m.content} /> : null}
-              <Bubble msg={m} subject={subject} />
-            </Fragment>
-          );
-        });
-      })()}
+      {rows}
       <LiveTurnTrace />
       {showInterrupted && tailTrail ? <ClosedTurnTrace steps={tailTrail.steps} /> : null}
       {/* Streaming text renders inside the live trace's round block: the trace

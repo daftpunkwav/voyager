@@ -152,6 +152,7 @@
   "rawlog.close": "关闭",
   "rawlog.loading": "加载中…",
   "rawlog.empty": "该轮没有原始记录",
+  "rawlog.hiddenRounds": "已跳过较早的 {{n}} 轮(仅渲染最近 {{shown}} 轮)——长会话设此上限以保证日志页不卡顿",
   "session.rename": "重命名",
   "session.status.cancelled": "已取消",
   "session.status.completed": "已完成",
