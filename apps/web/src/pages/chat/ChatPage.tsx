@@ -10,11 +10,11 @@
  * Responsibilities:
  * - Wire the SSE stream with navigation raised to react-router
  * - Tab between the conversation (message list with inline execution traces,
- *   ask dialog, composer) and the full trajectory view (per-turn execution
- *   detail rebuilt from persisted rows); session management lives in the app
- *   sidebar, not on this page
- * - Host the right panel: plan (todos), running subagents and deliverables,
- *   plus the raw LLM log drawer opened from a trace round block
+ *   ask dialog, composer), the full trajectory view (per-turn execution
+ *   detail rebuilt from persisted rows), and the raw LLM log view (every
+ *   recorded round of the session, verbatim); session management lives in the
+ *   app sidebar, not on this page
+ * - Host the right panel: plan (todos), running subagents and deliverables
  */
 
 import { useCallback, useState } from 'react';
