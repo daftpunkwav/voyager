@@ -381,10 +381,7 @@ function MessageForkButton({ msg }: { msg: ChatMessage }) {
       navigate(routes.chat);
       addToast({ type: 'success', message: t('chat:msg.forked') });
     } catch (err) {
-      addToast({
-        type: 'error',
-        message: err instanceof ServiceError ? extractErrorMessage(err) : String(err),
-      });
+      addToast({ type: 'error', message: extractErrorMessage(err) });
     } finally {
       setBusy(false);
     }
@@ -418,10 +415,7 @@ function RateBar({ subject, onDone }: { subject: string; onDone: () => void }) {
       await rateTurn(score, comment.trim(), subject.slice(0, 60));
       onDone();
     } catch (err) {
-      addToast({
-        type: 'error',
-        message: err instanceof ServiceError ? extractErrorMessage(err) : String(err),
-      });
+      addToast({ type: 'error', message: extractErrorMessage(err) });
     } finally {
       setBusy(false);
     }

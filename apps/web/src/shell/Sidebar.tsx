@@ -29,7 +29,6 @@ import {
   setActiveSession,
   type ChatSessionRow,
 } from '@/api/agent';
-import { ServiceError } from '@/bridge/client';
 import { extractErrorMessage } from '@/utils/errors';
 import { PRODUCT_NAME } from '@/brand';
 import { routes } from '@/utils/routes';
@@ -124,10 +123,7 @@ function SidebarSessions() {
   }, [activeId]);
 
   const fail = (err: unknown) => {
-    addToast({
-      type: 'error',
-      message: err instanceof ServiceError ? extractErrorMessage(err) : String(err),
-    });
+    addToast({ type: 'error', message: extractErrorMessage(err) });
   };
 
   const run = async (fn: () => Promise<unknown>) => {
