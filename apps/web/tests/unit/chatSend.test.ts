@@ -27,6 +27,7 @@ import {
   postChatMessage,
   fetchChatHistory,
   fetchChatHistoryBefore,
+  loadChatSessions,
   sendUserTurn,
 } from '@/bridge/chatSend';
 import { useChatStore } from '@/stores/chatStore';
@@ -200,5 +201,87 @@ describe('fetchChatHistory / fetchChatHistoryBefore', () => {
       '/api/chat/messages?before_seq=7&limit=50',
       expect.anything()
     );
+  });
+});
+
+describe('loadChatSessions: active-session lane reconciliation', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    useChatStore.setState({ sessions: [], activeSessionId: '', activeLoaded: false, lanes: {} });
+  });
+
+  it('re-opens the backend-active lane when the open session was deleted (active id moved)', async () => {
+    // Deleting the open session makes the backend re-point its active id:
+    // the store must follow (archive the stale view, hydrate the new lane),
+    // otherwise the visible timeline keeps showing the deleted session.
+    useChatStore.setState({
+      activeSessionId: 'a',
+      activeLoaded: true,
+      lanes: {},
+      messages: [{ seq: 1, role: 'user', content: 'old a message' }],
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('session_list')) {
+        return Promise.resolve(
+          jsonResponse({
+            result: {
+              sessions: [
+                { session_id: 'a', title: 'A', status: 'stored' },
+                { session_id: 'b', title: 'B', status: 'stored' },
+              ],
+              active: 'b',
+            },
+          })
+        );
+      }
+      if (url.includes('/api/chat/messages')) {
+        return Promise.resolve(
+          jsonResponse({
+            messages: [{ seq: 5, type: 'user.message', payload: { content: 'b1' } }],
+            has_more: false,
+          })
+        );
+      }
+      if (url.includes('/api/chat/trajectory')) {
+        return Promise.resolve(jsonResponse({ steps: [] }));
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await loadChatSessions();
+    const s = useChatStore.getState();
+    expect(s.activeSessionId).toBe('b');
+    expect(s.messages.map((m) => m.content)).toEqual(['b1']); // new lane backfilled
+    expect(s.lanes.a.messages.map((m) => m.content)).toEqual(['old a message']); // stale view archived
+  });
+
+  it('keeps the open lane untouched when the backend active matches', async () => {
+    useChatStore.setState({
+      activeSessionId: 'a',
+      activeLoaded: true,
+      lanes: {},
+      messages: [{ seq: 1, role: 'user', content: 'keep' }],
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('session_list')) {
+        return Promise.resolve(
+          jsonResponse({
+            result: {
+              sessions: [{ session_id: 'a', title: 'A', status: 'stored' }],
+              active: 'a',
+            },
+          })
+        );
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await loadChatSessions();
+    expect(useChatStore.getState().messages.map((m) => m.content)).toEqual(['keep']);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // session_list only: no history refetch
   });
 });

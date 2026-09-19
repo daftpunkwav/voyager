@@ -140,6 +140,15 @@ export async function sendUserTurn(content: string): Promise<void> {
 export async function loadChatSessions(): Promise<void> {
   try {
     const { sessions, active } = await listSessions();
+    const store = useChatStore.getState();
+    // Follow the backend's active session when it moved under the open lane
+    // (deleting the open session re-points the active id backend-side; another
+    // tab may have switched too): archive the open view and hydrate the new
+    // lane, otherwise the visible timeline would keep showing a session the
+    // active id no longer points at and sends/SSE would smear across lanes.
+    if (store.activeSessionId && active !== store.activeSessionId) {
+      if (!store.switchSession(active)) await loadSessionTimeline(active);
+    }
     useChatStore.getState().setSessions(sessions, active);
   } catch {
     // legacy global view stays

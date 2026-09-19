@@ -290,8 +290,10 @@ interface ChatState {
   /** Round end (hard-stop / send failure / subtask wrap-up) clears the thinking and typing
    *  slots; besides appendLocal/dispatch this is the only other write path to thinking. */
   clearThinking: () => void;
-  /** Session list from the capability; switches the active lane when the
-   *  backend's active session differs from the currently open one. */
+  /** Session list from the capability (records rows and the backend's active
+   *  id verbatim; lane reconciliation for a moved active session lives in
+   *  bridge/chatSend.loadChatSessions, the only caller that can also backfill
+   *  the freshly opened lane). */
   setSessions: (rows: SessionRow[], activeId: string) => void;
   /** Archive the open view and hydrate the target lane; returns whether the
    *  target lane already had its history backfill (caller fetches when not). */
