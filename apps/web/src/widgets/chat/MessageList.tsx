@@ -335,7 +335,10 @@ function Bubble({ msg, subject }: { msg: ChatMessage; subject: string }) {
 
 /** Fork: branch a new session from the conversation up to and including this
  *  message. keep_messages counts user/assistant entries in the persisted
- *  history, which maps 1:1 onto the visible non-system timeline. */
+ *  history. Notice-kind agent messages ([done]/[failed]/… task receipts) never
+ *  reach history (the backend persists only user/assistant entries), so they
+ *  are skipped here — counting them would over-count and leak post-fork turns
+ *  into the branched session. */
 function MessageForkButton({ msg }: { msg: ChatMessage }) {
   const { t } = useTranslation('chat');
   const addToast = useUIStore((s) => s.addToast);
@@ -345,7 +348,7 @@ function MessageForkButton({ msg }: { msg: ChatMessage }) {
   const index = messages.findIndex((m) => m.seq === msg.seq);
   const keep = messages
     .slice(0, index + 1)
-    .filter((m) => m.role === 'user' || m.role === 'agent').length;
+    .filter((m) => m.role === 'user' || (m.role === 'agent' && m.kind !== 'notice')).length;
 
   const onFork = async () => {
     if (busy) return;
