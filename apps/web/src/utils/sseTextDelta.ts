@@ -1,5 +1,5 @@
 /**
- * @file sse-helpers
+ * @file sseTextDelta
  * @description Type-narrowing helper for SSE text-delta event payloads (plain
  * cast, no runtime normalization).
  */

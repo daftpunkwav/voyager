@@ -17,7 +17,7 @@ import { streamTrendingScoutIntro } from '@/api/overview';
 import { i18n } from '@/i18n';
 import type { LookTarget } from '@/components/agent/AgentAvatar';
 import type { TrendingPeriod, TrendingRepo } from '@/api/types';
-import { asSSETextDelta } from '@/utils/sse-helpers';
+import { asSSETextDelta } from '@/utils/sseTextDelta';
 
 /** Delay before the spotlight starts disappearing after all trending cards are left. */
 export const TRENDING_SCOUT_LEAVE_DELAY_MS = 3000;
