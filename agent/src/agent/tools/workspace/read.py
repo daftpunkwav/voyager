@@ -1,4 +1,4 @@
-"""read_file tool: jailed text read with a 1-based line window.
+"""read tool: jailed text read with a 1-based line window.
 
 Reads see the workspace roots plus the additional read-only and read-write
 roots (the jail is the inner layer; the Toolbelt policy check is the outer).
@@ -9,14 +9,14 @@ from __future__ import annotations
 from agent.tools.core.base import AgentTool
 from agent.tools.workspace.jail import Jail
 
-#: Full-read byte cap for read_file: truncation happens after reading, and
+#: Full-read byte cap for read: truncation happens after reading, and
 #: without a cap a multi-hundred-MB generated log/dump would be loaded into
 #: memory in full first
 _MAX_READ_BYTES = 4_000_000
 
 
-def read_file_tool(jail: Jail) -> AgentTool:
-    def read_file(path: str, offset: int = 1, limit: int = 0, max_chars: int = 8000) -> str:
+def read_tool(jail: Jail) -> AgentTool:
+    def read(path: str, offset: int = 1, limit: int = 0, max_chars: int = 8000) -> str:
         """Read a text file; offset/limit select a 1-based line window
         (limit 0 = to the end). The default call keeps the legacy
         whole-read output byte-identical."""
@@ -35,7 +35,7 @@ def read_file_tool(jail: Jail) -> AgentTool:
             return f"[失败] 文件不存在: {jail.display(target)}"
         if size > _MAX_READ_BYTES:
             raise ValueError(
-                f"文件过大({size} 字节 > 上限 {_MAX_READ_BYTES}),read_file 拒绝整读;"
+                f"文件过大({size} 字节 > 上限 {_MAX_READ_BYTES}),read 拒绝整读;"
                 "请用 offset/limit 分段读取"
             )
         text = target.read_text(encoding="utf-8", errors="replace")
@@ -54,9 +54,9 @@ def read_file_tool(jail: Jail) -> AgentTool:
         return head + "\n" + body
 
     return AgentTool(
-        name="read_file",
+        name="read",
         description="读工作目录内文件文本(offset/limit 取 1 起始的行窗,limit 0 到末尾;默认截断 8000 字)",
-        handler=read_file,
+        handler=read,
         dimension="fs",
         concurrent_safe=True,  # read-only: safe to batch in parallel
         schema={
@@ -72,4 +72,4 @@ def read_file_tool(jail: Jail) -> AgentTool:
     )
 
 
-__all__ = ["read_file_tool"]
+__all__ = ["read_tool"]

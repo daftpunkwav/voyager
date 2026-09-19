@@ -317,7 +317,9 @@ def build(
             workspace_dir=workspace,
             # Chat transport: per-persona overrides (agent.llm.overrides) are
             # consulted per turn; outside a turn this degrades to ServiceLLM.
-            llm=llm if llm is not None else PersonaRoutingServiceLLM(call, settings=settings_store, bus=bus),
+            llm=llm
+            if llm is not None
+            else PersonaRoutingServiceLLM(call, settings=settings_store, bus=bus),
             bus=bus,
             settings_store=settings_store,
             extra_tools=make_domain_tools(mounts, audit=audit, quota=quota),

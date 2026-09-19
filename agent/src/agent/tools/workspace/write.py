@@ -1,4 +1,4 @@
-"""write_file tool: jailed whole-file write (parent directories created).
+"""write tool: jailed whole-file write (parent directories created).
 
 Writes are confined to the workspace roots and the additional read-write
 roots; the L2 tier for user directories is judged by the policy layer.
@@ -21,12 +21,12 @@ if TYPE_CHECKING:
     from agent.tools.workspace.write_journal import WriteJournal
 
 
-def write_file_tool(jail: Jail, journal: WriteJournal | None = None) -> AgentTool:
-    def write_file(path: str, content: str) -> dict:
+def write_tool(jail: Jail, journal: WriteJournal | None = None) -> AgentTool:
+    def write(path: str, content: str) -> dict:
         target = jail.resolve(path, allow_write_roots=True)
         entry = safe_capture(journal, target, intent="write")
         target.parent.mkdir(parents=True, exist_ok=True)
-        # Atomic write (temp file + os.replace, same discipline as edit_file):
+        # Atomic write (temp file + os.replace, same discipline as edit):
         # a mid-write failure must never truncate the target in place - the
         # journal's undo safety check keys on file content, and a half-written
         # file would be permanently unrestorable
@@ -43,9 +43,9 @@ def write_file_tool(jail: Jail, journal: WriteJournal | None = None) -> AgentToo
         return {"written": str(target), "chars": len(content)}
 
     return AgentTool(
-        name="write_file",
-        description="在工作目录内写文件(自动建父目录;写入前的旧内容可被 undo_writes 回滚)",
-        handler=write_file,
+        name="write",
+        description="在工作目录内写文件(自动建父目录;写入前的旧内容有本地备份)",
+        handler=write,
         dimension="fs",
         write=True,
         schema={
@@ -59,4 +59,4 @@ def write_file_tool(jail: Jail, journal: WriteJournal | None = None) -> AgentToo
     )
 
 
-__all__ = ["write_file_tool"]
+__all__ = ["write_tool"]

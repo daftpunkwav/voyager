@@ -23,7 +23,7 @@ class TestSpans:
             workspace_dir=tmp_path / "ws",
             llm=FakeLLM(
                 [
-                    LLMReply(tool_calls=(ToolCall("1", "list_dir", {"path": "."}),)),
+                    LLMReply(tool_calls=(ToolCall("1", "glob", {"pattern": "*"}),)),
                     LLMReply(text="done"),
                 ]
             ),
@@ -32,7 +32,7 @@ class TestSpans:
             await app.master.handle_user_message("look")
             await settle(app)
             names = [s.name for s in recent_spans()]
-            assert any(n.startswith("tool:list_dir") for n in names)
+            assert any(n.startswith("tool:glob") for n in names)
             assert any(n.startswith("llm:round-") for n in names)
             tool_span = next(s for s in recent_spans() if s.name.startswith("tool:"))
             assert tool_span.ok and tool_span.ms >= 0 and tool_span.attrs.get("tool_call_id") == "1"

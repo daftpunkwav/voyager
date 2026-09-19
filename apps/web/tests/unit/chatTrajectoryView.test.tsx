@@ -58,14 +58,14 @@ const TRAIL_STEPS = [
   {
     seq: 3,
     kind: 'tool',
-    name: 'read_file',
+    name: 'read',
     summary: 'ok',
     subagent: 'chat',
     toolCallId: 'c-1',
     args: '{"path":"a.txt"}',
     ok: true,
     ms: 12,
-    title: 'read_file',
+    title: 'read',
   },
 ];
 
@@ -135,7 +135,7 @@ describe('TrajectoryView', () => {
     expect(screen.getByText('读这个文件')).toBeTruthy();
     expect(screen.getByText(/完整的思考内容/)).toBeTruthy();
     // expand the tool row: arguments and latency become visible
-    fireEvent.click(screen.getByText(/读取文件/));
+    fireEvent.click(screen.getByText('读文件 ok'));
     expect(screen.getByText('{"path":"a.txt"}')).toBeTruthy();
     expect(screen.getByText(/耗时: 12ms/)).toBeTruthy();
   });
@@ -172,7 +172,7 @@ describe('live trace detail', () => {
   it('expands a tool row to the call fact sheet', () => {
     reset({ steps: TRAIL_STEPS, lastSteps: [] });
     render(<LiveTurnTrace />);
-    fireEvent.click(screen.getByText('读取文件'));
+    fireEvent.click(screen.getByText('读文件'));
     expect(screen.getByText('{"path":"a.txt"}')).toBeTruthy();
   });
 

@@ -184,7 +184,7 @@ class TestStepEvents:
     async def test_tool_step_reaches_event_stream(self, tmp_path, agent_replies, settle) -> None:
         llm = FakeLLM(
             [
-                LLMReply(tool_calls=(ToolCall("1", "list_dir", {"path": "."}),)),
+                LLMReply(tool_calls=(ToolCall("1", "glob", {"pattern": "*"}),)),
                 LLMReply(text="Done looking."),
             ]
         )
@@ -192,7 +192,7 @@ class TestStepEvents:
         await app.master.handle_user_message("look at the working directory")
         await settle(app)
         steps = [e.payload for _, e in app.log.read_after(types=["agent.step"])]
-        assert any(s["name"] == "list_dir" for s in steps)
+        assert any(s["name"] == "glob" for s in steps)
         assert all(s.get("subagent") for s in steps)
         assert all(len(s.get("summary", "")) <= 120 for s in steps)
         assert all(s.get("run_id") for s in steps)  # trace linkage for UIs
@@ -210,18 +210,18 @@ class TestStepEvents:
         """After tool steps, DigestStore renders the latest steps, truncated to 120 chars."""
         llm = FakeLLM(
             [
-                LLMReply(tool_calls=(ToolCall("1", "list_dir", {"path": "."}),)),
+                LLMReply(tool_calls=(ToolCall("1", "glob", {"pattern": "*"}),)),
                 LLMReply(text="Done looking."),
             ]
         )
         app = _app(tmp_path, llm)
         await app.master.handle_user_message("look at the working directory")
         await settle(app)
-        # list_dir is recorded in the step trail; DigestStore upserts every step, so the final last_step
-        # is the closing text reply. Assert the list_dir step via instance state directly and verify render is non-empty.
+        # glob is recorded in the step trail; DigestStore upserts every step, so the final last_step
+        # is the closing text reply. Assert the glob step via instance state directly and verify render is non-empty.
         chat = app.master.chat
         assert chat is not None
-        assert any(s.name == "list_dir" for s in chat.state.steps)
+        assert any(s.name == "glob" for s in chat.state.steps)
         rendered = app.master._digests.render()
         assert "chat" in rendered
         assert "| recent:" in rendered
@@ -258,10 +258,10 @@ class TestDomainPrefixes:
     def test_derive_from_belt_names(self) -> None:
         from agent.tools.core.activate import domain_prefixes
 
-        assert domain_prefixes(["read_file", "notes__x", "mcp__a__b"]) == ("mcp", "notes")
+        assert domain_prefixes(["read", "notes__x", "mcp__a__b"]) == ("mcp", "notes")
         # Only the first `__` segment counts: mcp__demo__search -> mcp, not mcp__demo
         assert "mcp__demo" not in domain_prefixes(["mcp__demo__search"])
-        assert domain_prefixes(["read_file", "run_shell", "activate_tools"]) == ()
+        assert domain_prefixes(["read", "bash", "activate_tools"]) == ()
         assert domain_prefixes([]) == ()
 
     async def test_schema_enum_follows_roster(self, tmp_path, settle) -> None:

@@ -17,6 +17,7 @@ from typing import Any
 from platform_contracts import DomainEvent, Event
 from platform_eventbus import EventBus
 
+from agent.runtime.current import current_session
 from agent.runtime.events import AGENT_MAIN
 
 AGENT_ASK = DomainEvent.AGENT_ASK  # compat alias; canonical name in platform_contracts.DomainEvent
@@ -40,7 +41,9 @@ class AskUser:
 
     async def ask(self, q: Question, *, trace_id: str = "") -> Any:
         """Publish the question and wait for the answer; returns None on timeout
-        (the caller decides whether to continue or give up)."""
+        (the caller decides whether to continue or give up). The event carries
+        the executing turn's chat session so a multi-session frontend routes
+        the dialog to the asking lane instead of pinning it globally."""
         qid = uuid.uuid4().hex[:12]
         loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
@@ -58,6 +61,7 @@ class AskUser:
                         "options": list(q.options),
                         "min": q.min,
                         "max": q.max,
+                        "session": current_session(),
                     },
                 )
             )

@@ -36,9 +36,9 @@ def _write_tools() -> dict[str, AgentTool]:
         )
 
     return {
-        "read_file": _tool("read_file"),
-        "write_file": _tool("write_file", write=True),
-        "delete_file": _tool("delete_file", write=True, irreversible=True),
+        "read": _tool("read"),
+        "write": _tool("write", write=True),
+        "gone": _tool("gone", write=True, irreversible=True),
         "notes__create_note": _tool("notes__create_note", write=True),
         "notes__list_notes": _tool("notes__list_notes"),
     }
@@ -47,15 +47,15 @@ def _write_tools() -> dict[str, AgentTool]:
 class TestTrimmedReadOnly:
     def test_write_and_irreversible_dropped(self) -> None:
         belt = Toolbelt(_write_tools(), PolicyEngine()).trimmed_read_only()
-        assert belt.names() == ["notes__list_notes", "read_file"]
+        assert belt.names() == ["notes__list_notes", "read"]
 
     def test_none_kept_when_all_write(self) -> None:
         belt = (
             Toolbelt(
-                {k: v for k, v in _write_tools().items() if k != "read_file"},
+                {k: v for k, v in _write_tools().items() if k != "read"},
                 PolicyEngine(),
             )
-            .trimmed(["write_file", "delete_file", "notes__create_note"])
+            .trimmed(["write", "gone", "notes__create_note"])
             .trimmed_read_only()
         )
         assert belt.names() == []
@@ -66,7 +66,7 @@ class TestTrimmedReadOnly:
             fs_tools([root]),
             PolicyEngine(fs=FsPolicy(roots=(str(root),))),
         ).trimmed_read_only()
-        out = await belt.call(ToolCall("1", "write_file", {"path": "a", "content": "b"}))
+        out = await belt.call(ToolCall("1", "write", {"path": "a", "content": "b"}))
         assert "[未知工具]" in out
 
 
@@ -75,11 +75,9 @@ class TestDispatchReadonly:
         app = _app(tmp_path)
         try:
             inst = await app.master.dispatch_task("review the code", readonly=True)
-            assert "write_file" not in inst.toolbelt.names()
+            assert "write" not in inst.toolbelt.names()
             assert inst.task.readonly is True
-            out = await inst.toolbelt.call(
-                ToolCall("1", "write_file", {"path": "a", "content": "b"})
-            )
+            out = await inst.toolbelt.call(ToolCall("1", "write", {"path": "a", "content": "b"}))
             assert "[未知工具]" in out
         finally:
             app.memory.close()
@@ -90,10 +88,10 @@ class TestDispatchReadonly:
         try:
             inst = await app.master.dispatch_task(
                 "review",
-                allowed_tools=("read_file", "write_file"),
+                allowed_tools=("read", "write"),
                 readonly=True,
             )
-            assert inst.toolbelt.names() == ["read_file"]
+            assert inst.toolbelt.names() == ["read"]
         finally:
             app.memory.close()
 
@@ -125,12 +123,12 @@ class TestDispatchReadonly:
                 {
                     "name": "revbot",
                     "description": "review bot",
-                    "allowed_tools": ["read_file", "write_file"],
+                    "allowed_tools": ["read", "write"],
                     "readonly": True,
                 },
             )
             inst = await app.master.dispatch_task("review", persona="revbot")
-            assert inst.toolbelt.names() == ["read_file"]
+            assert inst.toolbelt.names() == ["read"]
             assert inst.task.readonly is True
         finally:
             app.memory.close()
@@ -168,7 +166,7 @@ class TestDispatchReadonly:
             assert dispatched, "spawn_subagent must have dispatched an instance"
             inst = dispatched[0]
             assert inst.task.readonly is True
-            assert "write_file" not in inst.toolbelt.names()
+            assert "write" not in inst.toolbelt.names()
         finally:
             app.memory.close()
 
@@ -186,7 +184,7 @@ class TestReadonlySurvivesResume:
                 persona="recon",
                 name="rev",
             )
-            assert "write_file" not in inst.toolbelt.names()
+            assert "write" not in inst.toolbelt.names()
             snap = inst.build_resume_snapshot()
             assert snap.to_dict()["readonly"] is True
             state = inst.state
@@ -201,10 +199,8 @@ class TestReadonlySurvivesResume:
         try:
             revived = app2.spawner.resume_from_checkpoint(run_id)
             assert revived.task.readonly is True
-            assert "write_file" not in revived.toolbelt.names()
-            out = await revived.toolbelt.call(
-                ToolCall("1", "write_file", {"path": "a", "content": "b"})
-            )
+            assert "write" not in revived.toolbelt.names()
+            out = await revived.toolbelt.call(ToolCall("1", "write", {"path": "a", "content": "b"}))
             assert "[未知工具]" in out
         finally:
             app2.close()

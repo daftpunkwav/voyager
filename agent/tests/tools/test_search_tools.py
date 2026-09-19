@@ -6,7 +6,7 @@ from agent.capabilities.observe.search_tools import rank_tools
 _ROSTER = [
     {"name": "notes__create_note", "description": "新建一条笔记"},
     {"name": "web_search", "description": "Search the web for pages"},
-    {"name": "read_file", "description": "Read a file from disk"},
+    {"name": "read", "description": "Read a file from disk"},
 ]
 
 
@@ -48,6 +48,6 @@ async def test_registry_binding_returns_scored_hits(tmp_path) -> None:
             app.registry, "search_tools", ActorContext(actor=LOCAL_USER), {"query": "todo"}
         )
         names = [h["name"] for h in hits]
-        assert "todo_write" in names and "todo_read" in names
+        assert "todowrite" in names and "todowrite" in names
     finally:
         app.memory.close()

@@ -77,11 +77,13 @@ async def test_smoke_tool_round_completes(tmp_path) -> None:
     llm = _llm()
     app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=llm)
     try:
-        await _drive(app, "用 todo_write 工具新建一个待办事项,内容是“写周报”,状态 pending。")
+        await _drive(
+            app, "用 todowrite 工具(action=set)新建计划,一条待办事项,内容是“写周报”,状态 pending。"
+        )
         steps = [
             e.payload.get("name", "") for _, e in app.log.read_after(types=[DomainEvent.AGENT_STEP])
         ]
-        assert any("todo_write" in s for s in steps), f"no tool step in {steps}"
+        assert any("todowrite" in s for s in steps), f"no tool step in {steps}"
     finally:
         app.memory.close()
         await llm.aclose()

@@ -335,7 +335,9 @@ class TrajectoryStore:
             )
             rows = self._conn.execute(
                 "SELECT run_id, round, session, ts, request, response"
-                " FROM raw_rounds WHERE session = ? ORDER BY ts DESC LIMIT ?",
+                # round as the tiebreaker: same-tick inserts must not make the
+                # newest-window selection nondeterministic
+                " FROM raw_rounds WHERE session = ? ORDER BY ts DESC, round DESC LIMIT ?",
                 (session, capped),
             ).fetchall()
         rounds = [

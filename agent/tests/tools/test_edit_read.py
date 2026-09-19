@@ -1,5 +1,5 @@
-"""Tests for atomic file editing (edit_file) and windowed reading
-(read_file offset/limit): uniqueness guard, caps, error paths, and
+"""Tests for atomic file editing (edit) and windowed reading
+(read offset/limit): uniqueness guard, caps, error paths, and
 byte-identical legacy whole reads.
 """
 
@@ -34,13 +34,13 @@ class TestReadWindow:
     async def test_default_read_is_legacy_identical(self, workdir) -> None:
         body = "one\ntwo\nthree\n"
         (workdir / "repo" / "a.txt").write_text(body, encoding="utf-8")
-        out = await _belt(workdir).call(ToolCall("1", "read_file", {"path": "repo/a.txt"}))
+        out = await _belt(workdir).call(ToolCall("1", "read", {"path": "repo/a.txt"}))
         assert out == body  # byte-identical, trailing newline kept
 
     async def test_window_header_and_slice(self, workdir) -> None:
         (workdir / "repo" / "a.txt").write_text("l1\nl2\nl3\nl4\nl5\n", encoding="utf-8")
         out = await _belt(workdir).call(
-            ToolCall("1", "read_file", {"path": "repo/a.txt", "offset": 2, "limit": 2})
+            ToolCall("1", "read", {"path": "repo/a.txt", "offset": 2, "limit": 2})
         )
         assert out.startswith("[repo/a.txt: 第 2-3 行 / 共 5 行]\n")
         assert out.endswith("l2\nl3")
@@ -48,43 +48,41 @@ class TestReadWindow:
     async def test_limit_zero_reads_to_end(self, workdir) -> None:
         (workdir / "repo" / "a.txt").write_text("l1\nl2\nl3\n", encoding="utf-8")
         out = await _belt(workdir).call(
-            ToolCall("1", "read_file", {"path": "repo/a.txt", "offset": 2, "limit": 0})
+            ToolCall("1", "read", {"path": "repo/a.txt", "offset": 2, "limit": 0})
         )
         assert "第 2-3 行 / 共 3 行" in out
 
     async def test_offset_past_end_reports_empty(self, workdir) -> None:
         (workdir / "repo" / "a.txt").write_text("l1\n", encoding="utf-8")
-        out = await _belt(workdir).call(
-            ToolCall("1", "read_file", {"path": "repo/a.txt", "offset": 9})
-        )
+        out = await _belt(workdir).call(ToolCall("1", "read", {"path": "repo/a.txt", "offset": 9}))
         assert "(空" in out
 
     async def test_bad_window_is_argument_error(self, workdir) -> None:
         belt = _belt(workdir)
-        out = await belt.call(ToolCall("1", "read_file", {"path": "repo/a.txt", "offset": 0}))
+        out = await belt.call(ToolCall("1", "read", {"path": "repo/a.txt", "offset": 0}))
         assert out.startswith("[参数错误]")
-        out = await belt.call(ToolCall("1", "read_file", {"path": "repo/a.txt", "limit": -1}))
+        out = await belt.call(ToolCall("1", "read", {"path": "repo/a.txt", "limit": -1}))
         assert out.startswith("[参数错误]")
 
     async def test_directory_is_argument_error(self, workdir) -> None:
-        out = await _belt(workdir).call(ToolCall("1", "read_file", {"path": "repo"}))
+        out = await _belt(workdir).call(ToolCall("1", "read", {"path": "repo"}))
         assert out.startswith("[参数错误]")
 
     async def test_missing_file_reports(self, workdir) -> None:
-        out = await _belt(workdir).call(ToolCall("1", "read_file", {"path": "repo/nope.txt"}))
+        out = await _belt(workdir).call(ToolCall("1", "read", {"path": "repo/nope.txt"}))
         assert out.startswith("[失败]")
 
     async def test_max_chars_truncates(self, workdir) -> None:
         (workdir / "repo" / "a.txt").write_text("0123456789", encoding="utf-8")
         out = await _belt(workdir).call(
-            ToolCall("1", "read_file", {"path": "repo/a.txt", "max_chars": 4})
+            ToolCall("1", "read", {"path": "repo/a.txt", "max_chars": 4})
         )
         assert out == "0123\n…[截断]"
 
     async def test_negative_max_chars_is_argument_error(self, workdir) -> None:
         (workdir / "repo" / "a.txt").write_text("0123456789", encoding="utf-8")
         out = await _belt(workdir).call(
-            ToolCall("1", "read_file", {"path": "repo/a.txt", "max_chars": -1})
+            ToolCall("1", "read", {"path": "repo/a.txt", "max_chars": -1})
         )
         assert out.startswith("[参数错误]")
 
@@ -93,9 +91,7 @@ class TestEditFile:
     async def test_unique_replace(self, workdir) -> None:
         (workdir / "repo" / "a.txt").write_text("hello world\n", encoding="utf-8")
         out = await _belt(workdir, confirm=_yes).call(
-            ToolCall(
-                "1", "edit_file", {"path": "repo/a.txt", "old_text": "world", "new_text": "there"}
-            )
+            ToolCall("1", "edit", {"path": "repo/a.txt", "old_text": "world", "new_text": "there"})
         )
         assert json.loads(out)["replacements"] == 1
         assert (workdir / "repo" / "a.txt").read_text(encoding="utf-8") == "hello there\n"
@@ -104,7 +100,7 @@ class TestEditFile:
         body = "x=1\nx=2\n"
         (workdir / "repo" / "a.txt").write_text(body, encoding="utf-8")
         out = await _belt(workdir, confirm=_yes).call(
-            ToolCall("1", "edit_file", {"path": "repo/a.txt", "old_text": "x=", "new_text": "y="})
+            ToolCall("1", "edit", {"path": "repo/a.txt", "old_text": "x=", "new_text": "y="})
         )
         assert out.startswith("[失败]")
         assert (workdir / "repo" / "a.txt").read_text(encoding="utf-8") == body
@@ -114,7 +110,7 @@ class TestEditFile:
         out = await _belt(workdir, confirm=_yes).call(
             ToolCall(
                 "1",
-                "edit_file",
+                "edit",
                 {"path": "repo/a.txt", "old_text": "x=", "new_text": "y=", "count": 2},
             )
         )
@@ -127,7 +123,7 @@ class TestEditFile:
         out = await _belt(workdir, confirm=_yes).call(
             ToolCall(
                 "1",
-                "edit_file",
+                "edit",
                 {"path": "repo/a.txt", "old_text": "x=", "new_text": "y=", "count": 2},
             )
         )
@@ -137,32 +133,32 @@ class TestEditFile:
     async def test_no_match_reports(self, workdir) -> None:
         (workdir / "repo" / "a.txt").write_text("abc\n", encoding="utf-8")
         out = await _belt(workdir, confirm=_yes).call(
-            ToolCall("1", "edit_file", {"path": "repo/a.txt", "old_text": "zzz", "new_text": "y"})
+            ToolCall("1", "edit", {"path": "repo/a.txt", "old_text": "zzz", "new_text": "y"})
         )
         assert out.startswith("[失败]")
 
     async def test_empty_old_text_is_argument_error(self, workdir) -> None:
         out = await _belt(workdir, confirm=_yes).call(
-            ToolCall("1", "edit_file", {"path": "repo/a.txt", "old_text": "", "new_text": "y"})
+            ToolCall("1", "edit", {"path": "repo/a.txt", "old_text": "", "new_text": "y"})
         )
         assert out.startswith("[参数错误]")
 
     async def test_missing_args_rejected_by_pipeline(self, workdir) -> None:
         out = await _belt(workdir).call(
-            ToolCall("1", "edit_file", {"path": "repo/a.txt", "old_text": "x"})
+            ToolCall("1", "edit", {"path": "repo/a.txt", "old_text": "x"})
         )
         assert out.startswith("[参数错误]")
 
     async def test_missing_file_reports(self, workdir) -> None:
         out = await _belt(workdir, confirm=_yes).call(
-            ToolCall("1", "edit_file", {"path": "repo/nope.txt", "old_text": "x", "new_text": "y"})
+            ToolCall("1", "edit", {"path": "repo/nope.txt", "old_text": "x", "new_text": "y"})
         )
         assert out.startswith("[失败]")
 
     async def test_binary_refused(self, workdir) -> None:
         (workdir / "repo" / "b.bin").write_bytes(b"\x00\x01abc")
         out = await _belt(workdir, confirm=_yes).call(
-            ToolCall("1", "edit_file", {"path": "repo/b.bin", "old_text": "abc", "new_text": "y"})
+            ToolCall("1", "edit", {"path": "repo/b.bin", "old_text": "abc", "new_text": "y"})
         )
         assert out.startswith("[失败]")
 
@@ -173,7 +169,7 @@ class TestEditFile:
         out = await _belt(workdir, confirm=_yes).call(
             ToolCall(
                 "1",
-                "edit_file",
+                "edit",
                 {"path": "skills/keep/SKILL.md", "old_text": "keep", "new_text": "pwn"},
             )
         )
@@ -187,7 +183,7 @@ class TestEditFile:
         target.write_bytes(b"hello world\r\nsecond\r\n")
         out = await _belt(workdir, confirm=_yes).call(
             ToolCall(
-                "1", "edit_file", {"path": "repo/win.txt", "old_text": "world", "new_text": "there"}
+                "1", "edit", {"path": "repo/win.txt", "old_text": "world", "new_text": "there"}
             )
         )
         assert json.loads(out)["replacements"] == 1
@@ -196,9 +192,7 @@ class TestEditFile:
     async def test_exact_result_reports_matched_by(self, workdir) -> None:
         (workdir / "repo" / "a.txt").write_text("hello world\n", encoding="utf-8")
         out = await _belt(workdir, confirm=_yes).call(
-            ToolCall(
-                "1", "edit_file", {"path": "repo/a.txt", "old_text": "world", "new_text": "there"}
-            )
+            ToolCall("1", "edit", {"path": "repo/a.txt", "old_text": "world", "new_text": "there"})
         )
         assert json.loads(out)["matched_by"] == "exact"
 
@@ -208,7 +202,7 @@ class TestEditFile:
         out = await _belt(workdir, confirm=_yes).call(
             ToolCall(
                 "1",
-                "edit_file",
+                "edit",
                 {"path": "repo/code.py", "old_text": "return 1\n", "new_text": "return 2"},
             )
         )
@@ -221,9 +215,7 @@ class TestEditFile:
         target = workdir / "repo" / "win.txt"
         target.write_bytes(b"a\r\nb\r\nc\r\n")
         out = await _belt(workdir, confirm=_yes).call(
-            ToolCall(
-                "1", "edit_file", {"path": "repo/win.txt", "old_text": "a\nb", "new_text": "x\ny"}
-            )
+            ToolCall("1", "edit", {"path": "repo/win.txt", "old_text": "a\nb", "new_text": "x\ny"})
         )
         body = json.loads(out)
         assert body["matched_by"] == "line_trimmed"
@@ -236,7 +228,7 @@ class TestEditFile:
         out = await _belt(workdir, confirm=_yes).call(
             ToolCall(
                 "1",
-                "edit_file",
+                "edit",
                 {
                     "path": "repo/blk.txt",
                     "old_text": "head\none\ntwo!\nthree\ntail",
@@ -252,9 +244,7 @@ class TestEditFile:
         body = "a b\na b\n"
         (workdir / "repo" / "amb.txt").write_text(body, encoding="utf-8")
         out = await _belt(workdir, confirm=_yes).call(
-            ToolCall(
-                "1", "edit_file", {"path": "repo/amb.txt", "old_text": "a\tb", "new_text": "z"}
-            )
+            ToolCall("1", "edit", {"path": "repo/amb.txt", "old_text": "a\tb", "new_text": "z"})
         )
         assert out.startswith("[失败]")
         assert "候选" in out
@@ -266,7 +256,7 @@ class TestEditFile:
         out = await _belt(workdir, confirm=_yes).call(
             ToolCall(
                 "1",
-                "edit_file",
+                "edit",
                 {"path": "repo/esc.txt", "old_text": "line1\\nline2", "new_text": "oneline"},
             )
         )
@@ -281,7 +271,7 @@ class TestEditFile:
         out = await _belt(workdir, confirm=_yes).call(
             ToolCall(
                 "1",
-                "edit_file",
+                "edit",
                 {"path": "repo/cnt.txt", "old_text": "a\nb", "new_text": "z", "count": 2},
             )
         )
@@ -300,7 +290,7 @@ class TestEditFuzzyRegression:
         out = await _belt(workdir, confirm=_yes).call(
             ToolCall(
                 "1",
-                "edit_file",
+                "edit",
                 {
                     "path": "repo/deep.py",
                     "old_text": "\n        return x\n",
@@ -319,7 +309,7 @@ class TestEditFuzzyRegression:
         out = await _belt(workdir, confirm=_yes).call(
             ToolCall(
                 "1",
-                "edit_file",
+                "edit",
                 {
                     "path": "repo/win2.txt",
                     "old_text": "alpha\nbeta\n",

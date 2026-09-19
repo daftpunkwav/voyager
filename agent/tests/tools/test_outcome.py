@@ -21,12 +21,12 @@ def _belt(root, **kw) -> Toolbelt:
 
 class TestNormalize:
     def test_str_passes_through(self) -> None:
-        out = normalize("read_file", "hello")
-        assert (out.name, out.ok, out.text, out.title) == ("read_file", True, "hello", "read_file")
+        out = normalize("read", "hello")
+        assert (out.name, out.ok, out.text, out.title) == ("read", True, "hello", "read")
         assert out.metadata == {}
 
     def test_dict_serializes_like_legacy(self) -> None:
-        out = normalize("write_file", {"written": "a", "chars": 3})
+        out = normalize("write", {"written": "a", "chars": 3})
         assert out.ok is True
         assert out.text == '{"written": "a", "chars": 3}'
 
@@ -50,7 +50,7 @@ class TestNormalize:
 class TestValidateArguments:
     def _tool(self) -> AgentTool:
         return AgentTool(
-            name="edit_file",
+            name="edit",
             description="edit",
             handler=lambda **kw: "ok",
             schema={
@@ -131,7 +131,7 @@ class TestDetailedPipeline:
             return True
 
         belt = _belt(root, confirm=spy_confirm)
-        out = await belt.call_detailed(ToolCall("1", "read_file", {"path": 42}))
+        out = await belt.call_detailed(ToolCall("1", "read", {"path": 42}))
         assert out.ok is False
         assert out.text.startswith("[参数错误]")
         assert seen == []  # no confirmation raised for a malformed call
@@ -140,7 +140,7 @@ class TestDetailedPipeline:
         root = ensure_workdir(tmp_path / "ws")
         (root / "repo" / "a.txt").write_text("hello\n", encoding="utf-8")
         belt = _belt(root)
-        call = ToolCall("1", "read_file", {"path": "repo/a.txt"})
+        call = ToolCall("1", "read", {"path": "repo/a.txt"})
         assert (await belt.call_detailed(call)).text == await belt.call(call)
 
     async def test_unknown_tool_outcome(self, tmp_path) -> None:
@@ -156,7 +156,7 @@ class TestDetailedPipeline:
             PolicyEngine(fs=FsPolicy(roots=(str(root),))),
             result_budget=lambda text, _name: text if len(text) <= 10 else text[:10] + "…[spilled]",
         )
-        out = await belt.call_detailed(ToolCall("1", "read_file", {"path": "repo/big.txt"}))
+        out = await belt.call_detailed(ToolCall("1", "read", {"path": "repo/big.txt"}))
         assert out.ok is True
         assert out.metadata.get("truncated") is True
         assert out.text.endswith("…[spilled]")

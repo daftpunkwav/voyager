@@ -16,7 +16,7 @@ class TestRecorder:
             workspace_dir=tmp_path / "ws",
             llm=FakeLLM(
                 [
-                    LLMReply(tool_calls=(ToolCall("1", "list_dir", {"path": "."}),)),
+                    LLMReply(tool_calls=(ToolCall("1", "glob", {"pattern": "*"}),)),
                     LLMReply(text="done"),
                 ]
             ),
@@ -25,9 +25,9 @@ class TestRecorder:
             await app.master.handle_user_message("look around")
             await settle(app)
             rows = app.memory.episodic.recent(limit=5, kind="tool")
-            assert rows and rows[0]["summary"] == "list_dir"
+            assert rows and rows[0]["summary"] == "glob"
             detail = rows[0]["detail"]
-            assert detail["action"] == {"tool": "list_dir", "target": "."}
+            assert detail["action"] == {"tool": "glob", "target": '{"pattern": "*"}'}
             assert detail["ok"] is True and detail["result"]
             assert rows[0]["run_id"]  # bound to the chat instance's run
         finally:
@@ -36,9 +36,9 @@ class TestRecorder:
     def test_truncates_and_never_raises(self, tmp_path) -> None:
         episodic = EpisodicMemory(tmp_path / "e.db")
         rec = EpisodeRecorder(episodic)
-        rec.record_tool("write_file", {"path": "p" * 500, "content": "c"}, True, "x" * 5000)
+        rec.record_tool("write", {"path": "p" * 500, "content": "c"}, True, "x" * 5000)
         row = episodic.recent(limit=1)[0]
         assert len(row["detail"]["action"]["target"]) <= 200
         assert len(row["detail"]["result"]) <= 200
         episodic.close()
-        rec.record_tool("read_file", {"path": "a"}, False, "boom")  # closed db: logged, not raised
+        rec.record_tool("read", {"path": "a"}, False, "boom")  # closed db: logged, not raised

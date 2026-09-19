@@ -150,7 +150,7 @@ function WorkspaceBrowser({
 
   return createPortal(
     <div
-      className="ask-mask"
+      className="modal-overlay"
       role="dialog"
       aria-modal="true"
       aria-label={t('chat:workspace.browserTitle')}

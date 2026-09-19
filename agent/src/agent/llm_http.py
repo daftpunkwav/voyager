@@ -294,7 +294,9 @@ def _content_to_wire(content: Any) -> str | list[dict[str, Any]]:
                             }
                         )
                     else:
-                        wire_parts.append({"type": "image_url", "image_url": {"url": str(img_info)}})
+                        wire_parts.append(
+                            {"type": "image_url", "image_url": {"url": str(img_info)}}
+                        )
                 else:
                     wire_parts.append(p)
             else:

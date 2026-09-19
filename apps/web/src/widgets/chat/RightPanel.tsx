@@ -4,10 +4,11 @@
  * agents, deliverables — mirroring a mainstream agent UI's progress sidebar.
  *
  * Data sources:
- * - Plan: agent.todo_read polled every 5s (workspace/todo.json, the same list
- *   the LLM's todo_write maintains) with a done/total counter
- * - Agents: agent.list_subagents polled every 5s (no lifecycle SSE exists);
- *   each row shows the elapsed runtime and interrupts that instance on click
+ * - Plan: agent.todowrite (action=query) polled every 5s for the open session (the same
+ *   per-session list the LLM's todo_write maintains) with a done/total counter
+ * - Agents: agent.list_subagents polled every 5s (no lifecycle SSE exists),
+ *   filtered to the open session; each row shows the elapsed runtime and
+ *   interrupts that instance on click
  * - Deliverables: note artifacts from chatStore (note.created) plus the live
  *   task.* progress cards (rendered by TaskCards, passed in as children);
  *   the section stays visible with an empty hint when there is nothing to show
@@ -31,6 +32,8 @@ interface RunningInstance {
   started_ts: number;
   /** True = the chat session itself (Lucien), not a dispatched subagent. */
   conversational?: boolean;
+  /** Chat session this run belongs to ('' = session-less / older backend). */
+  session?: string;
 }
 
 const POLL_MS = 5000;
@@ -128,13 +131,16 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
   const [running, setRunning] = useState<RunningInstance[]>([]);
   const artifacts = useChatStore((s) => s.artifacts);
   const cardCount = useChatStore((s) => s.cardOrder.length);
+  // The panel mirrors the open session: plans and running instances are
+  // per-session data (session-less rows ride along for older backends).
+  const activeSessionId = useChatStore((s) => s.activeSessionId);
   // Ticks while subagents run so their elapsed time stays honest between polls.
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     let alive = true;
     const pull = () => {
-      listTodos()
+      listTodos(activeSessionId || undefined)
         .then((r) => {
           if (alive) {
             setTodos(r.items);
@@ -146,7 +152,9 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
         .then((s) => {
           if (alive)
             setRunning(
-              ((s.running as RunningInstance[]) ?? []).filter((r) => r.status === 'running')
+              ((s.running as RunningInstance[]) ?? []).filter(
+                (r) => r.status === 'running' && (!r.session || r.session === activeSessionId)
+              )
             );
         })
         .catch(() => {});
@@ -157,7 +165,7 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
       alive = false;
       clearInterval(timer);
     };
-  }, []);
+  }, [activeSessionId]);
 
   useEffect(() => {
     if (running.length === 0) return;

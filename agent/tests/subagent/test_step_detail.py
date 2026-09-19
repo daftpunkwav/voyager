@@ -8,12 +8,12 @@ from agent.policy import FsPolicy, PolicyEngine
 from agent.runtime.state import RunState
 from agent.subagent import Mode, ModeLimits
 from agent.subagent.modes import run_mode
-from agent.tools import Toolbelt, ensure_workdir, fs_tools
+from agent.tools import Toolbelt, ensure_workdir, fs_tools, search_tools
 
 
 def _belt(root, **kw) -> Toolbelt:
     return Toolbelt(
-        fs_tools([root]),
+        {**fs_tools([root]), **search_tools([root])},
         PolicyEngine(fs=FsPolicy(roots=(str(root),))),
         **kw,
     )
@@ -33,7 +33,7 @@ class TestToolStepDetail:
         root = ensure_workdir(tmp_path / "ws")
         llm = FakeLLM(
             [
-                LLMReply(tool_calls=(ToolCall("c-9", "list_dir", {"path": "."}),)),
+                LLMReply(tool_calls=(ToolCall("c-9", "glob", {"pattern": "*"}),)),
                 LLMReply(text="done"),
             ]
         )
@@ -50,17 +50,17 @@ class TestToolStepDetail:
         tools = [s for s in seen if s[0] == "tool"]
         assert len(tools) == 1
         _kind, name, summary, detail = tools[0]
-        assert name == "list_dir" and len(summary) <= 120
+        assert name == "glob" and len(summary) <= 120
         assert detail["tool_call_id"] == "c-9"
-        assert '"path"' in detail["args"] and detail["ok"] is True
-        assert detail["ms"] >= 0 and detail["title"] == "list_dir"
+        assert detail["ok"] is True
+        assert detail["ms"] >= 0 and detail["title"] == "glob"
 
     async def test_failed_call_detail_marks_not_ok(self, tmp_path) -> None:
         root = ensure_workdir(tmp_path / "ws")
-        belt = _belt(root).trimmed(["read_file"])  # list_dir genuinely absent
+        belt = _belt(root).trimmed(["read"])  # glob genuinely absent
         llm = FakeLLM(
             [
-                LLMReply(tool_calls=(ToolCall("c-1", "list_dir", {"path": "."}),)),
+                LLMReply(tool_calls=(ToolCall("c-1", "glob", {"pattern": "*"}),)),
                 LLMReply(text="done"),
             ]
         )
@@ -83,7 +83,7 @@ class TestToolStepDetail:
             [
                 LLMReply(
                     tool_calls=(
-                        ToolCall("c-1", "list_dir", {"path": "."}),
+                        ToolCall("c-1", "glob", {"pattern": "*"}),
                         ToolCall("c-2", "read_file", {"path": "nope.txt"}),
                     )
                 ),
@@ -141,7 +141,7 @@ class TestLlmStepDetail:
         llm = FakeLLM(
             [
                 LLMReply(
-                    tool_calls=(ToolCall("c-1", "list_dir", {"path": "."}),),
+                    tool_calls=(ToolCall("c-1", "glob", {"pattern": "*"}),),
                     usage=Usage(input_tokens=120, output_tokens=30),
                 ),
                 LLMReply(text="done", usage=Usage(input_tokens=60, output_tokens=10)),
@@ -159,7 +159,7 @@ class TestLlmStepDetail:
         rounds = [s for s in seen if s[0] == "llm" and s[1].startswith("round-")]
         assert len(rounds) == 2
         first = rounds[0][3]
-        assert first["round"] == 1 and first["tool_calls"] == ["list_dir"]
+        assert first["round"] == 1 and first["tool_calls"] == ["glob"]
         assert first["ms"] >= 0 and "ttft_ms" not in first  # FakeLLM does not stream
         assert (first["input_tokens"], first["output_tokens"]) == (120, 30)
         assert "text" not in first  # empty round text stays absent, not ""
@@ -174,7 +174,7 @@ class TestLlmStepDetail:
             [
                 LLMReply(
                     text="先看一下目录。",
-                    tool_calls=(ToolCall("c-1", "list_dir", {"path": "."}),),
+                    tool_calls=(ToolCall("c-1", "glob", {"pattern": "*"}),),
                 ),
                 LLMReply(text=big),
             ]

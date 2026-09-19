@@ -15,7 +15,7 @@ class TestObservabilityEndToEnd:
         fake_llm = FakeLLM(
             [
                 LLMReply(
-                    tool_calls=(ToolCall("call_1", "list_dir", {"path": "."}),),
+                    tool_calls=(ToolCall("call_1", "glob", {"pattern": "*"}),),
                     usage=Usage(input_tokens=40, output_tokens=15),
                     model="gpt-4o",
                 ),
@@ -42,7 +42,7 @@ class TestObservabilityEndToEnd:
             # 1. Verify root turn span and child spans exist
             assert "agent:turn" in names
             assert any(n.startswith("llm:round-") for n in names)
-            assert any(n.startswith("tool:list_dir") for n in names)
+            assert any(n.startswith("tool:glob") for n in names)
 
             # 2. Verify parent-child relationship
             turn_span = next(s for s in spans if s.name == "agent:turn")
@@ -54,7 +54,7 @@ class TestObservabilityEndToEnd:
 
             for ts in tool_spans:
                 assert ts.parent_id == turn_span.span_id
-                assert ts.attrs.get("tool_name") == "list_dir"
+                assert ts.attrs.get("tool_name") == "glob"
                 assert ts.attrs.get("tool_call_id") == "call_1"
 
             # 3. Verify GenAI semantic attributes
@@ -79,8 +79,12 @@ class TestObservabilityEndToEnd:
 
             # Set to all
             await app.settings.set("agent.observability.exporter", "all", LOCAL_USER)
-            await app.settings.set("agent.observability.langfuse_public_key", "pk-lf-test", LOCAL_USER)
-            await app.settings.set("agent.observability.langfuse_secret_key", "sk-lf-test", LOCAL_USER)
+            await app.settings.set(
+                "agent.observability.langfuse_public_key", "pk-lf-test", LOCAL_USER
+            )
+            await app.settings.set(
+                "agent.observability.langfuse_secret_key", "sk-lf-test", LOCAL_USER
+            )
 
             # Rebuild app to verify new exporter creation
             app2 = build_agent(

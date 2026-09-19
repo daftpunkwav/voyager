@@ -26,26 +26,23 @@ from typing import Any
 from agent.tools.core.base import AgentTool, Toolbelt
 
 #: Always active (full schema): tools that conversation orchestration cannot
-#: do without, plus activate_tools itself; todo_read/todo_write are the
-#: structured plan for long/multi-step conversations (baseline 2026-09):
-#: small and cross-domain, so kept always active
+#: do without, plus activate_tools itself; todowrite is the structured plan
+#: for long/multi-step conversations (baseline 2026-09): small and
+#: cross-domain, so kept always active
 CORE_TOOLS = (
     "ask_user",
     "spawn_subagent",
     "load_skill",
     "recall_memory",
     "request_context",
-    "todo_read",
-    "todo_write",
-    # The workspace working set (read/write/edit/delete/list/glob/grep/shell
-    # are resident): without write_file and run_shell the model cannot do
-    # actual workspace work and degrades into ask_user loops
-    "read_file",
-    "write_file",
-    "edit_file",
-    "delete_file",
-    "list_dir",
-    "run_shell",
+    "todowrite",
+    # The workspace working set (read/write/edit/glob/grep/bash are
+    # resident): without write and bash the model cannot do actual workspace
+    # work and degrades into ask_user loops
+    "read",
+    "write",
+    "edit",
+    "bash",
     "grep",
     "glob",
     "settings__get_theme",
@@ -85,8 +82,7 @@ def page_preactivate(page: str) -> str | None:
 
 def domain_prefixes(names: Iterable[str]) -> tuple[str, ...]:
     """Map `foo__bar` entries in the roster to foo (text before the first `__`).
-    Built-ins without `__` (read_file / run_shell / activate_tools...) yield no
-    domain. Deduplicated and sorted for a stable order.
+    Built-ins without `__` (read / bash / activate_tools...) yield no domain. Deduplicated and sorted for a stable order.
     """
     prefixes = set()
     for n in names:

@@ -91,6 +91,26 @@ class GoalManager:
         if self._store is not None:
             self._store.set_meta(self._key(session), "")
 
+    def subs(self, session: str) -> list:
+        """Sub goals of the session: [{text, status}] from a sibling meta key."""
+        if self._store is None:
+            return []
+        raw = self._store.get_meta(f"{KEY_PREFIX}sub:{session}")
+        if not raw:
+            return []
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            return []
+        return data if isinstance(data, list) else []
+
+    def set_subs(self, session: str, subs: list) -> None:
+        if self._store is not None:
+            self._store.set_meta(
+                f"{KEY_PREFIX}sub:{session}",
+                json.dumps(subs, ensure_ascii=False),
+            )
+
     def active_sessions(self) -> list[str]:
         """Sessions whose persisted goal is still 'active' (boot downgrade
         scans this; nothing else iterates goals)."""

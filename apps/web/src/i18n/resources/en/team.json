@@ -55,7 +55,7 @@
   "spawn.confirm.overwrite": "Overwrite",
   "spawnTools.label": "Tool access",
   "spawnTools.custom": "Specify whitelist",
-  "spawnTools.help": "The whitelist is a real restriction: unchecked tools cannot be called by this subagent (write_file / run_shell included).",
+  "spawnTools.help": "The whitelist is a real restriction: unchecked tools cannot be called by this subagent (write / bash included).",
   "tool.title": "Tool catalog",
   "tool.loading": "Loading tools…",
   "tool.loadFailed": "Failed to load tools",

@@ -44,6 +44,9 @@ def list_subagents(registry: SubagentRegistry, spawner: Spawner) -> dict:
                 # use this to keep them out of subagent rosters or label them
                 # as the main conversation.
                 "conversational": i.task.conversational,
+                # Chat session this run belongs to ('' = session-less background
+                # work); the frontend filters the panel to the open session.
+                "session": i.task.session,
             }
             # Only alive instances are listed: terminal ones (completed/failed/
             # cancelled) stay in spawner.instances for memory introspection but

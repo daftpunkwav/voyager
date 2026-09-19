@@ -55,7 +55,7 @@
   "spawn.confirm.overwrite": "覆盖",
   "spawnTools.label": "能力面",
   "spawnTools.custom": "指定白名单",
-  "spawnTools.help": "白名单是真裁剪:没勾的工具该 subagent 真的调不了(write_file / run_shell 等含其中)。",
+  "spawnTools.help": "白名单是真裁剪:没勾的工具该 subagent 真的调不了(write / bash 等含其中)。",
   "tool.title": "工具面名册",
   "tool.loading": "加载工具面中…",
   "tool.loadFailed": "工具面加载失败",

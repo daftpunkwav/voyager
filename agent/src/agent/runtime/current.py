@@ -14,4 +14,16 @@ from typing import Any
 
 current_instance: ContextVar[Any] = ContextVar("agent.current_instance", default=None)
 
-__all__ = ["current_instance"]
+
+def current_session() -> str:
+    """Chat session id of the executing instance ('' outside a turn or for
+    session-less work). The routing key UI-facing projections (ask dialogs,
+    per-session plans) stamp on their events so multi-session frontends can
+    route them to the right lane."""
+    inst = current_instance.get()
+    if inst is None:
+        return ""
+    return str(getattr(getattr(inst, "task", None), "session", "") or "")
+
+
+__all__ = ["current_instance", "current_session"]

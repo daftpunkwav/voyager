@@ -169,7 +169,7 @@ class ReplSession:
         if cmd == "help":
             self._out(_HELP)
         elif cmd == "todo":
-            self._out(f"{_fmt(await self._call('todo_read'))}\n")
+            self._out(f"{_fmt(await self._call('todowrite', {'action': 'query'}))}\n")
         elif cmd == "memory":
             self._out(f"{_fmt(await self._call('get_memory'))}\n")
         elif cmd == "sessions":

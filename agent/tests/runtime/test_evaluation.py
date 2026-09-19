@@ -75,7 +75,9 @@ def test_heuristic_circuit_breaker() -> None:
 async def test_judge_evaluation() -> None:
     fake_llm = FakeLLM(
         script=[
-            LLMReply(text='{"score": 0.95, "feedback": "Clear explanation and all constraints satisfied."}')
+            LLMReply(
+                text='{"score": 0.95, "feedback": "Clear explanation and all constraints satisfied."}'
+            )
         ]
     )
     res = await TaskEvaluator.evaluate_judge(

@@ -1,4 +1,4 @@
-"""edit_file tool: atomic in-place string replacement inside the jail.
+"""edit tool: atomic in-place string replacement inside the jail.
 
 Text files only; binary heads are refused. The write is temp-file +
 os.replace so an interrupted edit never leaves a half-written target.
@@ -60,9 +60,9 @@ def _fuzzy_edit(
         if result.ambiguous:
             return (
                 f"[失败] 未找到唯一匹配(模糊链发现 {result.ambiguous} 处候选): "
-                "请加长 old_text 使其唯一,或用 read_file 核对原文"
+                "请加长 old_text 使其唯一,或用 read 核对原文"
             )
-        return "[失败] 未找到匹配: 请用 read_file/grep 先看原文"
+        return "[失败] 未找到匹配: 请用 read/grep 先看原文"
     start, end = result.span
     replacement = new_text
     if result.level == "line_trimmed" and result.line_indent:
@@ -82,8 +82,8 @@ def _fuzzy_edit(
     return {"edited": jail.display(target), "replacements": 1, "matched_by": result.level}
 
 
-def edit_file_tool(jail: Jail, journal: WriteJournal | None = None) -> AgentTool:
-    def edit_file(path: str, old_text: str, new_text: str, count: int = 1) -> Any:
+def edit_tool(jail: Jail, journal: WriteJournal | None = None) -> AgentTool:
+    def edit(path: str, old_text: str, new_text: str, count: int = 1) -> Any:
         """Atomic string replacement: the exact match must be unique (default
         count=1) so a short old_text never rewrites the wrong place; when the
         exact pass finds nothing, a fuzzy ladder (line/block/whitespace/
@@ -101,13 +101,13 @@ def edit_file_tool(jail: Jail, journal: WriteJournal | None = None) -> AgentTool
         except FileNotFoundError:
             return f"[失败] 文件不存在: {jail.display(target)}"
         if b"\x00" in raw[:8192]:
-            return "[失败] 二进制文件不支持 edit,请用 write_file 整体重写"
+            return "[失败] 二进制文件不支持 edit,请用 write 整体重写"
         text = raw.decode("utf-8", errors="replace")
         found = text.count(old_text)
         if found == 0 and count == 1:
             return _fuzzy_edit(jail, target, text, old_text, new_text, journal)
         if found == 0:
-            return "[失败] 未找到匹配: 请用 read_file/grep 先看原文"
+            return "[失败] 未找到匹配: 请用 read/grep 先看原文"
         if found > count:
             return (
                 f"[失败] 匹配 {found} 处,超过 count={count}: 请加长 old_text 使其唯一,或增大 count"
@@ -119,12 +119,12 @@ def edit_file_tool(jail: Jail, journal: WriteJournal | None = None) -> AgentTool
         return {"edited": jail.display(target), "replacements": found, "matched_by": "exact"}
 
     return AgentTool(
-        name="edit_file",
+        name="edit",
         description=(
             "在工作目录内原子替换文件片段(old_text 须唯一,多处匹配会失败;"
-            "精确失配时按 行修剪/块锚点/空白归一/缩进 回填逐级模糊定位;大改用 write_file)"
+            "精确失配时按 行修剪/块锚点/空白归一/缩进 回填逐级模糊定位;大改用 write)"
         ),
-        handler=edit_file,
+        handler=edit,
         dimension="fs",
         write=True,
         schema={
@@ -140,4 +140,4 @@ def edit_file_tool(jail: Jail, journal: WriteJournal | None = None) -> AgentTool
     )
 
 
-__all__ = ["edit_file_tool"]
+__all__ = ["edit_tool"]

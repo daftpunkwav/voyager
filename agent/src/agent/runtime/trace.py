@@ -178,7 +178,9 @@ class Span:
                 "name": self.name,
                 "startTime": start_iso,
                 "endTime": end_iso,
-                "model": str(self.attrs.get("gen_ai.request.model") or self.attrs.get("model") or ""),
+                "model": str(
+                    self.attrs.get("gen_ai.request.model") or self.attrs.get("model") or ""
+                ),
                 "usage": {
                     "input": in_tok,
                     "output": out_tok,
@@ -285,11 +287,13 @@ class SpanHandle:
         self._ok = False
 
     def add_event(self, name: str, **attrs: Any) -> None:
-        self._events.append({
-            "name": name,
-            "time_ns": time.time_ns(),
-            "attributes": attrs,
-        })
+        self._events.append(
+            {
+                "name": name,
+                "time_ns": time.time_ns(),
+                "attributes": attrs,
+            }
+        )
 
     def __enter__(self) -> Self:
         self._start_perf = time.perf_counter()

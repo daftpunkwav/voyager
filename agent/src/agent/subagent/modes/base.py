@@ -59,7 +59,6 @@ DeltaCb = Callable[[int, str], Awaitable[None]]  # (round, delta text)
 EventCb = Callable[..., Awaitable[None]]
 
 
-
 async def noop_step(kind: str, name: str, summary: str, detail: dict[str, Any]) -> None:
     return None
 

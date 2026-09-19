@@ -74,6 +74,6 @@ class TestQuotaAndRoster:
             }
             roster = json.loads(await belt.call(ToolCall("2", "list_tools", {})))
             names = {t["name"] for t in roster}
-            assert {"read_file", "cancel_run", "read_events"} <= names
+            assert {"read", "cancel_run", "read_events"} <= names
         finally:
             app.close()

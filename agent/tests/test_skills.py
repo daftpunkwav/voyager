@@ -113,7 +113,7 @@ class TestDefaultWiring:
 class TestSkillsWriteGuard:
     """Integration: toolbelt writes into skills are refused by policy, so a fake skill never enters the index."""
 
-    async def test_write_file_rejected_and_not_indexed(self, tmp_path) -> None:
+    async def test_write_to_skills_rejected_and_not_indexed(self, tmp_path) -> None:
         from agent.llm import FakeLLM, ToolCall
         from agent.main import build_agent
 
@@ -121,7 +121,7 @@ class TestSkillsWriteGuard:
         try:
             belt = app.spawner._toolbelt
             out = await belt.call(
-                ToolCall("1", "write_file", {"path": "skills/pwn/SKILL.md", "content": "injection"})
+                ToolCall("1", "write", {"path": "skills/pwn/SKILL.md", "content": "injection"})
             )
             assert "[已拒绝]" in out
             assert not (tmp_path / "ws" / "skills" / "pwn").exists()
@@ -134,15 +134,15 @@ class TestOrganizer:
     def _fill(self, db, runs: int = 3) -> EpisodicMemory:
         ep = EpisodicMemory(db)
         for i in range(runs):
-            ep.log("tool", "read_file", run_id=f"r{i}")
-            ep.log("tool", "write_file", run_id=f"r{i}")
+            ep.log("tool", "read", run_id=f"r{i}")
+            ep.log("tool", "write", run_id=f"r{i}")
         return ep
 
     def test_detect_repeated_sequence(self, tmp_path) -> None:
         ep = self._fill(tmp_path / "ep.db")
         org = SkillOrganizer(ep)
         hits = ep and org.detect(min_count=3, seq_len=2)
-        assert hits == [{"sequence": ["read_file", "write_file"], "count": 3}]
+        assert hits == [{"sequence": ["read", "write"], "count": 3}]
         assert org.detect(min_count=4) == []  # below the threshold, nothing reported
 
     async def test_propose_publishes_event_without_writing(self, tmp_path) -> None:
@@ -156,7 +156,7 @@ class TestOrganizer:
         proposed = await org.propose(min_count=3)
         assert len(published) == 1
         assert published[0]["type"] == "skill.proposed"
-        assert published[0]["sequence"] == ["read_file", "write_file"]
+        assert published[0]["sequence"] == ["read", "write"]
         assert proposed[0]["count"] == 3
         assert not (tmp_path / "skills").exists()  # saving is propose_skill's job
 

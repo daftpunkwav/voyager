@@ -57,7 +57,9 @@ class AgentApp:
     )
     owns_log: bool = True  # False when sharing a bus (aggregate runs share the EventLog)
     session_index: Any = None  # SessionIndex: FTS search projection (closed with the app; optional for legacy constructors)
-    dispatcher: Any = None  # TraceDispatcher: span exporter lifecycle (flushed in drain, detached in close)
+    dispatcher: Any = (
+        None  # TraceDispatcher: span exporter lifecycle (flushed in drain, detached in close)
+    )
 
     async def start_queue_loop(self, *, poll_interval: float = 5.0) -> None:
         """Start the durable-job poll loop (host lifespan; needs a running loop)."""

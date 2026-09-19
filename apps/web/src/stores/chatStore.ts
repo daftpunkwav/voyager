@@ -176,6 +176,8 @@ interface LaneSnapshot {
   artifacts: NoteArtifact[];
   streaming: StreamingText | null;
   thinking: boolean;
+  /** Pending ask dialog of this lane; restored when the lane reactivates. */
+  question: PendingQuestion | null;
   /** History/trajectory backfill already ran for this lane. */
   loaded: boolean;
 }
@@ -190,7 +192,34 @@ function emptyLane(): LaneSnapshot {
     artifacts: [],
     streaming: null,
     thinking: false,
+    question: null,
     loaded: false,
+  };
+}
+
+/** agent.ask payload -> PendingQuestion (live SSE lanes share one parse).
+ *  Options are rendered as button children: normalize defensively — the
+ *  backend used to pass the LLM's {"content": ...} objects through, and a
+ *  non-string option crashes the whole route. */
+function toPendingQuestion(p: Record<string, unknown>): PendingQuestion {
+  const rawOptions = Array.isArray(p.options) ? p.options : [];
+  const options = rawOptions.map((o) =>
+    typeof o === 'string'
+      ? o
+      : o && typeof o === 'object'
+        ? ((['content', 'label', 'value', 'text']
+            .map((k) => (o as Record<string, unknown>)[k])
+            .find((v) => typeof v === 'string' && v.trim()) as string | undefined) ??
+          JSON.stringify(o))
+        : String(o ?? '')
+  );
+  return {
+    questionId: String(p.question_id),
+    prompt: String(p.prompt ?? ''),
+    kind: (p.kind as PendingQuestion['kind']) ?? 'confirm',
+    options,
+    min: (p.min as number | null) ?? null,
+    max: (p.max as number | null) ?? null,
   };
 }
 
@@ -447,6 +476,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       artifacts: s.artifacts,
       streaming: s.streaming,
       thinking: s.thinking,
+      question: s.question,
       loaded: s.activeLoaded,
     };
     const lane = s.lanes[sessionId] ?? emptyLane();
@@ -465,6 +495,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       activeLoaded: lane.loaded,
       // Per-turn visual slots reset on a switch; per-session state stays
       currentStep: null,
+      // The ask dialog belongs to the asking session: archived with its lane
+      // and restored on return, never shown over another session
+      question: lane.question,
     });
     return lane.loaded;
   },
@@ -478,6 +511,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ...lane,
         thinking: false,
         streaming: null,
+        // The agent speaking again means the lane's pending ask is settled
+        // (answered, timed out, or continued with defaults)
+        question: null,
         lastSteps: lane.steps,
         steps: [],
         messages: [
@@ -492,6 +528,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ],
       };
       set({ lanes: { ...get().lanes, [sessionId]: next } });
+    } else if (ev.type === EventType.AGENT_ASK) {
+      // The question parks in its own lane; it resurfaces when the user
+      // switches back (AskDialog re-arms its fallback timer on questionId)
+      set({
+        lanes: { ...get().lanes, [sessionId]: { ...lane, question: toPendingQuestion(p) } },
+      });
     } else if (ev.type === EventType.AGENT_DELTA) {
       const round = Number(p.round ?? 1);
       const prev = lane.streaming;
@@ -661,30 +703,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         break;
       }
       case EventType.AGENT_ASK: {
-        // Options are rendered as button children: normalize defensively — the
-        // backend used to pass the LLM's {"content": ...} objects through, and a
-        // non-string option crashes the whole route
-        const rawOptions = Array.isArray(p.options) ? p.options : [];
-        const options = rawOptions.map((o) =>
-          typeof o === 'string'
-            ? o
-            : o && typeof o === 'object'
-              ? ((['content', 'label', 'value', 'text']
-                  .map((k) => (o as Record<string, unknown>)[k])
-                  .find((v) => typeof v === 'string' && v.trim()) as string | undefined) ??
-                JSON.stringify(o))
-              : String(o ?? '')
-        );
-        set({
-          question: {
-            questionId: String(p.question_id),
-            prompt: String(p.prompt ?? ''),
-            kind: (p.kind as PendingQuestion['kind']) ?? 'confirm',
-            options,
-            min: (p.min as number | null) ?? null,
-            max: (p.max as number | null) ?? null,
-          },
-        });
+        set({ question: toPendingQuestion(p) });
         break;
       }
       case EventType.AGENT_NAVIGATE: {

@@ -44,6 +44,11 @@ HUMAN_ONLY_CAPABILITIES: dict[str, str] = {
     # human hands (the agent can only submit a plan and wait).
     "plan_mode_set": "toggles the plan review gate; human-controlled by design",
     "goal_manage": "creates/pauses/resumes durable goals; the auto-continuation budget stays human-controlled",
+    # Session list curation and turn rating shape the user's own view of the
+    # conversation history; the agent reads via read_history / session_search.
+    "pin_session": "curates the user's session list (human prerogative)",
+    "archive_session": "curates the user's session list (human prerogative)",
+    "rate_turn": "the user rates the agent's turn, never the other way around",
 }
 
 #: Agent tools with no human capability of the same name: the agent's hands
@@ -57,17 +62,12 @@ AGENT_ONLY_TOOLS: dict[str, str] = {
     "write_board": "task-scoped shared notes among sibling subagents (no human board page)",
     "read_events": "bounded reader of the activity feed (human has the activity page)",
     "read_history": "bounded reader of chat history (human has the chat page)",
-    "read_file": "workspace hand",
-    "write_file": "workspace hand",
-    "edit_file": "workspace hand",
-    "list_dir": "workspace hand",
-    "delete_file": "workspace hand",
-    "undo_writes": "workspace hand (rollback of the agent's own writes)",
+    "read": "workspace hand",
+    "write": "workspace hand",
+    "edit": "workspace hand",
     "grep": "workspace hand",
     "glob": "workspace hand",
-    "run_shell": "workspace hand",
-    "run_snippet": "shell hand (in-harness lightweight snippet execution, L2 like run_shell)",
-    "todo_write": "plan hand (human reads via todo_read)",
+    "bash": "workspace hand",
     "web_fetch": "network hand",
     "web_search": "network hand",
     "ask_user": "agent -> human question channel",

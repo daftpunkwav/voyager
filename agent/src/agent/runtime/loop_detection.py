@@ -26,7 +26,7 @@ DEFAULT_THRESHOLD = 3
 #: Bookkeeping tools invisible to the detector: legitimate todo updates repeat by
 #: design, and counting them would both false-trip and let interleaved updates evict
 #: a real repetition pattern from the window
-BOOKKEEPING_TOOLS = frozenset({"todo_write", "todo_read"})
+BOOKKEEPING_TOOLS = frozenset({"todowrite"})
 
 
 class LoopDetector:

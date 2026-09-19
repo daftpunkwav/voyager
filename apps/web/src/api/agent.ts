@@ -38,17 +38,20 @@ export async function listSubagents(): Promise<{
   };
 }
 
-/** todo_read: the agent's current plan (same workspace/todo.json the LLM tools write). */
+/** todowrite (action=query): the agent's current plan (the per-session file
+ *  the todowrite tool maintains; session-less work shares workspace/todo.json). */
 export interface TodoItem {
   content: string;
   status: 'pending' | 'in_progress' | 'done';
 }
 
-export async function listTodos(): Promise<{ items: TodoItem[]; done: number; total: number }> {
+export async function listTodos(
+  session?: string
+): Promise<{ items: TodoItem[]; done: number; total: number }> {
   const raw = await callCapability<{ items?: TodoItem[]; done?: number; total?: number }>(
     'agent',
-    'todo_read',
-    {}
+    'todowrite',
+    { action: 'query', session: session ?? '' }
   );
   return {
     items: Array.isArray(raw.items) ? raw.items : [],

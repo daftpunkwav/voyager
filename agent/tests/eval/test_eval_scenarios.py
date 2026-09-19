@@ -42,12 +42,13 @@ def scenario_todo_plan(tmp_path) -> dict:
                     tool_calls=(
                         ToolCall(
                             "1",
-                            "todo_write",
+                            "todowrite",
                             {
+                                "action": "set",
                                 "items": [
                                     {"content": "collect", "status": "in_progress"},
                                     {"content": "summarize", "status": "pending"},
-                                ]
+                                ],
                             },
                         ),
                     )
@@ -56,12 +57,13 @@ def scenario_todo_plan(tmp_path) -> dict:
                     tool_calls=(
                         ToolCall(
                             "2",
-                            "todo_write",
+                            "todowrite",
                             {
+                                "action": "set",
                                 "items": [
                                     {"content": "collect", "status": "done"},
                                     {"content": "summarize", "status": "done"},
-                                ]
+                                ],
                             },
                         ),
                     )
@@ -76,7 +78,9 @@ def scenario_todo_plan(tmp_path) -> dict:
         asyncio.run(_drive(app, "organize the weekly data"))
         from agent.tools.workspace.todo_store import TodoStore, read_plan
 
-        plan = read_plan(TodoStore(tmp_path / "ws" / "todo.json"))
+        # Plans are per chat session: read the driving session's plan file
+        sid = app.master.sessions.target_id("")
+        plan = read_plan(TodoStore(tmp_path / "ws" / "todo.json").for_session(sid))
         return {
             "scenario": "todo_plan",
             "reply": "All steps completed and reported.",

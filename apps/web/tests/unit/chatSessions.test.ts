@@ -116,4 +116,62 @@ describe('chatStore multi-session', () => {
     useChatStore.getState().dispatch(ev(13, 'agent.delta', { text: '好', round: 1, session: 'a' }));
     expect(useChatStore.getState().streaming?.text).toBe('你好');
   });
+
+  it('ask dialogs follow their session: archived with the lane, restored on return', () => {
+    const store = useChatStore.getState();
+    store.setSessions(
+      [
+        { session_id: 'a', title: 'A', status: 'waiting_input' },
+        { session_id: 'b', title: 'B', status: 'stored' },
+      ],
+      'a'
+    );
+    // A question arrives for the active session a
+    useChatStore
+      .getState()
+      .dispatch(ev(20, 'agent.ask', { question_id: 'q1', prompt: 'A 的问题', kind: 'confirm' }));
+    expect(useChatStore.getState().question?.questionId).toBe('q1');
+
+    // Switching away must not show A's dialog over session b
+    useChatStore.getState().switchSession('b');
+    expect(useChatStore.getState().question).toBeNull();
+
+    // While b is open, a question from the background session a parks in
+    // its lane instead of hijacking the view
+    useChatStore.getState().dispatch(
+      ev(21, 'agent.ask', {
+        question_id: 'q2',
+        prompt: 'A 后台的问题',
+        kind: 'choice',
+        session: 'a',
+      })
+    );
+    expect(useChatStore.getState().question).toBeNull();
+    expect(useChatStore.getState().lanes.a.question?.questionId).toBe('q2');
+
+    // Returning to a restores its latest dialog (the background one)
+    useChatStore.getState().switchSession('a');
+    expect(useChatStore.getState().question?.questionId).toBe('q2');
+  });
+
+  it('a lane reply settles the lane pending question without touching the view', () => {
+    const store = useChatStore.getState();
+    store.setSessions(
+      [
+        { session_id: 'a', title: 'A', status: 'waiting_input' },
+        { session_id: 'b', title: 'B', status: 'stored' },
+      ],
+      'a'
+    );
+    useChatStore.getState().switchSession('b');
+    useChatStore
+      .getState()
+      .dispatch(ev(30, 'agent.ask', { question_id: 'qb', prompt: 'B 的问题', kind: 'confirm' }));
+    useChatStore.getState().switchSession('a');
+
+    // The final message for the background lane clears the lane's question
+    useChatStore.getState().dispatch(ev(31, 'agent.message', { content: 'done', session: 'b' }));
+    expect(useChatStore.getState().lanes.b.question).toBeNull();
+    expect(useChatStore.getState().question).toBeNull();
+  });
 });

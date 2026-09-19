@@ -227,7 +227,9 @@ def _build_tools(
             {skill.name: skill, propose_skill.name: propose_skill, recall.name: recall},
         )
     )
-    # Plan/todos + scratchpad: persisted under the workspace, shared across turns/instances
+    # Plan/todos + scratchpad: persisted under the workspace; the plan file is
+    # resolved per executing session (todos/<session>.json, global todo.json
+    # for session-less work), the scratchpad is shared across turns/instances
     scratchpad = scratchpad_tool(workspace)
     registry.add(
         StaticToolSource(
@@ -396,8 +398,8 @@ def build_agent(
         """Master side of request_context: summaries only, never full context."""
         return {"need": need, "profile": memory.profile.render(), "subagents": digests.render()}
 
-    # Write journal: content-addressed backups behind the fs write tools,
-    # enabling undo_writes; lives under data_dir, outside the workspace jail
+    # Write journal: content-addressed backups behind the fs write tools
+    # (checkpoint/audit support); lives under data_dir, outside the workspace jail
     write_journal = WriteJournal(data_dir / "write_journal")
     tool_registry = _build_tools(
         settings,
@@ -716,7 +718,7 @@ def build_agent(
             user_hooks=user_hooks,  # hot load/unload of user workspace/hooks
             todos=TodoStore(
                 workspace / "todo.json"
-            ),  # same file as the toolbelt's store (stateless path wrapper)
+            ),  # same root as the toolbelt's store; per-session plans derive from it
             sessions=master.sessions,  # same manager the agent session tools use (one engine, two drivers)
             jobs=jobs_view,  # task.* projection (read-only)
             job_cancel=job_cancel,  # host-routed to the source domain's cancel capability
@@ -820,10 +822,14 @@ def build_agent(
         )
         span_exporters.append(OtlpHttpSpanExporter(endpoint=otlp_endpoint))
     if exporter_type in ("langfuse", "all"):
-        lf_host = str(settings.get("agent.observability.langfuse_host") or "https://cloud.langfuse.com")
+        lf_host = str(
+            settings.get("agent.observability.langfuse_host") or "https://cloud.langfuse.com"
+        )
         lf_pk = str(settings.get("agent.observability.langfuse_public_key") or "")
         lf_sk = str(settings.get("agent.observability.langfuse_secret_key") or "")
-        span_exporters.append(LangfuseSpanExporter(host=lf_host, public_key=lf_pk, secret_key=lf_sk))
+        span_exporters.append(
+            LangfuseSpanExporter(host=lf_host, public_key=lf_pk, secret_key=lf_sk)
+        )
     dispatcher = TraceDispatcher(span_exporters)
     dispatcher.attach()
 

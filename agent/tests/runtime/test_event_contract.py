@@ -69,7 +69,7 @@ class TestLifecycleEvents:
             workspace_dir=tmp_path / "ws",
             llm=FakeLLM(
                 [
-                    LLMReply(tool_calls=(ToolCall("1", "list_dir", {"path": "."}),)),
+                    LLMReply(tool_calls=(ToolCall("1", "glob", {"pattern": "*"}),)),
                     LLMReply(text="done"),
                 ]
             ),
@@ -93,7 +93,7 @@ class TestLifecycleEvents:
                 == types.count(RuntimeEvent.LLM_COMPLETED)
             )
             tool_done = next(e for _, e in app.log.read_after(types=[RuntimeEvent.TOOL_COMPLETED]))
-            assert tool_done.payload["tool"] == "list_dir" and tool_done.payload["run_id"]
+            assert tool_done.payload["tool"] == "glob" and tool_done.payload["run_id"]
         finally:
             app.close()
 
@@ -103,7 +103,7 @@ class TestLifecycleEvents:
             workspace_dir=tmp_path / "ws",
             llm=FakeLLM(
                 [
-                    LLMReply(tool_calls=(ToolCall("1", "read_file", {"path": "nope.txt"}),)),
+                    LLMReply(tool_calls=(ToolCall("1", "read", {"path": "nope.txt"}),)),
                     LLMReply(text="done"),
                 ]
             ),

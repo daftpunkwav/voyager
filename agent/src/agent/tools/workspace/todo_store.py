@@ -1,16 +1,21 @@
-"""Todo plan storage: atomic read/write of workspace/todo.json plus the one
-read-projection (read_plan) shared by the todo_read tool and capability.
+"""Todo plan storage: atomic read/write of workspace/todo.json plus the plan
+lifecycle operation (plan_action) shared by the todowrite tool and capability.
 
 Follows the TodoWrite convention of mainstream harnesses: whole-list
 replacement plus read-only query; three statuses pending / in_progress /
 done. The list is the agent's cross-turn "current plan" — persisted so the
 user can view or delete it directly. No multiple lists, no version history.
+
+Plans are per chat session (todos/<session>.json) so parallel sessions never
+overwrite each other and the UI panel follows the open session; session-less
+work (REPL, background runs) shares the legacy global todo.json.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from pathlib import Path
 from typing import Any
@@ -25,6 +30,11 @@ _STATUS = frozenset(STATUSES)
 #: bloating and crowding the context)
 MAX_ITEMS = 100
 MAX_CONTENT = 500
+
+#: Session ids double as file names under workspace/todos/ — same shape the
+#: gateway enforces on the chat API, re-checked here so the path can never be
+#: coerced into a traversal.
+_SESSION_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def _normalize(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -79,6 +89,22 @@ class TodoStore:
     def __init__(self, path: str | Path) -> None:
         self._path = Path(path)
 
+    def for_session(self, session: str) -> TodoStore:
+        """Per-session plan store: todos/<session>.json beside the global file;
+        an empty session resolves to the shared global file. The store is a
+        stateless path wrapper, so deriving one per call is free."""
+        sid = str(session or "").strip()
+        if not sid:
+            return self
+        if not _SESSION_RE.fullmatch(sid):
+            raise ServiceError(
+                "agent",
+                ErrorSuffix.INVALID_INPUT,
+                f"session 非法: {sid[:80]}",
+                hint="session 取值 [A-Za-z0-9_-]{1,64}",
+            )
+        return TodoStore(self._path.parent / "todos" / f"{sid}.json")
+
     def load(self) -> list[dict[str, Any]]:
         try:
             raw = self._path.read_text(encoding="utf-8")
@@ -109,11 +135,87 @@ def progress(items: list[dict[str, Any]]) -> dict[str, int]:
 
 
 def read_plan(store: TodoStore) -> dict[str, Any]:
-    """The one todo-read operation: current items plus progress. Both the LLM
-    tool binding (todo_read) and the human capability binding (todo_read) call
-    this single function — written once, same name on both surfaces."""
+    """The one plan-read operation: current items plus progress."""
     items = store.load()
     return {"items": items, **progress(items)}
 
 
-__all__ = ["MAX_CONTENT", "MAX_ITEMS", "STATUSES", "TodoStore", "progress", "read_plan"]
+def plan_action(
+    store: TodoStore,
+    *,
+    action: str = "query",
+    items: list[dict[str, Any]] | None = None,
+    index: int | None = None,
+    content: str | None = None,
+    status: str | None = None,
+) -> dict[str, Any]:
+    """The one plan-mutation operation covering the whole lifecycle — set
+    (whole-list replacement), query, update (patch one entry by index),
+    delete (one entry by index, or clear the list without one). Raises
+    ServiceError on invalid arguments; both the human capability and the
+    agent's todowrite tool bind this single function — one implementation,
+    two drivers, no human/agent asymmetry."""
+    if action == "query":
+        return read_plan(store)
+    if action == "set":
+        saved = store.replace(items if items is not None else [])
+        return {"items": saved, **progress(saved)}
+    current = store.load()
+    if action == "update":
+        if index is None or not (0 <= index < len(current)):
+            raise ServiceError(
+                "agent",
+                ErrorSuffix.INVALID_INPUT,
+                f"update 需要有效 index(0-{len(current) - 1 if current else 0})",
+            )
+        if content is None and status is None:
+            raise ServiceError(
+                "agent",
+                ErrorSuffix.INVALID_INPUT,
+                "update 需要 content 或 status 至少其一",
+            )
+        entry = dict(current[index])
+        if content is not None:
+            entry["content"] = content
+        if status is not None:
+            if status not in STATUSES:
+                raise ServiceError(
+                    "agent",
+                    ErrorSuffix.INVALID_INPUT,
+                    f"status 非法: {status}",
+                    hint="status 取值 pending / in_progress / done",
+                )
+            entry["status"] = status
+        current[index] = entry
+        saved = store.replace(current)
+        return {"items": saved, **progress(saved)}
+    if action == "delete":
+        if index is None:
+            saved = store.replace([])  # no index: clear the whole list
+        else:
+            if not (0 <= index < len(current)):
+                raise ServiceError(
+                    "agent",
+                    ErrorSuffix.INVALID_INPUT,
+                    f"delete 需要有效 index(0-{len(current) - 1 if current else 0})",
+                )
+            del current[index]
+            saved = store.replace(current)
+        return {"items": saved, **progress(saved)}
+    raise ServiceError(
+        "agent",
+        ErrorSuffix.INVALID_INPUT,
+        f"action 非法: {action}",
+        hint="action 取值 set / query / update / delete",
+    )
+
+
+__all__ = [
+    "MAX_CONTENT",
+    "MAX_ITEMS",
+    "STATUSES",
+    "TodoStore",
+    "plan_action",
+    "progress",
+    "read_plan",
+]

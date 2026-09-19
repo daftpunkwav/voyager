@@ -31,19 +31,16 @@ def _belt(root, *, confirm=None, notify=None) -> Toolbelt:
 
 
 class TestFsJail:
-    async def test_write_read_list_delete(self, workdir) -> None:
+    async def test_write_and_read(self, workdir) -> None:
         belt = _belt(workdir, confirm=lambda _p: _yes())
-        assert "repo/" in await belt.call(ToolCall("1", "list_dir", {"path": "."}))
-        await belt.call(ToolCall("2", "write_file", {"path": "repo/a.md", "content": "你好"}))
-        assert "你好" in await belt.call(ToolCall("3", "read_file", {"path": "repo/a.md"}))
-        out = await belt.call(ToolCall("4", "delete_file", {"path": "repo/a.md"}))
-        assert "deleted" in out
+        await belt.call(ToolCall("2", "write", {"path": "repo/a.md", "content": "你好"}))
+        assert "你好" in await belt.call(ToolCall("3", "read", {"path": "repo/a.md"}))
 
     async def test_outside_jail_rejected_twice(self, workdir, tmp_path) -> None:
         """Two layers of protection: the inner jail plus the outer policy."""
         belt = _belt(workdir)
         out = await belt.call(
-            ToolCall("1", "write_file", {"path": str(tmp_path / "evil.txt"), "content": "x"})
+            ToolCall("1", "write", {"path": str(tmp_path / "evil.txt"), "content": "x"})
         )
         assert "[已拒绝]" in out
         assert not (tmp_path / "evil.txt").exists()
@@ -56,7 +53,7 @@ class TestFsJail:
         """skills/ is write-protected: refused at the policy layer, nothing lands on disk."""
         belt = _belt(workdir)
         out = await belt.call(
-            ToolCall("1", "write_file", {"path": "skills/pwn/SKILL.md", "content": "pwn"})
+            ToolCall("1", "write", {"path": "skills/pwn/SKILL.md", "content": "pwn"})
         )
         assert "[已拒绝]" in out
         assert not (workdir / "skills").exists()  # not even the parent directory may be created
@@ -65,60 +62,24 @@ class TestFsJail:
         """repo/../skills still resolves under skills and is refused the same way."""
         belt = _belt(workdir)
         out = await belt.call(
-            ToolCall("1", "write_file", {"path": "repo/../skills/pwn/SKILL.md", "content": "pwn"})
+            ToolCall("1", "write", {"path": "repo/../skills/pwn/SKILL.md", "content": "pwn"})
         )
         assert "[已拒绝]" in out
         assert not (workdir / "skills" / "pwn").exists()
 
-    async def test_skills_delete_denied_without_confirm(self, workdir) -> None:
-        """Deleting into skills is refused outright, never raising the L2 confirmation; the file survives."""
-        asked: list[str] = []
-
-        async def spy_confirm(prompt: str) -> bool:
-            asked.append(prompt)
-            return True
-
-        keep = workdir / "skills" / "keep" / "SKILL.md"
-        keep.parent.mkdir(parents=True)
-        keep.write_text("# keep\n", encoding="utf-8")
-        belt = _belt(workdir, confirm=spy_confirm)
-        out = await belt.call(ToolCall("1", "delete_file", {"path": "skills/keep/SKILL.md"}))
-        assert "[已拒绝]" in out
-        assert keep.exists()
-        assert (
-            asked == []
-        )  # refusal happens before confirmation; the confirm channel is never asked
-
-    async def test_skills_read_list_still_ok(self, workdir) -> None:
+    async def test_skills_read_still_ok(self, workdir) -> None:
         keep = workdir / "skills" / "keep" / "SKILL.md"
         keep.parent.mkdir(parents=True)
         keep.write_text("# keep\n", encoding="utf-8")
         belt = _belt(workdir)
-        text = await belt.call(ToolCall("1", "read_file", {"path": "skills/keep/SKILL.md"}))
+        text = await belt.call(ToolCall("1", "read", {"path": "skills/keep/SKILL.md"}))
         assert "# keep" in text
-        listing = await belt.call(ToolCall("2", "list_dir", {"path": "skills"}))
-        assert "keep/" in listing
 
     async def test_repo_write_regression(self, workdir) -> None:
         """Non-skills categories remain writable (regression check)."""
         belt = _belt(workdir)
-        out = await belt.call(ToolCall("1", "write_file", {"path": "repo/a.md", "content": "x"}))
+        out = await belt.call(ToolCall("1", "write", {"path": "repo/a.md", "content": "x"}))
         assert "written" in out
-
-    async def test_list_missing_or_file_reports(self, workdir) -> None:
-        belt = _belt(workdir)
-        out = await belt.call(ToolCall("1", "list_dir", {"path": "repo/nope"}))
-        assert out.startswith("[失败]")
-        (workdir / "repo" / "f.txt").write_text("x", encoding="utf-8")
-        out = await belt.call(ToolCall("2", "list_dir", {"path": "repo/f.txt"}))
-        assert out.startswith("[参数错误]")
-
-    async def test_delete_missing_or_directory_reports(self, workdir) -> None:
-        belt = _belt(workdir, confirm=lambda _p: _yes())
-        out = await belt.call(ToolCall("1", "delete_file", {"path": "repo/nope"}))
-        assert out.startswith("[失败]")
-        out = await belt.call(ToolCall("2", "delete_file", {"path": "repo"}))
-        assert out.startswith("[参数错误]")
 
 
 async def _yes() -> bool:
@@ -128,33 +89,35 @@ async def _yes() -> bool:
 class TestTrim:
     def test_trimmed_removes_write(self, workdir) -> None:
         """Trimming away write means it is truly gone."""
-        belt = _belt(workdir).trimmed(["read_file"])
-        assert belt.names() == ["read_file"]
+        belt = _belt(workdir).trimmed(["read"])
+        assert belt.names() == ["read"]
         assert belt._policy is not None  # trimming keeps the policy engine
 
     async def test_trimmed_call_blocked(self, workdir) -> None:
-        belt = _belt(workdir).trimmed(["read_file"])
-        out = await belt.call(ToolCall("1", "write_file", {"path": "a", "content": "b"}))
+        belt = _belt(workdir).trimmed(["read"])
+        out = await belt.call(ToolCall("1", "write", {"path": "a", "content": "b"}))
         assert "[未知工具]" in out
 
     async def test_unknown_tool_suggests_closest_names(self, workdir) -> None:
         """A typo'd or ungranted name gets the roster's nearest matches, so
         the model can self-correct in one call."""
         belt = _belt(workdir)
-        out = await belt.call(ToolCall("1", "read_fiel", {"path": "a"}))
+        out = await belt.call(ToolCall("1", "rea", {"path": "a"}))
         assert "[未知工具]" in out
-        assert "read_file" in out
+        assert "read" in out
         # a name with no roster neighbour gets no hint segment
         out = await belt.call(ToolCall("1", "zzzQQQ", {}))
         assert "[未知工具]" in out
         assert "最接近的工具" not in out
 
     def test_trimmed_prefix_expand_relative_to_belt(self, workdir) -> None:
-        """Prefix grants expand against the current roster; new prefix names outside the allowlist never enter."""
+        """Grants expand against the current roster: explicit names pass, a
+        prefix with no roster match invents nothing."""
         belt = _belt(workdir)
-        trimmed = belt.trimmed(["read_*", "list_dir"])
-        assert set(trimmed.names()) == {"read_file", "list_dir"}
-        # No notes__* domain in the roster: prefixes never invent tools
+        trimmed = belt.trimmed(["read", "edit"])
+        assert set(trimmed.names()) == {"read", "edit"}
+        # No roster name starts with "note_": the prefix never invents tools
+        assert belt.trimmed(["note_*"]).names() == []
         assert not any(n.startswith("notes__") for n in trimmed.names())
 
     def test_trimmed_bare_star_is_not_prefix(self, workdir) -> None:
@@ -164,25 +127,36 @@ class TestTrim:
 
 
 class TestConfirmFlow:
-    async def test_l2_confirm_approve_and_deny(self, workdir) -> None:
+    async def test_l2_confirm_approve_and_deny(self, workdir, tmp_path) -> None:
         asked: list[str] = []
-        (workdir / "f.txt").touch()
+        proj = tmp_path / "proj"
+        proj.mkdir()
 
         async def nope(_prompt: str) -> bool:
             asked.append(_prompt)
             return False
 
-        belt = _belt(workdir, confirm=nope)
-        out = await belt.call(ToolCall("1", "delete_file", {"path": "f.txt"}))
+        belt = Toolbelt(
+            fs_tools([workdir], write_roots=[proj]),
+            PolicyEngine(
+                fs=FsPolicy(roots=(str(workdir),), write_roots=(str(proj),)),
+            ),
+            confirm=nope,
+        )
+        out = await belt.call(ToolCall("1", "write", {"path": str(proj / "f.txt"), "content": "x"}))
         assert "[已取消]" in out and asked  # the confirm prompt really fired
-        assert (workdir / "f.txt").exists()  # not deleted
+        assert not (proj / "f.txt").exists()  # nothing written
 
-    async def test_l2_without_channel_skipped(self, workdir) -> None:
-        (workdir / "f.txt").touch()
-        belt = _belt(workdir)  # no confirm channel
-        out = await belt.call(ToolCall("1", "delete_file", {"path": "f.txt"}))
+    async def test_l2_without_channel_skipped(self, workdir, tmp_path) -> None:
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        belt = Toolbelt(
+            fs_tools([workdir], write_roots=[proj]),
+            PolicyEngine(fs=FsPolicy(roots=(str(workdir),), write_roots=(str(proj),))),
+        )  # no confirm channel
+        out = await belt.call(ToolCall("1", "write", {"path": str(proj / "f.txt"), "content": "x"}))
         assert "[需确认]" in out
-        assert (workdir / "f.txt").exists()
+        assert not (proj / "f.txt").exists()
 
     async def test_l1_notify_fired(self, workdir) -> None:
         seen: list[str] = []
@@ -192,8 +166,8 @@ class TestConfirmFlow:
             seen.append(msg)
 
         belt = _belt(workdir, notify=notify)
-        await belt.call(ToolCall("1", "write_file", {"path": "g.txt", "content": "y"}))
-        assert seen and "write_file" in seen[0]
+        await belt.call(ToolCall("1", "write", {"path": "g.txt", "content": "y"}))
+        assert seen and "write" in seen[0]
 
     async def test_unknown_tool(self, workdir) -> None:
         out = await _belt(workdir).call(ToolCall("1", "nope", {}))
@@ -238,7 +212,7 @@ class TestAppPolicyTarget:
 class TestShellGuard:
     async def test_destructive_commands_blocked(self, tmp_path) -> None:
         """Machine-wrecking commands are hard-blocked before execution (even without an L2 confirm channel)."""
-        run_shell = shell_tools(tmp_path)["run_shell"].handler
+        bash = shell_tools(tmp_path)["bash"].handler
         for cmd in (
             "mkfs.ext4 /dev/sda1",
             "dd if=a of=/dev/sda",
@@ -247,13 +221,13 @@ class TestShellGuard:
             "rm -rf ~",
             "format C: /q",
         ):
-            out = await run_shell(cmd, timeout=2)
+            out = await bash(cmd, timeout=2)
             assert "[已拒绝]" in out, cmd
 
     async def test_normal_command_not_blocked(self, tmp_path) -> None:
-        run_shell = shell_tools(tmp_path)["run_shell"].handler
+        bash = shell_tools(tmp_path)["bash"].handler
         # Not via the shell: interpreter -c avoids Windows' builtin echo; no nested quotes so shlex does not mis-split in nt mode
-        out = await run_shell(f"{sys.executable} -c print(42)", timeout=5)
+        out = await bash(f"{sys.executable} -c print(42)", timeout=5)
         assert "已拒绝" not in out and "42" in out
 
     async def test_large_output_not_tool_truncated(self, tmp_path) -> None:
@@ -263,8 +237,8 @@ class TestShellGuard:
         # quotes, which turn a -c program into a bare string expression
         script = tmp_path / "_big.py"
         script.write_text("print('x' * 50000)", encoding="utf-8")
-        run_shell = shell_tools(tmp_path)["run_shell"].handler
-        out = await run_shell(f"{sys.executable} {script.name}", timeout=15)
+        bash = shell_tools(tmp_path)["bash"].handler
+        out = await bash(f"{sys.executable} {script.name}", timeout=15)
         # codex-style structured header: exit code, wall time, captured lines
         assert re.match(r"exit=0 wall=\d+\.\d+s lines=\d+\n", out), out
         assert "x" * 50000 in out
@@ -275,15 +249,15 @@ class TestShellGuard:
         script.write_text(
             "import time\nprint('early', flush=True)\ntime.sleep(30)\n", encoding="utf-8"
         )
-        run_shell = shell_tools(tmp_path)["run_shell"].handler
-        out = await run_shell(f"{sys.executable} {script.name}", timeout=1.5)
+        bash = shell_tools(tmp_path)["bash"].handler
+        out = await bash(f"{sys.executable} {script.name}", timeout=1.5)
         assert out.startswith("[超时]")
         assert "early" in out
 
     async def test_missing_executable_does_not_fall_back_to_shell(self, tmp_path) -> None:
-        run_shell = shell_tools(tmp_path)["run_shell"].handler
+        bash = shell_tools(tmp_path)["bash"].handler
         # Not echo: /bin/echo really exists on Unix, which would mask the no-shell-fallback behavior
-        out = await run_shell("__no_such_cmd_xyz__", timeout=5)
+        out = await bash("__no_such_cmd_xyz__", timeout=5)
         assert "[失败]" in out and "找不到可执行文件" in out
 
     async def test_subprocess_cwd_pinned_to_workspace(self, tmp_path) -> None:
@@ -297,10 +271,10 @@ class TestShellGuard:
             "Path('cwd-probe-phase35.txt').write_text('ok', encoding='utf-8')\n",
             encoding="utf-8",
         )
-        run_shell = shell_tools(work)["run_shell"].handler
+        bash = shell_tools(work)["bash"].handler
         stray = Path.cwd() / "cwd-probe-phase35.txt"
         try:
-            out = await run_shell(f"{sys.executable} {probe.name}", timeout=5)
+            out = await bash(f"{sys.executable} {probe.name}", timeout=5)
             assert "exit=0" in out, out
             assert (work / "cwd-probe-phase35.txt").read_text(encoding="utf-8") == "ok"
             assert not (tmp_path / "cwd-probe-phase35.txt").exists()  # nothing lands in the parent
@@ -318,7 +292,7 @@ class TestShellGuard:
             {**fs_tools([workdir]), **shell_tools(workdir)},
             PolicyEngine(fs=FsPolicy(roots=(str(workdir),))),
         )
-        out = await belt.call(ToolCall("1", "run_shell", {"command": "echo pwn > skills/x.txt"}))
+        out = await belt.call(ToolCall("1", "bash", {"command": "echo pwn > skills/x.txt"}))
         assert "[已拒绝]" in out
         assert not (workdir / "skills" / "x.txt").exists()
 
@@ -328,15 +302,13 @@ class TestShellGuard:
             {**fs_tools([workdir]), **shell_tools(workdir)},
             PolicyEngine(fs=FsPolicy(roots=(str(workdir),))),
         )
-        out = await belt.call(
-            ToolCall("1", "run_shell", {"command": "type skills\\keep\\SKILL.md"})
-        )
+        out = await belt.call(ToolCall("1", "bash", {"command": "type skills\\keep\\SKILL.md"}))
         assert "[需确认]" in out
 
 
 class TestFsReadRoots:
     """Extra read-only roots end to end: policy and tool layers agree — read tools admit extra
-    roots while writes/deletes are refused at both layers."""
+    roots while writes are refused at both layers."""
 
     def _belt_with_read_root(self, workdir, docs) -> Toolbelt:
         return Toolbelt(
@@ -344,41 +316,23 @@ class TestFsReadRoots:
             PolicyEngine(fs=FsPolicy(roots=(str(workdir),), read_roots=(str(docs),))),
         )
 
-    async def test_read_file_in_read_root_allowed(self, workdir, tmp_path) -> None:
+    async def test_read_in_read_root_allowed(self, workdir, tmp_path) -> None:
         docs = tmp_path / "docs"
         docs.mkdir()
         (docs / "a.txt").write_text("附加根内容", encoding="utf-8")
         belt = self._belt_with_read_root(workdir, docs)
-        out = await belt.call(ToolCall("1", "read_file", {"path": str(docs / "a.txt")}))
+        out = await belt.call(ToolCall("1", "read", {"path": str(docs / "a.txt")}))
         assert "附加根内容" in out
-
-    async def test_list_dir_in_read_root_allowed(self, workdir, tmp_path) -> None:
-        docs = tmp_path / "docs"
-        (docs / "sub").mkdir(parents=True)
-        belt = self._belt_with_read_root(workdir, docs)
-        out = await belt.call(ToolCall("1", "list_dir", {"path": str(docs)}))
-        assert "sub/" in out
 
     async def test_write_in_read_root_denied(self, workdir, tmp_path) -> None:
         docs = tmp_path / "docs"
         docs.mkdir()
         belt = self._belt_with_read_root(workdir, docs)
         out = await belt.call(
-            ToolCall("1", "write_file", {"path": str(docs / "pwn.txt"), "content": "x"})
+            ToolCall("1", "write", {"path": str(docs / "pwn.txt"), "content": "x"})
         )
         assert "[已拒绝]" in out
         assert not (docs / "pwn.txt").exists()
-
-    async def test_delete_in_read_root_denied_without_confirm(self, workdir, tmp_path) -> None:
-        """Deletes in extra roots are refused outright, never raising the L2 confirmation; the file survives."""
-        docs = tmp_path / "docs"
-        docs.mkdir()
-        target = docs / "keep.txt"
-        target.write_text("keep", encoding="utf-8")
-        belt = self._belt_with_read_root(workdir, docs)
-        out = await belt.call(ToolCall("1", "delete_file", {"path": str(target)}))
-        assert "[已拒绝]" in out
-        assert target.exists()
 
     async def test_read_outside_all_roots_still_denied(self, workdir, tmp_path) -> None:
         """Without extra roots (or for paths outside all roots), reads are refused at both layers — the original behavior."""
@@ -386,7 +340,7 @@ class TestFsReadRoots:
             fs_tools([workdir]),
             PolicyEngine(fs=FsPolicy(roots=(str(workdir),))),
         )
-        out = await belt.call(ToolCall("1", "read_file", {"path": str(tmp_path / "evil.txt")}))
+        out = await belt.call(ToolCall("1", "read", {"path": str(tmp_path / "evil.txt")}))
         assert "[已拒绝]" in out
 
     async def test_hot_read_roots_fn_without_rebuild(self, workdir, tmp_path) -> None:
@@ -404,16 +358,16 @@ class TestFsReadRoots:
             ),
             PolicyEngine(fs=FsPolicy(roots=(str(workdir),)), settings=settings),
         )
-        denied = await belt.call(ToolCall("1", "read_file", {"path": str(docs / "a.txt")}))
+        denied = await belt.call(ToolCall("1", "read", {"path": str(docs / "a.txt")}))
         assert "[已拒绝]" in denied
         values["agent.fs.read_roots"] = [str(docs)]
-        allowed = await belt.call(ToolCall("2", "read_file", {"path": str(docs / "a.txt")}))
+        allowed = await belt.call(ToolCall("2", "read", {"path": str(docs / "a.txt")}))
         assert "热读内容" in allowed
 
 
 class TestFsWriteRoots:
     """Extra read-write roots end to end: policy and tool layers agree — reads are admitted,
-    writes/deletes go through L2 confirmation, and read_root-only paths still refuse writes at both layers."""
+    writes go through L2 confirmation, and read_root-only paths still refuse writes at both layers."""
 
     def _belt(self, workdir, *, write_roots=(), read_roots=(), confirm=None) -> Toolbelt:
         return Toolbelt(
@@ -428,25 +382,20 @@ class TestFsWriteRoots:
             confirm=confirm,
         )
 
-    async def test_read_and_list_in_write_root_allowed(self, workdir, tmp_path) -> None:
+    async def test_read_in_write_root_allowed(self, workdir, tmp_path) -> None:
         proj = tmp_path / "proj"
-        (proj / "sub").mkdir(parents=True)
+        proj.mkdir()
         (proj / "a.txt").write_text("读写根内容", encoding="utf-8")
-        (proj / "sub" / "b.txt").write_text("x", encoding="utf-8")
         belt = self._belt(workdir, write_roots=[proj])
-        text = await belt.call(ToolCall("1", "read_file", {"path": str(proj / "a.txt")}))
+        text = await belt.call(ToolCall("1", "read", {"path": str(proj / "a.txt")}))
         assert "读写根内容" in text
-        listing = await belt.call(ToolCall("2", "list_dir", {"path": str(proj / "sub")}))
-        assert "b.txt" in listing
 
     async def test_write_without_confirm_channel_not_landed(self, workdir, tmp_path) -> None:
         """Writes inside write_roots go through L2: with no confirm channel they are skipped and never land."""
         proj = tmp_path / "proj"
         proj.mkdir()
         belt = self._belt(workdir, write_roots=[proj])
-        out = await belt.call(
-            ToolCall("1", "write_file", {"path": str(proj / "a.txt"), "content": "x"})
-        )
+        out = await belt.call(ToolCall("1", "write", {"path": str(proj / "a.txt"), "content": "x"}))
         assert "[需确认]" in out
         assert not (proj / "a.txt").exists()
 
@@ -455,30 +404,10 @@ class TestFsWriteRoots:
         proj.mkdir()
         belt = self._belt(workdir, write_roots=[proj], confirm=lambda _p: _yes())
         out = await belt.call(
-            ToolCall("1", "write_file", {"path": str(proj / "sub" / "a.txt"), "content": "x"})
+            ToolCall("1", "write", {"path": str(proj / "sub" / "a.txt"), "content": "x"})
         )
         assert "written" in out
         assert (proj / "sub" / "a.txt").read_text(encoding="utf-8") == "x"
-
-    async def test_delete_without_confirm_not_removed(self, workdir, tmp_path) -> None:
-        proj = tmp_path / "proj"
-        proj.mkdir()
-        target = proj / "keep.txt"
-        target.write_text("keep", encoding="utf-8")
-        belt = self._belt(workdir, write_roots=[proj])
-        out = await belt.call(ToolCall("1", "delete_file", {"path": str(target)}))
-        assert "[需确认]" in out
-        assert target.exists()
-
-    async def test_delete_with_confirm_removes(self, workdir, tmp_path) -> None:
-        proj = tmp_path / "proj"
-        proj.mkdir()
-        target = proj / "gone.txt"
-        target.write_text("x", encoding="utf-8")
-        belt = self._belt(workdir, write_roots=[proj], confirm=lambda _p: _yes())
-        out = await belt.call(ToolCall("1", "delete_file", {"path": str(target)}))
-        assert "deleted" in out
-        assert not target.exists()
 
     async def test_write_in_read_root_only_denied(self, workdir, tmp_path) -> None:
         """Writes to read_root-only paths stay refused: write_roots never relaxes read-only roots."""
@@ -488,7 +417,7 @@ class TestFsWriteRoots:
             workdir, read_roots=[docs], write_roots=[tmp_path / "proj"], confirm=lambda _p: _yes()
         )
         out = await belt.call(
-            ToolCall("1", "write_file", {"path": str(docs / "pwn.txt"), "content": "x"})
+            ToolCall("1", "write", {"path": str(docs / "pwn.txt"), "content": "x"})
         )
         assert "[已拒绝]" in out
         assert not (docs / "pwn.txt").exists()
@@ -509,12 +438,12 @@ class TestFsWriteRoots:
             PolicyEngine(fs=FsPolicy(roots=(str(workdir),)), settings=settings),
         )
         denied = await belt.call(
-            ToolCall("1", "write_file", {"path": str(proj / "a.txt"), "content": "x"})
+            ToolCall("1", "write", {"path": str(proj / "a.txt"), "content": "x"})
         )
         assert "[已拒绝]" in denied
         values["agent.fs.write_roots"] = [str(proj)]
         confirmed = await belt.call(
-            ToolCall("2", "write_file", {"path": str(proj / "a.txt"), "content": "x"})
+            ToolCall("2", "write", {"path": str(proj / "a.txt"), "content": "x"})
         )
         assert "[需确认]" in confirmed
 
@@ -528,15 +457,15 @@ class _FakeSettings:
 
 
 class TestShellCancellation:
-    async def test_cancelled_run_shell_raises_and_returns_promptly(self, tmp_path) -> None:
-        """Cancelling a running run_shell propagates CancelledError through the
+    async def test_cancelled_bash_raises_and_returns_promptly(self, tmp_path) -> None:
+        """Cancelling a running bash propagates CancelledError through the
         kill path (child killed, reader reaped) instead of leaking."""
         import asyncio
 
         script = tmp_path / "_hang.py"
         script.write_text("import time\ntime.sleep(30)\n", encoding="utf-8")
-        run_shell = shell_tools(tmp_path)["run_shell"].handler
-        task = asyncio.create_task(run_shell(f"{sys.executable} {script.name}", timeout=30))
+        bash = shell_tools(tmp_path)["bash"].handler
+        task = asyncio.create_task(bash(f"{sys.executable} {script.name}", timeout=30))
         await asyncio.sleep(0.3)  # let the child start
         task.cancel()
         try:
@@ -547,12 +476,10 @@ class TestShellCancellation:
         assert raised  # propagation preserved; child killed inside the handler
 
 
-class TestWriteFileAtomic:
+class TestWriteAtomic:
     async def test_failed_replace_keeps_original_and_cleans_tmp(self, workdir, monkeypatch) -> None:
         """A mid-write failure must not truncate the target nor leave a stray
-        temp file (the journal's undo keys on file content)."""
-        import os
-
+        temp file."""
         target = workdir / "repo" / "a.txt"
         target.write_text("original", encoding="utf-8")
 
@@ -563,7 +490,7 @@ class TestWriteFileAtomic:
 
         monkeypatch.setattr(os, "replace", _boom)
         belt = _belt(workdir)
-        out = await belt.call(ToolCall("1", "write_file", {"path": "repo/a.txt", "content": "new"}))
+        out = await belt.call(ToolCall("1", "write", {"path": "repo/a.txt", "content": "new"}))
         monkeypatch.setattr(os, "replace", real_replace)
         assert "[工具失败]" in out
         assert target.read_text(encoding="utf-8") == "original"  # untouched

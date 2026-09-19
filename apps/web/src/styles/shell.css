@@ -1546,23 +1546,10 @@ a.chat-card:hover {
   margin: 4px 0 2px;
 }
 
-/* ask_user dialog */
-.ask-mask {
-  position: fixed;
-  inset: 0;
-  /* Dim to focus, same scrim as .modal-overlay in global.css */
-  background: rgba(15, 23, 42, 0.32);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-modal, 1000);
-}
-[data-theme='dark'] .ask-mask {
-  background: rgba(0, 0, 0, 0.5);
-}
-.ask-dialog {
+/* ask_user dialog (rendered through the shared ModalOverlay portal) */
+/* Double-class selector: global.css loads after shell.css, so plain
+   .ask-dialog would lose its width to .modal's 440px. */
+.modal.ask-dialog {
   width: min(480px, 92vw);
   padding: 20px;
   display: flex;

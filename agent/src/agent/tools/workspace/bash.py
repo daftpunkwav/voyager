@@ -1,4 +1,4 @@
-"""run_shell tool: command execution in the agent working directory
+"""bash tool: command execution in the agent working directory
 (shell dimension, L2 confirm by default).
 
 L2 confirmation is the main gate; this module additionally hard-blocks
@@ -104,12 +104,12 @@ def _resolve_windows_stub(argv0: str) -> str:
     return argv0
 
 
-def run_shell_tool(cwd: str | Path) -> AgentTool:
-    """Build the run_shell tool; the subprocess cwd is pinned to the agent
+def bash_tool(cwd: str | Path) -> AgentTool:
+    """Build the bash tool; the subprocess cwd is pinned to the agent
     working directory supplied at assembly time."""
     work = Path(cwd).expanduser().resolve()
 
-    async def run_shell(command: str, timeout: float = 30.0) -> str:
+    async def bash(command: str, timeout: float = 30.0) -> str:
         if _DESTRUCTIVE_RE.search(command):
             return (
                 "[已拒绝] 命令含整机级破坏操作(格式化/关机/根递归删除),"
@@ -187,12 +187,12 @@ def run_shell_tool(cwd: str | Path) -> AgentTool:
         return f"exit={proc.returncode} wall={wall:.1f}s lines={lines}{suffix}"
 
     return AgentTool(
-        name="run_shell",
+        name="bash",
         description=(
             "在 agent 工作目录执行命令(不经 shell;默认需用户确认;"
-            "长输出会保存到文件供 read_file 分段查看)"
+            "长输出会保存到文件供 read 分段查看)"
         ),
-        handler=run_shell,
+        handler=bash,
         dimension="shell",
         write=True,
         schema={
@@ -206,4 +206,4 @@ def run_shell_tool(cwd: str | Path) -> AgentTool:
     )
 
 
-__all__ = ["run_shell_tool"]
+__all__ = ["bash_tool"]

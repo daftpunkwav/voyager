@@ -287,3 +287,47 @@ def test_repl_rating_extreme_inputs_do_not_crash() -> None:
     assert _coerce_answer("rating", (), "inf") == "inf"  # OverflowError path
     assert _coerce_answer("rating", (), "nan") == "nan"
     assert _coerce_answer("rating", (), "0") == 1
+
+
+async def test_question_event_carries_session(tmp_path) -> None:
+    """agent.ask is stamped with the executing turn's chat session so a
+    multi-session frontend routes the dialog to the asking lane; session-less
+    execution (REPL, background) publishes an empty session."""
+    from types import SimpleNamespace
+
+    from agent.runtime.current import current_instance
+
+    log = EventLog(tmp_path / "ev-session.db")
+    bus = EventBus(log)
+    asker = AskUser(bus)
+
+    task = asyncio.create_task(asker.ask(Question(prompt="会话内?")))
+    payload = None
+    for _ in range(50):
+        events = log.read_after(types=[AGENT_ASK])
+        if events:
+            payload = events[0][1].payload
+            break
+        await asyncio.sleep(0.01)
+    assert payload is not None and payload["session"] == ""
+    asker.answer(payload["question_id"], "ok")
+    await asyncio.wait_for(task, timeout=5)
+    first_qid = payload["question_id"]
+
+    token = current_instance.set(SimpleNamespace(task=SimpleNamespace(session="sess-a")))
+    try:
+        task = asyncio.create_task(asker.ask(Question(prompt="会话内?")))
+        payload = None
+        for _ in range(50):
+            events = log.read_after(types=[AGENT_ASK])
+            # The log replays older asks: accept only the new question's event
+            fresh = [e for e in events if e[1].payload["question_id"] != first_qid]
+            if fresh:
+                payload = fresh[0][1].payload
+                break
+            await asyncio.sleep(0.01)
+        assert payload is not None and payload["session"] == "sess-a"
+        asker.answer(payload["question_id"], "ok")
+        await asyncio.wait_for(task, timeout=5)
+    finally:
+        current_instance.reset(token)

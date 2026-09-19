@@ -37,19 +37,21 @@ class TestRecord:
         """record() runs before execution, so a call that would later be refused
         by policy still participates in the pattern."""
         d = LoopDetector()
-        d.record("write_file", {"path": "x"})
-        d.record("write_file", {"path": "x"})
-        assert d.record("write_file", {"path": "x"}) is True  # outcome unknown at record time
+        d.record("write", {"path": "x"})
+        d.record("write", {"path": "x"})
+        assert d.record("write", {"path": "x"}) is True  # outcome unknown at record time
 
     def test_bookkeeping_calls_are_transparent(self) -> None:
         """Interleaved todo updates neither trip on themselves nor evict a real
         repetition pattern from the window (grep -> todo -> grep still counts)."""
         d = LoopDetector()
         d.record("grep", {"q": "x"})
-        assert d.record("todo_write", {"items": []}) is False  # never stored, never trips
+        assert (
+            d.record("todowrite", {"action": "set", "items": []}) is False
+        )  # never stored, never trips
         d.record("grep", {"q": "x"})
         for i in range(4):  # four more would evict both greps from a 6-slot window if counted
-            assert d.record("todo_write", {"items": [i]}) is False
+            assert d.record("todowrite", {"action": "set", "items": [i]}) is False
         assert d.record("grep", {"q": "x"}) is True  # 3 greps still detected
 
     def test_window_slides_out_old_calls(self) -> None:

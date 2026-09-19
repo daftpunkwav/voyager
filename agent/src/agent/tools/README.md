@@ -20,8 +20,8 @@ core/        mechanism layer: AgentTool/Toolbelt (base), assembly-time source re
              execution pipeline (invoke: validate→policy→confirm→hook→retry→circuit-break→result
              budget), result envelope (outcome), tiered activation (activate), agent
              self-capability binding (self_capability: via execute guard chain + audit)
-workspace/   read_file · write_file · edit_file · list_dir · delete_file · grep · glob · run_shell ·
-             todo_write · todo_read; mechanisms: jail / workdir / todo_store
+workspace/   read · write · edit · grep · glob · bash · todowrite (set/query/update/delete);
+             mechanisms: jail / workdir / todo_store
 net/         web_fetch · web_search; mechanism: net_guard (DNS/intranet resolution guard)
 interact/    ask_user · request_context; mechanism: question_broker
 context/     context_status · compact_context (shares context.operations with same-named
@@ -79,12 +79,12 @@ The tools have no settings keys of their own; behavior is affected by
   outright (interaction contract); no override switch is provided;
 - `read_events` reads whitelisted types only (agent.delta / agent.ask
   excluded);
-- `run_shell` is not interpreted by a shell (no pipes/redirection); Windows
+- `bash` is not interpreted by a shell (no pipes/redirection); Windows
   built-in commands are unavailable.
 
 ## Deferred Work
 
-- Phase 21: `run_shell` routes to the code_exec domain (unified execution
+- Phase 21: `bash` routes to the code_exec domain (unified execution
   channel); `net_guard` moves to `platform_webguard`;
 - Phase 19: the `jobs/` group (list_jobs / cancel_job) and
   `interact/reach_out`;

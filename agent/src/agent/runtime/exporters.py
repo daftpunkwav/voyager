@@ -87,7 +87,10 @@ class OtlpHttpSpanExporter:
                     "resource": {
                         "attributes": [
                             {"key": "service.name", "value": {"stringValue": self.service_name}},
-                            {"key": "telemetry.sdk.name", "value": {"stringValue": "agent-runtime"}},
+                            {
+                                "key": "telemetry.sdk.name",
+                                "value": {"stringValue": "agent-runtime"},
+                            },
                             {"key": "telemetry.sdk.language", "value": {"stringValue": "python"}},
                         ]
                     },
@@ -129,7 +132,9 @@ class LangfuseSpanExporter:
     ) -> None:
         self.host = host.rstrip("/")
         self.endpoint = f"{self.host}/api/public/ingestion"
-        self._auth = httpx.BasicAuth(public_key, secret_key) if (public_key and secret_key) else None
+        self._auth = (
+            httpx.BasicAuth(public_key, secret_key) if (public_key and secret_key) else None
+        )
         self._client = httpx.AsyncClient(
             auth=self._auth,
             timeout=timeout_s,
@@ -164,7 +169,9 @@ class LangfuseSpanExporter:
         try:
             resp = await self._client.post(self.endpoint, json=payload)
             if resp.status_code >= 400:
-                log.warning("Langfuse export failed with HTTP %d: %.120s", resp.status_code, resp.text)
+                log.warning(
+                    "Langfuse export failed with HTTP %d: %.120s", resp.status_code, resp.text
+                )
         except Exception as exc:  # noqa: BLE001  # export failure must never affect core agent
             log.warning("Langfuse span export failed: %s", exc)
 

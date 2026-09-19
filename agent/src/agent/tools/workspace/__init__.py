@@ -12,21 +12,16 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent.tools.core.base import AgentTool
-from agent.tools.workspace.delete_file import delete_file_tool
-from agent.tools.workspace.edit_file import edit_file_tool
+from agent.tools.workspace.bash import bash_tool
+from agent.tools.workspace.edit import edit_tool
 from agent.tools.workspace.glob import glob_tool
 from agent.tools.workspace.grep import grep_tool
 from agent.tools.workspace.jail import Jail
-from agent.tools.workspace.list_dir import list_dir_tool
-from agent.tools.workspace.read_file import read_file_tool
-from agent.tools.workspace.run_shell import run_shell_tool
-from agent.tools.workspace.run_snippet import run_snippet_tool
-from agent.tools.workspace.todo_read import todo_read_tool
+from agent.tools.workspace.read import read_tool
 from agent.tools.workspace.todo_store import TodoStore, read_plan
-from agent.tools.workspace.todo_write import todo_write_tool
-from agent.tools.workspace.undo_writes import undo_writes_tool
+from agent.tools.workspace.todowrite import todowrite_tool
 from agent.tools.workspace.workdir import DEFAULT_CATEGORIES, ensure_workdir
-from agent.tools.workspace.write_file import write_file_tool
+from agent.tools.workspace.write import write_tool
 
 if TYPE_CHECKING:
     from agent.tools.workspace.write_journal import WriteJournal
@@ -57,22 +52,16 @@ def fs_tools(
     write_roots_fn: Callable[[], list[str | Path]] | None = None,
     journal: WriteJournal | None = None,
 ) -> dict[str, AgentTool]:
-    """Jailed fs tool group (read/write/edit/list/delete/undo_writes) sharing
-    one Jail; a write journal adds rollback to the write tools and mounts the
-    undo_writes tool (absent without a journal - nothing is journaled)."""
+    """Jailed fs tool group (read/write/edit) sharing one Jail. The write
+    journal, when present, keeps content-addressed backups behind the write
+    tools (checkpoint/audit support); there is no undo tool on the surface."""
     jail = _jail(roots, read_roots, write_roots, read_roots_fn, write_roots_fn)
     tools = (
-        read_file_tool(jail),
-        write_file_tool(jail, journal),
-        edit_file_tool(jail, journal),
-        list_dir_tool(jail),
-        delete_file_tool(jail, journal),
+        read_tool(jail),
+        write_tool(jail, journal),
+        edit_tool(jail, journal),
     )
-    mapping = {t.name: t for t in tools}
-    if journal is not None:
-        undo = undo_writes_tool(journal)
-        mapping[undo.name] = undo
-    return mapping
+    return {t.name: t for t in tools}
 
 
 def search_tools(
@@ -90,14 +79,13 @@ def search_tools(
 
 
 def shell_tools(cwd: str | Path) -> dict[str, AgentTool]:
-    shell = run_shell_tool(cwd)
-    snip = run_snippet_tool(cwd)
-    return {shell.name: shell, snip.name: snip}
+    shell = bash_tool(cwd)
+    return {shell.name: shell}
 
 
 def todo_tools(store: TodoStore) -> dict[str, AgentTool]:
-    tools = (todo_write_tool(store), todo_read_tool(store))
-    return {t.name: t for t in tools}
+    todo = todowrite_tool(store)
+    return {todo.name: todo}
 
 
 __all__ = [
@@ -107,7 +95,6 @@ __all__ = [
     "ensure_workdir",
     "fs_tools",
     "read_plan",
-    "run_snippet_tool",
     "search_tools",
     "shell_tools",
     "todo_tools",

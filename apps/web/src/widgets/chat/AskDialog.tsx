@@ -10,6 +10,9 @@
  *
  * Shared by the chat page and the persistent floating window; lives in the
  * widgets layer so page-private components are never depended on in reverse.
+ * Rendered through the shared ModalOverlay (portal to body, centered, dimmed
+ * scrim) — a fixed overlay inside the chat column gets clamped by the column's
+ * max-width rule and lands off-center.
  *
  * Responsibilities:
  * - Render the per-kind widgets (buttons / toggles / slider / stars)
@@ -22,6 +25,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ServiceError } from '@/bridge/client';
 import { answerQuestion } from '@/api/agent';
+import { ModalOverlay } from '@/components/common/ModalOverlay';
 import { useChatStore } from '@/stores/chatStore';
 
 /** Frontend fallback timeout: the backend Question expires after 120s by default
@@ -66,6 +70,10 @@ export function AskDialog() {
   const presetOptions = question.options;
   const allOptions = [...presetOptions, ...customOptions.filter((c) => !presetOptions.includes(c))];
 
+  // A pending ask cannot be dismissed: answer it or let the question expire
+  // (backend 120s, frontend fallback 130s), so onClose is deliberately a no-op.
+  const noDismiss = () => {};
+
   const submit = async (raw: unknown) => {
     setBusy(true);
     setError(null);
@@ -107,8 +115,14 @@ export function AskDialog() {
   const numericAnswerKind = question.kind === 'slider' || question.kind === 'rating';
 
   return (
-    <div className="ask-mask" role="dialog" aria-modal="true" aria-label={question.prompt}>
-      <div className="ask-dialog glass-card glass-card--dialog">
+    <ModalOverlay open onClose={noDismiss}>
+      <div
+        className="modal glass-card glass-card--dialog ask-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={question.prompt}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="ask-dialog__prompt">{question.prompt}</div>
 
         {question.kind === 'choice' && allOptions.length > 0 ? (
@@ -251,7 +265,7 @@ export function AskDialog() {
 
         {error ? <div className="setting-field__error small">{error}</div> : null}
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 

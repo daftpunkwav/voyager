@@ -90,9 +90,7 @@ class _ThinkingLLM:
             yield StreamReply(reasoning_delta="think-2")
             yield StreamReply(text_delta="Hello ")
             yield StreamReply(text_delta="world")
-            yield StreamReply(
-                final=LLMReply(text="Hello world", reasoning="think-1 think-2")
-            )
+            yield StreamReply(final=LLMReply(text="Hello world", reasoning="think-1 think-2"))
 
         return stream()
 
@@ -111,9 +109,7 @@ async def test_thinking_stream_events() -> None:
     # Bypass the time-based coalescer determinism: call with interval 0 via
     # direct deltas is timing-sensitive, so only assert event ordering and
     # final aggregation here.
-    reply = await complete_streaming(
-        llm, messages, None, on_delta, round_n=1, on_event=on_event
-    )
+    reply = await complete_streaming(llm, messages, None, on_delta, round_n=1, on_event=on_event)
     kinds = [t for t, _ in events]
     assert kinds[0] == RuntimeEvent.THINKING_STARTED
     assert RuntimeEvent.THINKING_DELTA in kinds
@@ -135,8 +131,6 @@ async def test_reasoning_never_merges_into_answer_text() -> None:
     async def on_event(type_: str, **payload: Any) -> None:
         return None
 
-    reply = await complete_streaming(
-        llm, messages, None, on_delta, round_n=2, on_event=on_event
-    )
+    reply = await complete_streaming(llm, messages, None, on_delta, round_n=2, on_event=on_event)
     assert "think-1" not in "".join(shown)
     assert reply.text == "Hello world"

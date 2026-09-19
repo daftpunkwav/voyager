@@ -45,10 +45,14 @@ def _estimate_part(part: Any) -> int:
         return estimate_text(text)
     ptype = getattr(part, "type", None) or (part.get("type") if isinstance(part, dict) else "")
     if ptype == "image_url":
-        detail = getattr(part, "detail", "auto") if hasattr(part, "detail") else (
-            part.get("image_url", {}).get("detail", "auto")
-            if isinstance(part, dict) and isinstance(part.get("image_url"), dict)
-            else "auto"
+        detail = (
+            getattr(part, "detail", "auto")
+            if hasattr(part, "detail")
+            else (
+                part.get("image_url", {}).get("detail", "auto")
+                if isinstance(part, dict) and isinstance(part.get("image_url"), dict)
+                else "auto"
+            )
         )
         return 85 if detail == "low" else 255
     if ptype == "file":

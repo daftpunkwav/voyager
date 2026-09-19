@@ -11,7 +11,13 @@ from agent.runtime import MeterRecord
 from agent.subagent import Mode, TaskBook
 from platform_actor import ActorContext
 from platform_capability import execute
-from platform_contracts import LOCAL_USER, ActorKind, ActorRef, ServiceError
+from platform_contracts import (
+    LOCAL_USER,
+    ActorKind,
+    ActorRef,
+    ErrorSuffix,
+    ServiceError,
+)
 
 USER_CTX = ActorContext(actor=LOCAL_USER)
 AGENT_CTX = ActorContext(actor=ActorRef(kind=ActorKind.AGENT, id="agent.main", scopes=()))
@@ -79,17 +85,17 @@ class TestRegistrySurface:
             "set_plugin_approval",
             "set_profile",
             "set_setting",
-            "todo_read",
+            "todowrite",
             "uninstall_plugin",
             "wait_subagent",
         ]
 
 
 class TestTodos:
-    async def test_todo_read_reads_shared_store(self, app, tmp_path) -> None:
+    async def test_todowrite_query_reads_shared_store(self, app, tmp_path) -> None:
         """The plan panel's data source: the capability reads the same
-        workspace/todo.json the LLM todo tools write."""
-        result = await execute(app.registry, "todo_read", USER_CTX, {})
+        workspace/todo.json the LLM todowrite tool writes."""
+        result = await execute(app.registry, "todowrite", USER_CTX, {})
         assert result == {"items": [], "done": 0, "total": 0}
 
         from agent.tools.workspace import TodoStore
@@ -100,9 +106,47 @@ class TestTodos:
                 {"content": "step two", "status": "in_progress"},
             ]
         )
-        result = await execute(app.registry, "todo_read", USER_CTX, {})
+        result = await execute(app.registry, "todowrite", USER_CTX, {})
         assert result["total"] == 2 and result["done"] == 1
         assert [it["content"] for it in result["items"]] == ["step one", "step two"]
+
+    async def test_todowrite_session_scoped(self, app, tmp_path) -> None:
+        """Passing the open session's id addresses that session's plan file,
+        not the shared global one (parallel sessions never overwrite each other)."""
+        from agent.tools.workspace import TodoStore
+
+        TodoStore(tmp_path / "ws" / "todo.json").replace([{"content": "global"}])
+        TodoStore(tmp_path / "ws" / "todos" / "sess-a.json").replace([{"content": "session plan"}])
+        result = await execute(app.registry, "todowrite", USER_CTX, {"session": "sess-a"})
+        assert [it["content"] for it in result["items"]] == ["session plan"]
+        legacy = await execute(app.registry, "todowrite", USER_CTX, {})
+        assert [it["content"] for it in legacy["items"]] == ["global"]
+
+    async def test_todowrite_rejects_illegal_session(self, app) -> None:
+        """Session ids become file names; traversal shapes are fail-closed."""
+        with pytest.raises(ServiceError) as ei:
+            await execute(app.registry, "todowrite", USER_CTX, {"session": "../x"})
+        assert ei.value.body.code.endswith(ErrorSuffix.INVALID_INPUT.value)
+
+    async def test_todowrite_human_write_updates_and_deletes(self, app, tmp_path) -> None:
+        """Same surface as the tool: the human may also update/delete through
+        the action parameter (no read-only special case)."""
+        from agent.tools.workspace import TodoStore
+
+        TodoStore(tmp_path / "ws" / "todos" / "sess-b.json").replace(
+            [{"content": "only", "status": "pending"}]
+        )
+        out = await execute(
+            app.registry,
+            "todowrite",
+            USER_CTX,
+            {"session": "sess-b", "action": "update", "index": 0, "status": "done"},
+        )
+        assert out["done"] == 1
+        out = await execute(
+            app.registry, "todowrite", USER_CTX, {"session": "sess-b", "action": "delete"}
+        )
+        assert out == {"items": [], "done": 0, "total": 0}
 
 
 class TestSettingsParity:
@@ -269,7 +313,7 @@ class TestSurface:
             workspace_dir=tmp_path / "ws2",
             llm=FakeLLM(
                 [
-                    LLMReply(tool_calls=(ToolCall("1", "list_dir", {"path": "."}),)),
+                    LLMReply(tool_calls=(ToolCall("1", "glob", {"pattern": "*"}),)),
                     LLMReply(text="Done."),
                 ]
             ),
@@ -294,9 +338,13 @@ class TestSurface:
             for r in running:
                 assert "last_step" in r
                 assert r["last_step"] is not None
+                # Panel routing key: the chat session the run belongs to
+                assert "session" in r
             chat = next((r for r in running if r["name"] == "chat"), None)
             assert chat is not None
-            # list_dir is in the step trail; the final last_step may be the final reply — either it or normal text is fine
+            # A conversational instance is a chat session itself: never session-less
+            assert chat["session"]
+            # glob is in the step trail; the final last_step may be the final reply — either it or normal text is fine
             assert chat["last_step"]
             assert len(chat["last_step"]) <= 120
         finally:
@@ -448,7 +496,7 @@ class TestTeamSurface:
             names = {t["name"] for t in tools}
             assert "notes__create_note" in names  # bridge tool
             assert "spawn_subagent" in names  # internal tool
-            assert "read_file" in names
+            assert "read" in names
             bridge_tool = next(t for t in tools if t["name"] == "notes__create_note")
             assert bridge_tool["description"] == "[notes] create note"  # passed through verbatim
         finally:
@@ -469,9 +517,7 @@ class TestTeamSurface:
         )
         inst = await app.master.dispatch_task("do research", persona="scout2")
         names = inst.toolbelt.names()
-        assert names == [
-            "web_search"
-        ]  # write_file and friends are truly absent from the tool surface
+        assert names == ["web_search"]  # write and friends are truly absent from the tool surface
 
     async def test_register_subagent_with_limits_and_network(self, app) -> None:
         """Creation tiers: rounds/network show up in the list card shape after registration."""
@@ -560,8 +606,8 @@ class TestTeamSurface:
         assert inst.task.goal == "wake up"
 
     async def test_describe_tool_returns_metadata_and_schema(self, app) -> None:
-        info = await execute(app.registry, "describe_tool", USER_CTX, {"name": "read_file"})
-        assert info["name"] == "read_file"
+        info = await execute(app.registry, "describe_tool", USER_CTX, {"name": "read"})
+        assert info["name"] == "read"
         assert info["dimension"] == "fs"
         assert info["write"] is False
         assert isinstance(info["parameters"], dict)
@@ -574,10 +620,10 @@ class TestTeamSurface:
     async def test_list_tools_entries_carry_classification(self, app) -> None:
         """list_tools adds dimension/write classification (schema stays behind describe_tool)."""
         tools = await execute(app.registry, "list_tools", USER_CTX, {})
-        read = next(t for t in tools if t["name"] == "read_file")
+        read = next(t for t in tools if t["name"] == "read")
         assert read["dimension"] == "fs"
         assert read["write"] is False
-        write = next(t for t in tools if t["name"] == "write_file")
+        write = next(t for t in tools if t["name"] == "write")
         assert write["write"] is True
         assert "parameters" not in read
 
