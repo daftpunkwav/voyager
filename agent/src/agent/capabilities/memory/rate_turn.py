@@ -11,6 +11,11 @@ from agent.capabilities.deps import CapabilityDeps
 _VALID_SCORES = (1, 2, 3, 4, 5)
 
 
+#: Facts surface back into prompts via recall, so a comment is capped like
+#: the distiller caps extracted content (400 chars) instead of storing blobs.
+_MAX_COMMENT_CHARS = 400
+
+
 def register(reg: Registry, deps: CapabilityDeps) -> None:
     @capability(
         reg,
@@ -18,7 +23,10 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
         description="Rate a finished agent turn (1-5) with an optional comment; the verdict is stored as memory that guides future turns",
     )
     def rate_turn(score: int, comment: str = "", subject: str = "") -> dict:
-        if score not in _VALID_SCORES:
+        # No input_model: this handler is its own validator (repo convention).
+        # bool is an int subclass, and a float like 1.0 would pass the membership
+        # check below but crash the star rendering - reject both up front.
+        if isinstance(score, bool) or not isinstance(score, int) or score not in _VALID_SCORES:
             from platform_contracts import ErrorSuffix, ServiceError
 
             raise ServiceError(
@@ -27,7 +35,7 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
                 f"score must be one of {list(_VALID_SCORES)}",
             )
         stars = "★" * score + "☆" * (5 - score)
-        text = f"{stars} {comment.strip()}".strip()
+        text = f"{stars} {comment.strip()[:_MAX_COMMENT_CHARS]}".strip()
         topic = subject.strip()[:60] or "agent 执行"
         deps.memory.semantic.add(topic, "评价", text, source="feedback")
         deps.memory.episodic.log("feedback", f"{topic} 评分:{text}")

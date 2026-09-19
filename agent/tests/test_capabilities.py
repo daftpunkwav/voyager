@@ -730,3 +730,32 @@ class TestSessionSurface:
         out = await execute(app.registry, "context_status", USER_CTX, {})
         assert out["window_tokens"] > 0
         assert "used_pct" in out
+
+
+class TestRateTurn:
+    async def test_rate_turn_stores_feedback_fact(self, app) -> None:
+        out = await execute(
+            app.registry,
+            "rate_turn",
+            USER_CTX,
+            {"score": 4, "comment": "干得不错", "subject": "整理笔记"},
+        )
+        assert out["stored"] is True
+        facts = app.memory.semantic.query(subject="整理笔记")
+        assert any(f["relation"] == "评价" and "★★★★☆" in f["object"] for f in facts)
+
+    async def test_rate_turn_rejects_non_integer_score(self, app) -> None:
+        """bool is an int subclass and a float like 4.0 would pass the value
+        check but crash the star rendering - both are rejected up front."""
+        for bad in (4.5, 4.0, True, "4"):
+            with pytest.raises(ServiceError):
+                await execute(app.registry, "rate_turn", USER_CTX, {"score": bad})
+
+    async def test_rate_turn_caps_comment_length(self, app) -> None:
+        out = await execute(
+            app.registry, "rate_turn", USER_CTX, {"score": 3, "comment": "长" * 5000}
+        )
+        assert out["stored"] is True
+        facts = app.memory.semantic.query(relation="评价")
+        assert facts
+        assert all(len(f["object"]) <= 500 for f in facts)
