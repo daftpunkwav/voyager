@@ -271,6 +271,8 @@ export function commitNotesFilter(filter: NotesFilter): void {
   persistNotesView({ filter });
 }
 
+/** Debounce for persisting the query so fast keystrokes coalesce into one write. */
+const QUERY_PERSIST_DEBOUNCE_MS = 400;
 let queryTimer: ReturnType<typeof setTimeout> | undefined;
 
 export function commitNotesQuery(query: string): void {
@@ -278,7 +280,7 @@ export function commitNotesQuery(query: string): void {
   useNotesUiStore.getState().apply({ query: q });
   writeKey(NOTES_QUERY_KEY, q);
   if (queryTimer) clearTimeout(queryTimer);
-  queryTimer = setTimeout(() => persistNotesView({ query: q }), 400);
+  queryTimer = setTimeout(() => persistNotesView({ query: q }), QUERY_PERSIST_DEBOUNCE_MS);
 }
 
 export function commitNotesSourceId(sourceId: string): void {
