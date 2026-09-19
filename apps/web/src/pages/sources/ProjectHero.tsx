@@ -9,7 +9,7 @@
  */
 import type { AgentId, Project } from '@/api/types';
 import { useTranslation } from 'react-i18next';
-import { formatNumber } from '@/utils/format';
+import { abbrevCount } from '@/utils/format';
 import { formatDate } from '@/utils/date';
 import { GLASS_INNER, GLASS_OUTER } from '@/constants/glassTokens';
 
@@ -50,7 +50,7 @@ export function ProjectHero({
             <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}>
               <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
             </svg>
-            <strong>{formatNumber(project.stars)}</strong>&nbsp;stars
+            <strong>{abbrevCount(project.stars)}</strong>&nbsp;stars
           </span>
           <span className="pd-meta-sep" />
           <span className="pd-meta-item">

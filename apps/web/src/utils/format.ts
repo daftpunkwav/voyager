@@ -10,8 +10,9 @@
  * This module must not depend on UI-layer components.
  */
 
-/** Abbreviate numbers (e.g. 15000 -> "15k"). */
-export function formatNumber(n: number | null | undefined): string {
+/** Abbreviate a count for display (e.g. 15000 -> "15k"). Named abbrevCount so
+ *  it never collides with i18n/format's locale-aware formatNumber. */
+export function abbrevCount(n: number | null | undefined): string {
   if (n === null || n === undefined) return '0';
   if (n >= 10000) return `${Math.floor(n / 1000)}k`;
   return String(n);

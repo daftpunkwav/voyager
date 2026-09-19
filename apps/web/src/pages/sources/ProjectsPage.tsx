@@ -37,7 +37,7 @@ import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
 import { backendUnreachable } from '@/utils/errors';
-import { formatNumber } from '@/utils/format';
+import { abbrevCount } from '@/utils/format';
 import { GLASS_OUTER } from '@/constants/glassTokens';
 
 const STAT_ICONS = {
@@ -321,7 +321,7 @@ export function ProjectsPage({ embedded = false }: { embedded?: boolean }) {
             {t('sources:projects.pageInfo', {
               page,
               total: totalPages,
-              count: formatNumber(data.total),
+              count: abbrevCount(data.total),
             })}
           </span>
           <div className="pages">

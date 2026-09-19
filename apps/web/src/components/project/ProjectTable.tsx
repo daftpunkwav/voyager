@@ -16,7 +16,7 @@ import type { Category, Project, Tag } from '@/api/types';
 import { ProgressBadge } from './ProgressBadge';
 import { categoryCssClass, categoryLabel } from '@/utils/labels';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
-import { formatNumber, langCssClass, REPO_AVATAR_GRADIENTS, splitRepoName } from '@/utils/format';
+import { abbrevCount, langCssClass, REPO_AVATAR_GRADIENTS, splitRepoName } from '@/utils/format';
 import { useProjectStore } from '@/stores/projectStore';
 import { routes } from '@/utils/routes';
 
@@ -171,7 +171,7 @@ export function ProjectTable({
                   </span>
                 </td>
                 <td>
-                  <span className="stars">★ {formatNumber(p.stars)}</span>
+                  <span className="stars">★ {abbrevCount(p.stars)}</span>
                 </td>
                 <td>
                   <ProgressBadge progress={p.progress} />

@@ -14,7 +14,7 @@
 
 import { useTranslation } from 'react-i18next';
 import { getSimilarNodes } from '@/components/graph/GraphControls';
-import { formatNumber, REPO_AVATAR_GRADIENTS } from '@/utils/format';
+import { abbrevCount, REPO_AVATAR_GRADIENTS } from '@/utils/format';
 import { KIND_LABELS } from './graphConstants';
 import type { GraphData, GraphNode } from '@/api/types';
 
@@ -76,7 +76,7 @@ export function GraphListView({
                 {isRepo && (
                   <>
                     <span>·</span>
-                    <span>{formatNumber(n.stars)} ★</span>
+                    <span>{abbrevCount(n.stars)} ★</span>
                   </>
                 )}
                 {n.tags && n.tags.length > 0 && (

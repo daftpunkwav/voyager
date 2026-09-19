@@ -31,7 +31,7 @@ import { useProjectStats } from '@/hooks/useProjects';
 import { useTrendingSpotlight } from '@/hooks/useTrendingSpotlight';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { formatRelativeTime, formatDateTime } from '@/utils/date';
-import { formatNumber, langCssClass, REPO_AVATAR_GRADIENTS, splitRepoName } from '@/utils/format';
+import { abbrevCount, langCssClass, REPO_AVATAR_GRADIENTS, splitRepoName } from '@/utils/format';
 import { activityItemHref } from '@/utils/overviewLinks';
 import { routes } from '@/utils/routes';
 import { safeHttpUrl } from '@/utils/safeUrl';
@@ -402,7 +402,7 @@ export function OverviewPage() {
                       </p>
                     </div>
                   </div>
-                  <span className="project-stars">⭐ {formatNumber(item.stars)}</span>
+                  <span className="project-stars">⭐ {abbrevCount(item.stars)}</span>
                 </Link>
               );
             })}
@@ -502,7 +502,7 @@ export function OverviewPage() {
                       <span className={`lang-dot ${langCssClass(r.language)}`}>
                         {r.language ?? '-'}
                       </span>
-                      <span className="stars">★ {formatNumber(r.stars)}</span>
+                      <span className="stars">★ {abbrevCount(r.stars)}</span>
                     </div>
                   </div>
                 </a>
