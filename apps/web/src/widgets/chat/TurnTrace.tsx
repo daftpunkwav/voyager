@@ -179,11 +179,6 @@ function TraceIcon({ name }: { name: IconName }) {
   }
 }
 
-/** Icon for a step row, chosen from the step's kind/capability (shared with the trajectory view). */
-export function StepTraceIcon({ step }: { step: TurnStep }) {
-  return <TraceIcon name={iconForStep(step)} />;
-}
-
 function Chevron({ open }: { open: boolean }) {
   return (
     <svg
