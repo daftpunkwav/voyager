@@ -68,10 +68,12 @@ async function reportActivity(body: {
   }
 }
 
-/** Activity page replay: reads the event stream; non-2xx throws with the backend envelope message. */
+/** Activity page replay: reads the event stream; non-2xx throws with the backend envelope message.
+ *  The gateway's activity_feed filter parameter is `types` (comma-separated event
+ *  types, fnmatch semantics) — a `kind` param would be silently ignored. */
 export async function fetchActivityFeed(kind: string): Promise<FeedEvent[]> {
   const url = new URL('/api/activity/feed', window.location.origin);
-  if (kind) url.searchParams.set('kind', kind);
+  if (kind) url.searchParams.set('types', kind);
   const resp = await fetch(url.toString(), { credentials: 'include' });
   if (!resp.ok) {
     // Prefer the message from the backend JSON envelope; without one (e.g. the dev
