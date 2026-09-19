@@ -15,7 +15,7 @@
  * This module must not depend on UI-layer components.
  */
 
-import { callCapability, unwrapDataField } from '@/bridge/client';
+import { callCapability, ServiceError, unwrapDataField } from '@/bridge/client';
 
 function asArray<T>(raw: T[] | { [k: string]: T[] | undefined }, key: string): T[] {
   if (Array.isArray(raw)) return raw;
@@ -275,8 +275,16 @@ export interface ContextStatus {
 }
 
 export function getContextStatus(sessionId = ''): Promise<ContextStatus> {
-  return callCapability<ContextStatus>('agent', 'context_status', {
+  return callCapability<ContextStatus | { error: string }>('agent', 'context_status', {
     session_id: sessionId,
+  }).then((raw) => {
+    // Soft-failure shape: an unknown session answers {"error": "..."} with
+    // HTTP 200 (not a ServiceError envelope). Reject so callers' catch paths
+    // hit their null fallbacks instead of reading undefined fields as NaN.
+    if (raw && typeof raw === 'object' && 'error' in raw) {
+      throw new ServiceError('NOT_FOUND', String(raw.error));
+    }
+    return raw as ContextStatus;
   });
 }
 
