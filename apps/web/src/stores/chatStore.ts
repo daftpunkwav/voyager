@@ -40,6 +40,10 @@ import { groupTrails } from '@/utils/trajectory';
 import type { ChatSessionRow } from '@/api/agent';
 import { EventType } from '@/bridge/events';
 
+/** Vocabulary of the backend agent.message `kind` field (agent/master:
+ *  default "message", turn failures "error", task receipts "notice"). */
+export type ChatMessageKind = 'message' | 'error' | 'notice';
+
 export interface ChatMessage {
   seq: number;
   role: 'user' | 'agent' | 'system';
@@ -47,7 +51,7 @@ export interface ChatMessage {
   ts?: number;
   /** Backend message kind: "error" renders distinctly (failures and harness
    *  degradation must not masquerade as normal answers); absent on old rows. */
-  kind?: string;
+  kind?: ChatMessageKind;
 }
 
 export interface ProgressCard {
@@ -355,7 +359,9 @@ function historyToMessages(events: ChatEvent[]): ChatMessage[] {
       role: (e.type === EventType.USER_MESSAGE ? 'user' : 'agent') as ChatMessage['role'],
       content: String(e.payload?.content ?? ''),
       ts: e.ts,
-      kind: typeof e.payload?.kind === 'string' ? (e.payload.kind as string) : undefined,
+      // Cast: the wire value is backend-controlled; unknown kinds render as
+      // plain answers, which is the intended degradation.
+      kind: typeof e.payload?.kind === 'string' ? (e.payload.kind as ChatMessageKind) : undefined,
     }));
 }
 
@@ -481,7 +487,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             role: 'agent',
             content: String(p.content ?? ''),
             ts: ev.ts,
-            kind: typeof p.kind === 'string' ? (p.kind as string) : undefined,
+            kind: typeof p.kind === 'string' ? (p.kind as ChatMessageKind) : undefined,
           },
         ],
       };
@@ -648,7 +654,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               role: 'agent',
               content: String(p.content ?? ''),
               ts: ev.ts,
-              kind: typeof p.kind === 'string' ? (p.kind as string) : undefined,
+              kind: typeof p.kind === 'string' ? (p.kind as ChatMessageKind) : undefined,
             },
           ],
         });
