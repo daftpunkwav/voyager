@@ -5,7 +5,7 @@
  * the slot; bubble rendering lives in MessageList.
  */
 
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -50,6 +50,10 @@ beforeEach(() => {
     connected: true,
     currentStep: null,
     streaming: null,
+    steps: [],
+    trails: [],
+    lastSteps: [],
+    roundTexts: [],
   });
 });
 
@@ -105,5 +109,67 @@ describe('MessageList streaming', () => {
     // the closing message is the only rendered output.
     expect(screen.getByText('正式回复')).toBeTruthy();
     expect(container.querySelector('.chat-round__out')).toBeNull();
+  });
+
+  it('a system op emitted before the first round marker renders inside that round block', () => {
+    // Backend compaction runs at the round boundary: the compact step lands
+    // BEFORE round 1's llm marker and must not be dropped from the trace.
+    dispatch('agent.step', { kind: 'system', name: 'compact', summary: '压缩上下文' });
+    dispatch('agent.step', {
+      kind: 'llm',
+      name: 'round-1',
+      summary: 't',
+      detail: { round: 1 },
+    });
+    const { container } = render(
+      <MemoryRouter>
+        <MessageList />
+      </MemoryRouter>
+    );
+    const opRow = container.querySelector('.chat-trace__rowbtn--op');
+    expect(opRow).not.toBeNull();
+    expect(opRow?.textContent).toContain('压缩上下文');
+  });
+});
+
+describe('MessageList interrupted turn trace', () => {
+  it('keeps the interrupted turn trace visible after the stop receipt (system bubble)', () => {
+    useChatStore.getState().appendLocal({ seq: 1, role: 'user', content: '读文件' });
+    dispatch('agent.step', { kind: 'tool', name: 'notes__read', summary: 'r', subagent: 'chat' });
+    act(() => {
+      // The stop flow folds the live steps into an interrupted trail, then the
+      // stop receipt lands as a system bubble right after clearThinking.
+      useChatStore.getState().clearThinking();
+      useChatStore.getState().addSystem('已停止');
+    });
+    const { container } = render(
+      <MemoryRouter>
+        <MessageList />
+      </MemoryRouter>
+    );
+    // The live trace is gone; the interrupted turn's closed trace remains.
+    expect(container.querySelector('.chat-trace--live')).toBeNull();
+    expect(container.querySelector('.chat-trace:not(.chat-trace--live)')).not.toBeNull();
+  });
+
+  it('interrupted trace still shows when an earlier completed turn exists (trails ascend by msgSeq)', () => {
+    // Turn 1 completes normally: its trail closes under the reply's seq.
+    useChatStore.getState().appendLocal({ seq: 1, role: 'user', content: '第一问' });
+    dispatch('agent.step', { kind: 'tool', name: 'notes__read', summary: 'r', subagent: 'chat' });
+    dispatch('agent.message', { content: '答一' });
+    // Turn 2 is interrupted; the negative-keyed trail sorts BEFORE turn 1's.
+    useChatStore.getState().appendLocal({ seq: 4, role: 'user', content: '第二问' });
+    dispatch('agent.step', { kind: 'tool', name: 'notes__read', summary: 'r2', subagent: 'chat' });
+    act(() => {
+      useChatStore.getState().clearThinking();
+      useChatStore.getState().addSystem('已停止');
+    });
+    const { container } = render(
+      <MemoryRouter>
+        <MessageList />
+      </MemoryRouter>
+    );
+    // Turn 1's closed trace above its answer + the interrupted turn's trace at the tail.
+    expect(container.querySelectorAll('.chat-trace:not(.chat-trace--live)')).toHaveLength(2);
   });
 });

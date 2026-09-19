@@ -221,11 +221,23 @@ export function MessageList() {
   // above the answer it produced.
   const trailBySeq = new Map(trails.map((tr) => [tr.msgSeq, tr]));
   // An interrupted turn closes under a synthetic negative key (no closing
-  // message); keep its trace visible at the tail while that turn is the newest.
-  const tailTrail = trails.length ? trails[trails.length - 1] : null;
-  const lastMsg = messages[messages.length - 1];
+  // message). upsertTrail keeps trails ascending by msgSeq, so negative keys
+  // sort FIRST and the newest interruption (largest timestamp = most negative)
+  // is trails[0] — the array tail is a completed turn's trail whenever one
+  // exists. Surface the interrupted trace at the tail while that turn is still
+  // the newest one.
+  const tailTrail = trails.length > 0 && trails[0].msgSeq < 0 ? trails[0] : null;
+  // Trailing system notices (the stop receipt lands right after clearThinking)
+  // must not hide the interrupted turn: compare against the last real bubble.
+  let lastMsg: ChatMessage | undefined;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role !== 'system') {
+      lastMsg = messages[i];
+      break;
+    }
+  }
   const showInterrupted =
-    !thinking && steps.length === 0 && !!tailTrail && tailTrail.msgSeq < 0
+    !thinking && steps.length === 0 && !!tailTrail
       ? !lastMsg || (lastMsg.role === 'user' && tailTrail.userText === lastMsg.content)
       : false;
 

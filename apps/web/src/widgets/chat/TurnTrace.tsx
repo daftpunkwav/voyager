@@ -400,6 +400,10 @@ function buildBlocks(
         reasoning: s.reasoning ?? '',
         reasoningTruncated: s.reasoningTruncated ?? false,
         dup: !!finalText && !!persisted && persisted === finalText,
+        // Ops emitted before this round's marker (backend compaction runs at
+        // the round boundary, i.e. BEFORE round 1's llm step) attach to the
+        // block they precede; without this the pre-round-1 op row is dropped.
+        ops: pendingOps,
       });
       pendingOps = [];
       blocks.push(cur);
