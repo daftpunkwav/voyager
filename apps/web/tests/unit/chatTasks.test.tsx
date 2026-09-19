@@ -70,18 +70,18 @@ beforeEach(() => {
 
 describe('chatStore task card completeness', () => {
   it('a bare task.completed (no prior progress) still builds a completed card', () => {
-    dispatch('task.completed', { job_id: 'j-1', project: 'voyager', progress: 1.0 });
+    dispatch('task.completed', { job_id: 'j-1', project: 'demo', progress: 1.0 });
     const { cards, cardOrder } = useChatStore.getState();
     expect(cardOrder).toContain('j-1');
     expect(cards['j-1']).toMatchObject({
-      label: 'voyager',
+      label: 'demo',
       status: 'completed',
       progress: 1,
     });
   });
 
   it('a bare task.failed (no prior progress) still builds a failed card with the error visible', () => {
-    dispatch('task.failed', { job_id: 'j-2', project: 'voyager', error: '队列爆炸' });
+    dispatch('task.failed', { job_id: 'j-2', project: 'demo', error: '队列爆炸' });
     expect(useChatStore.getState().cards['j-2']).toMatchObject({
       status: 'failed',
       error: '队列爆炸',

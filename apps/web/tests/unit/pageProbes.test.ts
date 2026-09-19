@@ -117,9 +117,9 @@ describe('sources provider summary quality', () => {
     expect(out?.summary).toBe('资源详情 · 仓库 · abc-123');
     expect(out?.selected).toBe('abc-123');
 
-    rememberSourceDetail({ kind: 'repo', id: 'abc-123', title: 'voyager/backend' });
+    rememberSourceDetail({ kind: 'repo', id: 'abc-123', title: 'demo/backend' });
     out = sourceDetailProvider.report();
-    expect(out?.summary).toBe('资源详情 · 仓库 · voyager/backend');
+    expect(out?.summary).toBe('资源详情 · 仓库 · demo/backend');
   });
 
   it('the detail summary never carries README/body-length text', () => {
