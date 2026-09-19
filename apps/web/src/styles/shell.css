@@ -988,84 +988,6 @@
   border-top: 1px dashed var(--bg-300);
   padding-top: 10px;
 }
-.chat-round__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  font-size: 11.5px;
-  color: var(--text-500);
-}
-.chat-round__no {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  color: var(--brand-600);
-}
-.chat-round__no .chat-trace__pulse {
-  width: 6px;
-  height: 6px;
-}
-.chat-round__toolstats {
-  font-variant-numeric: tabular-nums;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 40%;
-}
-.chat-round__model {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--bg-200);
-  color: var(--text-600);
-}
-.chat-round__stats {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-}
-.chat-round__text {
-  font-size: 13px;
-  line-height: 1.65;
-  color: var(--text-800);
-}
-.chat-round__text.is-clamped {
-  max-height: 8.5em;
-  overflow: hidden;
-}
-/* Model thinking on its own channel: visually secondary to the answer text,
-   same clamp behavior. */
-.chat-round__reason {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  border-left: 2px solid var(--bg-300);
-  padding-left: 8px;
-  font-size: 12.5px;
-  color: var(--text-600);
-}
-.chat-round__reasontext.is-clamped {
-  max-height: 8.5em;
-  overflow: hidden;
-}
-.chat-round__note {
-  font-size: 11.5px;
-}
-.chat-round__toggle {
-  align-self: flex-start;
-  border: none;
-  background: none;
-  color: var(--brand-500);
-  cursor: pointer;
-  padding: 0;
-}
-.chat-round__meta {
-  font-size: 11.5px;
-  color: var(--text-400);
-  font-variant-numeric: tabular-nums;
-}
 .chat-trace__rowbtn--op {
   color: var(--text-500);
 }
@@ -2899,8 +2821,8 @@ a.chat-card:hover {
 }
 
 /* ==========================================================================
-   Chat execution UX: message actions / turn rating / raw LLM log drawer /
-   sidebar session management. Appended 2026-09-19.
+   Chat execution UX: message actions / turn rating / sidebar session
+   management. Appended 2026-09-19.
    ========================================================================== */
 .chat-entry {
   display: flex;
@@ -3037,10 +2959,6 @@ a.chat-card:hover {
   padding-top: 8px;
   border-top: 1px dashed var(--bg-300);
 }
-.chat-rate--done {
-  border-top: none;
-  padding-top: 4px;
-}
 .chat-rate__stars {
   display: inline-flex;
   gap: 2px;
@@ -3080,21 +2998,6 @@ a.chat-card:hover {
 .chat-rate > button:disabled {
   opacity: 0.45;
   cursor: default;
-}
-
-.chat-round__rawbtn {
-  align-self: flex-start;
-  border: none;
-  background: none;
-  color: var(--text-400);
-  font-size: 11.5px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.chat-round__rawbtn:hover {
-  color: var(--text-1);
-  background: rgba(120, 120, 128, 0.14);
 }
 
 .sidebar-sessions__row {

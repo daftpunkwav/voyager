@@ -106,6 +106,8 @@ describe('MessageList streaming', () => {
     });
     // The trace folds (live steps cleared) and the closing message renders.
     expect(screen.getByText('正式回复')).toBeTruthy();
-    expect(container.querySelector('.chat-round__text')?.textContent ?? '').not.toContain('打字中');
+    // The streaming round text is gone with the trace: the closing message is
+    // the only rendered output (asserts the fold body, not a removed class).
+    expect(container.querySelector('.chat-fold__body')).toBeNull();
   });
 });

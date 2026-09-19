@@ -8,10 +8,11 @@
  * compaction) render as operation rows inside the timeline.
  *
  * The live turn renders one stable collapsible unit between the user's
- * message and the final output: a fixed-height, internally-scrolling body,
- * so streaming output below is never pushed around. Output text flowing is
- * the "latest activity" and collapses the unit; the next tool step reopens
- * it. Closed turns render the same blocks from the persisted trail.
+ * message and the final output. Streaming text flows inside its round block
+ * (never as a standalone bubble), so intermediate rounds no longer flash as
+ * final answers; round content (thinking / output / tool calls) renders as
+ * foldable rows, collapsed by default. Closed turns render the same blocks
+ * from the persisted trail.
  */
 
 import { useEffect, useRef, useState } from 'react';

@@ -6,8 +6,9 @@
  *
  * Responsibilities:
  * - Highlight the active route, falling back to the parent item on detail pages
- * - Switch / create chat sessions inline (lightweight list; rename/delete stay
- *   in the chat page session drawer)
+ * - Host the full chat session manager: switch / create / pin / rename /
+ *   archive / delete, an archived section, and the active session's context
+ *   usage with a compact action
  * - Keep the footer entries legible when collapsed (icon-only, centered)
  */
 import { useEffect, useId, useState } from 'react';
@@ -85,9 +86,9 @@ function BrandLogo() {
   );
 }
 
-/** Full session manager: switch + create + pin / rename / archive / delete
- *  (the chat page session drawer is gone), an archived section, and the
- *  active session's context usage with a compact action. */
+/** Full session manager: switch + create + pin / rename / archive / delete,
+ *  an archived section, and the active session's context usage with a compact
+ *  action (the chat page session drawer is gone). */
 function SidebarSessions() {
   const { t } = useTranslation('chat');
   const navigate = useNavigate();
