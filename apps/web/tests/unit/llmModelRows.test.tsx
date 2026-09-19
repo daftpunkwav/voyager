@@ -80,6 +80,14 @@ describe('firstEnabledModel', () => {
   });
 });
 
+/** Finds a button by its exact text inside a dialog; throws (failing the test
+ *  with a clear message) when absent instead of a non-null assertion. */
+function dialogButton(dialog: HTMLElement, text: string): HTMLButtonElement {
+  const btn = [...dialog.querySelectorAll('button')].find((b) => b.textContent === text);
+  if (!btn) throw new Error(`dialog button "${text}" not found`);
+  return btn;
+}
+
 describe('LlmProviderDetail model rows', () => {
   it('renders one row per model with badges and the enabled switch state', () => {
     setup();
@@ -110,10 +118,7 @@ describe('LlmProviderDetail model rows', () => {
     fireEvent.change(screen.getByLabelText('模型 ID'), { target: { value: 'm-new' } });
     fireEvent.change(screen.getByLabelText('上下文窗口'), { target: { value: '900000' } });
     // the dialog's confirm button carries the add label (same text as the list header button)
-    const confirm = [...dialog.querySelectorAll('button')].find(
-      (b) => b.textContent === '+ 添加模型'
-    );
-    fireEvent.click(confirm!);
+    fireEvent.click(dialogButton(dialog, '+ 添加模型'));
     await waitFor(() => expect(onPatch).toHaveBeenCalled());
     const patch = onPatch.mock.calls[0][0];
     expect(patch.models).toEqual(['m-a', 'm-b', 'm-new']);
@@ -132,10 +137,7 @@ describe('LlmProviderDetail model rows', () => {
     fireEvent.change(screen.getByLabelText('模型 ID'), { target: { value: 'm-a' } });
     // confirm button is the dialog's primary action carrying the add label
     const dialog = screen.getByRole('dialog', { name: '添加模型' });
-    const confirm = [...dialog.querySelectorAll('button')].find(
-      (b) => b.textContent === '+ 添加模型'
-    );
-    fireEvent.click(confirm!);
+    fireEvent.click(dialogButton(dialog, '+ 添加模型'));
     expect(await screen.findByText('模型 m-a 已存在')).toBeTruthy();
   });
 
@@ -155,9 +157,7 @@ describe('LlmProviderDetail model rows', () => {
     const { onPatch } = setup();
     fireEvent.click(screen.getByRole('button', { name: '移除 m-b' }));
     const dialog = await screen.findByRole('dialog', { name: '删除模型' });
-    fireEvent.click(
-      [...dialog.querySelectorAll('button')].find((b) => b.textContent === '移除 m-b')!
-    );
+    fireEvent.click(dialogButton(dialog, '移除 m-b'));
     await waitFor(() => expect(onPatch).toHaveBeenCalled());
     const patch = onPatch.mock.calls[0][0];
     expect(patch.models).toEqual(['m-a']);

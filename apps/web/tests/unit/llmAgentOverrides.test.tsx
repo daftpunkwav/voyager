@@ -78,8 +78,8 @@ describe('LlmAgentOverrides', () => {
     setup();
     await pick('Lucien 供应商', 'P One');
     await waitFor(() => expect(setCalls.some((c) => c.key === 'agent.llm.overrides')).toBe(true));
-    const call = setCalls.find((c) => c.key === 'agent.llm.overrides')!;
-    expect(call.value).toEqual({ orchestrator: { provider: 'p1', model: '' } });
+    const call = setCalls.find((c) => c.key === 'agent.llm.overrides');
+    expect(call?.value).toEqual({ orchestrator: { provider: 'p1', model: '' } });
   });
 
   it('drops the whole entry when provider and model are both back on default', async () => {
@@ -88,15 +88,15 @@ describe('LlmAgentOverrides', () => {
     // the stored provider shows as the trigger value; switch back to default
     await pick('Lucien 供应商', '默认（P One）');
     await waitFor(() => expect(setCalls.some((c) => c.key === 'agent.llm.overrides')).toBe(true));
-    const call = setCalls.find((c) => c.key === 'agent.llm.overrides')!;
-    expect(call.value).toEqual({});
+    const call = setCalls.find((c) => c.key === 'agent.llm.overrides');
+    expect(call?.value).toEqual({});
   });
 
   it('persists a style pick to agent.style.overrides', async () => {
     setup();
     await pick('Lucien 说话风格', '毒舌');
     await waitFor(() => expect(setCalls.some((c) => c.key === 'agent.style.overrides')).toBe(true));
-    const call = setCalls.find((c) => c.key === 'agent.style.overrides')!;
-    expect(call.value).toEqual({ orchestrator: '毒舌' });
+    const call = setCalls.find((c) => c.key === 'agent.style.overrides');
+    expect(call?.value).toEqual({ orchestrator: '毒舌' });
   });
 });

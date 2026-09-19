@@ -250,7 +250,8 @@ describe('settings subagents section (create/edit dialog)', () => {
     const confirmDialog = screen
       .getAllByRole('dialog')
       .find((d) => d.textContent?.includes('删除「scout」'));
-    fireEvent.click(within(confirmDialog!).getByRole('button', { name: '删除' }));
+    if (!confirmDialog) throw new Error('delete-confirm dialog not found');
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: '删除' }));
     await waitFor(() => expect(deleted).toEqual(['scout']));
   });
 });
