@@ -149,7 +149,12 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
             # in the running state forever (the reply sink is success-only).
             if inst.task.conversational and inst.reply_sink is not None:
                 try:
-                    await inst.reply_sink("[已中断] 本回合被中断;可重新发送或换个说法继续。", "message")
+                    # kind=notice: not a conversation turn (never enters the
+                    # session history), so fork's keep_messages counting and
+                    # the UI's notice styling both stay correct.
+                    await inst.reply_sink(
+                        "[已中断] 本回合被中断;可重新发送或换个说法继续。", "notice"
+                    )
                 except Exception:  # best effort, same as the event above
                     log.debug("failed to emit cancel closure message", exc_info=True)
             raise

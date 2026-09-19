@@ -10,6 +10,7 @@
 import type { AgentId, Project } from '@/api/types';
 import { useTranslation } from 'react-i18next';
 import { abbrevCount } from '@/utils/format';
+import { safeHttpUrl } from '@/utils/safeUrl';
 import { formatDate } from '@/utils/date';
 import { GLASS_INNER, GLASS_OUTER } from '@/constants/glassTokens';
 
@@ -87,7 +88,7 @@ export function ProjectHero({
         </button>
         <a
           className={`btn ${GLASS_INNER}`}
-          href={project.url}
+          href={safeHttpUrl(project.url) ?? undefined}
           target="_blank"
           rel="noopener noreferrer"
         >

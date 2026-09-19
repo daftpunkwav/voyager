@@ -14,6 +14,7 @@ import type { Category, Project, Tag } from '@/api/types';
 import { useTranslation } from 'react-i18next';
 import { categoryLabel } from '@/utils/labels';
 import { formatDate } from '@/utils/date';
+import { safeHttpUrl } from '@/utils/safeUrl';
 import { GLASS_INNER, GLASS_OUTER } from '@/constants/glassTokens';
 
 interface ProjectInfoCardProps {
@@ -47,7 +48,11 @@ export function ProjectInfoCard({
         <div className="pd-info-row">
           <span className="k">URL</span>
           <span className="v">
-            <a href={project.url} target="_blank" rel="noopener noreferrer">
+            <a
+              href={safeHttpUrl(project.url) ?? undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               {(project.url ?? '').replace('https://github.com/', '')} ↗
             </a>
           </span>

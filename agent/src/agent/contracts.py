@@ -133,7 +133,9 @@ class DispatchMaster(Protocol):
     of this module and no explicit inheritance.
     """
 
-    async def reply(self, text: str, *, trace_id: str = "", session: str = "") -> None: ...
+    async def reply(
+        self, text: str, *, trace_id: str = "", session: str = "", kind: str = "message"
+    ) -> None: ...
 
     @property
     def digests(self) -> DigestStore: ...
