@@ -1,11 +1,11 @@
 /**
- * @file chatProcessPanel
- * @description Chat redesign (2026-09, inline traces): the live turn's trace
- * stays expanded while tool steps stream in and streaming text flows inside
- * its round block; closed turns render their collapsed trail above the
- * answer; note receipts re-parent below the reply that produced them; the
- * composer's send -> stop morph; the right panel's plan / agents /
- * deliverables sections.
+ * @file chatTimeline
+ * @description Conversation timeline integration (the 2026-09 inline-trace
+ * redesign): the live turn's trace stays expanded while tool steps stream in
+ * and streaming text flows inside its round block; closed turns render their
+ * collapsed trail above the answer; note receipts re-parent below the reply
+ * that produced them; the composer's send -> stop morph; the right panel's
+ * plan / agents / deliverables sections.
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
