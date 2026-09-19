@@ -3,8 +3,8 @@
  * @description Renders the chat message stream as a mainstream-agent-style
  * timeline: user bubbles, plain agent output (no chrome), and inline execution
  * traces between them — a closed turn renders its collapsed trail right above
- * the answer it produced, the live turn's trace sits under the newest user
- * message and auto-collapses when output text starts streaming.
+ * the answer it produced, and the live turn's trace sits under the newest
+ * user message with the streaming text flowing inside its round block.
  *
  * Shared by the chat page and the persistent floating window; lives in the
  * widgets layer so page-private components are never depended on in reverse.
@@ -63,35 +63,28 @@ type TimelineItem =
   | { kind: 'artifact'; seq: number; artifact: NoteArtifact };
 
 /** Note receipts are emitted while the tools run, i.e. BEFORE the reply that
- *  produced them; the reply reads better with the results under it, so
- *  artifacts produced inside a turn are re-parented to follow that turn's
- *  agent message. Artifacts with no reply yet stay in seq order at the tail. */
+ *  produced them; the reply reads better with the results under it, so an
+ *  artifact attaches below the first message that follows it in seq order
+ *  when that message is an agent reply (its turn's closing answer). A user
+ *  message there (or none) means the turn never closed, and the artifact
+ *  keeps its seq position instead of drifting into a later turn. */
 function reParentArtifacts(merged: TimelineItem[]): TimelineItem[] {
-  const out: TimelineItem[] = [];
+  const out: TimelineItem[] = merged.filter((item) => item.kind === 'msg');
   for (const item of merged) {
-    if (item.kind === 'msg') {
-      out.push(item);
-      continue;
-    }
-    // Insert after the newest message with seq <= the artifact's own seq
-    // (its turn's closing answer); already-placed artifacts below the scan
-    // position keep their relative order. No host message yet -> tail.
+    if (item.kind !== 'artifact') continue;
     let at = out.length;
-    let lastArtifactEnd = out.length;
-    let hit = false;
-    for (let i = out.length - 1; i >= 0; i--) {
+    for (let i = 0; i < out.length; i++) {
       const placed = out[i];
-      if (placed.kind === 'artifact') {
-        lastArtifactEnd = i + 1;
-        continue;
-      }
-      if (placed.seq <= item.seq) {
-        at = i + 1;
-        hit = true;
+      if (placed.kind === 'msg' && placed.seq > item.seq) {
+        // Agent reply: the receipt belongs right below it. User message: the
+        // turn never closed, keep the receipt at its own seq position.
+        at = placed.msg.role === 'agent' ? i + 1 : i;
         break;
       }
     }
-    out.splice(hit ? at : Math.min(at, lastArtifactEnd), 0, item);
+    // Artifacts already attached to the same host keep their receipt order.
+    while (out[at]?.kind === 'artifact') at++;
+    out.splice(at, 0, item);
   }
   return out;
 }

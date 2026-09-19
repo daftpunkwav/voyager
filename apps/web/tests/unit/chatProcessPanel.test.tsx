@@ -1,9 +1,10 @@
 /**
  * @file chatProcessPanel
  * @description Chat redesign (2026-09, inline traces): the live turn's trace
- * stays expanded while tool steps stream in, auto-collapses when output text
- * starts flowing, and closed turns render their collapsed trail above the
- * answer; the composer's send -> stop morph; the right panel's plan / agents /
+ * stays expanded while tool steps stream in and streaming text flows inside
+ * its round block; closed turns render their collapsed trail above the
+ * answer; note receipts re-parent below the reply that produced them; the
+ * composer's send -> stop morph; the right panel's plan / agents /
  * deliverables sections.
  */
 
@@ -190,6 +191,55 @@ describe('inline live trace (MessageList)', () => {
     expect(
       firstAnswer.compareDocumentPosition(cardEl) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
+  });
+
+  it('re-parents a mid-turn receipt below the reply that produced it', () => {
+    // Real event-log order: the receipt (seq 2) lands while the tools run,
+    // strictly BEFORE the closing reply (seq 3). The card must still end up
+    // below that reply, not between the user message and it.
+    useChatStore.setState({
+      messages: [
+        { seq: 1, role: 'user', content: '第一问' },
+        { seq: 3, role: 'agent', content: '第一答' },
+        { seq: 4, role: 'user', content: '第二问' },
+      ],
+      artifacts: [{ seq: 2, noteId: 'n1', title: '周报' }],
+    });
+    const { container } = renderStream();
+    const cardEl = container.querySelector('.note-artifact') as Element;
+    const firstAnswer = container.querySelector('.chat-bubble--agent') as Element;
+    const secondAsk = [...container.querySelectorAll('.chat-bubble--user')].at(-1) as Element;
+    expect(
+      firstAnswer.compareDocumentPosition(cardEl) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      cardEl.compareDocumentPosition(secondAsk) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it('keeps multiple receipts of one turn in creation order below the reply', () => {
+    useChatStore.setState({
+      messages: [
+        { seq: 1, role: 'user', content: '第一问' },
+        { seq: 4, role: 'agent', content: '第一答' },
+      ],
+      artifacts: [
+        { seq: 2, noteId: 'n1', title: '笔记一' },
+        { seq: 3, noteId: 'n2', title: '笔记二' },
+      ],
+    });
+    const { container } = renderStream();
+    const cards = [...container.querySelectorAll('.note-artifact')];
+    expect(cards).toHaveLength(2);
+    const answer = container.querySelector('.chat-bubble--agent') as Element;
+    // both sit below the reply, first note above second note
+    for (const card of cards) {
+      expect(answer.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    expect(
+      cards[0].compareDocumentPosition(cards[1]) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(cards[0].textContent).toContain('笔记一');
   });
 });
 
