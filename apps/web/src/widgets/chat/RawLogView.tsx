@@ -1,23 +1,16 @@
 /**
  * @file RawLogView
- * @description The chat page's 日志 tab: every recorded LLM round of the
+ * @description The chat page's log tab: every recorded LLM round of the
  * current session, each showing the raw request transcript (the exact
  * messages the model received) and the raw response, verbatim. Data comes
- * from GET /api/chat/rawllm?session=... backed by the trajectory store.
+ * from GET /api/chat/rawllm (via bridge/chatSend) backed by the trajectory
+ * store.
  */
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '@/stores/chatStore';
-
-interface RawRound {
-  run_id: string;
-  round: number;
-  session: string;
-  ts: number;
-  request: string;
-  response: string;
-}
+import { fetchRawLlmRounds, type RawLlmRound } from '@/bridge/chatSend';
 
 function pretty(raw: string): string {
   try {
@@ -27,7 +20,7 @@ function pretty(raw: string): string {
   }
 }
 
-function RoundCard({ round }: { round: RawRound }) {
+function RoundCard({ round }: { round: RawLlmRound }) {
   const { t } = useTranslation('chat');
   const [tab, setTab] = useState<'request' | 'response'>('request');
   const time = new Date(round.ts * 1000).toLocaleTimeString();
@@ -67,18 +60,16 @@ function RoundCard({ round }: { round: RawRound }) {
 export function RawLogView() {
   const { t } = useTranslation('chat');
   const activeId = useChatStore((s) => s.activeSessionId);
-  const [rounds, setRounds] = useState<RawRound[] | null>(null);
+  const [rounds, setRounds] = useState<RawLlmRound[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setRounds(null);
     setError(null);
-    const q = new URLSearchParams({ session: activeId || '' });
-    fetch(`/api/chat/rawllm?${q.toString()}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((data: { rounds?: RawRound[] }) => {
-        if (!cancelled) setRounds(data.rounds ?? []);
+    fetchRawLlmRounds(activeId)
+      .then((rows) => {
+        if (!cancelled) setRounds(rows);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);

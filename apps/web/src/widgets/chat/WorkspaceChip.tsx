@@ -14,8 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { callCapability } from '@/bridge/client';
 import { useChatStore } from '@/stores/chatStore';
 import { useUIStore } from '@/stores/uiStore';
-import { WORKDIR_KEY } from '@/components/settings/agent/constants';
-import { type PickResult, pickDirectory, switchWorkspace } from '@/api/workspace';
+import { type PickResult, pickDirectory, switchWorkspace, WORKDIR_KEY } from '@/api/workspace';
 
 /**
  * Shared workspace hot-switch flow: confirm first (the switch rebuilds the

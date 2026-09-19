@@ -13,12 +13,11 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { switchWorkspace } from '@/api/workspace';
+import { switchWorkspace, WORKDIR_KEY } from '@/api/workspace';
 import { callCapability } from '@/bridge/client';
 import { useChatStore } from '@/stores/chatStore';
 import { useUIStore } from '@/stores/uiStore';
 import { extractErrorMessage } from '@/utils/errors';
-import { WORKDIR_KEY } from './constants';
 import type { SettingItem } from './types';
 
 /** Working directory (agent.workspace.dir): relative to the repo root; saving hot-switches the agent, no restart needed */

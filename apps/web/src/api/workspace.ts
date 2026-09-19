@@ -10,6 +10,11 @@ interface MaybeError {
   error?: { code: string; message: string };
 }
 
+/** Setting key backing the agent workspace (agent.workspace.dir). Lives here
+ *  because the workspace domain owns it: read by the settings WorkspaceBlock
+ *  and the composer's workspace chip, switched by switchWorkspace below. */
+export const WORKDIR_KEY = 'agent.workspace.dir';
+
 /** Plain GET against the gateway (these endpoints are REST, not capabilities). */
 async function callRest<T>(path: string): Promise<T & MaybeError> {
   const resp = await fetch(path);

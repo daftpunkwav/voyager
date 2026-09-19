@@ -8,6 +8,7 @@
  *
  * Responsibilities:
  * - Fetch chat history and enqueue chat messages over /api/chat/messages
+ * - Fetch the session's trajectory steps and raw LLM rounds (/api/chat/*)
  * - Apply the quota guard before user turns (block at full quota, warn at
  *   the threshold, then append locally and open the floating window)
  * - Expose the cross-domain timeline actions: system notes and interruption
@@ -89,6 +90,27 @@ export function fetchTrajectory(limit = 500, session?: string): Promise<ChatEven
     })
     .then((body) => body?.steps ?? [])
     .catch(() => []);
+}
+
+/** One recorded raw LLM round (GET /api/chat/rawllm): the exact transcript
+ *  the model received and the raw response, verbatim. */
+export interface RawLlmRound {
+  run_id: string;
+  round: number;
+  session: string;
+  ts: number;
+  request: string;
+  response: string;
+}
+
+/** All recorded raw LLM rounds of one session (the chat page's log tab). */
+export async function fetchRawLlmRounds(session?: string): Promise<RawLlmRound[]> {
+  const resp = await fetch(`/api/chat/rawllm?session=${encodeURIComponent(session ?? '')}`, {
+    credentials: 'include',
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const body = (await resp.json().catch(() => null)) as { rounds?: RawLlmRound[] } | null;
+  return body?.rounds ?? [];
 }
 
 export async function postChatMessage(content: string, session?: string): Promise<number> {

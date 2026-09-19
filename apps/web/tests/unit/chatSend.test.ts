@@ -27,6 +27,7 @@ import {
   postChatMessage,
   fetchChatHistory,
   fetchChatHistoryBefore,
+  fetchRawLlmRounds,
   loadChatSessions,
   sendUserTurn,
 } from '@/bridge/chatSend';
@@ -201,6 +202,38 @@ describe('fetchChatHistory / fetchChatHistoryBefore', () => {
       '/api/chat/messages?before_seq=7&limit=50',
       expect.anything()
     );
+  });
+});
+
+describe('fetchRawLlmRounds', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('unwraps the rounds list and passes the session filter through', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        rounds: [{ run_id: 'r1', round: 1, session: 's', ts: 1, request: '{}', response: '{}' }],
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const rounds = await fetchRawLlmRounds('s1');
+    expect(rounds).toHaveLength(1);
+    expect(rounds[0].run_id).toBe('r1');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/chat/rawllm?session=s1',
+      expect.objectContaining({ credentials: 'include' })
+    );
+  });
+
+  it('throws on a non-ok status instead of resolving to an empty list', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(null, 500)));
+    await expect(fetchRawLlmRounds('')).rejects.toThrow('HTTP 500');
+  });
+
+  it('resolves to an empty list when the body carries no rounds', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(null)));
+    await expect(fetchRawLlmRounds('')).resolves.toEqual([]);
   });
 });
 

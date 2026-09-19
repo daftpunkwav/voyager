@@ -6,6 +6,9 @@
  * global state; CPU abuse is bounded by execLimit (raises TimeLimitError).
  * Subset limits (no third-party packages, no file/network access) are
  * inherent to skulpt and surface as ordinary runtime errors.
+ *
+ * Vendored files: https://github.com/skulpt/skulpt (skulpt.min.js +
+ * skulpt-stdlib.js, release 1.2.0, MIT license — unmodified upstream builds).
  */
 
 import { truncateText } from './output';

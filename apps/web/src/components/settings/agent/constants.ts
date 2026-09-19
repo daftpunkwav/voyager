@@ -45,8 +45,8 @@ export const NETWORK_MODE_OPTIONS: { value: string; labelKey: string }[] = [
   { value: 'all', labelKey: 'settings:network.mode.all' },
 ];
 
-/** Working directory (agent.workspace.dir): relative to the repo root; saving hot-switches the agent, no restart needed */
-export const WORKDIR_KEY = 'agent.workspace.dir';
+// WORKDIR_KEY (agent.workspace.dir) lives in api/workspace.ts: the workspace
+// domain owns the key, and widgets/chat imports it from there.
 
 /** Additional read-only roots (agent.fs.read_roots): absolute path list; reads allowed, writes/deletes still limited to the working directory */
 export const READ_ROOTS_KEY = 'agent.fs.read_roots';
