@@ -128,6 +128,32 @@ describe('chatStore task card completeness', () => {
     dispatch('note.created', { note_id: '', title: '占位' });
     expect(useChatStore.getState().artifacts.map((a) => a.noteId)).toEqual(['n-1']);
   });
+
+  it('the card set is capped: oldest settled cards are evicted first', () => {
+    for (let i = 0; i < 40; i++) {
+      dispatch('task.completed', { job_id: `j-${i}`, project: 'demo' });
+    }
+    const { cards, cardOrder } = useChatStore.getState();
+    expect(cardOrder).toHaveLength(30);
+    expect(cards['j-0']).toBeUndefined();
+    expect(cardOrder[0]).toBe('j-10');
+    expect(cards['j-39']).toBeDefined();
+  });
+
+  it('a running card survives cap eviction while newer settled cards are dropped', () => {
+    for (let i = 0; i < 40; i++) {
+      dispatch('task.completed', { job_id: `j-${i}`, project: 'demo' });
+    }
+    dispatch('task.progress', { job_id: 'live-1', project: 'demo' });
+    for (let i = 40; i < 70; i++) {
+      dispatch('task.completed', { job_id: `j-${i}`, project: 'demo' });
+    }
+    const { cards, cardOrder } = useChatStore.getState();
+    expect(cardOrder).toHaveLength(30);
+    expect(cards['live-1']).toMatchObject({ status: 'running' });
+    expect(cards['j-11']).toBeUndefined();
+    expect(cards['j-69']).toBeDefined();
+  });
 });
 
 describe('chatStore tool step visibility (phase-06)', () => {

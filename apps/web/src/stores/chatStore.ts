@@ -315,6 +315,37 @@ function upsertTrail(trails: TurnTrail[], trail: TurnTrail): TurnTrail[] {
   return next.slice(-100);
 }
 
+/** Cap for live/progress task cards. Terminal cards are never cleared by any
+ *  event, so on a long-lived tab (persistent floating window) they would pile
+ *  up unboundedly and the side panel would render hundreds of settled cards. */
+const CARD_CAP = 30;
+
+/** Evict over-cap cards, oldest settled (completed/failed) first so running
+ *  progress always survives; only when every card is still running does the
+ *  eviction fall through to the front of the order. Mutates `cards`. */
+function pruneCards(
+  cards: Record<string, ProgressCard>,
+  order: string[]
+): { cards: Record<string, ProgressCard>; order: string[] } {
+  let excess = order.length - CARD_CAP;
+  if (excess <= 0) return { cards, order };
+  const nextOrder = [...order];
+  for (let i = 0; i < nextOrder.length && excess > 0;) {
+    if (cards[nextOrder[i]]?.status !== 'running') {
+      delete cards[nextOrder[i]];
+      nextOrder.splice(i, 1);
+      excess--;
+    } else {
+      i++;
+    }
+  }
+  while (excess > 0 && nextOrder.length > 0) {
+    delete cards[nextOrder.shift() as string];
+    excess--;
+  }
+  return { cards, order: nextOrder };
+}
+
 /** History rows (user.message/agent.message events) -> message stream items. */
 function historyToMessages(events: ChatEvent[]): ChatMessage[] {
   return events
@@ -568,6 +599,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     switch (ev.type) {
+      case EventType.USER_MESSAGE: {
+        // SSE echo of a sent message (fast push overtaking the POST response,
+        // or the same send seen from another tab). When appendLocal already
+        // inserted the bubble (POST response landed first) the seq-dedup keeps
+        // it single; when the echo arrives first (lost response, cross-tab)
+        // the bubble must still appear, and the turn counts as live — the
+        // agent.delta guard below keys on the thinking flag.
+        if (!Number.isFinite(ev.seq) || get().messages.some((m) => m.seq === ev.seq)) break;
+        set({
+          thinking: true,
+          messages: [
+            ...get().messages,
+            { seq: ev.seq, role: 'user', content: String(p.content ?? ''), ts: ev.ts },
+          ],
+        });
+        break;
+      }
       case EventType.AGENT_MESSAGE: {
         // Clear question too: the agent speaking again means it is no longer waiting
         // for an answer (e.g. continuing with defaults after an answer timeout), so
@@ -676,6 +724,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         break;
       }
       case EventType.AGENT_DELTA: {
+        // Deltas stream only mid-turn: the thinking flag is raised by the
+        // send (appendLocal / the user.message echo) and lowered by
+        // agent.message / clearThinking. A delta arriving while the flag is
+        // down is post-interrupt residue (frames already in flight or
+        // reconnect replay after a stop): accumulating it would resurrect a
+        // phantom live trace that no closing message will ever clear.
+        if (!get().thinking) break;
         // Streaming typing: accumulate within the same round; a round change (a new
         // round after tool rounds) freezes the finished round's lead-in text for the
         // inline trace and restarts the slot — lead-in text of intermediate rounds
@@ -702,7 +757,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const key = taskKey(p);
         if (!key) break;
         const cards = { ...get().cards };
-        if (!cards[key]) get().cardOrder.push(key);
+        const order = [...get().cardOrder];
+        if (!cards[key]) order.push(key);
         const prev = cards[key];
         cards[key] = {
           key,
@@ -713,7 +769,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           kind: p.kind === undefined ? prev?.kind : String(p.kind),
           link: taskLink(p) ?? prev?.link,
         };
-        set({ cards, cardOrder: [...get().cardOrder] });
+        const next = pruneCards(cards, order);
+        set({ cards: next.cards, cardOrder: next.order });
         break;
       }
       case EventType.TASK_COMPLETED:
@@ -722,10 +779,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (!key) break;
         const failed = ev.type === EventType.TASK_FAILED;
         const cards = { ...get().cards };
+        const order = [...get().cardOrder];
         const prev = cards[key];
         // Create a card even without an earlier progress card: completion/failure are
         // terminal facts and must not be swallowed for lack of a predecessor
-        if (!prev) get().cardOrder.push(key);
+        if (!prev) order.push(key);
         cards[key] = {
           key,
           label: taskLabel(p, prev?.label ?? key),
@@ -738,7 +796,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           kind: p.kind === undefined ? prev?.kind : String(p.kind),
           link: taskLink(p) ?? prev?.link,
         };
-        set({ cards, cardOrder: [...get().cardOrder] });
+        const next = pruneCards(cards, order);
+        set({ cards: next.cards, cardOrder: next.order });
         break;
       }
       case EventType.WORKSPACE_SWITCHED: {
@@ -753,7 +812,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   appendLocal: (msg) => {
-    set({ thinking: true, messages: [...get().messages, msg] });
+    // The SSE echo of this message may have landed first (fast push overtaking
+    // the POST response): dedup by seq so the bubble never doubles. Synthetic
+    // negative seqs (local-only bubbles, tests) always append. thinking is
+    // raised either way: a successfully sent message starts a turn.
+    const existing = get().messages;
+    const messages =
+      msg.seq >= 0 && existing.some((m) => m.seq === msg.seq) ? existing : [...existing, msg];
+    set({ thinking: true, messages });
   },
 
   addSystem: (content) => {

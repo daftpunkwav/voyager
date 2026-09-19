@@ -109,6 +109,9 @@ describe('chatStore multi-session', () => {
   it('streaming deltas for the active session accumulate in the view', () => {
     const store = useChatStore.getState();
     store.setSessions([{ session_id: 'a', title: 'A', status: 'waiting_input' }], 'a');
+    // Deltas stream only mid-turn: the thinking flag is raised by the send
+    // (appendLocal / the user.message echo) before any delta arrives.
+    useChatStore.setState({ thinking: true });
     useChatStore.getState().dispatch(ev(12, 'agent.delta', { text: '你', round: 1, session: 'a' }));
     useChatStore.getState().dispatch(ev(13, 'agent.delta', { text: '好', round: 1, session: 'a' }));
     expect(useChatStore.getState().streaming?.text).toBe('你好');

@@ -87,6 +87,35 @@ describe('chatStore streaming', () => {
   });
 });
 
+describe('chatStore user.message echo', () => {
+  it('an echo after appendLocal (POST response landed first) does not double the bubble', () => {
+    useChatStore.getState().appendLocal({ seq: 7, role: 'user', content: '你好' });
+    useChatStore
+      .getState()
+      .dispatch({ seq: 7, type: 'user.message', payload: { content: '你好' } } as ChatEvent);
+    expect(useChatStore.getState().messages.filter((m) => m.seq === 7)).toHaveLength(1);
+  });
+
+  it('an echo without a local bubble (lost POST response, cross-tab) lands the bubble and marks the turn live', () => {
+    useChatStore
+      .getState()
+      .dispatch({ seq: 9, type: 'user.message', payload: { content: '第二问' } } as ChatEvent);
+    const st = useChatStore.getState();
+    expect(st.messages.some((m) => m.seq === 9 && m.content === '第二问')).toBe(true);
+    // The agent.delta guard keys on thinking: the echo raises it so the live
+    // stream keeps flowing even when the POST response never arrived.
+    expect(st.thinking).toBe(true);
+  });
+
+  it('appendLocal dedups when the echo landed first', () => {
+    useChatStore
+      .getState()
+      .dispatch({ seq: 5, type: 'user.message', payload: { content: '先到的回声' } } as ChatEvent);
+    useChatStore.getState().appendLocal({ seq: 5, role: 'user', content: '先到的回声' });
+    expect(useChatStore.getState().messages.filter((m) => m.seq === 5)).toHaveLength(1);
+  });
+});
+
 describe('MessageList streaming', () => {
   it('streams the round text inside the live trace round block; the final message is the only bubble', () => {
     const { container } = render(
@@ -150,6 +179,18 @@ describe('MessageList interrupted turn trace', () => {
     // The live trace is gone; the interrupted turn's closed trace remains.
     expect(container.querySelector('.chat-trace--live')).toBeNull();
     expect(container.querySelector('.chat-trace:not(.chat-trace--live)')).not.toBeNull();
+  });
+
+  it('a residual agent.delta after clearThinking does not resurrect the streaming slot', () => {
+    // interruptInstance clears thinking immediately; delta frames already in
+    // flight (or replayed by a reconnect) must not bring the live trace back —
+    // no closing message would ever clear it.
+    useChatStore.getState().appendLocal({ seq: 1, role: 'user', content: '读文件' });
+    act(() => {
+      useChatStore.getState().clearThinking();
+    });
+    dispatch('agent.delta', { round: 1, text: '迟到的增量', subagent: 'chat' });
+    expect(useChatStore.getState().streaming).toBeNull();
   });
 
   it('interrupted trace still shows when an earlier completed turn exists (trails ascend by msgSeq)', () => {
