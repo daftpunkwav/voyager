@@ -210,16 +210,18 @@ describe('fetchRawLlmRounds', () => {
     vi.unstubAllGlobals();
   });
 
-  it('unwraps the rounds list and passes the session filter through', async () => {
+  it('unwraps the rounds list with the session total and passes the filter through', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
         rounds: [{ run_id: 'r1', round: 1, session: 's', ts: 1, request: '{}', response: '{}' }],
+        total: 12,
       })
     );
     vi.stubGlobal('fetch', fetchMock);
-    const rounds = await fetchRawLlmRounds('s1');
+    const { rounds, total } = await fetchRawLlmRounds('s1');
     expect(rounds).toHaveLength(1);
     expect(rounds[0].run_id).toBe('r1');
+    expect(total).toBe(12);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/chat/rawllm?session=s1',
       expect.objectContaining({ credentials: 'include' })
@@ -231,9 +233,9 @@ describe('fetchRawLlmRounds', () => {
     await expect(fetchRawLlmRounds('')).rejects.toThrow('HTTP 500');
   });
 
-  it('resolves to an empty list when the body carries no rounds', async () => {
+  it('resolves to an empty page when the body carries no rounds', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(null)));
-    await expect(fetchRawLlmRounds('')).resolves.toEqual([]);
+    await expect(fetchRawLlmRounds('')).resolves.toEqual({ rounds: [], total: 0 });
   });
 });
 

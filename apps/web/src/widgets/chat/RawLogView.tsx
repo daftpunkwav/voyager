@@ -71,16 +71,16 @@ function RoundCard({ round }: { round: RawLlmRound }) {
 export function RawLogView() {
   const { t } = useTranslation('chat');
   const activeId = useChatStore((s) => s.activeSessionId);
-  const [rounds, setRounds] = useState<RawLlmRound[] | null>(null);
+  const [page, setPage] = useState<{ rounds: RawLlmRound[]; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setRounds(null);
+    setPage(null);
     setError(null);
     fetchRawLlmRounds(activeId)
-      .then((rows) => {
-        if (!cancelled) setRounds(rows);
+      .then((data) => {
+        if (!cancelled) setPage(data);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -90,21 +90,24 @@ export function RawLogView() {
     };
   }, [activeId]);
 
+  const rounds = page?.rounds ?? null;
   // Newest-first render window: rounds arrive ascending, so the reversed tail
-  // is the newest RENDER_LIMIT rounds.
+  // is the newest RENDER_LIMIT rounds. `beyond` counts what is not shown at
+  // all: older than the backend page AND older than the render window.
   const visible = useMemo(
     () => (rounds ? [...rounds].reverse().slice(0, RENDER_LIMIT) : []),
     [rounds]
   );
+  const beyond = Math.max(0, (page?.total ?? 0) - (rounds?.length ?? 0));
 
   if (error) return <div className="chat-log chat-log--empty">⚠ {error}</div>;
-  if (rounds === null) {
+  if (page === null) {
     return <div className="chat-log chat-log--empty">{t('chat:rawlog.loading')}</div>;
   }
-  if (rounds.length === 0) {
+  if (rounds === null || rounds.length === 0) {
     return <div className="chat-log chat-log--empty">{t('chat:rawlog.empty')}</div>;
   }
-  const hidden = rounds.length - visible.length;
+  const hidden = rounds.length - visible.length + beyond;
   if (hidden > 0) {
     return (
       <div className="chat-log">

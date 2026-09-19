@@ -133,6 +133,7 @@
   "rate.placeholder": "Requirements or feedback — distilled into agent memory…",
   "rate.open": "Rate",
   "rate.submit": "Submit",
+  "rawlog.hiddenRounds": "Showing the newest {{n}} rounds only — older raw log is beyond the page limit",
   "rawlog.request": "Request",
   "rawlog.response": "Response",
   "rawlog.loading": "Loading…",

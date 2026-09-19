@@ -294,15 +294,19 @@ def build_chat_router(
         }
 
     @router.get("/api/chat/rawllm")
-    async def get_raw_llm(run_id: str = "", round: int = -1, session: str = "") -> dict:
-        """Raw LLM round log. With `session`: every recorded round of the
-        session with full bodies (the chat log page). With `run_id` (+ optional
-        `round`): the run's round index or one round's bodies."""
+    async def get_raw_llm(
+        run_id: str = "", round: int = -1, session: str = "", limit: int = 200
+    ) -> dict:
+        """Raw LLM round log. With `session`: the newest `limit` rounds with
+        full bodies (the chat log page) plus the session's total count. With
+        `run_id` (+ optional `round`): the run's round index or one round's
+        bodies."""
         sid = _session_or_400(session)
         if trajectory is None:
-            return {"rounds": [], "round": None}
+            return {"rounds": [], "total": 0, "round": None}
         if sid and not run_id:
-            return {"rounds": trajectory.raw_rounds_for_session(sid), "round": None}
+            rounds, total = trajectory.raw_rounds_for_session(sid, limit=max(1, min(limit, 1000)))
+            return {"rounds": rounds, "total": total, "round": None}
         if not run_id:
             raise ServiceError(
                 _DOMAIN,
@@ -311,8 +315,8 @@ def build_chat_router(
             )
         if round >= 0:
             row = trajectory.raw_round(run_id, round)
-            return {"rounds": [], "round": row}
-        return {"rounds": trajectory.raw_rounds(run_id), "round": None}
+            return {"rounds": [], "total": 0, "round": row}
+        return {"rounds": trajectory.raw_rounds(run_id), "total": 0, "round": None}
 
     @router.get("/api/chat/stream")
     async def stream(

@@ -50,6 +50,38 @@ class TestRawRoundsTable:
         store.close()
 
 
+class TestRawRetentionAndPaging:
+    def test_session_paging_returns_newest_window_with_total(self, tmp_path) -> None:
+        store = _store(tmp_path)
+        for i in range(5):
+            store.record_raw_round(
+                run_id="r", session="chat", round=i + 1, request=str(i), response=str(i)
+            )
+        rounds, total = store.raw_rounds_for_session("chat", limit=3)
+        assert total == 5
+        # newest window, returned oldest-first within the window
+        assert [r["round"] for r in rounds] == [3, 4, 5]
+
+    def test_purge_drops_only_rows_older_than_the_cutoff_days(self, tmp_path) -> None:
+        import time
+
+        store = _store(tmp_path)
+        store.record_raw_round(run_id="old", session="", round=1, request="x", response="x")
+        store.record_raw_round(run_id="new", session="", round=1, request="y", response="y")
+        with store._lock:
+            store._conn.execute(
+                "UPDATE raw_rounds SET ts = ? WHERE run_id = 'old'", (time.time() - 30 * 86400,)
+            )
+            store._conn.commit()
+        assert store.purge_raw_older_than_days(7) == 1
+        assert store.raw_round("old", 1) is None
+        assert store.raw_round("new", 1) is not None
+        # non-positive retention disables the purge
+        store.record_raw_round(run_id="keep", session="", round=1, request="z", response="z")
+        assert store.purge_raw_older_than_days(0) == 0
+        store.close()
+
+
 class TestReactWiring:
     async def test_on_raw_receives_request_and_reply(self) -> None:
         llm = FakeLLM([LLMReply(text="完成")])

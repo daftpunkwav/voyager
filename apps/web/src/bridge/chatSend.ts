@@ -103,14 +103,21 @@ export interface RawLlmRound {
   response: string;
 }
 
-/** All recorded raw LLM rounds of one session (the chat page's log tab). */
-export async function fetchRawLlmRounds(session?: string): Promise<RawLlmRound[]> {
+/** The newest recorded raw LLM rounds of one session (the chat page's log
+ *  tab) plus the session's total count, so the UI can say how much older
+ *  exists beyond the backend's page. */
+export async function fetchRawLlmRounds(
+  session?: string
+): Promise<{ rounds: RawLlmRound[]; total: number }> {
   const resp = await fetch(`/api/chat/rawllm?session=${encodeURIComponent(session ?? '')}`, {
     credentials: 'include',
   });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  const body = (await resp.json().catch(() => null)) as { rounds?: RawLlmRound[] } | null;
-  return body?.rounds ?? [];
+  const body = (await resp.json().catch(() => null)) as {
+    rounds?: RawLlmRound[];
+    total?: number;
+  } | null;
+  return { rounds: body?.rounds ?? [], total: typeof body?.total === 'number' ? body.total : 0 };
 }
 
 export async function postChatMessage(content: string, session?: string): Promise<number> {

@@ -320,16 +320,25 @@ class TrajectoryStore:
             {"round": r[0], "ts": r[1], "request_bytes": r[2], "response_bytes": r[3]} for r in rows
         ]
 
-    def raw_rounds_for_session(self, session: str) -> list[dict[str, Any]]:
-        """Full raw bodies of every recorded round in one session, oldest
-        first (the chat log page renders this verbatim)."""
+    def raw_rounds_for_session(
+        self, session: str, *, limit: int = 200
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Full raw bodies of the newest `limit` rounds of one session,
+        oldest first (the chat log page renders this verbatim), plus the
+        total recorded count so the UI can say how much older exists."""
+        capped = max(1, limit)
         with self._lock:
+            total = int(
+                self._conn.execute(
+                    "SELECT COUNT(*) FROM raw_rounds WHERE session = ?", (session,)
+                ).fetchone()[0]
+            )
             rows = self._conn.execute(
                 "SELECT run_id, round, session, ts, request, response"
-                " FROM raw_rounds WHERE session = ? ORDER BY ts ASC",
-                (session,),
+                " FROM raw_rounds WHERE session = ? ORDER BY ts DESC LIMIT ?",
+                (session, capped),
             ).fetchall()
-        return [
+        rounds = [
             {
                 "run_id": r[0],
                 "round": r[1],
@@ -338,8 +347,21 @@ class TrajectoryStore:
                 "request": r[4],
                 "response": r[5],
             }
-            for r in rows
+            for r in reversed(rows)  # DESC select -> return oldest first
         ]
+        return rounds, total
+
+    def purge_raw_older_than_days(self, days: int) -> int:
+        """Startup retention for the raw LLM log: it is a debugging surface,
+        not an archive — bodies are the full per-round transcripts and would
+        otherwise grow without bound. Returns the deleted row count."""
+        if days <= 0:
+            return 0
+        cutoff = time.time() - days * 86400.0
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM raw_rounds WHERE ts < ?", (cutoff,))
+            self._conn.commit()
+        return int(cur.rowcount or 0)
 
     def raw_round(self, run_id: str, round: int) -> dict[str, Any] | None:
         """Full raw bodies of one round; None when not recorded."""

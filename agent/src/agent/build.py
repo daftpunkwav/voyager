@@ -120,6 +120,10 @@ from agent.tools.workspace.write_journal import WriteJournal
 #: event type (review F-103).
 EVENTS_RETENTION = Retention(types=(DomainEvent.AGENT_DELTA,), max_age_s=24 * 3600.0)
 
+#: Raw LLM round log retention (days): full request/response bodies per
+#: round are the largest unbounded artifact in the runtime data directory.
+RAW_LOG_RETENTION_DAYS = 7
+
 
 def _build_policy(
     settings: SettingsStore, workspace: Path
@@ -746,6 +750,9 @@ def build_agent(
     # (steps / runs); startup catch-up folds whatever landed while down
     trajectory = TrajectoryStore(data_dir / "trajectory.db", log)
     trajectory.catch_up()
+    # Raw LLM round log retention: a debugging surface, not an archive - the
+    # bodies are full per-round transcripts and would grow without bound.
+    trajectory.purge_raw_older_than_days(RAW_LOG_RETENTION_DAYS)
 
     def _raw_round_fn(session_id: str):
         """Per-session raw LLM round recorder: the exact request transcript

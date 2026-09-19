@@ -2803,6 +2803,10 @@ a.chat-card:hover {
 .chat-log__hidden {
   padding: 0 2px;
 }
+.chat-log__hidden {
+  padding: 6px 2px;
+  text-align: center;
+}
 .chat-log__round {
   border: 1px solid var(--bg-300);
   border-radius: 12px;

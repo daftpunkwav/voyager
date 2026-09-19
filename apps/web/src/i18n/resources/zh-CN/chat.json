@@ -133,6 +133,7 @@
   "rate.placeholder": "写下你的要求或反馈,沉淀为 Agent 的准则…",
   "rate.open": "评价",
   "rate.submit": "提交",
+  "rawlog.hiddenRounds": "仅显示最新 {{n}} 轮,更早的原始日志已超出单页上限",
   "rawlog.request": "请求",
   "rawlog.response": "响应",
   "rawlog.loading": "加载中…",
