@@ -187,13 +187,16 @@ async def dispatch_task(
             # Best effort - shutdown may already be tearing the channel down.
             if inst.status is RunStatus.CANCELLED:
                 with suppress(Exception):
-                    await master.reply(f"[cancelled] {inst.name}", session=inst.task.session)
+                    await master.reply(
+                        f"[cancelled] {inst.name}", session=inst.task.session, kind="notice"
+                    )
             raise
         except Exception as exc:  # run_turn already recorded the state; notify + server-side log
             log.exception("background dispatch failed: %s", inst.name)
             await master.reply(
                 f"[failed] {inst.name}: {type(exc).__name__}: {exc}",
                 session=inst.task.session,
+                kind="notice",
             )
         else:
             if inst.status is RunStatus.CANCELLED:
@@ -202,12 +205,16 @@ async def dispatch_task(
                 # CancelledError) but nothing ran
                 await master.reply(f"[cancelled] {inst.name}", session=inst.task.session)
             elif inst.status.value == "paused":
-                await master.reply(f"[paused] {inst.name}", session=inst.task.session)
+                await master.reply(
+                    f"[paused] {inst.name}", session=inst.task.session, kind="notice"
+                )
             else:
                 # Long results get one synthesis call so the notice carries the
                 # conclusions instead of a blind cut; failures fall back inside
                 summary = await synthesize_result(master.llm, inst.name, result)
-                await master.reply(f"[done] {inst.name}: {summary}", session=inst.task.session)
+                await master.reply(
+                    f"[done] {inst.name}: {summary}", session=inst.task.session, kind="notice"
+                )
         finally:
             master.digests.upsert(inst)
             # Join point: a finished (or failed) task releases / blocks the

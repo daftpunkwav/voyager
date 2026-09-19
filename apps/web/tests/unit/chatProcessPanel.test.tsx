@@ -134,7 +134,8 @@ describe('inline live trace (MessageList)', () => {
     // folding row (no standalone typing bubble), tool rows stay visible.
     expect(screen.getByText('创建笔记')).toBeTruthy();
     expect(screen.getAllByText(/正在输出/).length).toBeGreaterThanOrEqual(1);
-    expect(container.querySelector('.chat-caret')).toBeNull();
+    // the caret rides the live round output row (no standalone bubble)
+    expect(container.querySelector('.chat-round__out .chat-caret')).not.toBeNull();
     // manual collapse hides the rows; the header brings them back
     fireEvent.click(screen.getByText(/工具 1 次/));
     expect(screen.queryByText('创建笔记')).toBeNull();

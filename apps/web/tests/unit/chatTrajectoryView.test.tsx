@@ -53,6 +53,7 @@ const TRAIL_STEPS = [
     outputTokens: 1100,
     ttftMs: 350,
     text: '完整的思考内容:先读文件,再判断格式,最后落笔。',
+    reasoning: '模型内心戏:先定位文件结构再动手。',
   },
   {
     seq: 3,
@@ -179,9 +180,11 @@ describe('live trace detail', () => {
     reset({ steps: TRAIL_STEPS, lastSteps: [] });
     render(<LiveTurnTrace />);
     expect(screen.queryByText('轮 1')).toBeNull(); // round chrome removed
-    // thinking is a folding row now: click to reveal the verbatim reasoning
-    fireEvent.click(screen.getByText('输出'));
+    // round output renders directly (never folded); thinking is a fold
     expect(screen.getByText(/完整的思考内容/)).toBeTruthy();
+    expect(screen.queryByText(/模型内心戏/)).toBeNull();
+    fireEvent.click(screen.getByText('思考过程'));
+    expect(screen.getByText(/模型内心戏/)).toBeTruthy();
     expect(screen.queryByText(/首 token 350ms/)).toBeNull(); // meta chrome removed
     expect(screen.queryByText(/第 \d+ 步/)).toBeNull();
   });

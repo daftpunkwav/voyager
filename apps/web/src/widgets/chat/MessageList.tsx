@@ -273,6 +273,11 @@ function Bubble({ msg, subject }: { msg: ChatMessage; subject: string }) {
     return <div className="chat-system">{msg.content}</div>;
   }
   const error = msg.role === 'agent' && msg.kind === 'error';
+  // Background-task notifications ([done]/[failed]/...) are not conversation
+  // turns: light notice styling, no action bar / rating / trace attachment.
+  if (msg.role === 'agent' && msg.kind === 'notice') {
+    return <div className="chat-notice">{msg.content}</div>;
+  }
   const cls =
     msg.role === 'user'
       ? 'chat-bubble chat-bubble--user'
@@ -289,9 +294,10 @@ function Bubble({ msg, subject }: { msg: ChatMessage; subject: string }) {
   };
 
   // The action bar lives OUTSIDE the bubble (below it), so user bubbles keep
-  // their clean pill shape; rating expands in place from the bar.
+  // their clean pill shape; rating expands in place from the bar. The wrapper
+  // carries the row alignment the bubble used to own.
   return (
-    <div className="chat-entry">
+    <div className={`chat-entry${msg.role === 'user' ? ' chat-entry--user' : ''}`}>
       <div className={cls} role={error ? 'alert' : undefined}>
         <div className="chat-md">
           <ChatMarkdown content={msg.content} />

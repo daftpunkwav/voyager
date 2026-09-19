@@ -2828,6 +2828,13 @@ a.chat-card:hover {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  align-items: flex-start;
+}
+.chat-entry--user {
+  align-items: flex-end;
+}
+.chat-entry--user .chat-msg-actions {
+  justify-content: flex-end;
 }
 .chat-msg-actions {
   display: flex;
@@ -2884,6 +2891,40 @@ a.chat-card:hover {
   line-height: 1.6;
   color: var(--text-700);
   max-height: none;
+}
+/* Round output: the answer-in-progress, always visible (never folded) */
+.chat-round__out {
+  position: relative;
+  padding-left: 10px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-800);
+}
+.chat-round__out.is-live .chat-trace__pulse {
+  position: absolute;
+  left: -2px;
+  top: 7px;
+}
+.chat-round__out.is-live .chat-caret {
+  color: var(--text-400);
+  animation: chatCaret 1s infinite ease-in-out;
+}
+/* Background-task notifications ([done]/[failed]/...): light inline notice,
+   clearly not a conversation turn */
+.chat-notice {
+  align-self: flex-start;
+  max-width: 92%;
+  margin: 2px 0;
+  padding: 7px 12px;
+  border: 1px solid var(--bg-300);
+  border-left: 3px solid var(--brand-400);
+  border-radius: 10px;
+  background: var(--bg-200);
+  color: var(--text-600);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Log tab: every recorded LLM round of the session, verbatim */

@@ -445,7 +445,6 @@ function buildBlocks(
 function RoundBlockView({ block }: { block: RoundBlock }) {
   const { t } = useTranslation('chat');
   const [thinkOpen, setThinkOpen] = useState(false);
-  const [textOpen, setTextOpen] = useState(false);
   const llm = block.llm;
   // Live: the frozen round text; closed/refreshed: the persisted step text.
   // Hidden when it repeats the closing message verbatim (dup).
@@ -474,27 +473,14 @@ function RoundBlockView({ block }: { block: RoundBlock }) {
         </div>
       ) : null}
       {bodyText ? (
-        <div className="chat-fold">
-          <button
-            type="button"
-            className="chat-fold__head chat-role--assistant"
-            aria-expanded={textOpen}
-            onClick={() => setTextOpen(!textOpen)}
-          >
-            <Chevron open={textOpen} />
-            {block.live ? (
-              <>
-                <span className="chat-trace__pulse" aria-hidden />
-                {t('chat:trace.outputting')}
-              </>
-            ) : (
-              t('chat:trace.roundOutput')
-            )}
-          </button>
-          {textOpen ? (
-            <div className="chat-fold__body chat-md">
-              <ChatMarkdown content={bodyText} runCode={false} />
-            </div>
+        // Round output is the answer-in-progress: always visible, never folded.
+        <div className={`chat-round__out chat-md${block.live ? ' is-live' : ''}`}>
+          {block.live ? <span className="chat-trace__pulse" aria-hidden /> : null}
+          <ChatMarkdown content={bodyText} runCode={false} />
+          {block.live ? (
+            <span className="chat-caret" aria-hidden>
+              ▍
+            </span>
           ) : null}
         </div>
       ) : null}

@@ -95,19 +95,15 @@ describe('MessageList streaming', () => {
     act(() => {
       dispatch('agent.delta', { round: 1, text: '打字中', subagent: 'chat' });
     });
-    // The live round folding row carries the streaming text (collapsed until clicked).
-    expect(screen.getAllByText(/正在输出/).length).toBeGreaterThanOrEqual(1);
-    expect(container.querySelector('.chat-bubble--agent .chat-caret')).toBeNull();
-    const foldHead = [...container.querySelectorAll('.chat-fold__head')].at(-1) as Element;
-    fireEvent.click(foldHead);
-    expect(container.querySelector('.chat-fold__body')?.textContent).toContain('打字中');
+    // The live round output row carries the streaming text, caret included.
+    expect(container.querySelector('.chat-round__out')?.textContent).toContain('打字中');
+    expect(container.querySelector('.chat-round__out .chat-caret')).not.toBeNull();
     act(() => {
       dispatch('agent.message', { content: '正式回复' });
     });
-    // The trace folds (live steps cleared) and the closing message renders.
+    // The trace folds (live steps cleared) and the closing message renders:
+    // the closing message is the only rendered output.
     expect(screen.getByText('正式回复')).toBeTruthy();
-    // The streaming round text is gone with the trace: the closing message is
-    // the only rendered output (asserts the fold body, not a removed class).
-    expect(container.querySelector('.chat-fold__body')).toBeNull();
+    expect(container.querySelector('.chat-round__out')).toBeNull();
   });
 });
