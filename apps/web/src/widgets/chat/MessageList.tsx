@@ -48,6 +48,9 @@ const LOAD_TRIGGER_PX = 80;
 /** Follow live-trace growth only when the viewport is this close to the bottom. */
 const FOLLOW_MARGIN_PX = 240;
 
+/** How long the "copied" feedback stays on the message action button. */
+const COPY_FEEDBACK_MS = 1500;
+
 /** Nearest scroll container around this element, INCLUDING the element itself:
  *  on the chat page the scroller is .chat-stream itself (ancestors are
  *  overflow:hidden), inside the floating window the stream's overflow is
@@ -316,7 +319,7 @@ function Bubble({ msg, subject }: { msg: ChatMessage; subject: string }) {
     try {
       await navigator.clipboard.writeText(msg.content);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      window.setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
     } catch {
       addToast({ type: 'error', message: t('chat:msg.copyFailed') });
     }
