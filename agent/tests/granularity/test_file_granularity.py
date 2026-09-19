@@ -30,6 +30,7 @@ TOOL_MECHANISMS: dict[str, str] = {
     "workspace/workdir.py": "default working-directory layout used by assembly",
     "workspace/todo_store.py": "todo.json persistence + read_plan projection shared by tool and capability",
     "workspace/edit_matchers.py": "fuzzy match chain (uniqueness-guarded degradation ladder) behind edit_file",
+    "workspace/console_decode.py": "UTF-8 / console-codepage (GBK, UTF-16 on NULs) decode of child output shared by run_shell and run_snippet",
     "workspace/write_journal.py": "content-addressed write backup behind the fs write tools (undo_writes)",
     "interact/question_broker.py": "ask/answer Future broker behind ask_user and answer_question",
 }

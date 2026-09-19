@@ -2,6 +2,7 @@
 L1/L2 confirm channels.
 """
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -11,6 +12,7 @@ from agent.llm import ToolCall
 from agent.policy import FsPolicy, PolicyEngine
 from agent.tools import Toolbelt, ensure_workdir, fs_tools
 from agent.tools.workspace import shell_tools
+from agent.tools.workspace.console_decode import decode_console_output
 
 
 @pytest.fixture()
@@ -566,3 +568,22 @@ class TestWriteFileAtomic:
         assert "[工具失败]" in out
         assert target.read_text(encoding="utf-8") == "original"  # untouched
         assert not list((workdir / "repo").glob(".a.txt.*.tmp"))  # no stray tmp
+
+
+class TestConsoleDecode:
+    def test_utf8_still_wins(self) -> None:
+        assert decode_console_output("中文 ok\n".encode()) == "中文 ok\n"
+
+    def test_utf16_tried_when_nul_bytes_present(self, monkeypatch) -> None:
+        """UTF-16LE output (some PowerShell pipelines) must decode as UTF-16:
+        GBK accepts the NUL-interleaved bytes and would return mojibake, so
+        the NUL heuristic has to put UTF-16 first in the fallback chain."""
+        monkeypatch.setattr(os, "name", "nt")
+        raw = "exit=0\n中文输出\n".encode("utf-16-le")
+        assert decode_console_output(raw) == "exit=0\n中文输出\n"
+
+    def test_gbk_fallback_without_nul_bytes(self, monkeypatch) -> None:
+        assert decode_console_output("中文 ok\n".encode("gbk")) == "中文 ok\n"
+
+    def test_undecodable_degrades_to_replacement(self, monkeypatch) -> None:
+        assert "\ufffd" in decode_console_output(b"\xff\xfe\x81\x81\x81")

@@ -25,7 +25,7 @@ from contextlib import suppress
 from pathlib import Path
 
 from agent.tools.core.base import AgentTool
-from agent.tools.workspace.run_shell import _decode_console_output
+from agent.tools.workspace.console_decode import decode_console_output
 
 _MAX_COLLECT_BYTES = 100_000
 _MAX_CODE_CHARS = 100_000
@@ -172,8 +172,8 @@ def run_snippet_tool(workspace: str | Path) -> AgentTool:
         if timed_out:
             return f"[超时] 代码执行超过 {timeout_sec} 秒上限，已终止。教学演示建议优化算法复杂度或减少计算量。"
 
-        stdout_text = _decode_console_output(stdout_bytes[:_MAX_COLLECT_BYTES]).strip()
-        stderr_text = _decode_console_output(stderr_bytes[:_MAX_COLLECT_BYTES]).strip()
+        stdout_text = decode_console_output(stdout_bytes[:_MAX_COLLECT_BYTES]).strip()
+        stderr_text = decode_console_output(stderr_bytes[:_MAX_COLLECT_BYTES]).strip()
 
         try:
             new_files = set(sandbox_dir.iterdir()) - existing_files

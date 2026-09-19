@@ -24,7 +24,6 @@ the spill file instead of losing it at a tool-local cap.
 from __future__ import annotations
 
 import asyncio
-import locale
 import os
 import re
 import shlex
@@ -35,6 +34,7 @@ from contextlib import suppress
 from pathlib import Path
 
 from agent.tools.core.base import AgentTool
+from agent.tools.workspace.console_decode import decode_console_output
 
 #: In-memory safety ceiling for collected output (bytes); beyond it chunks
 #: are drained but discarded - the process still runs to completion so the
@@ -104,23 +104,6 @@ def _resolve_windows_stub(argv0: str) -> str:
     return argv0
 
 
-def _decode_console_output(raw: bytes) -> str:
-    """Decode child-process output: try UTF-8 first, then the Windows
-    console codepage (GBK/cp936 on zh-CN systems - forcing UTF-8 there
-    turns every CJK byte into replacement characters, the mojibake seen
-    in traces)."""
-    try:
-        return raw.decode("utf-8")
-    except UnicodeDecodeError:
-        pass
-    candidates = ("gbk", "utf-16") if os.name == "nt" else (locale.getpreferredencoding(),)
-    for enc in candidates:
-        try:
-            return raw.decode(enc)
-        except (UnicodeDecodeError, LookupError):
-            continue
-    return raw.decode("utf-8", errors="replace")
-
 def run_shell_tool(cwd: str | Path) -> AgentTool:
     """Build the run_shell tool; the subprocess cwd is pinned to the agent
     working directory supplied at assembly time."""
@@ -185,7 +168,7 @@ def run_shell_tool(cwd: str | Path) -> AgentTool:
             raise
         wall = time.monotonic() - started
         out, discarded = await reader
-        text = _decode_console_output(out)
+        text = decode_console_output(out)
         if discarded:
             text += (
                 f"\n…[输出超出 {_MAX_COLLECT_BYTES} 字节安全上限,余量已丢弃"
