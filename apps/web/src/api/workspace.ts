@@ -21,7 +21,13 @@ async function callRest<T>(path: string): Promise<T & MaybeError> {
   if (!resp.ok) {
     throw new Error(`workspace request failed (${resp.status})`);
   }
-  return (await resp.json()) as T & MaybeError;
+  // A 200 with a non-JSON body must not surface the browser's raw
+  // SyntaxError copy to the user
+  const body = (await resp.json().catch(() => null)) as (T & MaybeError) | null;
+  if (!body) {
+    throw new Error('workspace request failed (invalid response body)');
+  }
+  return body;
 }
 
 export interface WorkspaceEntry {

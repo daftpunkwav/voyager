@@ -75,6 +75,7 @@ export function AskDialog() {
   const noDismiss = () => {};
 
   const submit = async (raw: unknown) => {
+    const submittingId = question.questionId;
     setBusy(true);
     setError(null);
     try {
@@ -87,10 +88,15 @@ export function AskDialog() {
         // the user and close normally so the conversation can continue
         useChatStore.getState().addSystem(t('chat:ask.expired'));
       }
-      clearQuestion();
-      setText('');
-      setSelected([]);
-      setCustomOptions([]);
+      // A newer ask may have raced in while the POST was in flight: clear only
+      // when the answered question is still the one on screen (asks are not in
+      // history — clearing the wrong one would lose it for good)
+      if (useChatStore.getState().question?.questionId === submittingId) {
+        clearQuestion();
+        setText('');
+        setSelected([]);
+        setCustomOptions([]);
+      }
     } catch (err) {
       setError((err as ServiceError).message);
     } finally {

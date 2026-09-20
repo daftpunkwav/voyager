@@ -118,7 +118,9 @@ describe('MessageList scroll-to-top loader', () => {
     const scroller = mountInScroller();
     fireEvent.scroll(scroller);
     await waitFor(() => {
-      expect(fetchChatHistoryBeforeMock).toHaveBeenCalledWith(30);
+      // Paging passes the active session: before_seq pages the global log and
+      // would otherwise pull other sessions' rows into this lane
+      expect(fetchChatHistoryBeforeMock).toHaveBeenCalledWith(30, 200, undefined);
     });
     await waitFor(() => {
       const s = useChatStore.getState();

@@ -39,10 +39,14 @@ const STREAM_PATTERNS = [
 
 export function useChatStream(onNavigate: (path: string) => void) {
   useEffect(() => {
+    // StrictMode double-mounts this effect in dev: without the alive flag both
+    // chains run to completion and failure paths add duplicate system bubbles
+    let alive = true;
     // Session list first: the active session id scopes the history fetch.
     // Capability failures keep the legacy global view (no session filter).
     loadChatSessions()
       .then(() => {
+        if (!alive) return undefined;
         const sid = useChatStore.getState().activeSessionId || undefined;
         const stillActive = () => (useChatStore.getState().activeSessionId || undefined) === sid;
         // The message stream starts from now; history failures leave a trace
@@ -55,11 +59,11 @@ export function useChatStream(onNavigate: (path: string) => void) {
               // fetch was in flight, this page belongs to the previous lane;
               // dropping it is safe (switch refetches an unloaded lane, and
               // the event log stays the source of truth)
-              if (!stillActive()) return;
+              if (!stillActive() || !alive) return;
               useChatStore.getState().applyHistory(page.messages, page.hasMore);
             })
             .catch(() => {
-              if (!stillActive()) return;
+              if (!stillActive() || !alive) return;
               useChatStore.getState().addSystem(i18n.t('chat:history.failedNotice'));
             })
             // Trajectory backfill runs after history settles: grouping needs the
@@ -67,10 +71,10 @@ export function useChatStream(onNavigate: (path: string) => void) {
             // Skipped when history failed (ungroupable steps are worse than none;
             // the live step stream still covers new turns). Failures stay silent.
             .finally(() => {
-              if (!stillActive()) return;
+              if (!stillActive() || !alive) return;
               if (useChatStore.getState().messages.length === 0) return;
               fetchTrajectory(500, sid).then((steps) => {
-                if (steps.length && stillActive()) {
+                if (steps.length && stillActive() && alive) {
                   useChatStore.getState().applyTrajectory(steps);
                 }
               });
@@ -78,6 +82,7 @@ export function useChatStream(onNavigate: (path: string) => void) {
         );
       })
       .catch(() => {
+        if (!alive) return;
         useChatStore.getState().addSystem(i18n.t('chat:history.failedNotice'));
       });
     const off = subscribe(STREAM_PATTERNS, (ev) => {
@@ -145,6 +150,7 @@ export function useChatStream(onNavigate: (path: string) => void) {
     useChatStore.getState().setConnected(true);
 
     return () => {
+      alive = false;
       off();
       useChatStore.getState().setConnected(false);
     };

@@ -498,13 +498,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // The ask dialog belongs to the asking session: archived with its lane
       // and restored on return, never shown over another session
       question: lane.question,
+      // An in-flight loadOlder must not prepend into the new lane; it bails on
+      // the session guard and paging resumes fresh after this reset
+      historyLoading: false,
     });
     return lane.loaded;
   },
 
   dispatchToLane: (sessionId, ev) => {
-    const lane = get().lanes[sessionId];
-    if (!lane) return; // no archived view yet: the backfill will pick the rows up
+    let lane = get().lanes[sessionId];
+    // History only returns user/agent.message rows: asks and user echoes have
+    // no backfill path, so materialize the lane rather than drop the event
+    if (!lane) {
+      if (ev.type !== EventType.AGENT_ASK && ev.type !== EventType.USER_MESSAGE) return;
+      lane = emptyLane();
+    }
     const p = ev.payload ?? {};
     if (ev.type === EventType.AGENT_MESSAGE) {
       const next: LaneSnapshot = {
@@ -533,6 +541,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // switches back (AskDialog re-arms its fallback timer on questionId)
       set({
         lanes: { ...get().lanes, [sessionId]: { ...lane, question: toPendingQuestion(p) } },
+      });
+    } else if (ev.type === EventType.USER_MESSAGE) {
+      // SSE echo of a send from another tab (or a fast push racing the POST):
+      // parked in the lane so the timeline shows the question, not just the
+      // answer; seq-dedup keeps it single when the lane re-opens
+      if (!Number.isFinite(ev.seq) || lane.messages.some((m) => m.seq === ev.seq)) return;
+      set({
+        lanes: {
+          ...get().lanes,
+          [sessionId]: {
+            ...lane,
+            messages: [
+              ...lane.messages,
+              { seq: ev.seq, role: 'user', content: String(p.content ?? ''), ts: ev.ts },
+            ],
+          },
+        },
       });
     } else if (ev.type === EventType.AGENT_DELTA) {
       const round = Number(p.round ?? 1);
@@ -579,8 +604,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const msgs = historyToMessages(events);
     // Note receipts are session-less global events: keep only those inside
     // this session's history window (seq at/after its oldest message), so a
-    // long-lived workspace's older notes do not flood the timeline.
-    const windowStart = msgs.length ? msgs[0].seq : Number.POSITIVE_INFINITY;
+    // long-lived workspace's older notes do not flood the timeline. A page
+    // with no messages yet has no window to speak of: keep everything.
+    const windowStart = msgs.length ? msgs[0].seq : 0;
     const restored = historyToArtifacts(events).filter((a) => a.seq >= windowStart);
     // While a history request is in flight, live SSE messages may already sit in the
     // timeline: the replacement only covers the history range (seq <= last history

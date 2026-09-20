@@ -104,7 +104,9 @@ export function EmbedAgentChat({
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // isComposing: Enter during IME composition confirms the candidate, it
+    // must not send (zh-CN is a first-class locale here)
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       void send();
     }

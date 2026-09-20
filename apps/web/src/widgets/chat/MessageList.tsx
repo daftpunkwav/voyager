@@ -151,12 +151,18 @@ export function MessageList() {
     if (!scroller || store.historyLoading || !store.hasMoreHistory) return;
     const oldest = store.messages.find((m) => m.seq > 0);
     if (!oldest) return;
+    // before_seq pages the global event log: without the session filter the
+    // page would carry every session's older rows into this lane
+    const sid = store.activeSessionId || undefined;
     store.setHistoryLoading(true);
     const prevHeight = scroller.scrollHeight;
     const prevTop = scroller.scrollTop;
     const prevCount = store.messages.length;
     try {
-      const page = await fetchChatHistoryBefore(oldest.seq);
+      const page = await fetchChatHistoryBefore(oldest.seq, 200, sid);
+      // A mid-fetch session switch orphans this page: it belongs to the
+      // previous lane (switchSession reset historyLoading, so paging recovers)
+      if ((useChatStore.getState().activeSessionId || undefined) !== sid) return;
       // Commit the prepended rows synchronously, then restore the scroll
       // offset before the browser paints: the viewport stays anchored on the
       // messages the user was reading instead of jumping

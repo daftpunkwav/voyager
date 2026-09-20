@@ -167,8 +167,12 @@ export async function sendUserTurn(content: string): Promise<void> {
  *  legacy global view: empty active id, unfiltered history — the chat never
  *  breaks because the session capability is unavailable. */
 export async function loadChatSessions(): Promise<void> {
+  // The backend snapshot goes stale the moment the user switches locally:
+  // never let an in-flight response drag the view back across lanes
+  const before = useChatStore.getState().activeSessionId;
   try {
     const { sessions, active } = await listSessions();
+    if (useChatStore.getState().activeSessionId !== before) return;
     const store = useChatStore.getState();
     // Follow the backend's active session when it moved under the open lane
     // (deleting the open session re-points the active id backend-side; another
