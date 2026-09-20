@@ -2,7 +2,7 @@
 
 A local-first agent companion workbench: import repos / documents / web pages, take notes, build knowledge graphs — humans and agents drive the same capability layer.
 
-Personas: a resident orchestrator (display name Lucien) plus 4 presets (recon / explainer / organizer / graph guide). Brand strings live only in the repo-root `brand.json`.
+Personas: a resident orchestrator (display name Lucien) plus 4 presets (recon / explainer / organizer / graph guide); persona display names live in the personas data layer and `apps/web/src/constants/agentCatalog.ts`. UI brand strings (product name, tagline) live only in the repo-root `brand.json`.
 
 **Stack:** FastAPI + sqlite3 / React + TypeScript + Vite. The default monolithic assembly (`packages/host/`) runs gateway + domain packages + agent in a single process; the graph C engine can also run as a sidecar.
 
@@ -21,7 +21,7 @@ Set `SECRETS_ENCRYPTION_KEY` or `SECRET_KEY` (a long random string — do not re
 uv run python -m host.dev    # gateway :8000 + Vite :5173
 ```
 
-Quality gates run locally: `npm run gate` (`gate:py` = ruff format/check, import-linter layering contracts, mypy, pytest; `gate:web` = tsc, eslint, vitest, i18n key checks, prettier).
+Quality gates run locally: `npm run gate` (`gate:py` = ruff format/check, import-linter layering contracts, mypy, pytest, dependency-graph check; `gate:web` = tsc, eslint, vitest, i18n key checks, prettier).
 
 ## Ports
 
@@ -31,7 +31,7 @@ Quality gates run locally: `npm run gate` (`gate:py` = ruff format/check, import
 | gateway (uvicorn)      | 8000         | —                    |
 | Graph C engine sidecar | 8123 / 9750  | see service settings |
 
-The full environment variable list is in `.env.example`.
+Backend environment variables are documented in `.env.example`.
 
 ## Repository layout
 
@@ -67,4 +67,14 @@ Each package documents its contract in its own `README.md` (purpose / config / e
 > **Local-only**: no external network dependency by default; LLM access is BYOK or a
 > local OpenAI-compatible endpoint, and the agent degrades when no model is available.
 
-Engineering conventions: see [AGENTS.md](AGENTS.md).
+## Documentation
+
+- The `docs/` tree documents the code as it is: start from [docs/README.md](docs/README.md) — architecture, subsystem references, catalogs (tools / settings / data layout), frontend, testing.
+- Each backend package documents its contract in its own `README.md` (purpose / config / extension points / tool surface / limits), starting from [packages/README.md](packages/README.md); the agent source root starts from [agent/README.md](agent/README.md).
+- The frontend starts from [apps/web/README.md](apps/web/README.md).
+
+## Conventions and contributing
+
+- Engineering conventions (commits, frontend rules): [AGENTS.md](AGENTS.md). Coding agents working in a subtree should also read that subtree's `AGENTS.md` ([agent/](agent/AGENTS.md), [packages/](packages/AGENTS.md), [apps/web/](apps/web/AGENTS.md)).
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md) (简体中文: [CONTRIBUTING.zh.md](CONTRIBUTING.zh.md)).
+- Security policy and vulnerability reporting: [SECURITY.md](SECURITY.md).
