@@ -38,7 +38,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
-from typing import Protocol
+from typing import Any, Protocol
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
@@ -109,12 +109,21 @@ def _in_session(event: Event, session: str) -> bool:
 
 
 class TrajectoryReader(Protocol):
-    """Query projection over agent.step rows (agent.runtime.trajectory); the
-    gateway only reads pages, never the projection's writer side."""
+    """Query projection over agent.step rows and the raw LLM round log
+    (agent.runtime.trajectory); the gateway only reads pages, never the
+    projection's writer side."""
 
     def steps_page(
         self, *, session: str, after_seq: int, before_seq: int | None, limit: int
     ) -> tuple[list[dict], bool]: ...
+
+    def raw_rounds(self, run_id: str) -> list[dict[str, Any]]: ...
+
+    def raw_rounds_for_session(
+        self, session: str, *, limit: int = 200
+    ) -> tuple[list[dict[str, Any]], int]: ...
+
+    def raw_round(self, run_id: str, round: int) -> dict[str, Any] | None: ...
 
 
 def build_chat_router(
