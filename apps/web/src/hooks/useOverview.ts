@@ -21,6 +21,7 @@ import type { ActivityItem, TrendingRepo } from '@/api/types';
 type RecommendRow = {
   id: string;
   name: string;
+  owner?: string | null;
   project_id?: string;
   description?: string;
   reason?: string;

@@ -52,6 +52,7 @@
   "data.title": "数据",
   "data.exportProjects": "导出项目 JSON",
   "data.exportNotes": "导出笔记 JSON",
+  "data.exportFailed": "导出失败",
   "health.title": "服务状态",
   "health.open": "打开服务状态页",
   "about.title": "关于 {{name}}",

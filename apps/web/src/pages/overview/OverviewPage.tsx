@@ -31,7 +31,13 @@ import { useProjectStats } from '@/hooks/useProjects';
 import { useTrendingSpotlight } from '@/hooks/useTrendingSpotlight';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { formatRelativeTime, formatDateTime } from '@/utils/date';
-import { abbrevCount, langCssClass, REPO_AVATAR_GRADIENTS, splitRepoName } from '@/utils/format';
+import {
+  abbrevCount,
+  langCssClass,
+  REPO_AVATAR_GRADIENTS,
+  repoDisplayParts,
+  splitRepoName,
+} from '@/utils/format';
 import { activityItemHref } from '@/utils/overviewLinks';
 import { routes } from '@/utils/routes';
 import { safeHttpUrl } from '@/utils/safeUrl';
@@ -288,7 +294,10 @@ export function OverviewPage() {
                     <div key={p.key} className="progress-row">
                       <span className="pl">{t(`overview:progress.${p.key}`)}</span>
                       <div className="track">
-                        <div className={`fill ${p.color}`} style={{ width: `${pct}%` }} />
+                        <div
+                          className={`fill ${p.color}`}
+                          style={{ '--fill': pct / 100 } as CSSProperties}
+                        />
                       </div>
                       <span className="pv">{v}</span>
                     </div>
@@ -374,7 +383,7 @@ export function OverviewPage() {
                   </div>
                 );
               }
-              const { owner, repo } = splitRepoName(item.name);
+              const { owner, repo } = repoDisplayParts(item);
               return (
                 <Link
                   key={item.id}
@@ -391,8 +400,12 @@ export function OverviewPage() {
                   </div>
                   <div className="project-info">
                     <div className="project-name">
-                      <span className="owner">{owner}</span>
-                      <span className="slash">/</span>
+                      {owner ? (
+                        <>
+                          <span className="owner">{owner}</span>
+                          <span className="slash">/</span>
+                        </>
+                      ) : null}
                       <span>{repo}</span>
                     </div>
                     <div className="project-desc-swap">

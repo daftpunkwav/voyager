@@ -294,8 +294,11 @@ function PdfPane({ docId, fileUrl }: { docId: string; fileUrl: string }) {
   const [total, setTotal] = useState(0);
   const [failed, setFailed] = useState('');
   const [scale, setScale] = useState(() => {
+    // Guarded parse: a dirty legacy value must not poison the scale — NaN
+    // would propagate through min/max and write "NaN" back to storage
     const raw = localStorage.getItem(PDFJS_SCALE_KEY);
-    return raw ? Number(raw) : 1.2;
+    const n = raw !== null ? Number(raw) : NaN;
+    return Number.isFinite(n) && n >= 0.5 && n <= 3 ? n : 1.2;
   });
 
   const docRef = useRef<import('pdfjs-dist').PDFDocumentProxy | null>(null);

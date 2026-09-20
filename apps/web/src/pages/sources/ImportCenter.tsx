@@ -98,7 +98,9 @@ function FilesPane({ onDone }: { onDone: () => void }) {
 
   const upload = async (files: FileList | File[]) => {
     const list = Array.from(files);
-    if (list.length === 0) return;
+    // busy guard: a second drop/click while a batch is in flight would run a
+    // concurrent loop and the first finishing batch would clear the flag early
+    if (list.length === 0 || busy) return;
     setBusy(true);
     let ok = 0;
     let fail = 0;

@@ -16,7 +16,7 @@ import type { Category, Project, Tag } from '@/api/types';
 import { ProgressBadge } from './ProgressBadge';
 import { categoryCssClass, categoryLabel } from '@/utils/labels';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
-import { abbrevCount, langCssClass, REPO_AVATAR_GRADIENTS, splitRepoName } from '@/utils/format';
+import { abbrevCount, langCssClass, REPO_AVATAR_GRADIENTS, repoDisplayParts } from '@/utils/format';
 import { useProjectStore } from '@/stores/projectStore';
 import { routes } from '@/utils/routes';
 
@@ -121,7 +121,7 @@ export function ProjectTable({
         </thead>
         <tbody>
           {projects.map((p, i) => {
-            const { owner, repo } = splitRepoName(p.name);
+            const { owner, repo } = repoDisplayParts(p);
             const catCls = categoryCssClass(p.category, categories);
             const isSelected = selectedSet.has(p.id);
             return (
@@ -154,8 +154,12 @@ export function ProjectTable({
                     </div>
                     <div className="repo-info">
                       <div className="repo-name">
-                        <span className="owner">{owner}</span>
-                        <span className="slash">/</span>
+                        {owner ? (
+                          <>
+                            <span className="owner">{owner}</span>
+                            <span className="slash">/</span>
+                          </>
+                        ) : null}
                         <span>{repo}</span>
                       </div>
                       <div className="repo-desc">{p.description ?? ''}</div>

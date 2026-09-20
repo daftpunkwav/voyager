@@ -62,10 +62,19 @@ export async function importProjects(r: unknown): Promise<{
   };
 }
 
+/** Frontend sort keys → backend list_repos sort keys (RepoStore._SORTABLE:
+ *  unknown keys silently fall back to added_ts). */
+const SORT_PARAM: Record<NonNullable<ProjectListParams['sort_by']>, string> = {
+  name: 'name',
+  stars: 'stars',
+  imported_at: 'added',
+  updated_at: 'updated',
+};
+
 /** List: the server only applies sort/desc/category; remaining filtering and pagination happen client-side. */
 export async function listProjects(p?: ProjectListParams): Promise<PaginatedList<Project>> {
   const rows = await callCapability<RepoRow[]>('sources', 'list_repos', {
-    sort: (p?.sort_by as string) ?? 'added',
+    sort: SORT_PARAM[p?.sort_by ?? 'imported_at'],
     desc: (p?.sort_order ?? 'desc') !== 'asc',
     category: p?.category_id ?? '',
   });

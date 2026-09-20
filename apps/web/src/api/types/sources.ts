@@ -64,6 +64,9 @@ export interface StarRepo {
 export interface Project {
   id: string;
   name: string;
+  /** Backend rows carry the owner as a separate column; `name` is the bare repo
+   *  name. Optional: manual entries may have it empty. */
+  owner?: string | null;
   full_name: string;
   description: string;
   language: string | null;

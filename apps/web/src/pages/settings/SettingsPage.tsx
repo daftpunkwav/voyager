@@ -184,26 +184,36 @@ export function SettingsPage() {
     addToast({ type: 'success', message: t('github.unbound') });
   };
 
-  const exportProjects = async () => {
-    const rows = await exportProjectsApi();
+  const downloadJson = (rows: unknown, filename: string) => {
     const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'projects-export.json';
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
   };
 
+  const exportProjects = async () => {
+    try {
+      downloadJson(await exportProjectsApi(), 'projects-export.json');
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : t('data.exportFailed'),
+      });
+    }
+  };
+
   const exportNotes = async () => {
-    const notes = await listAllNotes();
-    const blob = new Blob([JSON.stringify(notes, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'notes-export.json';
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      downloadJson(await listAllNotes(), 'notes-export.json');
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : t('data.exportFailed'),
+      });
+    }
   };
 
   return (

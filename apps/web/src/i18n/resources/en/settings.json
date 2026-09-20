@@ -52,6 +52,7 @@
   "data.title": "Data",
   "data.exportProjects": "Export projects JSON",
   "data.exportNotes": "Export notes JSON",
+  "data.exportFailed": "Export failed",
   "health.title": "Service health",
   "health.open": "Open the services page",
   "about.title": "About {{name}}",

@@ -24,6 +24,19 @@ export function splitRepoName(name: string): { owner: string; repo: string } {
   return { owner, repo };
 }
 
+/** Compose the display owner/repo pair for a repo row. The backend carries the
+ *  owner and the bare repo name in separate columns (list_repos rows); fall
+ *  back to splitting a legacy "owner/repo" name, and to the bare name alone
+ *  when no owner exists. */
+export function repoDisplayParts(row: { owner?: string | null; name: string }): {
+  owner: string;
+  repo: string;
+} {
+  if (row.owner) return { owner: row.owner, repo: row.name };
+  const split = splitRepoName(row.name);
+  return split.repo ? split : { owner: '', repo: row.name };
+}
+
 /** Repo avatar gradients for the project list. */
 export const REPO_AVATAR_GRADIENTS = [
   'linear-gradient(135deg,#61dafb,#2196f3)',
