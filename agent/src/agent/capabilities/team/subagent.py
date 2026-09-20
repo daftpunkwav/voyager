@@ -8,10 +8,14 @@ capability (schema derived, audit symmetric).
   narrows the child to the dispatcher's own tools);
 - register validates agent-authored allowlists against the registering
   instance's surface (early readable feedback; dispatch re-checks anyway);
-- send continues a WAITING_INPUT conversational instance with a follow-up
-  message via spawner.start(inst, message) — history stays continuous. React
-  task instances are not continued in place: spawn again with a goal that
-  references the board / prior conclusions.
+- send is wired to spawner.start(inst, message) but is guarded: today the
+  only conversational instances are the user's own chat sessions (dispatched
+  task instances are never conversational), and the agent must not drive the
+  user's conversation — a send would inject a user-role message and trigger a
+  full reply turn. Conversational instances are therefore refused, and react
+  instances (never in WAITING_INPUT) get the readable conflict error. React
+  follow-ups stay re-spawn with a goal referencing the board / prior
+  conclusions.
 """
 
 from __future__ import annotations
@@ -197,18 +201,23 @@ async def subagent_action(
                 f"no matching instance: {id_or_name}",
                 hint="see subagent(action=list) for running instances",
             )
-        if not getattr(inst.task, "conversational", False):
+        if getattr(inst.task, "conversational", False):
+            # Interaction integrity: conversational instances are the user's
+            # own chat sessions — a send would speak as the user and trigger
+            # a full reply turn. The agent never drives them.
             raise ServiceError(
                 "agent",
-                ErrorSuffix.INVALID_INPUT,
-                f"{inst.name} is a task instance, not a conversational one",
-                hint="spawn a new task with a goal referencing the board / prior conclusions",
+                ErrorSuffix.FORBIDDEN,
+                f"{inst.name} is the user's chat instance; the agent cannot send it messages",
+                hint="deliver conclusions via the board / a completion notice, or spawn a new task",
             )
         if inst.status is not RunStatus.WAITING_INPUT:
             raise ServiceError(
                 "agent",
                 ErrorSuffix.CONFLICT,
                 f"instance {inst.name} is {inst.status.value}, not waiting for input",
+                hint="task instances are not continued in place: spawn a new task"
+                " with a goal referencing the board / prior conclusions",
             )
         text = str(message or "").strip()
         if not text:
@@ -234,8 +243,9 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
             "allowed_tools — the allowlist may only narrow this instance's own"
             " surface), list, register (name/description/mode/allowed_tools/...),"
             " unregister (name), wait (id_or_name,timeout_s — blocks for the"
-            " result), send (id_or_name,message — continue a waiting"
-            " conversational instance)"
+            " result), send (id_or_name,message — reserved continuation"
+            " channel: the user's chat instances are refused and task"
+            " instances are not continued in place, so prefer spawn)"
         ),
     )
     async def subagent(

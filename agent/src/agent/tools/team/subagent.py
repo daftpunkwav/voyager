@@ -20,8 +20,8 @@ def subagent_tool(registry: Registry, audit: AuditSinks | None = None) -> AgentT
             " list(定义与运行中实例)/"
             " register(name,description 等登记自定义定义)/ unregister(name 删除定义)/"
             " wait(id_or_name,timeout_s,阻塞等结果)/"
-            " send(id_or_name,message,跟进等待输入的对话型实例;"
-            "react 任务不续代,请带 board 结论重新 spawn)"
+            " send(id_or_name,message,保留的续跑通道:用户聊天实例不可驱动,"
+            "任务实例不原地续代——跟进请重新 spawn 并在 goal 里引用 board/前次结论)"
         ),
         audit=audit,
         write=True,
