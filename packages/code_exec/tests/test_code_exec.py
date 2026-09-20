@@ -93,6 +93,16 @@ class TestSecurity:
             )
         assert exc.value.body.code == "CODE_EXEC.NOT_FOUND"
 
+    async def test_unknown_runtime_rejects_before_spawn(self, app) -> None:
+        """An unknown runtime must fail the call itself. The JobRef contract
+        promises results via task.* events; a fire-and-forget task that dies
+        before publishing anything would leave the caller waiting forever."""
+        with pytest.raises(ServiceError) as exc:
+            await execute(registry, "run_snippet", USER_CTX, {"runtime": "nope", "code": "pass"})
+        assert exc.value.body.code == "CODE_EXEC.NOT_FOUND"
+        # nothing was spawned: no orphaned background task, no store row
+        assert capabilities._bg_tasks == set()
+
     async def test_runtime_rejects_shell_metachars(self, tmp_path) -> None:
         """Injection characters in image/command/extension are rejected before
         any execution path runs."""

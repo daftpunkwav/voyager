@@ -205,6 +205,10 @@ def list_runtimes() -> list[dict[str, Any]]:
     long_running=True,
 )
 async def run_snippet(runtime: str, code: str, _actor: ActorRef | None = None) -> JobRef:
+    # Validate before spawning: an unknown runtime must reject the caller
+    # immediately, not die silently inside the fire-and-forget task (which
+    # would leave the JobRef waiting for an event that never arrives)
+    _find_runtime(runtime)
     exec_id = uuid.uuid4().hex[:12]
     # Kick off async execution immediately so the caller is not blocked; the
     # strong ref prevents silent GC collection
@@ -232,6 +236,9 @@ async def run_file(runtime: str, file_path: str, _actor: ActorRef | None = None)
         ) from exc
     if not target.is_file():
         raise ServiceError(_DOMAIN, ErrorSuffix.NOT_FOUND, f"File not found: {file_path}")
+    # Same entry validation as run_snippet: reject unknown runtimes before
+    # spawning so the failure reaches the caller, not the void
+    _find_runtime(runtime)
     # Read off the event loop: file size is user-controlled, a sync
     # read_text would stall the whole loop
     code = await asyncio.to_thread(target.read_text, encoding="utf-8")
