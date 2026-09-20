@@ -238,10 +238,27 @@ class TestRepo:
             "https://github.com/../x",
             "https://github.com/./x",
             # a trailing newline must not slip past the charset check
-            # (match+$ matches before a final \n; fullmatch does not)
+            # (match+$ matches before a final \n; fullmatch does not);
+            # urlparse would silently strip it and rewrite the target repo
             "https://github.com/abc\n/def",
         ):
             with pytest.raises(ServiceError, match="Invalid GitHub owner/repo"):
+                github_mod.parse_repo_url(bad)
+
+    def test_parse_repo_url_rejects_non_github_hosts(self) -> None:
+        """Hostname (not substring) validation: lookalike domains and URLs
+        where 'github.com' is not followed by '/' must be a clean 400, never
+        an unhandled IndexError from split()[1]."""
+        from platform_contracts import ServiceError
+
+        for bad in (
+            "https://github.com.evil.com/a/b",
+            "https://evilgithub.com/a/b",
+            "https://notgithub.com/a/b",
+            "ftp://github.com/a/b",
+            "github.com/a/b",
+        ):
+            with pytest.raises(ServiceError, match="Only GitHub repo URLs"):
                 github_mod.parse_repo_url(bad)
 
 

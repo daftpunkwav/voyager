@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import re
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from platform_contracts import ErrorSuffix, ServiceError
@@ -28,18 +29,28 @@ def parse_repo_url(url: str) -> tuple[str, str]:
     """Parse (owner, repo) from https://github.com/owner/repo (.git or
     /tree/... forms included).
     """
-    text = url.strip().removesuffix(".git").rstrip("/")
-    if "github.com" not in text:
+    # urlparse silently strips \n/\t from the URL (bpo-43882), which would
+    # rewrite e.g. "abc\n/def" into a different repo than typed — reject
+    # control characters up front, before any parsing can hide them
+    if any(ord(c) < 0x20 for c in url):
+        raise ServiceError(
+            "sources",
+            ErrorSuffix.INVALID_INPUT,
+            f"Invalid GitHub owner/repo in URL: {url}",
+            hint="owner and repo may contain letters, digits, '.', '_' and '-' only",
+        )
+    parsed = urlparse(url.strip())
+    if parsed.scheme not in ("http", "https") or parsed.hostname != "github.com":
         raise ServiceError(
             "sources",
             ErrorSuffix.INVALID_INPUT,
             f"Only GitHub repo URLs are supported: {url}",
             hint="e.g. https://github.com/owner/repo",
         )
-    parts = text.split("github.com/", 1)[1].split("/")
+    parts = [p for p in parsed.path.split("/") if p]
     if len(parts) < 2 or not all(parts[:2]):
         raise ServiceError("sources", ErrorSuffix.INVALID_INPUT, f"Cannot parse repo URL: {url}")
-    owner, repo = parts[0], parts[1]
+    owner, repo = parts[0], parts[1].removesuffix(".git")
     if (
         not (_OWNER_REPO_RE.fullmatch(owner) and _OWNER_REPO_RE.fullmatch(repo))
         or "." in (owner, repo)

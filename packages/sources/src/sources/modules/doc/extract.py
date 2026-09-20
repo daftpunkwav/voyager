@@ -27,6 +27,13 @@ from xml.etree import ElementTree
 #: oversized chunks split further on blank lines
 _CHAPTER_TARGET = 8000
 
+#: EPUB decompression caps: the import pipeline limits the compressed file
+#: size, not what the zip expands to — a zip bomb must not exhaust memory.
+#: Per-spine-entry cap plus a total budget across all entries (the OPF and
+#: each spine file count against it).
+_MAX_EPUB_ENTRY_BYTES = 20 * 1024 * 1024
+_MAX_EPUB_TOTAL_BYTES = 200 * 1024 * 1024
+
 
 class ExtractError(Exception):
     """Extraction failure (encrypted/corrupt/empty); the worker catches it
@@ -127,17 +134,32 @@ _XHTML_NS = "{http://www.w3.org/1999/xhtml}"
 _BLOCK_TAGS = {"p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote"}
 
 
+def _read_entry(zf: zipfile.ZipFile, name: str, budget: list[int]) -> bytes:
+    """Read one zip entry under the per-entry cap and the shared total budget;
+    raises ExtractError so a zip bomb fails the import instead of the process."""
+    info = zf.getinfo(name)
+    if info.file_size > _MAX_EPUB_ENTRY_BYTES:
+        raise ExtractError(
+            f"EPUB entry exceeds the {_MAX_EPUB_ENTRY_BYTES // (1024 * 1024)}MB limit: {name}"
+        )
+    if info.file_size > budget[0]:
+        raise ExtractError("EPUB expands beyond the decompression budget")
+    budget[0] -= info.file_size
+    return zf.read(name)
+
+
 def _from_epub(path: Path) -> list[Section]:
     try:
         zf = zipfile.ZipFile(path)
     except Exception as exc:
         raise ExtractError(f"Failed to open EPUB: {exc}") from exc
     with zf:
-        spine_files = _epub_spine(zf)
+        budget = [_MAX_EPUB_TOTAL_BYTES]
+        spine_files = _epub_spine(zf, budget)
         sections: list[Section] = []
         for i, name in enumerate(spine_files):
             try:
-                root = ElementTree.fromstring(zf.read(name))
+                root = ElementTree.fromstring(_read_entry(zf, name, budget))
             except ElementTree.ParseError:
                 continue
             title = _first_heading(root)
@@ -150,7 +172,7 @@ def _from_epub(path: Path) -> list[Section]:
         return sections
 
 
-def _epub_spine(zf: zipfile.ZipFile) -> list[str]:
+def _epub_spine(zf: zipfile.ZipFile, budget: list[int]) -> list[str]:
     """XHTML file paths in OPF spine order; falls back to all .x?html files
     when the OPF cannot be parsed.
     """
@@ -160,7 +182,7 @@ def _epub_spine(zf: zipfile.ZipFile) -> list[str]:
         return [n for n in names if n.endswith((".xhtml", ".html", ".htm"))]
     base = opf_name.rsplit("/", 1)[0] + "/" if "/" in opf_name else ""
     try:
-        root = ElementTree.fromstring(zf.read(opf_name))
+        root = ElementTree.fromstring(_read_entry(zf, opf_name, budget))
     except ElementTree.ParseError:
         return [n for n in names if n.endswith((".xhtml", ".html", ".htm"))]
     manifest: dict[str, str] = {}
