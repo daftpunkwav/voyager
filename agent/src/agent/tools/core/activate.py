@@ -32,7 +32,7 @@ from agent.tools.core.base import AgentTool, Toolbelt
 CORE_TOOLS = (
     "ask_user",
     "spawn_subagent",
-    "load_skill",
+    "skill",
     "memory",
     "request_context",
     "todowrite",
@@ -50,8 +50,7 @@ CORE_TOOLS = (
     "activate_tools",
     # LLM-driven context management: the model reads its own window usage and
     # compacts proactively (the harness auto-triggers at the threshold too)
-    "context_status",
-    "compact_context",
+    "context",
     # Agent-side session surface: one aggregated tool (list/create/fork/…);
     # activation granularity is the whole surface (known cost, design §9.3)
     "session",

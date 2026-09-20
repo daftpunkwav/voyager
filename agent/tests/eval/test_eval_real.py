@@ -194,7 +194,7 @@ async def test_prefix_cache_health_visible_after_turns(tmp_path) -> None:
         from agent.tools.core.self_capability import agent_context
         from platform_capability import execute
 
-        status = await execute(app.registry, "context_status", agent_context(), {})
+        status = await execute(app.registry, "context", agent_context(), {"action": "status"})
         cache = status.get("prefix_cache") or {}
         assert cache.get("turns", 0) >= 2, f"sentinel did not fold turns: {cache}"
         assert "warm_rounds" in cache and "cold_rounds" in cache

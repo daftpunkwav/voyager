@@ -36,7 +36,6 @@ HUMAN_ONLY_CAPABILITIES: dict[str, str] = {
     "set_setting": "reachable as settings__set_setting via the domain bridge",
     # The review gate decides when the agent may act: the switch must stay in
     # human hands (the agent can only submit a plan and wait).
-    "plan_mode_set": "toggles the plan review gate; human-controlled by design",
     "goal_manage": "creates/pauses/resumes durable goals; the auto-continuation budget stays human-controlled",
     # Turn rating shapes the user's own view of the conversation.
     "rate_turn": "the user rates the agent's turn, never the other way around",
@@ -61,11 +60,9 @@ AGENT_ONLY_TOOLS: dict[str, str] = {
     "web_search": "network hand",
     "ask_user": "agent -> human question channel",
     "reach_out": "one-shot proactive message (fire-and-forget; the human is the recipient)",
-    "exit_plan_mode": "plan review submission (human approves through the ask channel)",
     "goal_read": "durable-goal status reader",
     "goal_write": "agent progress report (done/blocked only; lifecycle stays human-side)",
     "scratchpad": "in-harness working scratchpad for intermediate thinking and step tracking",
-    "propose_skill": "proposes user skills from conversational experience, confirmed by human",
 }
 
 #: Transport-layer human surfaces that are not business capabilities and

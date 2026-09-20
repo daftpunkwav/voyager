@@ -157,7 +157,7 @@ STATUS_PCT_BUCKET = 5
 
 def render_status_line(status: dict[str, Any], *, session: str = "") -> str:
     """One-line system-prompt summary: the model reads this every turn and
-    decides proactively (via compact_context) whether to free space before
+    decides proactively (via the context compact action) whether to free space before
     heavy work. Deliberately cache-stable: usage is bucketed (STATUS_PCT_BUCKET)
     and exact token counts are omitted — the tool path serves exact facts."""
     bucketed = int(status["used_pct"] // STATUS_PCT_BUCKET) * STATUS_PCT_BUCKET
@@ -165,7 +165,7 @@ def render_status_line(status: dict[str, Any], *, session: str = "") -> str:
         f"【上下文状态】窗口 {status['window_tokens']} tok(输出预留 "
         f"{status['max_output_tokens']}),已用约 {bucketed}%+"
         f",自动压缩阈值 {status['auto_compact_at_pct']}%。"
-        "规划大批量工作前,可用 compact_context 主动腾出空间。"
+        "规划大批量工作前,可用 context(action=compact) 主动腾出空间。"
     )
     if session:
         line += f"当前会话: {session}。"

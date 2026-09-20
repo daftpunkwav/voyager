@@ -146,7 +146,7 @@ class TestStatusLine:
         line = render_status_line(status)
         assert "200000" in line
         assert "75%" in line
-        assert "compact_context" in line
+        assert "context(action=compact)" in line
 
     def test_line_appends_session_when_present(self) -> None:
         status = usage_status(

@@ -48,7 +48,7 @@ class TestStatusLineInjection:
         assert system["role"] == "system"
         assert system["content"].startswith("SYS")
         assert "123456" in system["content"]  # resolved window reaches the model
-        assert "compact_context" in system["content"]
+        assert "context(action=compact)" in system["content"]
 
     async def test_reported_usage_anchors_next_turn(self, tmp_path) -> None:
         llm = FakeLLM(

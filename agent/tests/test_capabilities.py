@@ -38,30 +38,23 @@ class TestRegistrySurface:
             "answer_question",
             "approve_mcp_tools",
             "cancel_run",
-            "compact_context",
-            "context_status",
+            "context",
             "delete_subagent",
+            "extension",
             "get_settings",
             "goal_manage",
-            "install_plugin",
             "jobs",
             "list_approvals",
-            "list_mcp_servers",
             "list_personas",
-            "list_plugins",
             "list_resumable_checkpoints",
             "list_skills",
             "list_subagents",
-            "list_user_hooks",
-            "load_skill",
             "memory",
             "observe",
             "pause_run",
-            "plan_mode_set",
-            "preview_mcp_tools",
+            "plan",
             "rate_turn",
             "register_subagent",
-            "reload_user_hooks",
             "remove_mcp_server",
             "report_page_context",
             "resume_run",
@@ -69,9 +62,9 @@ class TestRegistrySurface:
             "session",
             "set_plugin_approval",
             "set_setting",
+            "skill",
             "todowrite",
             "tools",
-            "uninstall_plugin",
             "wait_subagent",
         ]
 
@@ -256,7 +249,12 @@ class TestSurface:
         index = await execute(app.registry, "list_skills", USER_CTX, {})
         names = {s["name"] for s in index}
         assert "explore-repo" in names  # built-in skill indexed
-        doc = await execute(app.registry, "load_skill", USER_CTX, {"name": "explore-repo"})
+        doc = await execute(
+            app.registry,
+            "skill",
+            USER_CTX,
+            {"action": "load", "name": "explore-repo"},
+        )
         assert doc["name"] == "explore-repo" and doc["text"]
 
     async def test_report_page_context(self, app) -> None:
@@ -778,7 +776,7 @@ class TestSessionSurface:
             )
 
     async def test_compact_context_skips_small_context(self, app) -> None:
-        out = await execute(app.registry, "compact_context", USER_CTX, {})
+        out = await execute(app.registry, "context", USER_CTX, {"action": "compact"})
         assert out["mode"] == "skipped"
 
     async def test_context_status_reports_window(self, app, settle) -> None:
@@ -787,7 +785,7 @@ class TestSessionSurface:
         await app.master.handle_user_message("hello")
         await settle(app)
         app.master.chat.state.status = RunStatus.WAITING_INPUT
-        out = await execute(app.registry, "context_status", USER_CTX, {})
+        out = await execute(app.registry, "context", USER_CTX, {"action": "status"})
         assert out["window_tokens"] > 0
         assert "used_pct" in out
 

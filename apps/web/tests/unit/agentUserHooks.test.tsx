@@ -64,22 +64,26 @@ const HOOKS = [
 function backend(
   overrides: { items?: unknown[]; failList?: boolean; failReload?: boolean; reload?: object } = {}
 ) {
-  return (_domain: string, name: string, _args: Record<string, unknown>) => {
+  return (_domain: string, name: string, args: Record<string, unknown>) => {
     switch (name) {
-      case 'list_user_hooks':
-        if (overrides.failList) return Promise.reject(new Error('boom'));
-        return Promise.resolve({ items: overrides.items ?? HOOKS });
-      case 'reload_user_hooks':
-        if (overrides.failReload) return Promise.reject(new Error('user operations only'));
-        return Promise.resolve({
-          loaded: 2,
-          event_patterns: ['note.created'],
-          ...overrides.reload,
-        });
+      case 'extension':
+        if (args.kind === 'hook' && args.action === 'list') {
+          if (overrides.failList) return Promise.reject(new Error('boom'));
+          return Promise.resolve({ items: overrides.items ?? HOOKS });
+        }
+        if (args.kind === 'hook' && args.action === 'reload') {
+          if (overrides.failReload) return Promise.reject(new Error('user operations only'));
+          return Promise.resolve({
+            loaded: 2,
+            event_patterns: ['note.created'],
+            ...overrides.reload,
+          });
+        }
+        return Promise.resolve({});
       case 'get_memory':
         return Promise.resolve(SNAPSHOT);
       case 'get_setting':
-        return Promise.resolve({ value: SETTINGS[String(_args.key)] });
+        return Promise.resolve({ value: SETTINGS[String(args.key)] });
       default:
         return Promise.resolve({});
     }
@@ -109,7 +113,7 @@ beforeAll(() => {
 });
 
 describe('settings page user hooks block (phase-78)', () => {
-  it('mounts with list_user_hooks and renders file names / on / disabled and not-loaded states; no getApi()', async () => {
+  it('mounts with extension(hook list) and renders file names / on / disabled and not-loaded states; no getApi()', async () => {
     renderSection(backend());
     await waitFor(() => expect(screen.getByText('note-watch.json')).toBeTruthy());
     expect(screen.getByText('offline.json')).toBeTruthy();
@@ -118,7 +122,10 @@ describe('settings page user hooks block (phase-78)', () => {
     expect(screen.getByText('note.deleted')).toBeTruthy();
     expect(screen.getByText('已停用')).toBeTruthy();
     expect(screen.getByText('未装载')).toBeTruthy();
-    expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'list_user_hooks', {});
+    expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'extension', {
+      kind: 'hook',
+      action: 'list',
+    });
     expect(getApiMock).not.toHaveBeenCalled();
   });
 
@@ -133,14 +140,17 @@ describe('settings page user hooks block (phase-78)', () => {
     expect(screen.getByLabelText('工作目录')).toBeTruthy();
   });
 
-  it('"reload" calls reload_user_hooks; the success toast includes the loaded count and the list refreshes', async () => {
+  it('"reload" calls extension(hook reload); the success toast includes the loaded count and the list refreshes', async () => {
     renderSection(backend());
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '重新加载用户钩子' })).toBeTruthy()
     );
     fireEvent.click(screen.getByRole('button', { name: '重新加载用户钩子' }));
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'reload_user_hooks', {})
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'extension', {
+        kind: 'hook',
+        action: 'reload',
+      })
     );
     await waitFor(() =>
       expect(
@@ -148,7 +158,9 @@ describe('settings page user hooks block (phase-78)', () => {
       ).toBe(true)
     );
     // after reload succeeds, list_user_hooks is called again to refresh the list
-    const listCalls = callCapabilityMock.mock.calls.filter((c) => c[1] === 'list_user_hooks');
+    const listCalls = callCapabilityMock.mock.calls.filter(
+      (c) => c[1] === 'extension' && c[2]?.action === 'list'
+    );
     expect(listCalls.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -185,9 +197,11 @@ describe('settings page user hooks block (phase-78)', () => {
   it('busy guard against double submit: the button is disabled while the request is pending and double click sends once', async () => {
     let resolveReload!: (v: unknown) => void;
     callCapabilityMock.mockImplementation(
-      (_domain: string, name: string, _args: Record<string, unknown>) => {
-        if (name === 'list_user_hooks') return Promise.resolve({ items: HOOKS });
-        if (name === 'reload_user_hooks') {
+      (_domain: string, name: string, args: Record<string, unknown>) => {
+        if (name === 'extension' && args?.kind === 'hook' && args?.action === 'list') {
+          return Promise.resolve({ items: HOOKS });
+        }
+        if (name === 'extension' && args?.kind === 'hook' && args?.action === 'reload') {
           return new Promise((resolve) => {
             resolveReload = resolve;
           });
@@ -211,7 +225,9 @@ describe('settings page user hooks block (phase-78)', () => {
       ).toBe(true)
     );
     fireEvent.click(screen.getByRole('button', { name: '重新加载用户钩子' })); // a disabled button does not send again
-    const reloadCalls = callCapabilityMock.mock.calls.filter((c) => c[1] === 'reload_user_hooks');
+    const reloadCalls = callCapabilityMock.mock.calls.filter(
+      (c) => c[1] === 'extension' && c[2]?.action === 'reload'
+    );
     expect(reloadCalls).toHaveLength(1);
     resolveReload({ loaded: 2, event_patterns: [] });
     await waitFor(() =>

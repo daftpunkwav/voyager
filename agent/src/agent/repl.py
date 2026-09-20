@@ -185,7 +185,9 @@ class ReplSession:
         elif cmd == "replay":
             self._replay(arg)
         elif cmd == "compact":
-            self._out(f"{_fmt(await self._call('compact_context', {'session_id': arg}))}\n")
+            self._out(
+                f"{_fmt(await self._call('context', {'action': 'compact', 'session_id': arg}))}\n"
+            )
         else:
             self._out(f"[unknown command /{cmd}; try /help]\n")
         return True

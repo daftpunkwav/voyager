@@ -80,7 +80,7 @@ class TestStatusShare:
             chat = app.master.chat
             assert chat is not None
             chat.state.status = RunStatus.WAITING_INPUT
-            status = await execute(app.registry, "context_status", USER_CTX, {})
+            status = await execute(app.registry, "context", USER_CTX, {"action": "status"})
             assert status["memory_cards_tokens"] > 0
         finally:
             app.close()

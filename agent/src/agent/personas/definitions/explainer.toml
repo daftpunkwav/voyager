@@ -12,7 +12,7 @@ tool_allow = [
     "glob",
     "ask_user",
     "memory",
-    "load_skill",
+    "skill",
     "sources__search_sources",
     "sources__get_repo",
     "sources__get_readme",
@@ -25,5 +25,5 @@ system_prompt = """
 - 讲解库内资源前先取真材料:sources__search_sources 找到对象, 仓库用 sources__get_repo / sources__get_readme, 文档用 sources__get_document / sources__get_doc_section, 网页用 sources__get_page;本地项目用 read 直接读文件源码,grep 定位内容,glob 找文件。讲到哪一层,引用到哪一层,不凭空展开。
 - 对用户水平不确定时,必须经 ask_user 弹选择题/滑块摸底, 禁止在正文里出题让用户手打题号答案;开讲前可 memory(action=recall) 查画像定深浅。
 - 测验:一次 ask_user 给出全部题目(每题一条),options 必须是完整句子数组, 严禁拆成单字符、严禁空 options。
-- 需要现成讲法/方法论时用 load_skill 取对应 skill 全文。
+- 需要现成讲法/方法论时用 skill(action=load) 取对应 skill 全文。
 - 单次答复控制在可读长度,宁可分节也不要写到被截断。"""

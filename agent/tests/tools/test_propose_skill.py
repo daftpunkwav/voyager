@@ -1,7 +1,9 @@
-"""Tests for the propose_skill tool."""
+"""Tests for the skill tool's propose action (validation ladder, on-disk
+shape, SkillLoader indexing) and the retired-confirm policy gate."""
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -9,7 +11,9 @@ from agent.llm import ToolCall
 from agent.policy import PolicyEngine
 from agent.skills.loader import SkillLoader
 from agent.tools.core.base import Toolbelt
-from agent.tools.skill.propose_skill import propose_skill_tool
+from agent.tools.skill.skill import skill_tool
+from agent.tools.skill.skill_ops import propose_skill
+from platform_contracts import ServiceError
 
 
 @pytest.fixture()
@@ -21,14 +25,16 @@ def skills_dir(tmp_path: Path) -> Path:
 
 class TestProposeSkill:
     def test_propose_skill_success(self, skills_dir: Path) -> None:
-        tool = propose_skill_tool(skills_dir)
-        res = tool.handler(
-            name="python-list-quiz",
-            description="Python 列表教学与测验流程",
-            content="## 步骤\n1. 介绍列表基础\n2. 出题测验\n3. 错题讲解",
+        tool = skill_tool(loader=SkillLoader([skills_dir]), skills_dir=skills_dir)  # duck-typed loader
+        res = asyncio.run(
+            tool.handler(
+                action="propose",
+                name="python-list-quiz",
+                description="Python 列表教学与测验流程",
+                content="## 步骤\n1. 介绍列表基础\n2. 出题测验\n3. 错题讲解",
+            )
         )
-        assert "[技能已保存]" in res
-        assert "python-list-quiz" in res
+        assert res["name"] == "python-list-quiz" and res["updated"] is False
 
         # Verify on-disk file
         skill_file = skills_dir / "python-list-quiz" / "SKILL.md"
@@ -46,70 +52,42 @@ class TestProposeSkill:
         assert "Python 列表教学与测验流程" in full_text
 
     def test_invalid_skill_name(self, skills_dir: Path) -> None:
-        tool = propose_skill_tool(skills_dir)
-        res = tool.handler(
-            name="Invalid Name With Spaces",
-            description="描述",
-            content="内容",
-        )
-        assert "[参数错误]" in res
-        assert "不合法" in res
+        with pytest.raises(ServiceError) as exc:
+            propose_skill(skills_dir, "Invalid Name With Spaces", "描述", "内容")
+        assert "invalid skill name" in str(exc.value)
 
     def test_empty_description_rejected(self, skills_dir: Path) -> None:
-        tool = propose_skill_tool(skills_dir)
-        res = tool.handler(
-            name="valid-skill",
-            description="  ",
-            content="内容",
-        )
-        assert "[参数错误]" in res
-        assert "描述" in res
+        with pytest.raises(ServiceError) as exc:
+            propose_skill(skills_dir, "valid-skill", "  ", "内容")
+        assert "description" in str(exc.value)
 
     def test_empty_content_rejected(self, skills_dir: Path) -> None:
-        tool = propose_skill_tool(skills_dir)
-        res = tool.handler(
-            name="valid-skill",
-            description="描述",
-            content="",
-        )
-        assert "[参数错误]" in res
-        assert "内容" in res
+        with pytest.raises(ServiceError) as exc:
+            propose_skill(skills_dir, "valid-skill", "描述", "")
+        assert "content" in str(exc.value)
+
+    def test_update_existing_skill(self, skills_dir: Path) -> None:
+        propose_skill(skills_dir, "keep-skill", "描述", "内容")
+        out = propose_skill(skills_dir, "keep-skill", "新描述", "新内容")
+        assert out["updated"] is True
 
 
 class TestPolicyGate:
-    """Skill-library writes land in the resident index next turn, so they
-    need an explicit human confirmation (L2); without a confirm channel the
-    call is skipped and nothing is written."""
+    """Skill-library writes land in the resident index next turn; the
+    confirm channel is retired, so proposals land directly (the permission
+    modes decide reachability; the skills subtree stays shell/file-proof via
+    the fs guards)."""
 
     async def test_writes_without_confirmation_by_default(self, skills_dir: Path) -> None:
-        """Confirm retired: skill proposals land directly (the permission
-        modes decide reachability; the skills subtree stays shell/file-proof
-        via the fs guards)."""
-        tool = propose_skill_tool(skills_dir)
+        tool = skill_tool(loader=SkillLoader([skills_dir]), skills_dir=skills_dir)  # duck-typed loader
         belt = Toolbelt({tool.name: tool}, PolicyEngine())
         out = await belt.call_detailed(
             ToolCall(
                 "1",
-                "propose_skill",
-                {"name": "gated-skill", "description": "d", "content": "c"},
+                "skill",
+                {"action": "propose", "name": "gated-skill", "description": "d", "content": "c"},
             )
         )
         assert out.ok is True
         assert "[需确认]" not in out.text
-        assert (skills_dir / "gated-skill" / "SKILL.md").exists()
-
-    async def test_writes_after_confirmation(self, skills_dir: Path) -> None:
-        async def _allow(_prompt: str) -> bool:
-            return True
-
-        tool = propose_skill_tool(skills_dir)
-        belt = Toolbelt({tool.name: tool}, PolicyEngine(), confirm=_allow)
-        out = await belt.call_detailed(
-            ToolCall(
-                "1",
-                "propose_skill",
-                {"name": "gated-skill", "description": "d", "content": "c"},
-            )
-        )
-        assert out.ok is True
         assert (skills_dir / "gated-skill" / "SKILL.md").exists()

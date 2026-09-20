@@ -66,28 +66,33 @@ function backend(
 ) {
   return (_domain: string, name: string, args: Record<string, unknown>) => {
     switch (name) {
-      case 'list_plugins':
-        if (failList) return Promise.reject(new Error('boom'));
-        return Promise.resolve({
-          items: overrides.items ?? [{ ...PLUGIN, ...(overrides.plugin as object) }],
-        });
+      case 'extension':
+        if (args.kind === 'plugin' && args.action === 'list') {
+          if (failList) return Promise.reject(new Error('boom'));
+          return Promise.resolve({
+            items: overrides.items ?? [{ ...PLUGIN, ...(overrides.plugin as object) }],
+          });
+        }
+        if (args.kind === 'plugin' && args.action === 'install') {
+          if (failInstall)
+            return Promise.reject(
+              new Error('plugin name already exists; pass overwrite=true explicitly to replace it')
+            );
+          return Promise.resolve({
+            name: 'fresh',
+            version: '0.1.0',
+            path: 'fresh',
+            permissions: { scopes: [], network: '', fs: '' },
+            contains_summary: { skills: 1, hooks: 0, mcp: false },
+          });
+        }
+        if (args.kind === 'plugin' && args.action === 'uninstall') {
+          return Promise.resolve({ name: args.name, uninstalled: true, path: args.name });
+        }
+        return Promise.resolve({});
       case 'set_plugin_approval':
         if (failApproval) return Promise.reject(new Error('user operations only'));
         return Promise.resolve({ ...RESULT, name: args.name, approved: args.approved });
-      case 'install_plugin':
-        if (failInstall)
-          return Promise.reject(
-            new Error('plugin name already exists; pass overwrite=true explicitly to replace it')
-          );
-        return Promise.resolve({
-          name: 'fresh',
-          version: '0.1.0',
-          path: 'fresh',
-          permissions: { scopes: [], network: '', fs: '' },
-          contains_summary: { skills: 1, hooks: 0, mcp: false },
-        });
-      case 'uninstall_plugin':
-        return Promise.resolve({ name: args.name, uninstalled: true, path: args.name });
       default:
         return Promise.resolve({});
     }
@@ -125,7 +130,10 @@ describe('settings page plugin block (roster)', () => {
     expect(screen.getByText('未批准')).toBeTruthy();
     expect(screen.getByText(/技能 2 · 钩子 1 · MCP 配置/)).toBeTruthy();
     expect(screen.getByText(/请求权限：notes\.write/)).toBeTruthy();
-    expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'list_plugins', {});
+    expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'extension', {
+      kind: 'plugin',
+      action: 'list',
+    });
     expect(getApiMock).not.toHaveBeenCalled();
   });
 
@@ -329,7 +337,7 @@ describe('settings page plugin revoke reclaims MCP', () => {
   it('the revoke response discloses reclaim results: reclaimed ids listed, skipped ones with reasons', async () => {
     callCapabilityMock.mockImplementation(
       (_domain: string, name: string, args: Record<string, unknown>) => {
-        if (name === 'list_plugins') {
+        if (name === 'extension' && args.action === 'list') {
           return Promise.resolve({ items: [{ ...PLUGIN, approved: true, granularity: 'bundle' }] });
         }
         if (name === 'set_plugin_approval') {
@@ -364,7 +372,7 @@ describe('settings page plugin revoke reclaims MCP', () => {
   it('when the per-item response carries mcp_reclaimed, the approval toast also discloses the removed MCPs', async () => {
     callCapabilityMock.mockImplementation(
       (_domain: string, name: string, args: Record<string, unknown>) => {
-        if (name === 'list_plugins') {
+        if (name === 'extension' && args.action === 'list') {
           return Promise.resolve({ items: [{ ...PLUGIN }] });
         }
         if (name === 'set_plugin_approval') {
@@ -411,7 +419,9 @@ describe('settings page plugin install/delete (dialog)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: '安装插件' }));
     await waitFor(() => expect(uploadFileMock).toHaveBeenCalledWith(file));
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'install_plugin', {
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'extension', {
+        kind: 'plugin',
+        action: 'install',
         zip_path: 'C:/ws/imports/example.zip',
         overwrite: false,
       })
@@ -421,7 +431,9 @@ describe('settings page plugin install/delete (dialog)', () => {
         toastTexts().some((m) => m.includes('已安装插件「fresh」') && m.includes('尚未批准'))
       ).toBe(true)
     );
-    const listCalls = callCapabilityMock.mock.calls.filter((c) => c[1] === 'list_plugins');
+    const listCalls = callCapabilityMock.mock.calls.filter(
+      (c) => c[1] === 'extension' && (c[2] as { action?: string })?.action === 'list'
+    );
     expect(listCalls.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -435,7 +447,9 @@ describe('settings page plugin install/delete (dialog)', () => {
     });
     fireEvent.click(within(dialog).getByRole('button', { name: '安装插件' }));
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'install_plugin', {
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'extension', {
+        kind: 'plugin',
+        action: 'install',
         source_dir: 'C:/plugins-src/example',
         overwrite: false,
       })
@@ -488,7 +502,9 @@ describe('settings page plugin install/delete (dialog)', () => {
     dialog = screen.getByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: '安装插件' }));
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'install_plugin', {
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'extension', {
+        kind: 'plugin',
+        action: 'install',
         source_dir: 'C:/x',
         overwrite: true,
       })
@@ -498,9 +514,11 @@ describe('settings page plugin install/delete (dialog)', () => {
   it('busy while the install request is pending: the submit is disabled and double click sends once', async () => {
     let resolveInstall!: (v: unknown) => void;
     callCapabilityMock.mockImplementation(
-      (_domain: string, name: string, _args: Record<string, unknown>) => {
-        if (name === 'list_plugins') return Promise.resolve({ items: [{ ...PLUGIN }] });
-        if (name === 'install_plugin') {
+      (_domain: string, name: string, args: Record<string, unknown>) => {
+        if (name === 'extension' && args.kind === 'plugin' && args.action === 'list') {
+          return Promise.resolve({ items: [{ ...PLUGIN }] });
+        }
+        if (name === 'extension' && args.action === 'install') {
           return new Promise((resolve) => {
             resolveInstall = resolve;
           });
@@ -520,7 +538,9 @@ describe('settings page plugin install/delete (dialog)', () => {
       ).toBe(true)
     );
     fireEvent.click(within(dialog).getByRole('button', { name: '安装插件' })); // disabled: no second request
-    const installCalls = callCapabilityMock.mock.calls.filter((c) => c[1] === 'install_plugin');
+    const installCalls = callCapabilityMock.mock.calls.filter(
+      (c) => c[1] === 'extension' && (c[2] as { action?: string })?.action === 'install'
+    );
     expect(installCalls).toHaveLength(1);
     resolveInstall({
       name: 'fresh',
@@ -542,7 +562,9 @@ describe('settings page plugin install/delete (dialog)', () => {
     fireEvent.click(screen.getByRole('button', { name: '删除插件 example' }));
     expect(String(confirmMock.mock.calls[0]?.[0])).toContain('不可恢复');
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'uninstall_plugin', {
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'extension', {
+        kind: 'plugin',
+        action: 'uninstall',
         name: 'example',
       })
     );

@@ -113,7 +113,7 @@ class TestAddAndPreview:
             )
             assert result["ok"] is True and result["connected"] is False
             assert "connection refused" in result["error"] and result["preview"] == []
-            state = await execute(app.registry, "list_mcp_servers", USER_CTX, {})
+            state = await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"})
             assert [s["id"] for s in state] == ["bad"]
         finally:
             app.memory.close()
@@ -253,7 +253,7 @@ class TestRemove:
             ToolCall(id="2", name="mcp__demo__search", arguments={})
         )
         assert "未知工具" in out
-        state = await execute(app.registry, "list_mcp_servers", USER_CTX, {})
+        state = await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"})
         assert state == []
         assert session.closed  # the session was closed
 
@@ -346,7 +346,12 @@ class TestRestart:
             await app.mcp.start()
             assert "mcp__broken__search" not in app.spawner._toolbelt.names()
             fail_ids.clear()
-            await execute(app.registry, "preview_mcp_tools", USER_CTX, {"id": "broken"})
+            await execute(
+            app.registry,
+            "extension",
+            USER_CTX,
+            {"kind": "mcp", "action": "preview", "id": "broken"},
+        )
             assert "mcp__broken__search" in app.spawner._toolbelt.names()
         finally:
             app.close()
@@ -568,7 +573,7 @@ class TestDomains:
         assert "mcp" in domain_prefixes(["mcp__demo__search", "read_file"])
         assert "mcp" not in domain_prefixes(["read_file", "notes__create_note"])
         assert domain_prefixes([]) == ()
-        assert "load_skill" in CORE_TOOLS  # must never leave CORE
+        assert "skill" in CORE_TOOLS  # must never leave CORE
         assert not [n for n in CORE_TOOLS if n.startswith("mcp__")]
 
 

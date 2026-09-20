@@ -90,17 +90,16 @@ from agent.tools import (
     fs_tools,
     goal_tools,
     jobs_tools,
-    load_skill_tool,
     memory_tools,
     observe_tools,
     plan_tools,
-    propose_skill_tool,
     reach_out_tool,
     request_context_tool,
     scratchpad_tool,
     search_tools,
     session_tools,
     shell_tools,
+    skill_tools,
     spawn_tool,
     team_tools,
     todo_tools,
@@ -217,9 +216,7 @@ def _build_tools(
     ask = ask_user_tool(asker)
     req = request_context_tool(provide_context)
     registry.add(StaticToolSource("interact", {ask.name: ask, req.name: req}))
-    skill = load_skill_tool(on_demand)
-    propose_skill = propose_skill_tool(workspace / "skills")
-    registry.add(StaticToolSource("skill", {skill.name: skill, propose_skill.name: propose_skill}))
+    registry.add(StaticToolSource("skill", skill_tools(on_demand, workspace / "skills")))
     # Plan/todos + scratchpad: persisted under the workspace; the plan file is
     # resolved per executing session (todos/<session>.json, global todo.json
     # for session-less work), the scratchpad is shared across turns/instances
@@ -723,6 +720,7 @@ def build_agent(
             approvals=approval_store,  # remembered L2 grants (list/revoke capabilities)
             plan_gates=plan_gates,  # human-side review-phase toggle
             goal_manager=goal_manager,  # durable session goals
+            skills_dir=skills_dir,  # skill propose writes here
             session_index=session_index,  # session search action
             log=log,  # session read action pages the shared history
         )

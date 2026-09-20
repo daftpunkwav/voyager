@@ -130,7 +130,10 @@ export function clearMemory(zone: string): Promise<unknown> {
 }
 
 export async function listPlugins<T = unknown>(): Promise<T[]> {
-  const raw = await callCapability<{ items?: T[] }>('agent', 'list_plugins', {});
+  const raw = await callCapability<{ items?: T[] }>('agent', 'extension', {
+    kind: 'plugin',
+    action: 'list',
+  });
   return raw.items ?? [];
 }
 
@@ -139,20 +142,23 @@ export function setPluginApproval(args: Record<string, unknown>): Promise<unknow
 }
 
 export function installPlugin(args: Record<string, unknown>): Promise<unknown> {
-  return callCapability('agent', 'install_plugin', args);
+  return callCapability('agent', 'extension', { kind: 'plugin', action: 'install', ...args });
 }
 
 export function uninstallPlugin(name: string): Promise<unknown> {
-  return callCapability('agent', 'uninstall_plugin', { name });
+  return callCapability('agent', 'extension', { kind: 'plugin', action: 'uninstall', name });
 }
 
 export async function listUserHooks<T = unknown>(): Promise<T[]> {
-  const raw = await callCapability<{ items?: T[] }>('agent', 'list_user_hooks', {});
+  const raw = await callCapability<{ items?: T[] }>('agent', 'extension', {
+    kind: 'hook',
+    action: 'list',
+  });
   return raw.items ?? [];
 }
 
 export function reloadUserHooks<T = unknown>(): Promise<T> {
-  return callCapability<T>('agent', 'reload_user_hooks', {});
+  return callCapability<T>('agent', 'extension', { kind: 'hook', action: 'reload' });
 }
 
 export function listSkills<T = unknown>(): Promise<T[]> {
@@ -160,7 +166,7 @@ export function listSkills<T = unknown>(): Promise<T[]> {
 }
 
 export function listMcpServers<T = unknown>(): Promise<T[]> {
-  return callCapability<T[]>('agent', 'list_mcp_servers', {}).then((r) =>
+  return callCapability<T[]>('agent', 'extension', { kind: 'mcp', action: 'list' }).then((r) =>
     Array.isArray(r) ? r : []
   );
 }
@@ -170,7 +176,7 @@ export function addMcpServer(args: Record<string, unknown>): Promise<unknown> {
 }
 
 export function previewMcpTools(id: string): Promise<unknown> {
-  return callCapability('agent', 'preview_mcp_tools', { id });
+  return callCapability('agent', 'extension', { kind: 'mcp', action: 'preview', id });
 }
 
 export function approveMcpTools(id: string, names: string[]): Promise<unknown> {
@@ -264,7 +270,7 @@ export function rateTurn(score: number, comment = '', subject = ''): Promise<unk
   return callCapability('agent', 'rate_turn', { score, comment, subject });
 }
 
-/** Context-window usage of one session (agent.context_status). */
+/** Context-window usage of one session (agent.context, action=status). */
 export interface ContextStatus {
   window_tokens: number;
   max_output_tokens: number;
@@ -288,7 +294,8 @@ export interface ContextStatus {
 }
 
 export function getContextStatus(sessionId = ''): Promise<ContextStatus> {
-  return callCapability<ContextStatus | { error: string }>('agent', 'context_status', {
+  return callCapability<ContextStatus | { error: string }>('agent', 'context', {
+    action: 'status',
     session_id: sessionId,
   }).then((raw) => {
     // Soft-failure shape: an unknown session answers {"error": "..."} with
@@ -302,5 +309,5 @@ export function getContextStatus(sessionId = ''): Promise<ContextStatus> {
 }
 
 export function compactSession(sessionId = ''): Promise<Record<string, unknown>> {
-  return callCapability('agent', 'compact_context', { session_id: sessionId });
+  return callCapability('agent', 'context', { action: 'compact', session_id: sessionId });
 }

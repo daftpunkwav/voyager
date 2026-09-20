@@ -29,9 +29,18 @@ class TestExtensionTools:
         )
         try:
             belt = _belt(app)
-            assert '"items"' in await belt.call(ToolCall("1", "list_plugins", {}))
-            assert await belt.call(ToolCall("2", "list_mcp_servers", {})) == "[]"
-            assert '"items"' in await belt.call(ToolCall("3", "list_user_hooks", {}))
+            assert (
+                '"items"'
+                in await belt.call(ToolCall("1", "extension", {"kind": "plugin", "action": "list"}))
+            )
+            assert (
+                await belt.call(ToolCall("2", "extension", {"kind": "mcp", "action": "list"}))
+                == "[]"
+            )
+            assert (
+                '"items"'
+                in await belt.call(ToolCall("3", "extension", {"kind": "hook", "action": "list"}))
+            )
         finally:
             app.close()
 
@@ -52,14 +61,14 @@ class TestExtensionTools:
                 return False
 
             belt = _belt(app, confirm=_deny)
-            for name, args in (
-                ("install_plugin", {"source_dir": str(tmp_path / "ws" / "nope")}),
-                ("uninstall_plugin", {"name": "nope"}),
+            for args in (
+                {"kind": "plugin", "action": "install", "source_dir": str(tmp_path / "ws" / "nope")},
+                {"kind": "plugin", "action": "uninstall", "name": "nope"},
             ):
-                out = await belt.call(ToolCall("1", name, args))
-                assert "[已取消]" not in out and "[需确认]" not in out, name
-                assert out, name  # handler-level error text for missing targets
-            out = await belt.call(ToolCall("2", "reload_user_hooks", {}))
+                out = await belt.call(ToolCall("1", "extension", args))
+                assert "[已取消]" not in out and "[需确认]" not in out, args
+                assert out, args  # handler-level error text for missing targets
+            out = await belt.call(ToolCall("2", "extension", {"kind": "hook", "action": "reload"}))
             assert "loaded" in out
             assert asked == []
         finally:

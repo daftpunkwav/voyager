@@ -25,13 +25,13 @@ class _FakeAsker(AskUser):
 def _tool_with(answers: list):
     gates = PlanGates()
     asker = _FakeAsker(answers)
-    tool = plan_tools(gates, asker)["exit_plan_mode"]
+    tool = plan_tools(gates, asker)["plan"]
     return gates, asker, tool.handler
 
 
 async def test_inactive_gate_refuses_submission() -> None:
     gates, _, handler = _tool_with([])
-    out = await handler(plan="# plan")
+    out = await handler(action="exit", plan="# plan")
     assert "未开启" in out
     assert gates.section_for("") == ""
 
@@ -39,7 +39,7 @@ async def test_inactive_gate_refuses_submission() -> None:
 async def test_approval_closes_gate_and_records_plan() -> None:
     gates, asker, handler = _tool_with(["批准执行"])
     gates.set("", True)
-    out = await handler(plan="# step 1")
+    out = await handler(action="exit", plan="# step 1")
     assert "批准" in out
     assert "# step 1" in out  # the plan text rides the result: it must stay
     # in the transcript for execution after the turn's history write-back
@@ -62,7 +62,7 @@ async def test_approval_persists_plan_into_instance_history() -> None:
     inst = SimpleNamespace(session="s1", history=[], _turn_messages=[{"role": "user"}])
     token = current_instance.set(inst)
     try:
-        await handler(plan="# step 1\n# step 2")
+        await handler(action="exit", plan="# step 1\n# step 2")
     finally:
         current_instance.reset(token)
     assert len(inst.history) == 1
@@ -82,7 +82,7 @@ async def test_approval_without_instance_still_records_gate_plan() -> None:
     try:
         gates, _asker, handler = _tool_with(["批准执行"])
         gates.set("", True)  # no live instance: the session falls back to ""
-        out = await handler(plan="# plan x")
+        out = await handler(action="exit", plan="# plan x")
         assert "批准" in out
         assert gates.for_session("").plan == "# plan x"
     finally:
@@ -92,7 +92,7 @@ async def test_approval_without_instance_still_records_gate_plan() -> None:
 async def test_rejection_keeps_gate_open_with_feedback() -> None:
     gates, _asker, handler = _tool_with(["继续计划", "第一段太多风险"])
     gates.set("", True)
-    out = await handler(plan="# risky plan")
+    out = await handler(action="exit", plan="# risky plan")
     assert "未批准" in out and "第一段太多风险" in out
     assert gates.for_session("").active is True  # still in review phase
 
@@ -100,7 +100,7 @@ async def test_rejection_keeps_gate_open_with_feedback() -> None:
 async def test_timeout_keeps_gate_open_without_feedback() -> None:
     gates, _, handler = _tool_with([None])  # reviewer never answered
     gates.set("", True)
-    out = await handler(plan="# plan")
+    out = await handler(action="exit", plan="# plan")
     assert "未批准" in out and "(无)" in out
     assert gates.for_session("").active is True
 

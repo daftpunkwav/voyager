@@ -1,6 +1,6 @@
-"""Tests for the LLM-facing context meta tools: context_status reads
-the executing instance's window facts, compact_context restructures the live
-transcript through the same editor engine the human path uses.
+"""Tests for the LLM-facing context tool: status reads the executing
+instance's window facts, compact restructures the live transcript through
+the same editor engine the human path uses.
 """
 
 import json
@@ -53,7 +53,7 @@ class TestContextTools:
         tools = context_tools()
         token = current_instance.set(inst)
         try:
-            outcome = await tools["context_status"].handler()
+            outcome = await tools["context"].handler(action="status")
         finally:
             current_instance.reset(token)
         assert outcome["window_tokens"] == 2_000
@@ -66,7 +66,7 @@ class TestContextTools:
         tools = context_tools()
         token = current_instance.set(inst)
         try:
-            outcome = await tools["compact_context"].handler()
+            outcome = await tools["context"].handler(action="compact")
         finally:
             current_instance.reset(token)
         assert outcome["mode"] == "plan"
@@ -77,12 +77,12 @@ class TestContextTools:
         tools = context_tools()
         token = current_instance.set(inst)
         try:
-            outcome = await tools["compact_context"].handler()
+            outcome = await tools["context"].handler(action="compact")
         finally:
             current_instance.reset(token)
         assert outcome["mode"] == "fallback"
 
     async def test_without_instance_returns_error(self) -> None:
         tools = context_tools()
-        assert "error" in await tools["context_status"].handler()
-        assert "error" in await tools["compact_context"].handler()
+        assert "error" in await tools["context"].handler(action="status")
+        assert "error" in await tools["context"].handler(action="compact")

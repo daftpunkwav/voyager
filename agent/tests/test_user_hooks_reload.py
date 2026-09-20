@@ -359,7 +359,12 @@ class TestCapabilityContract:
                 "a.json",
                 {"on": "note.created", "description": "u", "enabled": True},
             )
-            out = await execute(app.registry, "reload_user_hooks", USER_CTX, {})
+            out = await execute(
+            app.registry,
+            "extension",
+            USER_CTX,
+            {"kind": "hook", "action": "reload"},
+        )
             assert out == {"loaded": 1, "event_patterns": ["note.created"], "skipped": []}
             assert "note.created" in app.loop.patterns  # subscription sync already applied
         finally:
@@ -370,7 +375,12 @@ class TestCapabilityContract:
         the directory stays pinned, so no path can be smuggled in."""
         app = self._build(tmp_path)
         try:
-            out = await execute(app.registry, "reload_user_hooks", AGENT_CTX, {})
+            out = await execute(
+            app.registry,
+            "extension",
+            AGENT_CTX,
+            {"kind": "hook", "action": "reload"},
+        )
             assert set(out) >= {"loaded", "event_patterns", "skipped"}
         finally:
             app.memory.close()
@@ -379,24 +389,28 @@ class TestCapabilityContract:
         app = self._build(tmp_path)
         try:
             with pytest.raises(ServiceError) as exc:
-                await execute(app.registry, "reload_user_hooks", None, {})
+                await execute(
+            app.registry,
+            "extension",
+            None,
+            {"kind": "hook", "action": "reload"},
+        )
             assert exc.value.body.code == "CAPABILITY.AUTH_REQUIRED"
         finally:
             app.memory.close()
 
     async def test_no_path_parameter_accepted(self, tmp_path) -> None:
-        """The capability takes no path parameter; passing path-like arguments is rejected by the framework
-        (TypeError), so no arbitrary-path loading channel exists."""
+        """The hook reload action takes no path parameter: the hooks directory
+        is pinned at assembly time, so no arbitrary-path loading channel
+        exists (unknown kinds/actions are rejected by the dispatch)."""
         app = self._build(tmp_path)
         try:
-            params = inspect_capability_params(app, "reload_user_hooks")
-            assert params == set()  # no parameters at all besides the injected _actor
             with pytest.raises(TypeError):
                 await execute(
                     app.registry,
-                    "reload_user_hooks",
+                    "extension",
                     USER_CTX,
-                    {"path": str(tmp_path / "elsewhere")},
+                    {"kind": "hook", "action": "reload", "path": str(tmp_path / "elsewhere")},
                 )
         finally:
             app.memory.close()
@@ -409,7 +423,12 @@ class TestCapabilityContract:
         )
         app = self._build(tmp_path)
         try:
-            out = await execute(app.registry, "list_user_hooks", USER_CTX, {})
+            out = await execute(
+                app.registry,
+                "extension",
+                USER_CTX,
+                {"kind": "hook", "action": "list"},
+            )
             assert out == {
                 "items": [
                     {
@@ -471,7 +490,12 @@ class TestLiveLoopIntegration:
                 "u.json",
                 {"on": "note.created", "description": "user observed", "enabled": True},
             )
-            out = await execute(app.registry, "reload_user_hooks", USER_CTX, {})
+            out = await execute(
+            app.registry,
+            "extension",
+            USER_CTX,
+            {"kind": "hook", "action": "reload"},
+        )
             assert out["loaded"] == 1
             assert "note.created" in app.loop.patterns  # subscribed without a restart
             with caplog.at_level(logging.INFO, logger="agent.hooks.loader"):
@@ -496,7 +520,12 @@ class TestLiveLoopIntegration:
         try:
             assert "note.created" in app.loop.patterns  # subscribed by startup loading
             (hooks_dir / "u.json").unlink()
-            await execute(app.registry, "reload_user_hooks", USER_CTX, {})
+            await execute(
+            app.registry,
+            "extension",
+            USER_CTX,
+            {"kind": "hook", "action": "reload"},
+        )
             assert "note.created" not in app.loop.patterns  # unsubscribed
             with caplog.at_level(logging.INFO, logger="agent.hooks.loader"):
                 await bus.publish(Event(type="note.created", actor=LOCAL_USER, payload={}))
@@ -528,13 +557,23 @@ class TestLiveLoopIntegration:
                 "u.json",
                 {"on": "note.created", "description": "user observed", "enabled": True},
             )
-            await execute(app.registry, "reload_user_hooks", USER_CTX, {})
+            await execute(
+            app.registry,
+            "extension",
+            USER_CTX,
+            {"kind": "hook", "action": "reload"},
+        )
             assert app.hooks.registered() == {"on_event": 2}
             assert "note.created" in app.loop.patterns
             assert [s for s in app.hooks.sources if s.startswith("plugin:")] == plugin_sources
             # Delete the user file -> reload: the pattern is still kept because of the plugin
             (tmp_path / "ws" / "hooks" / "u.json").unlink()
-            await execute(app.registry, "reload_user_hooks", USER_CTX, {})
+            await execute(
+            app.registry,
+            "extension",
+            USER_CTX,
+            {"kind": "hook", "action": "reload"},
+        )
             assert app.hooks.registered() == {"on_event": 1}
             assert "note.created" in app.loop.patterns
             # Revoke the plugin: with nobody wanting it, the pattern finally exits

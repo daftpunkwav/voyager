@@ -50,8 +50,16 @@ const SERVER = {
 function backend(overrides: Record<string, unknown> = {}) {
   return (_domain: string, name: string, args: Record<string, unknown>) => {
     switch (name) {
-      case 'list_mcp_servers':
-        return Promise.resolve(overrides.list_mcp_servers ?? [{ ...SERVER, ...overrides.server }]);
+      case 'extension':
+        if (args.kind === 'mcp' && args.action === 'list') {
+          return Promise.resolve(
+            overrides.list_mcp_servers ?? [{ ...SERVER, ...overrides.server }]
+          );
+        }
+        if (args.kind === 'mcp' && args.action === 'preview') {
+          return Promise.resolve({ id: args.id, preview: SERVER.preview });
+        }
+        return Promise.resolve({});
       case 'add_mcp_server':
         return Promise.resolve({ ok: true, id: args.id, connected: true, error: '', preview: [] });
       case 'approve_mcp_tools':
@@ -62,8 +70,6 @@ function backend(overrides: Record<string, unknown> = {}) {
         });
       case 'remove_mcp_server':
         return Promise.resolve({ ok: true });
-      case 'preview_mcp_tools':
-        return Promise.resolve({ id: args.id, preview: SERVER.preview });
       default:
         return Promise.resolve({});
     }
@@ -94,11 +100,14 @@ beforeAll(() => {
 });
 
 describe('settings page external MCP', () => {
-  it('mounts with list_mcp_servers and renders the name/unapproved chip; no getApi()', async () => {
+  it('mounts with extension(mcp list) and renders the name/unapproved chip; no getApi()', async () => {
     renderBlock(backend());
     await waitFor(() => expect(screen.getByText('My Search')).toBeTruthy());
     expect(screen.getByText('未批准')).toBeTruthy();
-    expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'list_mcp_servers', {});
+    expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'extension', {
+      kind: 'mcp',
+      action: 'list',
+    });
     expect(getApiMock).not.toHaveBeenCalled();
   });
 
@@ -172,14 +181,16 @@ describe('settings page external MCP', () => {
     );
   });
 
-  it('"refresh tool list" → preview_mcp_tools', async () => {
+  it('"refresh tool list" → extension(mcp preview)', async () => {
     renderBlock(backend());
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '刷新工具列表 My Search' })).toBeTruthy()
     );
     fireEvent.click(screen.getByRole('button', { name: '刷新工具列表 My Search' }));
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'preview_mcp_tools', {
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'extension', {
+        kind: 'mcp',
+        action: 'preview',
         id: 'my-search',
       })
     );

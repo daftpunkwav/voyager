@@ -67,7 +67,7 @@ TOOL_CLASS: dict[str, str] = {
     "scratchpad": CLASS_R,
     "goal_read": CLASS_R,
     "goal_write": CLASS_R,
-    "exit_plan_mode": CLASS_R,
+    "plan": CLASS_R,
     # context window
     "context_status": CLASS_R,
     "compact_context": CLASS_R,
@@ -89,9 +89,8 @@ TOOL_CLASS: dict[str, str] = {
     "memory.remember": CLASS_D,
     "memory.forget": CLASS_D,
     "memory.clear": CLASS_D,
-    # skills
-    "load_skill": CLASS_R,
-    "propose_skill": CLASS_R,
+    # skills (aggregated; propose lands in the loader-indexed library)
+    "skill": CLASS_R,
     # extension: lists/previews R, lifecycle D
     "list_plugins": CLASS_R,
     "install_plugin": CLASS_D,
