@@ -12,11 +12,11 @@ scripts win.
   the repo is a uv workspace with every member installed editable (`uv sync`
   also installs ruff, mypy, pytest, and import-linter).
 - Node ≥ 20.11 (`.nvmrc`: 20) and npm 10 workspaces (`apps/*`).
-- Configure the repo-root `.env` (never committed; a pre-commit hook blocks
-  it). `SECRETS_ENCRYPTION_KEY` (or the fallback name `SECRET_KEY`) must be a
-  long random string — the documented sample values are rejected. Backend
-  environment variables are documented in `.env.example`; a few frontend-only
-  variables (`VITE_API_TARGET`, `E2E_PORT`) are read from the shell instead.
+- Configure the repo-root `.env` (never committed). `SECRETS_ENCRYPTION_KEY`
+  (or the fallback name `SECRET_KEY`) must be a long random string — the
+  documented sample values are rejected. Backend environment variables are
+  documented in `.env.example`; a few frontend-only variables
+  (`VITE_API_TARGET`, `E2E_PORT`) are read from the shell instead.
 - Start everything with `uv run python -m host.dev` (gateway on 8000, Vite on
   5173). See [docs/development.md](docs/development.md) for the per-process
   variants.

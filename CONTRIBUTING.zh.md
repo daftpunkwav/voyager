@@ -8,7 +8,7 @@
 
 - Python 3.11(`.python-version`),使用 [uv](https://docs.astral.sh/uv/) 管理;仓库是 uv workspace,所有成员以 editable 方式安装(`uv sync` 同时安装 ruff、mypy、pytest、import-linter)。
 - Node ≥ 20.11(`.nvmrc`:20)与 npm 10 workspaces(`apps/*`)。
-- 配置仓库根的 `.env`(绝不提交;pre-commit 钩子会拦截)。`SECRETS_ENCRYPTION_KEY`(或后备名 `SECRET_KEY`)必须是一串足够长的随机字符串 —— 文档中的示例值会被拒绝。后端环境变量记录在 `.env.example`;少数仅前端的变量(`VITE_API_TARGET`、`E2E_PORT`)从 shell 环境读取。
+- 配置仓库根的 `.env`(绝不提交)。`SECRETS_ENCRYPTION_KEY`(或后备名 `SECRET_KEY`)必须是一串足够长的随机字符串 —— 文档中的示例值会被拒绝。后端环境变量记录在 `.env.example`;少数仅前端的变量(`VITE_API_TARGET`、`E2E_PORT`)从 shell 环境读取。
 - 一条命令启动全部:`uv run python -m host.dev`(gateway 8000,Vite 5173)。分进程启动方式见 [docs/development.zh.md](docs/development.zh.md)。
 
 ## 工作流

@@ -31,8 +31,6 @@
 | `npm run gate` | `gate:py && gate:web` |
 | `npm run eval` | agent eval 套件(`agent/tests/eval`,真模型需环境变量门控);`eval:update` 重录基线 |
 
-预提交(husky + lint-staged)对 `apps/web/src/**/*.{ts,tsx}` 格式化与 lint,并阻止提交 `.env`/`.env.local`。
-
 ## 约定
 
 - 提交主题:`<type>(<scope>): <subject>`,type ∈ `feat/fix/refactor/chore/docs/test/perf`。

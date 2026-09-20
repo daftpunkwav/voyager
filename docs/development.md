@@ -31,8 +31,6 @@ Toolchain, startup, and repository conventions.
 | `npm run gate` | `gate:py && gate:web` |
 | `npm run eval` | agent eval suite (`agent/tests/eval`), env-gated for real models; `eval:update` re-records the baseline |
 
-Pre-commit (husky + lint-staged) formats and lints `apps/web/src/**/*.{ts,tsx}` and blocks committing `.env`/`.env.local`.
-
 ## Conventions
 
 - Commit subjects: `<type>(<scope>): <subject>` with type ∈ `feat/fix/refactor/chore/docs/test/perf`.

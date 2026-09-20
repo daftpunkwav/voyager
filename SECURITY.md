@@ -48,5 +48,5 @@ Security-relevant surfaces, in rough priority order:
   `workdir.py`): path containment for the agent's file and shell tools.
 
 Findings outside the surfaces above are equally welcome. Secret hygiene note:
-`.env` files are blocked from committing by a pre-commit hook; if real key
-material ever lands in the tree, rotate it regardless of removal.
+never commit `.env` files; if real key material ever lands in the tree, rotate
+it regardless of removal.
