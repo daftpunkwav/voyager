@@ -61,19 +61,19 @@ function backend(_domain: string, name: string, args: Record<string, unknown>) {
       ]);
     case 'subagent':
       if (args.action === 'list') return Promise.resolve({ definitions, running: [] });
-    if (args.action === 'register') {
-      registered.push(args);
-      definitions = [
-        ...definitions.filter((d) => d.name !== args.name),
-        { ...(definitions.find((d) => d.name === args.name) ?? makeDef(0)), ...args },
-      ];
+      if (args.action === 'register') {
+        registered.push(args);
+        definitions = [
+          ...definitions.filter((d) => d.name !== args.name),
+          { ...(definitions.find((d) => d.name === args.name) ?? makeDef(0)), ...args },
+        ];
         return Promise.resolve({ name: args.name });
       }
-    if (args.action === 'unregister') {
-      deleted.push(String(args.name));
-      definitions = definitions.filter((d) => d.name !== args.name);
-      return Promise.resolve({ deleted: args.name });
-    }
+      if (args.action === 'unregister') {
+        deleted.push(String(args.name));
+        definitions = definitions.filter((d) => d.name !== args.name);
+        return Promise.resolve({ deleted: args.name });
+      }
     default:
       return Promise.resolve({});
   }
@@ -139,9 +139,10 @@ describe('settings subagents section (roster)', () => {
         'agent',
         'subagent',
         expect.objectContaining({
-            action: 'register',
-          name: 'scout', enabled: false
-          })
+          action: 'register',
+          name: 'scout',
+          enabled: false,
+        })
       )
     );
   });
@@ -180,14 +181,14 @@ describe('settings subagents section (create/edit dialog)', () => {
         'agent',
         'subagent',
         expect.objectContaining({
-            action: 'register',
+          action: 'register',
           name: 'repo_scout',
           description: 'scans repos',
           mode: 'react',
           persona: '',
           enabled: true,
           readonly: false,
-          })
+        })
       )
     );
   });
@@ -212,10 +213,10 @@ describe('settings subagents section (create/edit dialog)', () => {
         'agent',
         'subagent',
         expect.objectContaining({
-            action: 'register',
+          action: 'register',
           name: 'reader',
           allowed_tools: ['notes__create_note'],
-          })
+        })
       )
     );
   });
@@ -243,9 +244,10 @@ describe('settings subagents section (create/edit dialog)', () => {
         'agent',
         'subagent',
         expect.objectContaining({
-            action: 'register',
-          name: 'scout', description: 'old description'
-          })
+          action: 'register',
+          name: 'scout',
+          description: 'old description',
+        })
       )
     );
   });

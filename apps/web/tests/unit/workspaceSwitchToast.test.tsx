@@ -68,18 +68,30 @@ describe('workspace.switched → toast + revision bump', () => {
   it('skips the toast for its own echo (marker match) but still bumps', () => {
     render(<HookProbe />);
     useChatStore.setState({ workspaceSwitchMarker: 'tab-1' });
-    handler()({ seq: 1, type: 'workspace.switched', payload: { workspace: 'ws2', marker: 'tab-1' } });
+    handler()({
+      seq: 1,
+      type: 'workspace.switched',
+      payload: { workspace: 'ws2', marker: 'tab-1' },
+    });
     expect(useUIStore.getState().toasts).toHaveLength(0);
     expect(useChatStore.getState().workspaceRev).toBe(1);
     // The marker is consumed: a later foreign switch toasts again.
-    handler()({ seq: 2, type: 'workspace.switched', payload: { workspace: 'ws3', marker: 'tab-1' } });
+    handler()({
+      seq: 2,
+      type: 'workspace.switched',
+      payload: { workspace: 'ws3', marker: 'tab-1' },
+    });
     expect(useUIStore.getState().toasts).toHaveLength(1);
   });
 
   it('toasts when the marker belongs to another tab', () => {
     render(<HookProbe />);
     useChatStore.setState({ workspaceSwitchMarker: 'tab-1' });
-    handler()({ seq: 1, type: 'workspace.switched', payload: { workspace: 'ws2', marker: 'tab-2' } });
+    handler()({
+      seq: 1,
+      type: 'workspace.switched',
+      payload: { workspace: 'ws2', marker: 'tab-2' },
+    });
     expect(useUIStore.getState().toasts).toHaveLength(1);
     expect(useChatStore.getState().workspaceSwitchMarker).toBe('tab-1');
   });

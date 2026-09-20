@@ -11,7 +11,13 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
-import { deleteSubagent, listPersonas, listSubagents, listTools, registerSubagent } from '@/api/agent';
+import {
+  deleteSubagent,
+  listPersonas,
+  listSubagents,
+  listTools,
+  registerSubagent,
+} from '@/api/agent';
 import { useUIStore } from '@/stores/uiStore';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
@@ -72,8 +78,7 @@ export function SubagentsSection() {
     const q = search.trim().toLowerCase();
     if (!q) return definitions ?? [];
     return (definitions ?? []).filter(
-      (d) =>
-        d.name.toLowerCase().includes(q) || (d.description ?? '').toLowerCase().includes(q)
+      (d) => d.name.toLowerCase().includes(q) || (d.description ?? '').toLowerCase().includes(q)
     );
   }, [definitions, search]);
 
@@ -186,12 +191,26 @@ export function SubagentsSection() {
               aria-label={t('team:mgr.refresh')}
               onClick={() => void load()}
             >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <svg
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
                 <path d="M21 12a9 9 0 1 1-2.64-6.36" />
                 <path d="M21 3v6h-6" />
               </svg>
             </button>
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => void openCreate()}>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => void openCreate()}
+            >
               + {t('team:mgr.create')}
             </button>
           </>
@@ -213,7 +232,10 @@ export function SubagentsSection() {
           {visible.map((d) => {
             const enabled = d.enabled ?? true;
             return (
-              <li key={d.name} className={`settings-row entity-row${enabled ? '' : ' is-disabled'}`}>
+              <li
+                key={d.name}
+                className={`settings-row entity-row${enabled ? '' : ' is-disabled'}`}
+              >
                 <span className="entity-icon" style={{ '--h': nameHue(d.name) } as CSSProperties}>
                   {d.name.slice(0, 1).toUpperCase()}
                 </span>
@@ -251,7 +273,17 @@ export function SubagentsSection() {
                     disabled={busyName === d.name}
                     onClick={() => setDeleteTarget(d)}
                   >
-                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="15"
+                      height="15"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                    >
                       <path d="M3 6h18" />
                       <path d="M8 6V4h8v2" />
                       <path d="M6 6l1 14h10l1-14" />
@@ -265,11 +297,7 @@ export function SubagentsSection() {
       )}
 
       {hiddenCount > 0 && (
-        <button
-          type="button"
-          className="settings-rows__more"
-          onClick={() => setExpanded(true)}
-        >
+        <button type="button" className="settings-rows__more" onClick={() => setExpanded(true)}>
           {t('team:mgr.showAll', { n: hiddenCount })}
         </button>
       )}

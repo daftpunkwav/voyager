@@ -6,3 +6,6 @@ coverage/
 screenshots/
 preview.log
 tsconfig.tsbuildinfo
+# Vendored third-party bundles (committed as-is; formatting them would only
+# create diff noise against upstream)
+public/vendor/

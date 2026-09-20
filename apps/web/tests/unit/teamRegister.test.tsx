@@ -287,7 +287,9 @@ describe('instance emergency stop (phase-07)', () => {
     await waitFor(() => expect(useChatStore.getState().thinking).toBe(false));
     await waitFor(() =>
       expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'agent_instance', {
-        action: 'cancel', id_or_name: 'chat' })
+        action: 'cancel',
+        id_or_name: 'chat',
+      })
     );
     expect(useChatStore.getState().messages).toHaveLength(0);
     expect(useUIStore.getState().toasts.some((t) => t.message.includes('对话主实例'))).toBe(true);

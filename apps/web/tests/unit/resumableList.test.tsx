@@ -130,8 +130,10 @@ describe('resumable task list (phase-70 A)', () => {
     // clicking the disabled button does not trigger agent_instance(resume)
     fireEvent.click(btn);
     expect(
-        callCapabilityMock.mock.calls.some((c) => c[1] === 'agent_instance' && c[2]?.action === 'resume')
-      ).toBe(false);
+      callCapabilityMock.mock.calls.some(
+        (c) => c[1] === 'agent_instance' && c[2]?.action === 'resume'
+      )
+    ).toBe(false);
     // abandon is unaffected (phase-70 semantics: stop the instance + delete the checkpoint)
     fireEvent.click(screen.getByRole('button', { name: '放弃' }));
     await waitFor(() =>
@@ -149,7 +151,9 @@ describe('resumable task list (phase-70 A)', () => {
     fireEvent.click(await screen.findByRole('button', { name: '放弃' }));
 
     expect(
-      callCapabilityMock.mock.calls.some((c) => c[1] === 'agent_instance' && c[2]?.action === 'abandon')
+      callCapabilityMock.mock.calls.some(
+        (c) => c[1] === 'agent_instance' && c[2]?.action === 'abandon'
+      )
     ).toBe(false);
     expect(screen.getByText('scout')).toBeTruthy();
   });
