@@ -52,6 +52,9 @@ export function GlassSelect({
 }: GlassSelectProps) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<MenuPos | null>(null);
+  // The menu flips above its trigger when the space below runs out; the scale
+  // entrance must grow from the edge facing the trigger (transform-origin)
+  const [flipped, setFlipped] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
   const listId = useId();
@@ -73,6 +76,7 @@ export function GlassSelect({
       const below = r.bottom + 6;
       const top =
         below + menuH > window.innerHeight - 8 && r.top > menuH + 8 ? r.top - menuH - 6 : below;
+      setFlipped(top !== below);
       setPos({ top, left, width });
     };
     place();
@@ -106,7 +110,7 @@ export function GlassSelect({
     open && pos ? (
       <ul
         ref={menuRef}
-        className="glass-select-menu glass-select-menu--portal"
+        className={`glass-select-menu glass-select-menu--portal${flipped ? ' is-flipped' : ''}`}
         id={listId}
         role="listbox"
         style={{ top: pos.top, left: pos.left, width: pos.width }}

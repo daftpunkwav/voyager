@@ -1243,8 +1243,11 @@ a.chat-card:hover {
 }
 .chat-card__fill {
   height: 100%;
+  width: 100%;
   background: var(--brand-500);
-  transition: width 0.3s var(--ease);
+  transform: scaleX(var(--fill, 0));
+  transform-origin: left;
+  transition: transform 240ms var(--ease);
 }
 /* Composer: one rounded card holding the textarea and the bottom bar
    (context ring / model / reasoning / send), shared with the floating window.
@@ -1531,8 +1534,11 @@ a.chat-card:hover {
 }
 .ctx-ring__fill {
   height: 100%;
+  width: 100%;
   border-radius: 999px;
-  transition: width 0.3s var(--ease);
+  transform: scaleX(var(--fill, 0));
+  transform-origin: left;
+  transition: transform 240ms var(--ease);
 }
 .ctx-ring__mark {
   position: absolute;

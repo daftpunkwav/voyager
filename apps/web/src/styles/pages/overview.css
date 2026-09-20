@@ -789,8 +789,12 @@
 }
 .progress-row .fill {
   height: 100%;
+  width: 100%;
   border-radius: var(--radius-pill);
-  transition: width 450ms var(--ease-apple);
+  /* scaleX keeps the animation on the compositor: width would reflow per frame */
+  transform: scaleX(var(--fill, 0));
+  transform-origin: left;
+  transition: transform 280ms var(--ease-apple);
 }
 /* Aligned with the progress-pill semantic colors */
 .fill-none {
@@ -826,16 +830,18 @@
   position: relative;
   isolation: isolate;
 }
-.panel-activity .activity-item.liquid-glass--interactive:hover,
-.panel-recommend .project-item.liquid-glass--interactive:hover,
-.panel-notes .note-item.liquid-glass--interactive:hover,
-.trending-section .trending-card.liquid-glass--interactive.is-visible:hover {
-  box-shadow:
-    0 4px 14px rgba(15, 23, 42, 0.07),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.1),
-    inset 0 0 2px 1px rgba(255, 255, 255, 0.1);
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .panel-activity .activity-item.liquid-glass--interactive:hover,
+  .panel-recommend .project-item.liquid-glass--interactive:hover,
+  .panel-notes .note-item.liquid-glass--interactive:hover,
+  .trending-section .trending-card.liquid-glass--interactive.is-visible:hover {
+    box-shadow:
+      0 4px 14px rgba(15, 23, 42, 0.07),
+      inset 0 1px 0 rgba(255, 255, 255, 0.5),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.1),
+      inset 0 0 2px 1px rgba(255, 255, 255, 0.1);
+    transform: translateY(-1px);
+  }
 }
 .panel-activity .activity-item.glass-card--overview-inner > *,
 .panel-recommend .project-item.glass-card--overview-inner > *,
@@ -853,15 +859,17 @@
     inset 0 -1px 0 rgba(255, 255, 255, 0.06),
     inset 0 0 2px 1px rgba(255, 255, 255, 0.04);
 }
-[data-theme='dark'] .panel-activity .activity-item.liquid-glass--interactive:hover,
-[data-theme='dark'] .panel-recommend .project-item.liquid-glass--interactive:hover,
-[data-theme='dark'] .panel-notes .note-item.liquid-glass--interactive:hover,
-[data-theme='dark'] .trending-section .trending-card.liquid-glass--interactive.is-visible:hover {
-  box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
-    inset 0 0 2px 1px rgba(255, 255, 255, 0.04);
+@media (hover: hover) and (pointer: fine) {
+  [data-theme='dark'] .panel-activity .activity-item.liquid-glass--interactive:hover,
+  [data-theme='dark'] .panel-recommend .project-item.liquid-glass--interactive:hover,
+  [data-theme='dark'] .panel-notes .note-item.liquid-glass--interactive:hover,
+  [data-theme='dark'] .trending-section .trending-card.liquid-glass--interactive.is-visible:hover {
+    box-shadow:
+      0 4px 14px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.06),
+      inset 0 0 2px 1px rgba(255, 255, 255, 0.04);
+  }
 }
 .panel-activity .activity-item {
   flex-shrink: 0;
@@ -968,14 +976,26 @@
   filter: blur(4px);
   transition-delay: 0.02s;
 }
-.project-item:hover .project-desc,
+@media (hover: hover) and (pointer: fine) {
+  .project-item:hover .project-desc {
+    opacity: 0;
+    transform: translateY(-6px);
+    filter: blur(3px);
+    transition-delay: 0s;
+  }
+  .project-item:hover .project-reason {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+    transition-delay: 0.08s;
+  }
+}
 .project-item:focus-visible .project-desc {
   opacity: 0;
   transform: translateY(-6px);
   filter: blur(3px);
   transition-delay: 0s;
 }
-.project-item:hover .project-reason,
 .project-item:focus-visible .project-reason {
   opacity: 1;
   transform: translateY(0);
@@ -1132,8 +1152,10 @@
   color: inherit;
   transition: transform 0.2s var(--ease);
 }
-.agent-carousel-card:hover {
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .agent-carousel-card:hover {
+    transform: translateY(-1px);
+  }
 }
 /* Mid layer · glass panel */
 .agent-card-glass {
@@ -1224,8 +1246,10 @@
   filter: drop-shadow(0 3px 8px rgba(15, 23, 42, 0.1));
   transition: transform 0.2s var(--ease-apple);
 }
-.agent-carousel-card:hover .agent-character {
-  transform: scale(1.04);
+@media (hover: hover) and (pointer: fine) {
+  .agent-carousel-card:hover .agent-character {
+    transform: scale(1.04);
+  }
 }
 .agent-head .agent-eye-pupil {
   transition: transform 0.28s var(--ease);
@@ -1434,8 +1458,10 @@
   opacity: 1;
   transform: translateX(0);
 }
-.trending-card.is-visible:hover {
-  transform: translateY(-2px);
+@media (hover: hover) and (pointer: fine) {
+  .trending-card.is-visible:hover {
+    transform: translateY(-2px);
+  }
 }
 .trending-rank {
   flex-shrink: 0;
@@ -1564,10 +1590,10 @@
   pointer-events: none;
 }
 .trending-scout-spot--visible {
-  animation: trending-scout-in 0.38s var(--ease-spring) both;
+  animation: trending-scout-in 0.24s var(--ease-spring) both;
 }
 .trending-scout-spot--leaving {
-  animation: trending-scout-out 0.38s var(--ease) both;
+  animation: trending-scout-out 0.18s var(--ease) both;
 }
 @keyframes trending-scout-in {
   from {

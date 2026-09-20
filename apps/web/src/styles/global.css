@@ -31,12 +31,16 @@ a {
     border-color var(--dur-base, 250ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) !important,
     background-color var(--dur-base, 250ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) !important;
 }
-.glass-card--panel:hover,
-.glass-card--panel-clear:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    0 12px 32px -8px rgba(0, 0, 0, 0.1),
-    0 4px 12px -4px rgba(0, 0, 0, 0.06) !important;
+/* Touch devices fire :hover on tap and leave it stuck: transform hovers are
+   gated to real pointers (see liquid-glass.css for the same pattern) */
+@media (hover: hover) and (pointer: fine) {
+  .glass-card--panel:hover,
+  .glass-card--panel-clear:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 12px 32px -8px rgba(0, 0, 0, 0.1),
+      0 4px 12px -4px rgba(0, 0, 0, 0.06) !important;
+  }
 }
 
 /* ---------- List item fade-in (global) ---------- */
@@ -127,11 +131,6 @@ a {
   font-size: 13px;
   color: var(--text-500);
   font-weight: 500;
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 /* Toast visuals and entrance live in design-system.css; .toast / toast-in are not redefined here to avoid late-loaded overrides breaking centering */
@@ -365,6 +364,10 @@ a {
   /* Menus anchor below their trigger: scale grows from that edge, not center */
   transform-origin: top;
   animation: popIn var(--dur-fast, 150ms) var(--ease-apple) both;
+}
+/* Flipped menus open above the trigger: grow from the edge facing it */
+.glass-select-menu.is-flipped {
+  transform-origin: bottom;
 }
 /* Menu items cascade in with a short stagger; must never block interaction */
 .glass-select-item,
@@ -624,11 +627,13 @@ a {
   }
 }
 .float-dot {
-  animation: floatIn var(--dur-slow, 350ms) var(--ease-spring) both;
+  animation: floatIn 280ms var(--ease-spring) both;
 }
-.float-dot:hover {
-  transform: translateY(-2px) scale(1.05);
-  box-shadow: 0 6px 20px rgba(0, 122, 255, 0.4);
+@media (hover: hover) and (pointer: fine) {
+  .float-dot:hover {
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 6px 20px rgba(0, 122, 255, 0.4);
+  }
 }
 .float-panel {
   animation: sheetIn var(--dur-base, 250ms) var(--ease-spring) both;

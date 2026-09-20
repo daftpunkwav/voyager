@@ -798,11 +798,6 @@
   border-radius: var(--radius-pill);
   animation: spin 0.8s linear infinite;
 }
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 
 /* ---------- About section ---------- */
 .about-row {
@@ -1364,16 +1359,6 @@
 }
 .llm-model-row__result.is-fail {
   color: var(--error);
-}
-@keyframes llm-verdict-in {
-  from {
-    opacity: 0;
-    transform: translateY(2px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 /* In-flight state of the per-model test button: the spinner replaces the icon
    inside the same 28px hit target, so the row never reflows. */

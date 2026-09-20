@@ -15,7 +15,9 @@
 .notes-index {
   --notes-tr-fast: 150ms;
   --notes-tr-base: 220ms;
-  --notes-tr-slow: 380ms;
+  /* Drives the density/font-size layout transitions: long enough to read as
+     one change, short enough to keep the per-frame reflow cheap */
+  --notes-tr-slow: 240ms;
   --notes-ease: var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1));
   --notes-bulk-ms: 420ms;
   --notes-card-h: 212px;
@@ -309,7 +311,6 @@
   overflow: hidden;
   display: flex;
   padding-left: 0;
-  transition: padding-left 0.42s var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1));
 }
 .notes-rail-allslot.is-open .notes-rail-allslot__inner {
   padding-left: 8px;
@@ -321,7 +322,7 @@
   transform: translateX(-10px);
   transition:
     opacity 0.28s var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) 0.08s,
-    transform 0.4s var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) 0.04s;
+    transform 0.24s var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) 0.04s;
 }
 .notes-rail-allslot.is-open .notes-rail-all {
   opacity: 1;
@@ -590,10 +591,17 @@
   padding: 6px 8px;
   border-radius: 8px;
   cursor: pointer;
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease),
+    transform 0.12s var(--ease);
 }
 .notes-bulk__btn:hover {
   background: rgba(0, 122, 255, 0.08);
   color: var(--brand-600);
+}
+.notes-bulk__btn:active {
+  transform: scale(0.97);
 }
 .notes-bulk__btn.is-danger {
   color: var(--error, #ff3b30);
@@ -2397,8 +2405,10 @@
   transition: transform var(--dur-fast, 150ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1));
 }
 
-.md-img:hover {
-  transform: scale(1.015);
+@media (hover: hover) and (pointer: fine) {
+  .md-img:hover {
+    transform: scale(1.015);
+  }
 }
 
 .md-wiki-link {

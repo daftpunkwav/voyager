@@ -312,10 +312,14 @@
     box-shadow 0.2s var(--ease);
 }
 
-.liquid-glass--interactive:hover,
-.glass-hover:hover {
-  transform: translateY(-1px);
-  --lg-shadow-outer: 0 10px 36px rgba(0, 0, 0, 0.12);
+/* Touch devices fire :hover on tap and leave it stuck: transform/displacement
+   hovers are gated to real pointers only (color-only hovers are harmless) */
+@media (hover: hover) and (pointer: fine) {
+  .liquid-glass--interactive:hover,
+  .glass-hover:hover {
+    transform: translateY(-1px);
+    --lg-shadow-outer: 0 10px 36px rgba(0, 0, 0, 0.12);
+  }
 }
 
 .liquid-glass--brand.liquid-glass--interactive:hover,

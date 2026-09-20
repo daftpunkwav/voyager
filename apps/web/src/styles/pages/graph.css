@@ -2146,8 +2146,10 @@ body:has(.code-graph-page) {
   filter: drop-shadow(0 6px 16px rgba(0, 122, 255, 0.28));
   transition: transform 0.18s var(--ease, ease);
 }
-.atlas-scout__fab:hover {
-  transform: translateY(-2px) scale(1.03);
+@media (hover: hover) and (pointer: fine) {
+  .atlas-scout__fab:hover {
+    transform: translateY(-2px) scale(1.03);
+  }
 }
 .atlas-scout.is-open .atlas-scout__fab {
   filter: drop-shadow(0 8px 20px rgba(0, 122, 255, 0.4));

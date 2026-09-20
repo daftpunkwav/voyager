@@ -32,11 +32,15 @@
   transition:
     border-color 0.18s var(--ease),
     box-shadow 0.18s var(--ease),
-    background 0.18s var(--ease);
+    background 0.18s var(--ease),
+    transform 0.12s var(--ease);
 }
 /* Neutral hover/focus like .field: blue stays reserved for selection */
 .glass-select-trigger:hover {
   border-color: rgba(0, 0, 0, 0.2);
+}
+.glass-select-trigger:active:not(:disabled) {
+  transform: scale(0.98);
 }
 .glass-select-trigger:disabled {
   opacity: 0.55;

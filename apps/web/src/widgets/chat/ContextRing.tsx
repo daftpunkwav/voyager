@@ -9,6 +9,7 @@
  * never blocks composing.
  */
 
+import type { CSSProperties } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { type ContextStatus, getContextStatus } from '@/api/agent';
@@ -163,7 +164,10 @@ export function ContextRing() {
                 ))}
               </ul>
               <div className="ctx-ring__bar">
-                <div className="ctx-ring__fill" style={{ width: `${pct}%`, background: tone }} />
+                <div
+                  className="ctx-ring__fill"
+                  style={{ '--fill': pct / 100, background: tone } as CSSProperties}
+                />
                 <div
                   className="ctx-ring__mark"
                   style={{ left: `${status.auto_compact_at_pct}%` }}

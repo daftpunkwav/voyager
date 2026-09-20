@@ -8,6 +8,7 @@
  * children, so the panel never has to import from the message timeline.
  */
 
+import type { CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '@/stores/chatStore';
@@ -40,7 +41,7 @@ export function TaskCards() {
             <div className="chat-card__bar">
               <div
                 className="chat-card__fill"
-                style={{ width: `${Math.round(c.progress * 100)}%` }}
+                style={{ '--fill': Math.round(c.progress * 100) / 100 } as CSSProperties}
               />
             </div>
           </>

@@ -22,7 +22,7 @@ import { asSSETextDelta } from '@/utils/sseTextDelta';
 /** Delay before the spotlight starts disappearing after all trending cards are left. */
 export const TRENDING_SCOUT_LEAVE_DELAY_MS = 3000;
 /** Must match the CSS transition duration. */
-export const TRENDING_SCOUT_HIDE_ANIM_MS = 380;
+export const TRENDING_SCOUT_HIDE_ANIM_MS = 180;
 
 export type TrendingSpotlightPhase = 'hidden' | 'visible' | 'leaving';
 

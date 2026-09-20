@@ -12,6 +12,7 @@
  * - Skip the progress bar entirely when the quota is unlimited
  */
 
+import type { CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { getResourceQuota } from '@/api/agent';
@@ -84,7 +85,10 @@ export function DailyTokenQuotaCard() {
               aria-valuenow={Math.round(pct)}
               aria-label={t('usage:quota.barAria')}
             >
-              <div className="usage-quota-bar-fill" style={{ width: `${pct}%` }} />
+              <div
+                className="usage-quota-bar-fill"
+                style={{ '--fill': pct / 100 } as CSSProperties}
+              />
             </div>
           ) : null}
           <p className="muted usage-quota-note">

@@ -138,9 +138,12 @@
 
 .usage-quota-bar-fill {
   height: 100%;
+  width: 100%;
   border-radius: inherit;
   background: var(--brand-500);
-  transition: width 0.3s ease;
+  transform: scaleX(var(--fill, 0));
+  transform-origin: left;
+  transition: transform 240ms ease;
 }
 
 .usage-quota-bar.is-warning .usage-quota-bar-fill {

@@ -74,9 +74,11 @@
     box-shadow var(--dur-fast, 150ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1));
 }
 
-.source-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.14);
+@media (hover: hover) and (pointer: fine) {
+  .source-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.14);
+  }
 }
 
 .source-card__top {

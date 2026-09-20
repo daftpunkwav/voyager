@@ -1229,7 +1229,7 @@ svg {
 }
 .empty-state > * {
   position: relative;
-  animation: emptyStateIn 320ms var(--ease-apple) both;
+  animation: emptyStateIn 280ms var(--ease-apple) both;
 }
 .empty-state > :nth-child(2) {
   animation-delay: 60ms;
@@ -1351,14 +1351,16 @@ svg {
   color: #fff;
   box-shadow: var(--shadow-hairline, 0 1px 2px rgba(0, 0, 0, 0.04));
 }
-.btn-primary:hover {
-  background: var(--brand-600);
-  transform: translateY(-1px);
-  box-shadow: var(
-    --shadow-card-hover,
-    0 4px 8px -2px rgba(0, 0, 0, 0.06),
-    0 2px 4px -2px rgba(0, 0, 0, 0.05)
-  );
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:hover {
+    background: var(--brand-600);
+    transform: translateY(-1px);
+    box-shadow: var(
+      --shadow-card-hover,
+      0 4px 8px -2px rgba(0, 0, 0, 0.06),
+      0 2px 4px -2px rgba(0, 0, 0, 0.05)
+    );
+  }
 }
 .btn-primary:active {
   background: var(--brand-700);
@@ -1404,11 +1406,13 @@ svg {
     0 2px 8px rgba(255, 59, 48, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
-.btn-danger:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    0 4px 14px rgba(255, 59, 48, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+@media (hover: hover) and (pointer: fine) {
+  .btn-danger:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 4px 14px rgba(255, 59, 48, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
 }
 
 /* Sizes */
@@ -1501,12 +1505,14 @@ svg {
     box-shadow 0.2s var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)),
     border-color 0.2s var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1));
 }
-.card-hover:hover {
-  transform: translateY(-3px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    var(--shadow-lg);
-  border-color: rgba(0, 122, 255, 0.4);
+@media (hover: hover) and (pointer: fine) {
+  .card-hover:hover {
+    transform: translateY(-3px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.6),
+      var(--shadow-lg);
+    border-color: rgba(0, 122, 255, 0.4);
+  }
 }
 
 /* ==========================================================================
@@ -2603,24 +2609,29 @@ textarea.field {
 }
 
 /* Skeleton shimmer */
-@keyframes shimmer {
-  0% {
-    background-position: -1000px 0;
-  }
-  100% {
-    background-position: 1000px 0;
-  }
-}
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    rgba(0, 0, 0, 0.04) 0%,
-    rgba(0, 0, 0, 0.08) 50%,
-    rgba(0, 0, 0, 0.04) 100%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 1.6s infinite;
+  position: relative;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.05);
   border-radius: var(--radius-xs);
+}
+/* The sweep rides a compositor transform instead of background-position, which
+   would repaint the whole surface every frame */
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  animation: shimmer 1.6s infinite;
+}
+[data-theme='dark'] .skeleton::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+}
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
 }
 
 /* Toast: the container owns horizontal centering; capsules only animate vertically. Never apply a translateX to items that lacks -50% */
@@ -2658,7 +2669,7 @@ textarea.field {
   font-size: 13px;
   font-weight: 600;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  animation: toast-in 0.38s var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) both;
+  animation: toast-in 0.25s var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) both;
 }
 .toast.toast--leaving {
   animation: toast-out 0.28s var(--ease-out, cubic-bezier(0.32, 0.72, 0, 1)) forwards;
@@ -2728,6 +2739,9 @@ textarea.field {
 .toast__close:hover {
   color: #fff;
 }
+.toast__close:active {
+  transform: scale(0.92);
+}
 @keyframes toast-in {
   from {
     transform: translateY(10px) scale(0.98);
@@ -2760,10 +2774,12 @@ textarea.field {
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
     0 1px 2px rgba(0, 0, 0, 0.4);
 }
-[data-theme='dark'] .card-hover:hover {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    var(--shadow-lg);
+@media (hover: hover) and (pointer: fine) {
+  [data-theme='dark'] .card-hover:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      var(--shadow-lg);
+  }
 }
 
 [data-theme='dark'] .field {
