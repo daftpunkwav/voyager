@@ -134,7 +134,7 @@ class ContextBuilder:
                 block = (
                     "【可用 skill】\n"
                     + "\n".join(lines)
-                    + "\n需要步骤时用 load_skill(name) 取全文。"
+                    + "\n需要步骤时用 skill(action=load, name) 取全文。"
                 )
                 layers.append(truncate_layer(block, skill_chars, "\n…(skill 索引过长已截断)"))
         # Layer ordering serves the provider prefix cache: stable layers

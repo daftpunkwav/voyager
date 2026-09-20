@@ -62,7 +62,7 @@ class TestIndexVisibility:
         system = builder.system()
         assert "【可用 skill】" in system
         assert "explore-repo: explore repo structure" in system
-        assert "load_skill" in system  # points at fetching full text on demand
+        assert "skill(action=load, name)" in system  # points at fetching full text on demand
         assert str(tmp_path) not in system  # no local absolute paths leak
 
     def test_builder_omits_layer_when_no_skills(self, tmp_path) -> None:

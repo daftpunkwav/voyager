@@ -38,7 +38,7 @@ log = logging.getLogger("agent.sessions")
 
 CHAT_GOAL = (
     "与用户对话,理解并满足需求。普通对话与顺手的小任务直接自己完成;"
-    "确实需要多步骤或长时间后台执行时,才用 spawn_subagent 派出任务型"
+    "确实需要多步骤或长时间后台执行时,才用 subagent(action=spawn) 派出任务型"
     " subagent;不确定时经 ask_user 向用户提问。回复简洁有温度。"
 )
 
@@ -102,7 +102,7 @@ class SessionManager:
                         "agent",
                         ErrorSuffix.NOT_FOUND,
                         f"session not found: {sid}",
-                        hint="session_list first or pass no session id",
+                        hint="session(action=list) first or pass no session id",
                     )
                 # Store-less mode: instances are created on demand
                 inst = self._spawn_instance(sid, None)
