@@ -122,6 +122,22 @@ class TestDenyList:
         # exact pattern: extra arguments are not covered
         assert rp.check("bash", {"command": "git status --short"}) is None
 
+    def test_bash_prefix_deny_resists_quote_case_exe_variants(self) -> None:
+        """Quoting shapes, case, and a Windows .exe suffix must not slip a
+        command past its own deny prefix (the prefix list is a primary gate
+        now that confirm retired)."""
+        rp = _resolver({"mode": "full", "deny": ["bash:git push*"], "allow": []})
+        for command in (
+            '"git" push origin main',
+            'git "push" origin',
+            "GIT PUSH",
+            "Git push",
+            "git.exe push --force",
+        ):
+            assert rp.check("bash", {"command": command}) is not None, command
+        # a differently-named command still passes
+        assert rp.check("bash", {"command": "git fetch origin"}) is None
+
 
 class TestModes:
     def test_read_only_hard_ceiling(self) -> None:

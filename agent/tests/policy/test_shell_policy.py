@@ -20,8 +20,12 @@ class TestCommandTokens:
     def test_parse_error_yields_no_tokens(self) -> None:
         assert command_tokens('git commit -m "unterminated') == ()
 
-    def test_tokens_keep_quotes_on_windows_mode(self) -> None:
-        assert command_tokens('git commit -m "hi"') == ("git", "commit", "-m", '"hi"')
+    def test_tokens_are_unquoted_and_case_folded(self) -> None:
+        """posix=False keeps quote characters and original case on the raw
+        tokens; command_tokens normalizes both so quoting shapes and Windows'
+        case-insensitive binary resolution cannot dodge a deny prefix."""
+        assert command_tokens('git commit -m "hi"') == ("git", "commit", "-m", "hi")
+        assert command_tokens('"git" PUSH') == ("git", "push")
 
 
 class TestGuards:

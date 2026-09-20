@@ -108,27 +108,51 @@ def _targets_read_root_write(
     return False
 
 
+def _strip_token_quotes(token: str) -> str:
+    """Drop one pair of wrapping quotes shlex keeps in posix=False mode: without
+    this, `"git" push` would tokenize as ('"git"', 'push') and slip past a
+    `bash:git push` deny prefix."""
+    if len(token) >= 2 and token[0] == token[-1] and token[0] in ("'", '"'):
+        return token[1:-1]
+    return token
+
+
 def command_tokens(cmd: str) -> tuple[str, ...]:
     """Parse a command into tokens for prefix matching; an unparseable
     command yields no tokens, so it can never match a rule (falls back to
     the default level). posix=False everywhere: matching is best-effort and
-    platform-consistent, not execution (run_shell owns execution)."""
+    platform-consistent, not execution (run_shell owns execution).
+
+    Tokens are unquoted and case-folded so quoting shapes and Windows'
+    case-insensitive resolution cannot dodge a deny prefix; the folded case
+    can only over-match on case-sensitive platforms (the safe direction)."""
     try:
-        return tuple(shlex.split(cmd or "", posix=False))
+        raw = shlex.split(cmd or "", posix=False)
     except ValueError:
         return ()
+    return tuple(_strip_token_quotes(t).lower() for t in raw)
+
+
+def _exe_free(token: str) -> str:
+    """Strip a trailing `.exe` so the first token compares as the binary name
+    (`git.exe push` must not dodge a `bash:git push` deny prefix on Windows)."""
+    return token.removesuffix(".exe")
 
 
 def _matches_prefix(tokens: tuple[str, ...], pattern: str) -> bool:
-    parts = pattern.split()
+    parts = pattern.lower().split()
     if not parts:
         return False
     if parts == ["*"]:
         return True
-    if parts[-1] == "*":
-        head = parts[:-1]
-        return len(tokens) >= len(head) and tokens[: len(head)] == tuple(head)
-    return tokens == tuple(parts)
+    if not tokens:
+        return False
+    head = parts[:-1] if parts[-1] == "*" else parts
+    if len(tokens) < len(head) or (parts[-1] != "*" and len(tokens) != len(head)):
+        return False
+    # Executable-name normalization applies to the first token only: later
+    # arguments like `setup.exe` are ordinary file names.
+    return _exe_free(tokens[0]) == _exe_free(head[0]) and tokens[1 : len(head)] == tuple(head[1:])
 
 
 def decide_shell(fs, shell: ShellPolicy, action) -> Decision:
