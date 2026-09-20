@@ -801,6 +801,61 @@ class TestSessionSurface:
         assert "used_pct" in out
 
 
+class TestJobsSurface:
+    """jobs action dispatch: list is the read-only projection; cancel/reorder
+    route through host-injected routers — standalone (no router) they refuse
+    with a readable UNAVAILABLE instead of a guess."""
+
+    async def test_list_returns_projection(self, app) -> None:
+        out = await execute(app.registry, "jobs", USER_CTX, {"action": "list"})
+        assert isinstance(out, list)
+
+    async def test_cancel_without_router_is_unavailable(self, app) -> None:
+        with pytest.raises(ServiceError) as exc:
+            await execute(app.registry, "jobs", USER_CTX, {"action": "cancel", "job_id": "j-1"})
+        assert exc.value.body.code.endswith(ErrorSuffix.UNAVAILABLE.value)
+
+    async def test_reorder_without_router_is_unavailable(self, app) -> None:
+        with pytest.raises(ServiceError) as exc:
+            await execute(
+                app.registry,
+                "jobs",
+                USER_CTX,
+                {"action": "reorder", "job_id": "j-1", "priority": 1},
+            )
+        assert exc.value.body.code.endswith(ErrorSuffix.UNAVAILABLE.value)
+
+    async def test_unknown_action_rejected(self, app) -> None:
+        with pytest.raises(ServiceError) as exc:
+            await execute(app.registry, "jobs", USER_CTX, {"action": "purge"})
+        assert exc.value.body.code.endswith(ErrorSuffix.INVALID_INPUT.value)
+
+    async def test_reorder_requires_priority_with_router_wired(self) -> None:
+        """With a router wired, a missing priority is invalid input; a valid
+        call routes (job_id, priority) through unchanged."""
+        from types import SimpleNamespace
+        from typing import cast
+
+        from agent.capabilities.deps import CapabilityDeps
+        from agent.capabilities.jobs.jobs import jobs_action
+
+        calls: list[tuple[str, int]] = []
+
+        async def _reorder(job_id: str, priority: int) -> dict:
+            calls.append((job_id, priority))
+            return {"job_id": job_id, "priority": priority}
+
+        deps = cast(
+            CapabilityDeps, SimpleNamespace(jobs=None, job_cancel=None, job_reorder=_reorder)
+        )
+        with pytest.raises(ServiceError) as exc:
+            await jobs_action(deps, action="reorder", job_id="j-1")
+        assert exc.value.body.code.endswith(ErrorSuffix.INVALID_INPUT.value)
+        out = await jobs_action(deps, action="reorder", job_id="j-1", priority=7)
+        assert out == {"job_id": "j-1", "priority": 7}
+        assert calls == [("j-1", 7)]
+
+
 class TestRateTurn:
     async def test_rate_turn_stores_feedback_fact(self, app) -> None:
         out = await execute(
