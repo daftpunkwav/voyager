@@ -53,5 +53,5 @@ Voyager 是一个本地优先的 agent 伴侣工作台:Python 后端(FastAPI + S
 
 | 文档 | 内容 |
 |---|---|
-| [AGENTS.zh.md](AGENTS.zh.md) | 文档规范:放置、双语配对、写作规则 |
+| [AGENTS.md](AGENTS.md) | 文档规范:放置、双语配对、写作规则 |
 | [i18n/README.zh.md](i18n/README.zh.md) | 双语配对契约与一致性记录 |
