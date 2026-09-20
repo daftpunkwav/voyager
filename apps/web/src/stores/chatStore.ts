@@ -461,6 +461,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   workspaceSwitchMarker: null,
 
   setSessions: (rows, activeId) => {
+    // Rewriting the active id (e.g. the legacy '' view resolving to a real
+    // session) invalidates any in-flight loadOlder page exactly like a switch
+    // does: release the paging lock, the orphaned page fails the session
+    // guard and is discarded
+    if (get().activeSessionId !== activeId) {
+      set({ sessions: rows, activeSessionId: activeId, historyLoading: false });
+      return;
+    }
     set({ sessions: rows, activeSessionId: activeId });
   },
 

@@ -181,6 +181,9 @@ export async function loadChatSessions(): Promise<void> {
     // active id no longer points at and sends/SSE would smear across lanes.
     if (store.activeSessionId && active !== store.activeSessionId) {
       if (!store.switchSession(active)) await loadSessionTimeline(active);
+      // The user may have switched while the timeline backfill ran: their
+      // choice wins over the stale backend snapshot
+      if (useChatStore.getState().activeSessionId !== active) return;
     }
     useChatStore.getState().setSessions(sessions, active);
   } catch {
