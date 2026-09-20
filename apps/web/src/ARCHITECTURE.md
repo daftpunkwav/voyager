@@ -1,9 +1,8 @@
 # Frontend Architecture (apps/web)
 
-> Aligned with `docs-local/design/architecture.md` §2.1 / §10.1 / §12. This file records the **current implementation**
-> (as-is state after the 2026-09 review); for structure and rules, this file + `eslint.config.js` are authoritative.
+> This file records the **current implementation**; for structure and rules, this file + `eslint.config.js` are authoritative.
 
-## 1. Layering and Shared Artifacts (§10.1 Iron Rule 1, frontend implementation)
+## 1. Layering and Shared Artifacts
 
 | Layer             | Path                                              | Responsibility                                                                                                                                                                                                                                                                                             |
 | ----------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -38,7 +37,7 @@ apps/web/src/
 │   ├── activity.ts     # behavior reporting (privacy hard switch) + activity replay
 │   └── feed.ts / events.ts / pageContext.ts / quotaGuard.ts
 │
-├── components/         # Base UI + domain components layer (see §1)
+├── components/         # Base UI + domain components layer
 │   ├── common/  icons/
 │   ├── project/        # sources domain components (project table/import/category tags/AI panel)
 │   ├── settings/       # settings domain components (with agent/ llm/ subdirectories)
@@ -59,15 +58,14 @@ apps/web/src/
 └── main.tsx            # entry point
 ```
 
-## 3. Data Access Status (legacyApi retired as of 2026-09)
+## 3. Data Access
 
 - Data access chain: `hooks/components → api/<domain>.ts (per-domain thin layer, direct payload return) → bridge/client.callCapability → gateway`;
   the change surface for adding one capability = backend capability + one function in api/<domain> + call sites,
   with no intermediate registry;
-- `bridge/legacyApi.ts` and `api/client.ts` (the getApi facade) have been deleted in full: the 97-method facade,
-  the 38-entry METHOD_MAP dispatch table, the `{data}` envelope, and the IApiClient compatibility alias no longer exist;
-  `bridge/client.unwrapDataField` is a migration-period equivalent value-extraction helper (passes results through
-  when they already carry a data key), to be retired domain by domain as each capability's shape is verified;
+- There is no facade layer over the api modules; `bridge/client.unwrapDataField` is a value-extraction
+  helper (passes results through when they already carry a data key) used where a payload still needs
+  unwrapping;
 - Exception: the settings form domain (settings/* components) calls callCapability directly to read and write setting
   keys — an established pattern, not a bypass; cross-domain chat interaction always goes through the `bridge/chatSend`
   contract (enforced by ESLint);
@@ -84,8 +82,8 @@ apps/web/src/
 - `components/agent/EmbedAgentChat` is exported through a two-line stub at `widgets/EmbedAgentChat`:
   the domain-component export pattern; other domains must not bypass the stub to import components/agent directly.
 
-## 5. Engineering Commands and Known Status
+## 5. Engineering Commands
 
 - Tests: `npm run test:web` (vitest, tests/unit; jsdom stubs matchMedia/scrollIntoView);
-- Types: `npm run typecheck:web`; lint: `npm run lint:web` (strict `--max-warnings 0`,
-  fully green since 2026-09; new code must keep 0 warnings).
+- Types: `npm run typecheck:web`; lint: `npm run lint:web` (strict `--max-warnings 0`;
+  new code must keep 0 warnings).

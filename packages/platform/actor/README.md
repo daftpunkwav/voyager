@@ -5,8 +5,6 @@
 - **No backdoor for the agent**: the agent holds its own actor credentials and passes the same checks as the user;
 - Credential passing: `ActorContext` flows along the call chain; `restrict()` can only narrow it, and no step may elevate privileges.
 
-OAuth 2.1 / static token issuance for external MCP clients will be wired in a later step (see docs-local/design/architecture.md §7.4).
-
 ---
 
 ## Purpose

@@ -1,3 +1,3 @@
-# office/modules/doc — Word-style documents (skeleton)
+# office/modules/doc — Word-style documents
 
-Create/edit/export; corresponds to the workshop page doc-editor; the agent can revise documents directly through capabilities (§10.6).
+Create/edit/export; corresponds to the workshop page doc-editor; the agent can revise documents directly through capabilities.

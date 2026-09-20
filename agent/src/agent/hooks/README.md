@@ -1,5 +1,5 @@
-# agent.hooks — Hook system (skeleton)
+# agent.hooks — Hook system
 
 loader.py loads; triggers.py fires at hook points (events / before and after
-tools / lifecycle). §9.13.
+tools / lifecycle).
 Hooks brought in by plugins are registered after user approval.

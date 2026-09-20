@@ -8,9 +8,9 @@ feet" (workspace / net), interaction channels (interact), and self-management
 capabilities are wired in via `host.bridge` under `domain__capability` names;
 this package remains unaware of domain implementations.
 
-Directory discipline (task brief §4.4): **one tool per file, file name = tool
+Directory discipline: **one tool per file, file name = tool
 name**, with each file exporting a single factory `<name>_tool(...) -> AgentTool`;
-mechanism files (jail / workdir / todo_store / net_guard / question_broker) are
+mechanism files (jail / workdir / todo_store / question_broker) are
 named by their mechanism responsibility; the group `__init__.py` does
 zero-logic aggregation only. The shape is locked by
 `agent/tests/granularity/test_file_granularity.py`.
@@ -22,7 +22,9 @@ core/        mechanism layer: AgentTool/Toolbelt (base), assembly-time source re
              self-capability binding (self_capability: via execute guard chain + audit)
 workspace/   read · write · edit · grep · glob · bash · todowrite (set/query/update/delete);
              mechanisms: jail / workdir / todo_store
-net/         web_fetch · web_search; mechanism: net_guard (DNS/intranet resolution guard)
+net/         web_fetch · web_search; outbound fetches are re-checked per hop
+             against the shared platform_webguard guards (DNS pinning,
+             redirect policy, bounded body read)
 interact/    ask_user · request_context; mechanism: question_broker
 context/     context (status/compact) — shares context.operations with the same-named
              human capability; mechanism: none
@@ -66,8 +68,8 @@ The tools have no settings keys of their own; behavior is affected by
 
 ## Model Experience
 
-- Tool names strictly match human-side capability names (`install_plugin`,
-  not `plugin_install`); descriptions are in Chinese and action-oriented;
+- Tool names strictly match human-side capability names (`extension`, never a
+  reordered name); descriptions are in Chinese and action-oriented;
 - Call failure taxonomy (verbatim runtime markers): `[参数错误]` (parameter
   error — schema not satisfied, no side effects) → `[权限拒绝]` (rejected —
   the user's tool permission policy) → `[已拒绝]` (rejected — policy /
@@ -88,11 +90,3 @@ The tools have no settings keys of their own; behavior is affected by
   excluded);
 - `bash` is not interpreted by a shell (no pipes/redirection); Windows
   built-in commands are unavailable.
-
-## Deferred Work
-
-- Phase 21: `bash` routes to the code_exec domain (unified execution
-  channel); `net_guard` moves to `platform_webguard`;
-- Phase 19: the `jobs/` group (list_jobs / cancel_job) and
-  `interact/reach_out`;
-- Phase 20: `team/read_board` / `write_board`.

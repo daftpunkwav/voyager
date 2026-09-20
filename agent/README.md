@@ -2,11 +2,11 @@
 
 ## Purpose
 
-The agent (Harness layer): event loop, master orchestration, subagents, context/memory, policy, tools, skills, plugins.
+The agent: event loop, master orchestration, subagents, context/memory, policy, tools, skills, plugins.
 
 ## Configuration
 
-agent.* settings keys (see settings.py groups: rounds/context/fs/network/llm/memory/skills/outreach/execution).
+`agent.*` settings keys (declared in settings.py; among others the groups rounds / context / fs / network / llm / memory / skills / outreach / execution).
 
 ## Extension Points
 
@@ -14,7 +14,7 @@ New tool = one file under tools/<group>/; new capability = one file under capabi
 
 ## Model Experience
 
-This IS the model experience: tool descriptions, confirm dialogs, memory, context budgets.
+What the model interacts with lives here: tool descriptions, confirm dialogs, memory, context budgets.
 
 ## Known Limitations
 
@@ -22,4 +22,4 @@ Single-process, single-user by design.
 
 ## Deferred Work
 
-Multi-agent supervisor beyond the current tree (phase 20 scope).
+Multi-agent supervision beyond the current in-process instance tree.

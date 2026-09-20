@@ -1,7 +1,7 @@
 [project]
 name = "platform-capability"
 version = "0.1.0"
-description = "capability framework: define once, generate REST + MCP dual protocol; entry enforces auth/quota/audit (§7.3)"
+description = "capability framework: define once, generate REST + MCP dual protocol; entry enforces auth/quota/audit"
 requires-python = ">=3.11"
 dependencies = ["platform-contracts", "platform-actor"]
 

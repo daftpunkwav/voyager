@@ -1,6 +1,6 @@
 # packages/_template — New domain service scaffold
 
-Copy this directory and you have a new service (acceptance criterion: no other directory is touched, §13.1):
+Copy this directory and you have a new service (acceptance criterion: no other directory is touched):
 
 1. `cp -r packages/_template packages/<domain>`, rename `src/_template/` to
    `src/<domain>/`, and globally replace `_template` / `template` with `<domain>`
@@ -10,10 +10,10 @@ Copy this directory and you have a new service (acceptance criterion: no other d
    register it in `dependencies` and `tool.uv.sources` too, then run `uv sync`;
 3. Register this domain's capabilities in `src/<domain>/capabilities.py` (minimal initial set; the full list goes into
    this package's README);
-4. Long tasks: the handler only enqueues and returns a `JobRef` (§7.3); progress goes through the event stream — see the `worker.py` example;
+4. Long tasks: the handler only enqueues and returns a `JobRef`; progress goes through the event stream — see the `worker.py` example;
 5. The port is declared in `service.json` and registered with the gateway (port table in packages/README.md).
 
-Layout (src layout; decision in docs-local/design/2026-09-10-packages-src-layout.md):
+Layout (src layout):
 
 ```
 packages/<domain>/

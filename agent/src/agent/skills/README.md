@@ -1,5 +1,5 @@
-# agent.skills — Skill system (skeleton)
+# agent.skills — Skill system
 
-loader.py: skill index resident + full text on demand (§9.20);
+loader.py: skill index resident + full text on demand;
 organizer.py: auto-organization — find duplicate workflows → propose adding
-them to the library (§9.13).
+them to the library.

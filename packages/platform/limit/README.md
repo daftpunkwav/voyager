@@ -1,6 +1,7 @@
-# platform/limit — Rate limiting and quotas (skeleton)
+# platform/limit — Rate limiting and quotas (placeholder)
 
-Four layers of rate limiting (§7.5): entry rate limiting (gateway) / capability quotas (capability framework, CostQuota already implemented) /
+Rate limiting spans several layers: entry rate limiting (implemented in the gateway, `packages/gateway/src/gateway/ratelimit.py`) /
+capability quotas (capability framework guard chain) /
 agent self-restraint (policy engine) / service backpressure (each service's queues).
 
-This package hosts the shared mechanisms for **entry rate limiting** (requests per actor per minute, SSE connection count), to be implemented when the gateway lands.
+This directory is a documentation placeholder with no code.

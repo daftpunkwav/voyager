@@ -1,8 +1,8 @@
-# platform/secrets — Secret keeping (skeleton)
+# platform/secrets — Secret keeping
 
-Encrypted at rest, delivered on demand, and framework-level redaction of secrets in log and event payloads (§7.7);
-**the only write path for secret settings is the user writing through this package** (§8.8). BYOK: the user fills in their own
-LLM key; with no key the agent degrades (§9.18).
+Encrypted at rest, delivered on demand, and framework-level redaction of secrets in log and event payloads;
+**the only write path for secret settings is the user writing through this package**. BYOK: the user fills in their own
+LLM key; with no key the agent degrades.
 
 ---
 

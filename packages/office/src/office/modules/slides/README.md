@@ -1,3 +1,3 @@
-# office/modules/slides — PPT-style presentations (skeleton)
+# office/modules/slides — PPT-style presentations
 
-Outline → pages → beautification; corresponds to the workshop page slides-editor; the element under the mouse cursor is reported via the page for agent perception (§10.6).
+Outline → pages → beautification; corresponds to the workshop page slides-editor; the element under the mouse cursor is reported via the page for agent perception.

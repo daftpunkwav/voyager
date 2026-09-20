@@ -2,7 +2,7 @@
 
 The **pure-type** layer shared across modules: event envelopes, capability input/output DTOs, unified error codes, protocol version.
 
-Iron rules (see docs-local/design/architecture.md §7.1):
+Iron rules:
 
 - Pure types, zero logic, **zero third-party dependencies**;
 - The only package referenced directly by all three of apps / agent / services;
@@ -15,10 +15,10 @@ The import name is `platform_contracts` (to avoid clashing with the standard-lib
 
 | Term                 | Sole meaning                                                                                                                                         | Boundary                                                                                                                                                                          |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **capability**       | A capability a domain service/agent registers in the registry (schema + handler + metadata, §7.3); REST and MCP are both generated from the registry | Exists only in the `Registry`; its name is the name registered in `service.json`                                                                                                  |
+| **capability**       | A capability a domain service/agent registers in the registry (schema + handler + metadata); REST and MCP are both generated from the registry | Exists only in the `Registry`; its name is the name registered in `service.json`                                                                                                  |
 | **tool (AgentTool)** | An LLM-callable tool on the agent side, mounted on the Toolbelt tool surface                                                                         | Domain capabilities are bridged via `host.bridge.make_domain_tools` into `<domain>__<capability>`; the agent's built-in tools (fs/shell/web/spawn…) do not come from the registry |
-| **skill**            | A SKILL.md knowledge pack; once loaded it enters the system context (§9.10)                                                                          | Not a tool, not executable; it only injects prompts                                                                                                                               |
-| **MCP server**       | An **external** server the user adds and approves on the settings page, mounted into the tool surface via McpClientPool                              | Never use it to re-feed this repo's own `services/*/mcp_server` (in the monolith those capabilities are already bridged in)                                                       |
+| **skill**            | A SKILL.md knowledge pack; once loaded it enters the system context                                                                                  | Not a tool, not executable; it only injects prompts                                                                                                                               |
+| **MCP server**       | An **external** server the user adds and approves on the settings page, mounted into the tool surface via McpClientPool                              | Never use it to re-feed this repo's own `<domain>/mcp_server` (in the monolith those capabilities are already bridged in)                                                          |
 
 Within one call the capability name `<name>` is identical everywhere; only the wrapper differs:
 HTTP `POST /api/<domain>/capabilities/<name>`; agent tool name `<domain>__<name>`;

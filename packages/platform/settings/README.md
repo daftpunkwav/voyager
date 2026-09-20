@@ -3,10 +3,10 @@
 > Not to be confused with `packages/settings` (the settings *domain*: REST/bridge
 > access and theme keys built on this framework).
 
-Each setting is defined by: `key / type / default / owning module / secret flag / description` (§7.9).
+Each setting is defined by: `key / type / default / owning module / secret flag / description`.
 
 - Each service declares its own settings in its `settings.py` and calls `register()` at startup;
-- `set()` validates type/value domain; **secret items are writable by the user only** (§8.8 privacy exception);
+- `set()` validates type/value domain; **secret items are writable by the user only**;
 - Changes publish a `settings.changed` event (secret item payloads carry no value);
 - `list_schema()` lets the settings page render dynamically: no setting is hardcoded, and secrets only return `has_value`.
 

@@ -1,4 +1,4 @@
-# platform/health — Health probing and unified errors (§7.10)
+# platform/health — Health probing and unified errors
 
 Goal: **when one service breaks, all the others stay unaffected; and the broken one reports errors that are clear and actionable.**
 

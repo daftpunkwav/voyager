@@ -1,6 +1,6 @@
 # platform/eventbus — Event stream
 
-Shape: **a durable event log (SQLite append-only table) + cursor-based subscription** (§7.2).
+Shape: **a durable event log (SQLite append-only table) + cursor-based subscription**.
 
 - In-process: direct push over asyncio queues (a subscriber that falls behind is flagged `lagged`, and can catch up via its cursor);
 - Cross-process: consumers share the same `events.db`, hold a cursor, and poll `read_after` / `read_missed`;
