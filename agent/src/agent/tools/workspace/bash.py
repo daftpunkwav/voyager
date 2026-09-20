@@ -1,9 +1,10 @@
 """bash tool: command execution in the agent working directory
-(shell dimension, L2 confirm by default).
+(shell dimension).
 
-L2 confirmation is the main gate; this module additionally hard-blocks
-destructive commands before execution — even if the confirm channel is
-bypassed (subtasks without confirm / future refactoring), machine-level
+Execution-time confirmation is retired; the gates in front of this tool are
+the tool permission modes (deny / allow `bash:` argv prefixes) and the shell
+dimension policy. This module additionally hard-blocks destructive commands
+before execution — even if every configurable gate is loosened, machine-level
 irreversible operations are never allowed through.
 
 Execution uses create_subprocess_exec(argv) without shell interpretation of
@@ -189,7 +190,7 @@ def bash_tool(cwd: str | Path) -> AgentTool:
     return AgentTool(
         name="bash",
         description=(
-            "在 agent 工作目录执行命令(不经 shell;默认需用户确认;"
+            "在 agent 工作目录执行命令(不经 shell;可用工具权限的 bash: 前缀规则限制;"
             "长输出会保存到文件供 read 分段查看)"
         ),
         handler=bash,
