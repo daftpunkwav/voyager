@@ -61,7 +61,6 @@ TOOL_CLASS: dict[str, str] = {
     # interaction
     "ask_user": CLASS_R,
     "request_context": CLASS_R,
-    "reach_out": CLASS_R,
     # plan / scratchpad / goals (main-goal guardrails live in the dispatch
     # rules, not in permissions)
     "scratchpad": CLASS_R,

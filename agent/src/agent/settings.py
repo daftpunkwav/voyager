@@ -576,32 +576,6 @@ DEFS = [
         user_only=True,
         description="In-app capability denylist (deny wins; user-writable only)",
     ),
-    # Shell command-prefix rules: retired with the confirm channel (the tool
-    # permission modes replace them). allowed is no longer read by the engine;
-    # denied stays registered only as the one-time migration source into
-    # agent.permissions ("bash:" entries).
-    SettingDef(
-        key="agent.shell.allowed",
-        module="agent",
-        type=SettingType.JSON,
-        default=[],
-        user_only=True,
-        description=(
-            "Legacy shell prefix allowlist (unused since the confirm channel retired; "
-            "superseded by agent.permissions)"
-        ),
-    ),
-    SettingDef(
-        key="agent.shell.denied",
-        module="agent",
-        type=SettingType.JSON,
-        default=[],
-        user_only=True,
-        description=(
-            "Legacy shell prefix denylist (enforced via agent.permissions as bash: deny "
-            "prefixes, merged at read time; kept registered only as the migration source)"
-        ),
-    ),
     # Tool-surface permission modes: one mode + two lists, default full.
     # user_only: the agent must not be able to rewrite its own permission
     # envelope via the settings bridge.

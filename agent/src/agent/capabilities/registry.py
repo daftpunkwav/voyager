@@ -14,7 +14,6 @@ from agent.capabilities import (
     memory,
     observe,
     plan,
-    policy,
     session,
     settings,
     skill,
@@ -38,7 +37,6 @@ def build_agent_registry(deps: CapabilityDeps) -> Registry:
     workspace.register(reg, deps)
     session.register(reg, deps)
     jobs.register(reg, deps)
-    policy.register(reg, deps)
     plan.register(reg, deps)
     context.register(reg, deps)
     return reg

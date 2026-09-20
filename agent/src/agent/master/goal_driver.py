@@ -86,7 +86,7 @@ class GoalDriver:
         await self._master.handle_notice(
             session,
             f"[目标续跑] 目标「{goal.text}」:继续推进。"
-            "若目标已完成,用 goal_write 标记 done;受阻则标记 blocked 并说明原因。",
+            "若目标已完成,用 goal(action=status, status=done) 标记 done;受阻则标记 blocked 并说明原因。",
             guard=_still_active,
         )
 

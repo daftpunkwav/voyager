@@ -294,36 +294,20 @@ async def invoke_detailed(
             pass
         else:
             # The one kept confirmation: writes into user-configured write_roots
-            # ("extra directories are writable, but confirm with me"). Approval
-            # memory first (phase 21): a remembered grant — session or
-            # persistent, per (tool, target) — shortcuts the dialog; the default
-            # remains ask-every-time.
-            remembered = (
-                view.approvals.lookup(tool.name, target) if view.approvals is not None else None
-            )
-            if remembered is None:
-                if view.confirm_scoped is not None:
-                    answer = await view.confirm_scoped(
-                        f"允许执行 {tool.name}({target})吗?", tool.name, target
-                    )
-                    if answer not in ("allow", "session", "always"):
-                        return ToolResult(
-                            name=tool.name, ok=False, text="[已取消] 用户未确认", title=tool.name
-                        )
-                    if answer != "allow" and view.approvals is not None:
-                        view.approvals.grant(tool.name, target, answer)
-                elif view.confirm is not None:
-                    if not await view.confirm(f"允许执行 {tool.name}({target})吗?"):
-                        return ToolResult(
-                            name=tool.name, ok=False, text="[已取消] 用户未确认", title=tool.name
-                        )
-                else:
+            # ("extra directories are writable, but confirm with me"). Every
+            # call asks — there is no approval memory to shortcut it.
+            if view.confirm is not None:
+                if not await view.confirm(f"允许执行 {tool.name}({target})吗?"):
                     return ToolResult(
-                        name=tool.name,
-                        ok=False,
-                        text=f"[需确认] {tool.name}({target})需用户确认,当前无可确认通道,已跳过",
-                        title=tool.name,
+                        name=tool.name, ok=False, text="[已取消] 用户未确认", title=tool.name
                     )
+            else:
+                return ToolResult(
+                    name=tool.name,
+                    ok=False,
+                    text=f"[需确认] {tool.name}({target})需用户确认,当前无可确认通道,已跳过",
+                    title=tool.name,
+                )
     elif decision.level == Level.L1_NOTIFY and view.notify is not None:
         await view.notify(f"{tool.name}: {target}")
     if view.hooks is not None:

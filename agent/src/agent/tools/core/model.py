@@ -9,7 +9,7 @@ stays one-way.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -29,10 +29,6 @@ ResultBudgetFn = Callable[[str, str], str]
 #: Post-call episode recorder: (tool_name, arguments, ok, result_text) ->
 #: None (episodic memory). Absent = nothing recorded.
 RecorderFn = Callable[[str, dict[str, Any], bool, str], None]
-
-#: Scope-aware L2 confirmation: (prompt, tool, target) -> "allow" | "session"
-#: | "always" | "deny". Absent = the plain boolean confirm path.
-ScopedConfirmFn = Callable[[str, str, str], Awaitable[str]]
 
 
 @dataclass(frozen=True)
@@ -71,8 +67,6 @@ class ToolbeltView:
     breakers: dict[str, CircuitBreaker]
     result_budget: ResultBudgetFn | None = None
     recorder: RecorderFn | None = None
-    approvals: Any = None  # policy.approvals.ApprovalStore (remembered L2 grants)
-    confirm_scoped: ScopedConfirmFn | None = None
     permissions: ToolPermissions | None = None  # tool permission modes (agent actor)
 
     def tool(self, name: str) -> AgentTool | None:
@@ -83,6 +77,5 @@ __all__ = [
     "AgentTool",
     "RecorderFn",
     "ResultBudgetFn",
-    "ScopedConfirmFn",
     "ToolbeltView",
 ]

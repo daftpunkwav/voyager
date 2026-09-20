@@ -24,16 +24,21 @@ workspace/   read · write · edit · grep · glob · bash · todowrite (set/que
              mechanisms: jail / workdir / todo_store
 net/         web_fetch · web_search; mechanism: net_guard (DNS/intranet resolution guard)
 interact/    ask_user · request_context; mechanism: question_broker
-context/     context_status · compact_context (shares context.operations with same-named
-             human-side capabilities)
-memory/      recall_memory · get_memory · clear_memory · set_profile · delete_profile
-skill/       load_skill
-session/     session_list · session_create · session_fork · rename_session · delete_session · read_history
-team/        spawn_subagent · cancel_run · resume_run · register_subagent · list_subagents ·
-             list_resumable_checkpoints · abandon_resumable_checkpoint
-extension/   list_plugins · install_plugin · uninstall_plugin · list_mcp_servers · preview_mcp_tools ·
-             reload_user_hooks · list_user_hooks
-observe/     read_events · get_resource_quota · list_tools
+context/     context (status/compact) — shares context.operations with the same-named
+             human capability; mechanism: none
+plan/        plan (status/write/enter/exit; the agent's exit submits for human
+             review) · scratchpad; mechanism: plan_ops
+memory/      memory (query/recall/remember/forget/clear)
+skill/       skill (load/propose); mechanism: skill_ops
+session/     session (list/create/fork/rename/delete/get/read/search/trace/pin/
+             archive/set_active); mechanism: actions (shared dispatch + guard)
+team/        subagent (spawn/list/register/unregister/wait/send) · agent_instance
+             (cancel/pause/resume/checkpoints/abandon) · board (read/write) ·
+             goal (get/create/set/status with driver rules)
+extension/   extension (kind plugin/mcp/hook x list/install/uninstall/preview/reload)
+observe/     observe (events/quota)
+jobs/        jobs (list/reorder/cancel)
+tools/       tools (list/describe/search)
 ```
 
 ## Configuration

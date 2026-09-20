@@ -38,7 +38,6 @@ class CapabilityDeps:
     jobs: Any  # runtime.jobs_view.JobsView (task.* projection; read-only)
     job_cancel: Any  # async (job_id) -> dict, injected by the host (routes to the source domain)
     blackboard: Any  # master.blackboard.Blackboard (task-scoped shared notes)
-    approvals: Any  # policy.approvals.ApprovalStore (remembered L2 grants)
     plan_gates: Any = None  # context.plan_gate.PlanGates (session review-phase state)
     goal_manager: Any = None  # master.goal.GoalManager (durable session goals)
     skills_dir: Any = None  # user skills directory (skill propose writes there)

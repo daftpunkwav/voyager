@@ -55,10 +55,6 @@ CAP_ONLY_GROUPS = {
     # agent registry's settings group is the human REST projection of the
     # shared settings store.
     "settings",
-    # Approval memory widens the agent's own permission envelope: granting and
-    # revoking remembered L2 confirmations is the user's prerogative (parity
-    # exception; the agent sees remembered grants by NOT being re-asked).
-    "policy",
 }
 
 

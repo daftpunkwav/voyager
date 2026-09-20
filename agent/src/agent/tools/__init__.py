@@ -16,7 +16,6 @@ from agent.tools.interact import (
     AskUser,
     Question,
     ask_user_tool,
-    reach_out_tool,
     request_context_tool,
 )
 from agent.tools.jobs import jobs_tools
@@ -63,7 +62,6 @@ __all__ = [
     "memory_tools",
     "observe_tools",
     "plan_tools",
-    "reach_out_tool",
     "request_context_tool",
     "scratchpad_tool",
     "search_tools",

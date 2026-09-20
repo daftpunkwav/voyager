@@ -26,7 +26,6 @@ _STORE_FILES = [
     "agent/src/agent/memory/semantic.py",
     "agent/src/agent/memory/session_store.py",
     "agent/src/agent/runtime/meter_store.py",
-    "agent/src/agent/policy/approvals.py",
     "agent/src/agent/runtime/queue_store.py",
     "agent/src/agent/runtime/trajectory.py",
     "agent/src/agent/runtime/session_index.py",

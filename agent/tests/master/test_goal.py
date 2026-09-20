@@ -249,13 +249,15 @@ class TestGoalCapabilityAndTools:
         finally:
             app.close()
 
-    async def test_goal_read_reports_missing(self, tmp_path) -> None:
+    async def test_goal_get_reports_missing(self, tmp_path) -> None:
         app = _app(tmp_path)
         try:
-            from agent.tools.plan import goal_tools
-
-            tools = goal_tools(app.master.goal_driver._goals)
-            out = await tools["goal_read"].handler(session_id="nope")
-            assert "没有持久目标" in str(out)
+            out = await execute(
+                app.registry,
+                "goal",
+                ActorContext(actor=LOCAL_USER),
+                {"session_id": "nope", "action": "get"},
+            )
+            assert out["main"] is None and out["subs"] == []
         finally:
             app.close()

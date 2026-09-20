@@ -105,7 +105,6 @@ class TestAssemblyRosterParity:
                 "memory",
                 "observe",
                 "plan",
-                "reach_out",
                 "read",
                 "request_context",
                 "scratchpad",

@@ -98,7 +98,9 @@ def scenario_memory_recall(tmp_path) -> dict:
         tmp_path,
         FakeLLM(
             [
-                LLMReply(tool_calls=(ToolCall("1", "recall_memory", {"query": "language"}),)),
+                LLMReply(
+                    tool_calls=(ToolCall("1", "memory", {"action": "recall", "query": "language"}),)
+                ),
                 LLMReply(text="User prefers Chinese."),
             ]
         ),

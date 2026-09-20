@@ -47,9 +47,7 @@ from agent.memory.session_store import SessionStore
 from agent.personas import canonical_persona_key, resolve_persona
 from agent.plugins import PluginManager
 from agent.policy import AppPolicy, FsPolicy, NetworkPolicy, PolicyEngine
-from agent.policy.approvals import ApprovalStore
 from agent.policy.permissions import ToolPermissions
-from agent.policy.shell import ShellPolicy
 from agent.runtime import (
     EventLoop,
     LangfuseSpanExporter,
@@ -92,7 +90,6 @@ from agent.tools import (
     memory_tools,
     observe_tools,
     plan_tools,
-    reach_out_tool,
     request_context_tool,
     scratchpad_tool,
     search_tools,
@@ -143,10 +140,6 @@ def _build_policy(
         app=AppPolicy(
             allowed=frozenset(settings.get("agent.app.allowed")),
             denied=frozenset(settings.get("agent.app.denied")),
-        ),
-        shell=ShellPolicy(
-            allowed=frozenset(settings.get("agent.shell.allowed")),
-            denied=frozenset(settings.get("agent.shell.denied")),
         ),
         settings=settings,
     )
@@ -323,7 +316,6 @@ def build_agent(
             client, meter, quota_fn=lambda: settings.get("agent.resource.daily_tokens") or 0
         )
 
-    approval_store = ApprovalStore(data_dir / "approvals.db")
     chat_llm = _metered(llm)
     # Purpose routing (phase 18): arbiter, distillation, and the context
     # editor's planning call may run on lighter models resolved by the host
@@ -359,25 +351,6 @@ def build_agent(
             Question(prompt=prompt, kind="confirm", timeout_s=_confirm_timeout_s())
         )
         return bool(answer)
-
-    async def _confirm_scoped(prompt: str, tool: str, target: str) -> str:
-        """Three-way L2 confirm (phase 21): the dialog offers remembering the
-        grant for the session or persistently (this tool + target); timeout
-        and any answer outside the options count as declined."""
-        answer = await asker.ask(
-            Question(
-                prompt=prompt,
-                kind="choice",
-                options=("Allow once", "本次会话内允许", "总是允许(该工具+目标)"),
-                timeout_s=_confirm_timeout_s(),
-            )
-        )
-        mapping = {
-            "Allow once": "allow",
-            "本次会话内允许": "session",
-            "总是允许(该工具+目标)": "always",
-        }
-        return mapping.get(str(answer), "deny")
 
     async def _notify(message: str) -> None:
         """L1 permission notice: pushed to the Chat toast via the event stream,
@@ -448,8 +421,6 @@ def build_agent(
         # Episodic trail: every executed tool call lands in memory/episodic.db
         # (trigger / action / result summary), feeding recall and the organizer
         recorder=EpisodeRecorder(memory.episodic).record_tool,
-        approvals=approval_store,
-        confirm_scoped=_confirm_scoped,
         # Tool permission modes (one mode + deny/allow lists, hot-read): the
         # agent-actor gate in front of every native tool call
         permissions=ToolPermissions(settings),
@@ -638,7 +609,7 @@ def build_agent(
     task_graph = TaskGraph()  # dependency edges between named task dispatches
     blackboard = Blackboard()  # task-scoped shared notes (read/write tools bind it)
     # One anti-bombing budget shared by every assistant-initiated channel
-    # (greetings/follow-ups and the reach_out tool), so the caps are global.
+    # (greetings/follow-ups), so the caps are global.
     outreach_budget = OutreachBudget(settings)
     proactive = ProactiveEngine(
         master=None,
@@ -713,7 +684,6 @@ def build_agent(
             job_cancel=job_cancel,  # host-routed to the source domain's cancel capability
             job_reorder=job_reorder,  # host-routed to the source domain's reorder capability
             blackboard=blackboard,  # task-scoped shared notes (read/write tools below)
-            approvals=approval_store,  # remembered L2 grants (list/revoke capabilities)
             plan_gates=plan_gates,  # human-side review-phase toggle
             dispatch=master.dispatch_task,  # subagent spawn action
             goal_manager=goal_manager,  # durable session goals
@@ -739,10 +709,6 @@ def build_agent(
             **tools_tools(registry, audit),
         }
     )
-    # One-shot proactive message outlet: fire-and-forget, bound to the
-    # master's reply (the same channel conversational turns use)
-    reach = reach_out_tool(master.reply, budget=outreach_budget)
-    toolbelt.register({reach.name: reach})
     # Trajectory projection: a rebuildable query index over the event log
     # (steps / runs); startup catch-up folds whatever landed while down
     trajectory = TrajectoryStore(data_dir / "trajectory.db", log)
@@ -851,7 +817,6 @@ def build_agent(
         queue_store=queue_store,
         scheduler=scheduler,
         checkpoints=checkpoints,
-        approvals=approval_store,
         write_journal=write_journal,
         owns_settings=owns_settings,
         owns_log=owns_log,

@@ -2,10 +2,16 @@
 
 Every capability a human can call through REST is meant to be callable by
 the agent as a tool with the same name (domains via the host bridge as
-<domain>__<name>, the agent's own capabilities via tools/<group>/<name>.py).
+<domain>__<name>, the agent's own capabilities via the aggregated tools).
 Deviations from that rule are enumerated here — nowhere else — each with the
 reason the asymmetry exists. The host parity test (test_parity_surface)
 reads these tables; adding an entry is a deliberate, reviewed change.
+
+The exceptions classify into four kinds (design §5): directional channels
+(interaction direction, not privilege), agent runtime mechanisms,
+interaction/lifecycle invariants (enforced at dispatch or by the settings
+framework's user_only rejection, not by this table), and the agent's hands
+(tools without a human REST mirror).
 """
 
 from __future__ import annotations
@@ -30,8 +36,6 @@ HUMAN_ONLY_CAPABILITIES: dict[str, str] = {
     # The settings domain bridge (settings__get_settings / settings__set_setting)
     # already gives the agent the shared settings store; the agent registry's
     # pair is the human REST projection.
-    "list_approvals": "approval memory widens the agent's own envelope; management is the user's prerogative",
-    "revoke_approval": "approval memory widens the agent's own envelope; management is the user's prerogative",
     "get_settings": "reachable as settings__get_settings via the domain bridge",
     "set_setting": "reachable as settings__set_setting via the domain bridge",
     # The review gate decides when the agent may act: the switch must stay in
@@ -55,7 +59,6 @@ AGENT_ONLY_TOOLS: dict[str, str] = {
     "web_fetch": "network hand",
     "web_search": "network hand",
     "ask_user": "agent -> human question channel",
-    "reach_out": "one-shot proactive message (fire-and-forget; the human is the recipient)",
     "scratchpad": "in-harness working scratchpad for intermediate thinking and step tracking",
 }
 

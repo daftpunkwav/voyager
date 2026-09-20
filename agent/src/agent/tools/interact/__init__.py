@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from agent.tools.interact.ask_user import ask_user_tool
 from agent.tools.interact.question_broker import AGENT_ASK, AskUser, Question
-from agent.tools.interact.reach_out import reach_out_tool
 from agent.tools.interact.request_context import request_context_tool
 
 __all__ = [
@@ -14,6 +13,5 @@ __all__ = [
     "AskUser",
     "Question",
     "ask_user_tool",
-    "reach_out_tool",
     "request_context_tool",
 ]

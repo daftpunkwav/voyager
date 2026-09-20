@@ -1,4 +1,4 @@
-"""Jobs projection + cancellation routing + reach_out (fire-and-forget)."""
+"""Jobs projection + cancellation routing."""
 
 from __future__ import annotations
 
@@ -7,8 +7,6 @@ import asyncio
 from agent.build import build_agent
 from agent.llm import FakeLLM
 from agent.runtime.jobs_view import JobsView
-from agent.tools import Toolbelt
-from agent.tools.interact.reach_out import reach_out_tool
 from platform_contracts import ActorKind, ActorRef, DomainEvent, Event
 from platform_eventbus import EventLog
 
@@ -42,26 +40,6 @@ class TestJobsView:
         assert rows[0]["status"] == "failed"
         assert view.find("j-1") is not None and view.find("nope") is None
         log.close()
-
-
-class TestReachOut:
-    async def test_sends_and_finishes(self, tmp_path) -> None:
-        app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
-        try:
-            sent: list[tuple[str, str]] = []
-
-            async def reply(text: str, session: str = "") -> None:
-                sent.append((text, session))
-
-            belt = Toolbelt({"reach_out": reach_out_tool(reply)}, app.spawner._toolbelt._policy)
-            from agent.llm import ToolCall
-
-            out = await belt.call(ToolCall("1", "reach_out", {"session_id": "s1", "text": "done!"}))
-            assert '"sent": true' in out and sent == [("done!", "s1")]
-            empty = await belt.call(ToolCall("2", "reach_out", {"text": "  "}))
-            assert empty.startswith("[参数错误]")
-        finally:
-            app.close()
 
 
 class TestQueueStartWiring:

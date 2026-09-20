@@ -8,7 +8,7 @@ Responsibilities:
 - propose(): publish a skill.proposed event per hit via the injected emit
   callback. Non-blocking by design: no file is written here and the ask_user
   channel is never used; when the user agrees in conversation, the agent
-  saves the skill through the propose_skill tool.
+  saves the skill through the skill tool's propose action.
 - maybe_propose(): cadence trigger - every N new tool episodes (hot-read
   setting, 0 = off) returns the proposal coroutine for the caller to schedule
 """

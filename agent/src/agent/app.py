@@ -48,7 +48,6 @@ class AgentApp:
     queue_store: Any  # QueueStore: durable delayed/cron jobs (closed with the app)
     scheduler: Any  # Scheduler: concurrency cap, timers, durable-job poll loop
     checkpoints: Any  # CheckpointStore: run snapshots (resume/abandon paths)
-    approvals: Any  # ApprovalStore: remembered L2 grants (closed with the app)
     write_journal: Any = (
         None  # WriteJournal: fs write backups for undo_writes (closed with the app)
     )
@@ -102,7 +101,6 @@ class AgentApp:
         if self.session_index is not None:
             self.session_index.close()
         self.queue_store.close()
-        self.approvals.close()
         if self.write_journal is not None:
             self.write_journal.close()
         if self.owns_settings:

@@ -154,31 +154,8 @@ class PolicyEngine:
     def _decide_app(self, action: Action) -> Decision:
         return decide_app(self._app_policy(), action)
 
-    def _shell_policy(self) -> ShellPolicy:
-        """The shell dimension policy: prefix rules hot-read with a settings
-        handle (same discipline as app/fs); the level stays at the assembly
-        snapshot. Invalid values fall back to the snapshot wholesale."""
-        if self._settings is None:
-            return self.shell
-        try:
-            allowed_raw = self._settings.get("agent.shell.allowed")
-            denied_raw = self._settings.get("agent.shell.denied")
-            allowed = list(allowed_raw) if isinstance(allowed_raw, (list, tuple, set)) else None
-            denied = list(denied_raw) if isinstance(denied_raw, (list, tuple, set)) else None
-            if (
-                allowed is None
-                or denied is None
-                or not all(isinstance(x, str) for x in allowed + denied)
-            ):
-                return self.shell
-            return ShellPolicy(
-                level=self.shell.level, allowed=frozenset(allowed), denied=frozenset(denied)
-            )
-        except Exception:  # noqa: BLE001  # on settings errors fall back to the snapshot
-            return self.shell
-
     def _decide_shell(self, action: Action) -> Decision:
-        return decide_shell(self._fs_policy(), self._shell_policy(), action)
+        return decide_shell(self._fs_policy(), self.shell, action)
 
     @staticmethod
     def _decide_skill(action: Action) -> Decision:

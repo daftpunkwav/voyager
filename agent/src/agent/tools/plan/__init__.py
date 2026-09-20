@@ -7,12 +7,10 @@ from __future__ import annotations
 from agent.context.plan_gate import PlanGates
 from agent.tools.core.base import AgentTool
 from agent.tools.interact.question_broker import AskUser
-from agent.tools.plan.goal_read import goal_read_tool
-from agent.tools.plan.goal_write import goal_write_tool
 from agent.tools.plan.plan_ops import plan_enter, plan_status, plan_submit, plan_write
 from agent.tools.plan.scratchpad import scratchpad_tool
 
-__all__ = ["goal_tools", "plan_tools", "scratchpad_tool"]
+__all__ = ["plan_tools", "scratchpad_tool"]
 
 
 def plan_tools(gates: PlanGates, asker: AskUser) -> dict[str, AgentTool]:
@@ -56,9 +54,3 @@ def plan_tools(gates: PlanGates, asker: AskUser) -> dict[str, AgentTool]:
         concurrent_safe=False,
     )
     return {tool.name: tool}
-
-
-def goal_tools(goals) -> dict[str, AgentTool]:
-    goal_read = goal_read_tool(goals)
-    goal_write = goal_write_tool(goals)
-    return {goal_read.name: goal_read, goal_write.name: goal_write}

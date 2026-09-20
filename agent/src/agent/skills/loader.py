@@ -50,7 +50,7 @@ class SkillLoader:
                     return Path(item["path"]).read_text(encoding="utf-8")
                 except (OSError, UnicodeDecodeError) as exc:
                     # Present at index time but broken at read time (deleted / re-encoded):
-                    # raise with "unavailable" semantics so the caller (the load_skill tool)
+                    # raise with "unavailable" semantics so the caller (the skill tool's load action)
                     # reports it via an error message instead of crashing the turn
                     raise KeyError(
                         f"skill {name} failed to read: {exc} (see index() for all)"

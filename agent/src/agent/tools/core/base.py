@@ -29,7 +29,6 @@ from agent.tools.core.model import (
     AgentTool,
     RecorderFn,
     ResultBudgetFn,
-    ScopedConfirmFn,
     ToolbeltView,
 )
 from agent.tools.core.outcome import ToolResult
@@ -51,8 +50,6 @@ class Toolbelt:
         breakers: dict[str, CircuitBreaker] | None = None,  # per-tool; shared by trimmed views
         result_budget: ResultBudgetFn | None = None,  # oversized-result spill; shared by views
         recorder: RecorderFn | None = None,  # episodic recorder; shared by views
-        approvals: Any = None,  # approval memory; shared by views
-        confirm_scoped: ScopedConfirmFn | None = None,  # three-way L2 confirm; shared by views
         permissions: ToolPermissions | None = None,  # tool permission modes; shared by views
     ) -> None:
         self._tools = dict(tools)
@@ -67,8 +64,6 @@ class Toolbelt:
         self._breakers = breakers if breakers is not None else {}
         self._result_budget = result_budget
         self._recorder = recorder
-        self._approvals = approvals
-        self._confirm_scoped = confirm_scoped
         self._permissions = permissions
 
     def names(self) -> list[str]:
@@ -169,8 +164,6 @@ class Toolbelt:
             breakers=self._breakers,
             result_budget=self._result_budget,
             recorder=self._recorder,
-            approvals=self._approvals,
-            confirm_scoped=self._confirm_scoped,
             permissions=self._permissions,
         )
 
@@ -195,8 +188,6 @@ class Toolbelt:
             breakers=self._breakers,
             result_budget=self._result_budget,
             recorder=self._recorder,
-            approvals=self._approvals,
-            confirm_scoped=self._confirm_scoped,
             permissions=self._permissions,
         )
 
@@ -226,8 +217,6 @@ class Toolbelt:
             breakers=self._breakers,
             result_budget=self._result_budget,
             recorder=self._recorder,
-            approvals=self._approvals,
-            confirm_scoped=self._confirm_scoped,
             permissions=self._permissions,
         )
 
@@ -248,18 +237,8 @@ class Toolbelt:
             breakers=self._breakers,
             result_budget=self._result_budget,
             recorder=self._recorder,
-            approvals=self._approvals,
-            confirm_scoped=self._confirm_scoped,
             permissions=self._permissions,
         )
-
-    @property
-    def approvals_store(self) -> Any:
-        return self._approvals
-
-    @property
-    def scoped_confirm(self) -> ScopedConfirmFn | None:
-        return self._confirm_scoped
 
     def invocation_view(self) -> ToolbeltView:
         """Constrained invocation view of the current roster: the only sanctioned
@@ -276,8 +255,6 @@ class Toolbelt:
             breakers=self._breakers,
             result_budget=self._result_budget,
             recorder=self._recorder,
-            approvals=self._approvals,
-            confirm_scoped=self._confirm_scoped,
             permissions=self._permissions,
         )
 
