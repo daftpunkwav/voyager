@@ -88,9 +88,10 @@ export function removeDocument(docId: string): Promise<unknown> {
 }
 
 /** Download URL for the document's original file (inline preview, e.g. opening PDFs
- *  directly). Synchronous pure function: safe to call from render paths. */
+ *  directly). Synchronous pure function: safe to call from render paths. The id
+ *  is backend data — encode it so it cannot change the URL's path semantics. */
 export function docFileUrl(docId: string): string {
-  return `/api/sources/files/doc/${docId}`;
+  return `/api/sources/files/doc/${encodeURIComponent(docId)}`;
 }
 
 // ---- Web clippings (web) ----

@@ -16,6 +16,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
 import { MarkdownRenderer } from '@/components/common/MarkdownRenderer';
+import { safeHttpUrl } from '@/utils/safeUrl';
 import { TagEditor } from './TagEditor';
 import { rememberSourceDetail } from './provider';
 
@@ -57,6 +58,10 @@ export function PageReader() {
     );
   }
 
+  // Same trust boundary as every other external-data anchor in the app: the
+  // scheme allowlist decides whether the original link renders at all
+  const originalUrl = safeHttpUrl(page.url);
+
   return (
     <div className="page-reader">
       <header className="doc-reader__head">
@@ -86,10 +91,10 @@ export function PageReader() {
           />
         </div>
         <div className="doc-reader__actions">
-          {page.url && (
+          {originalUrl && (
             <a
               className="btn glass-card glass-card--control liquid-glass--pill liquid-glass--interactive"
-              href={page.url}
+              href={originalUrl}
               target="_blank"
               rel="noreferrer"
             >
