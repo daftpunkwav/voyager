@@ -26,6 +26,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
+from platform_contracts import ErrorSuffix, ServiceError
 
 from agent.llm import ToolCall
 from agent.policy import Action, Level
@@ -37,6 +38,32 @@ from agent.tools.core.outcome import ToolResult, normalize
 
 #: Long-tool progress outlet: (fraction 0.0-1.0, message) -> None.
 ProgressCb = Callable[[float, str], Awaitable[None]]
+
+#: ServiceError suffix -> the pipeline's model-facing label. Capability
+#: rejections raised through the guard chain (aggregated tools and domain
+#: bridges) must read like every other pipeline rejection: a contract label
+#: plus the message, never the exception type name. UNAVAILABLE shares the
+#: offline label: from the model's side both mean "the backing service is
+#: not reachable right now".
+_SERVICE_LABELS: dict[str, str] = {
+    ErrorSuffix.INVALID_INPUT.value: "[参数错误]",
+    ErrorSuffix.NOT_FOUND.value: "[未找到]",
+    ErrorSuffix.FORBIDDEN.value: "[已拒绝]",
+    ErrorSuffix.CONFLICT.value: "[已拒绝]",
+    ErrorSuffix.AUTH_REQUIRED.value: "[已拒绝]",
+    ErrorSuffix.RATE_LIMITED.value: "[配额受限]",
+    ErrorSuffix.QUEUE_FULL.value: "[队列已满]",
+    ErrorSuffix.UNAVAILABLE.value: "[积木服务离线]",
+    ErrorSuffix.INTERNAL.value: "[工具失败]",
+}
+
+
+def _service_error_text(name: str, exc: ServiceError) -> str:
+    """One capability rejection as model-actionable text: label, message, hint."""
+    suffix = exc.body.code.rsplit(".", 1)[-1]
+    label = _SERVICE_LABELS.get(suffix, "[工具失败]")
+    hint = f";{exc.body.hint}" if exc.body.hint else ""
+    return f"{label} {name}: {exc.body.message}{hint}"
 
 
 def _breaker_for(view: ToolbeltView, name: str) -> CircuitBreaker:
@@ -68,7 +95,9 @@ async def _invoke_with_recovery(
       timeouts multiplied by backoff retries only prolong the wait; a single
       timeout fails immediately and is left to the breaker/text result.
       httpx.TimeoutException likewise: URL-based MCP timeouts (httpx.AsyncClient
-      in session.py) behave like stdio MCP — one failure and stop;
+      in session.py) behave like stdio MCP — one failure and stop. ServiceError
+      (capability rejections) is deterministic, so it is also in the no-retry
+      list;
     - CircuitOpenError after the breaker opens does not enter the retry loop; it
       propagates (invoke_tool folds it into a "[breaker]" text result);
     - Policy denial / user non-confirmation / pre_tool interception return
@@ -132,6 +161,10 @@ async def _invoke_with_recovery(
             TimeoutError,
             asyncio.TimeoutError,
             httpx.TimeoutException,
+            # A capability rejection (bad input, interaction guard, quota) is
+            # deterministic: retrying the same arguments only burns backoff
+            # sleeps and breaker budget before the same failure.
+            ServiceError,
         ),
     )
 
@@ -335,6 +368,12 @@ async def invoke_detailed(
         # loop; fold it into a text result for the LLM
         ok = False
         result = f"[熔断] {tool.name} 连续失败已暂停,请稍后重试"
+    except ServiceError as exc:
+        # Capability rejections (aggregated tools, domain bridges) keep the
+        # pipeline's label contract instead of leaking "ServiceError" and a
+        # misleading [工具失败] tag onto model-correctable mistakes
+        ok = False
+        result = _service_error_text(tool.name, exc)
     except (ConnectionError, httpx.ConnectError) as exc:
         ok = False
         result = (

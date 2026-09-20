@@ -34,7 +34,8 @@ class TestMemoryTools:
             bad = await belt.call(
                 ToolCall("4", "memory", {"action": "remember", "key": " ", "value": "x"})
             )
-            assert bad.startswith("[工具失败]")
+            # capability INVALID_INPUT now surfaces under the [参数错误] label
+            assert bad.startswith("[参数错误]")
         finally:
             app.close()
 

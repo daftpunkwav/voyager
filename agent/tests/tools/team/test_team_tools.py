@@ -52,7 +52,8 @@ class TestTeamTools:
             missing = await belt.call(
                 ToolCall("4", "agent_instance", {"action": "cancel", "id_or_name": "nope"})
             )
-            assert missing.startswith("[工具失败]")
+            # capability NOT_FOUND now surfaces under the [未找到] label
+            assert missing.startswith("[未找到]")
         finally:
             app.close()
 

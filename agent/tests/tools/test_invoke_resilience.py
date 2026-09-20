@@ -114,3 +114,69 @@ class TestBuildingBlockResilience:
         assert out.ok is False
         assert "[积木服务离线]" in out.text
         assert "外部运行环境或可执行文件未找到" in out.text
+
+
+class TestServiceErrorContract:
+    """Capability rejections surface under the pipeline's label contract:
+    suffix-mapped label + message + hint, never the exception type name; and
+    the deterministic rejection is not retried (no breaker accumulation)."""
+
+    async def test_labels_map_by_suffix_and_carry_hint(self) -> None:
+        from platform_contracts import ErrorSuffix, ServiceError
+
+        def raising(message: str, hint: str):
+            async def handler(**_kw: object) -> str:
+                raise ServiceError("agent", ErrorSuffix.INVALID_INPUT, message, hint=hint)
+
+            return handler
+
+        tool = AgentTool(
+            name="goal",
+            description="Goal surface",
+            handler=raising("unknown action: 'bogus'", "valid actions: get/set/status"),
+            write=False,  # read-class path: exercises the no-retry behavior below
+        )
+        belt = Toolbelt({"goal": tool}, PolicyEngine(app=AppPolicy(allowed=frozenset({"*"}))))
+        out = await belt.call_detailed(ToolCall("1", "goal", {"action": "bogus"}))
+        assert out.ok is False
+        assert out.text.startswith("[参数错误] goal: unknown action: 'bogus'")
+        assert ";valid actions: get/set/status" in out.text
+        assert "ServiceError" not in out.text
+
+    async def test_forbidden_reads_as_rejected(self) -> None:
+        from platform_contracts import ErrorSuffix, ServiceError
+
+        async def guarded(**_kw: object) -> str:
+            raise ServiceError(
+                "agent",
+                ErrorSuffix.FORBIDDEN,
+                "the agent may only report done/blocked",
+            )
+
+        tool = AgentTool(name="goal", description="Goal", handler=guarded, write=True)
+        belt = Toolbelt({"goal": tool}, PolicyEngine(app=AppPolicy(allowed=frozenset({"*"}))))
+        out = await belt.call_detailed(ToolCall("1", "goal", {"action": "status"}))
+        assert out.ok is False
+        assert out.text.startswith("[已拒绝] goal: the agent may only report done/blocked")
+
+    async def test_no_retry_on_service_error(self) -> None:
+        from platform_contracts import ErrorSuffix, ServiceError
+
+        calls = 0
+
+        async def flaky(**_kw: object) -> str:
+            nonlocal calls
+            calls += 1
+            raise ServiceError("agent", ErrorSuffix.INVALID_INPUT, "bad input")
+
+        tool = AgentTool(name="observe", description="Observe", handler=flaky, write=False)
+        belt = Toolbelt(
+            {"observe": tool},
+            PolicyEngine(app=AppPolicy(allowed=frozenset({"*"}))),
+            retries=3,
+            retry_backoff=0,
+        )
+        out = await belt.call_detailed(ToolCall("1", "observe", {}))
+        assert out.ok is False
+        # one attempt only: a deterministic rejection never re-runs the handler
+        assert calls == 1
