@@ -1,5 +1,7 @@
 # platform/capability — Capability framework
 
+> Language: **English** | [简体中文](README.zh.md)
+
 **Define once, generate both protocols**:
 
 - Definition: name, description (written for the LLM: when to use it, what it returns), input model, metadata (cost / reversible /

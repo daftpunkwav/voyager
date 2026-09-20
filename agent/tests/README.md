@@ -1,5 +1,7 @@
 # tests — the agent package test suite
 
+> Language: **English** | [简体中文](README.zh.md)
+
 Pytest suite for `agent/src/agent`, run from the repository root: `npm run test:py` (which invokes `uv run pytest -q`); the evaluation subset runs on its own via `npm run eval`. `conftest.py` provides assembled-app fixture helpers (`agent_replies`, `settle`); `__init__.py` anchors the package so pytest's importlib mode does not shadow the installed `agent` package.
 
 ## Layout

@@ -1,5 +1,7 @@
 # agent
 
+> Language: **English** | [简体中文](README.zh.md)
+
 ## Purpose
 
 The agent: event loop, master orchestration, subagents, context/memory, policy, tools, skills, plugins.

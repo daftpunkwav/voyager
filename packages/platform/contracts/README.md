@@ -1,5 +1,7 @@
 # platform/contracts — Contracts package
 
+> Language: **English** | [简体中文](README.zh.md)
+
 The **pure-type** layer shared across modules: event envelopes, capability input/output DTOs, unified error codes, protocol version.
 
 Iron rules:

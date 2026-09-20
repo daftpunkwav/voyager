@@ -1,5 +1,7 @@
 # packages — Backend modules root
 
+> Language: **English** | [简体中文](README.zh.md)
+
 platform (cross-cutting mechanisms) + domain packages (independently runnable processes) + host (composition root).
 
 Each domain directory = an independently runnable process: it ships its own registry → REST + MCP, and its tests live inside its own directory.

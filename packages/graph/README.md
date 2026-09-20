@@ -1,5 +1,7 @@
 # graph
 
+> Language: **English** | [简体中文](README.zh.md)
+
 ## Purpose
 
 Graph domain: build and query a knowledge graph (nodes/relations) from imported sources; code and L0 pipelines plus an AI guide.

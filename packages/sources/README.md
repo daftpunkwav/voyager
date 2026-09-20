@@ -1,5 +1,7 @@
 # sources
 
+> Language: **English** | [简体中文](README.zh.md)
+
 ## Purpose
 
 Sources domain: import and search material from three modules — repo (git), doc (files), web (pages).

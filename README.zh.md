@@ -56,7 +56,7 @@ uv run python -m host.dev    # gateway :8000 + Vite :5173
 └── brand.json         # 品牌字符串唯一来源
 ```
 
-每个后端包在自己的 `README.md` 中记录契约(用途 / 配置 / 扩展点 / 工具面 / 限制),从 [packages/README.md](packages/README.md) 开始;agent 源码根从 [agent/README.md](agent/README.md) 开始。
+每个后端包在自己的 `README.md` 中记录契约(用途 / 配置 / 扩展点 / 工具面 / 限制),从 [packages/README.zh.md](packages/README.zh.md) 开始;agent 源码根从 [agent/README.zh.md](agent/README.zh.md) 开始。
 
 > **产品面**:`packages/office / browser / code_exec` 三域已实现且可独立运行(各自带 rest.py / mcp_server.py),但模块卡为 `enabled_by_default=false`,默认单体装配不挂载,产品 UI 也尚未包含它们。可在设置中显式启用,或用 `ENABLE_DOMAINS` 环境变量。
 >
@@ -64,8 +64,8 @@ uv run python -m host.dev    # gateway :8000 + Vite :5173
 
 ## 文档
 
-- `docs/` 目录按代码现状编写文档:从 [docs/README.md](docs/README.md) 开始 —— 架构、子系统参考、目录(工具 / 设置 / 数据布局)、前端、测试。
-- 前端从 [apps/web/README.md](apps/web/README.md) 开始。
+- `docs/` 目录按代码现状编写文档:从 [docs/README.zh.md](docs/README.zh.md) 开始 —— 架构、子系统参考、目录(工具 / 设置 / 数据布局)、前端、测试。
+- 前端从 [apps/web/README.zh.md](apps/web/README.zh.md) 开始。
 
 ## 约定与贡献
 

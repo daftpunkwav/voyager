@@ -1,5 +1,7 @@
 # scripts/ — Repository maintenance scripts
 
+> Language: **English** | [简体中文](README.zh.md)
+
 Small Python utilities for repository maintenance. They are invoked through the repository-root `package.json` npm scripts shown below, or directly with `uv run python scripts/<name>.py`.
 
 ## Scripts

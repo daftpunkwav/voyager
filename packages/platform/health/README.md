@@ -1,5 +1,7 @@
 # platform/health — Health probing and unified errors
 
+> Language: **English** | [简体中文](README.zh.md)
+
 Goal: **when one service breaks, all the others stay unaffected; and the broken one reports errors that are clear and actionable.**
 
 - `HealthMonitor`: registers each service's probes, probing periodically/on demand; state changes publish

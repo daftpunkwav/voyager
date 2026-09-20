@@ -1,5 +1,7 @@
 # code_exec
 
+> Language: **English** | [简体中文](README.zh.md)
+
 ## Purpose
 
 Code execution domain: run snippets/files in runtimes (python/node/shell), docker-first with explicit host fallback.

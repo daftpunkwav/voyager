@@ -1,5 +1,7 @@
 # platform/settings — Settings framework
 
+> Language: **English** | [简体中文](README.zh.md)
+
 > Not to be confused with `packages/settings` (the settings *domain*: REST/bridge
 > access and theme keys built on this framework).
 

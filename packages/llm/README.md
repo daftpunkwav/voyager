@@ -1,5 +1,7 @@
 # llm
 
+> Language: **English** | [简体中文](README.zh.md)
+
 ## Purpose
 
 LLM domain: provider catalog, chat/stream/embedding calls, usage metering, price-table cost conversion.

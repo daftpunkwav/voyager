@@ -1,5 +1,7 @@
 # browser
 
+> Language: **English** | [简体中文](README.zh.md)
+
 ## Purpose
 
 Browser domain: forward browser actions (navigate/click/type/read/screenshot) to an external browser host.

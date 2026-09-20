@@ -1,5 +1,7 @@
 # notes
 
+> Language: **English** | [简体中文](README.zh.md)
+
 ## Purpose
 
 Notes domain: markdown notes with versions, links, tags, trash, attachments, and view/batch operations.

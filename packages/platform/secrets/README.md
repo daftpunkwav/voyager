@@ -1,5 +1,7 @@
 # platform/secrets — Secret keeping
 
+> Language: **English** | [简体中文](README.zh.md)
+
 Encrypted at rest, delivered on demand, and framework-level redaction of secrets in log and event payloads;
 **the only write path for secret settings is the user writing through this package**. BYOK: the user fills in their own
 LLM key; with no key the agent degrades.

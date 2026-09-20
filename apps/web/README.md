@@ -1,5 +1,7 @@
 # apps/web/ — React main application
 
+> Language: **English** | [简体中文](README.zh.md)
+
 The single frontend application: a React 19 + TypeScript + Vite single-page app that talks to the backend gateway only (REST/SSE under `/api`, plus `/health`). The entry point is `src/main.tsx`, which mounts `src/App.tsx` with the theme and locale bridges, an error boundary, a React Query client and the router. Brand strings are injected at build time from the repository-root `brand.json` (see `vite.config.ts`).
 
 ## Commands

@@ -1,5 +1,7 @@
 # runtime-data — Runtime data ("its brain")
 
+> Language: **English** | [简体中文](README.zh.md)
+
 Separated from the workspace ("its home"). Contents are user data, **not committed to the repo**.
 
 | Contents | Purpose |

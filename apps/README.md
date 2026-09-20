@@ -1,5 +1,7 @@
 # apps/ — Frontend workspace root
 
+> Language: **English** | [简体中文](README.zh.md)
+
 This directory is the root of the npm workspaces declared in the repository-root `package.json` (`"workspaces": ["apps/*"]`). The application here consumes the backend HTTP surface (the gateway serves `/api` and `/health` on port 8000, proxied by the Vite dev server — see `apps/web/vite.config.ts`). Neither workspace is published or consumed as an npm dependency by the other roots.
 
 ## Apps

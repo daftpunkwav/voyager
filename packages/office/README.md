@@ -1,5 +1,7 @@
 # office
 
+> Language: **English** | [简体中文](README.zh.md)
+
 ## Purpose
 
 Office domain: create/read/update documents (doc) and decks (slides) as structured artifacts.

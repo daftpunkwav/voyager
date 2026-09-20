@@ -1,5 +1,7 @@
 # host
 
+> Language: **English** | [简体中文](README.zh.md)
+
 ## Purpose
 
 Composition root (Runtime layer): scan domain cards, wire them, bridge capabilities to agent tools, mount the gateway, own the process lifespan.

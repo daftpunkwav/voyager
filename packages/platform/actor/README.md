@@ -1,5 +1,7 @@
 # platform/actor — Actors and authentication
 
+> Language: **English** | [简体中文](README.zh.md)
+
 - Actor model: `{ kind: user | agent | external, id, scopes[] }` (contract in platform_contracts);
 - Local authentication: a machine-local secret is generated on first startup and signs/verifies HMAC session tokens;
 - **No backdoor for the agent**: the agent holds its own actor credentials and passes the same checks as the user;

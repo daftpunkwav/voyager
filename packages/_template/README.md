@@ -1,5 +1,7 @@
 # packages/_template — New domain service scaffold
 
+> Language: **English** | [简体中文](README.zh.md)
+
 Copy this directory and you have a new service (acceptance criterion: no other directory is touched):
 
 1. `cp -r packages/_template packages/<domain>`, rename `src/_template/` to
@@ -20,7 +22,7 @@ packages/<domain>/
 ├── pyproject.toml      # hatchling; dependencies declare platform-* only
 ├── service.json        # module card
 ├── README.md
-├── src/<domain>/       # six-piece set: capabilities / rest / mcp_server / worker / store / settings
+├── src/<domain>/       # seven-piece set: capabilities / wiring / rest / mcp_server / worker / store / settings
 └── tests/              # flat, no __init__.py
 ```
 

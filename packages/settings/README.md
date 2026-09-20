@@ -1,5 +1,7 @@
 # settings
 
+> Language: **English** | [简体中文](README.zh.md)
+
 > Not to be confused with `packages/platform/settings` (the settings *framework*:
 > store, schema registry, user_only enforcement). This package is the settings
 > *domain* on top of that framework.

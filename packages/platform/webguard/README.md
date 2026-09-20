@@ -1,5 +1,7 @@
 # platform/webguard
 
+> Language: **English** | [简体中文](README.zh.md)
+
 ## Purpose
 
 Shared URL safety guard: SSRF policy, DNS resolve-and-pin, per-hop redirect checks.

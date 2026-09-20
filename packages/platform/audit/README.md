@@ -1,5 +1,7 @@
 # platform/audit — Audit (skeleton)
 
+> Language: **English** | [简体中文](README.zh.md)
+
 Every mutation-type capability call lands in the audit trail: actor / capability / input summary / result / ts / trace_id.
 
 The capability framework already defines the `AuditSink` protocol and `AuditEntry` (with input redaction, see

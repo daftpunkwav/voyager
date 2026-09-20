@@ -1,5 +1,7 @@
 # workspace — Agent default working directory ("its home")
 
+> Language: **English** | [简体中文](README.zh.md)
+
 Contents are user data, **not committed to the repo** (see the root .gitignore; this file is kept via git add -f).
 
 | Subdirectory | Purpose |

@@ -1,5 +1,7 @@
 # gateway
 
+> Language: **English** | [简体中文](README.zh.md)
+
 ## Purpose
 
 HTTP transport: capability mounting, chat SSE, uploads, activity feed, health, rate limiting, security headers.
