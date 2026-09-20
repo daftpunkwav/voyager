@@ -85,6 +85,27 @@ class TestSignatureSchema:
         assert schema["properties"]["a"] == {}
         assert schema["properties"]["extra"] == {"type": "object"}
 
+    async def test_actor_param_is_not_published(self) -> None:
+        """`_actor` is injected by execute() from the caller's ActorContext:
+        publishing it in the schema would invite callers to pass it (a
+        duplicate-keyword TypeError) and leak harness plumbing into tool
+        schemas."""
+        from platform_contracts import ActorRef
+
+        reg = Registry("goal")
+
+        @capability(reg, name="goal", description="durable goal")
+        def goal(
+            action: str,
+            scope: str = "main",
+            _actor: ActorRef | None = None,
+        ) -> dict:
+            return {}
+
+        schema = build_tool_specs(reg)[0]["inputSchema"]
+        assert set(schema["properties"]) == {"action", "scope"}
+        assert schema["required"] == ["action"]
+
     async def test_tool_surface_prefers_input_model(self) -> None:
         reg = Registry("both")
 

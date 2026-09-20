@@ -88,7 +88,10 @@ def capability_input_schema(cap: Capability) -> dict[str, Any]:
     The signature fallback matters: an unmodeled capability used to expose an
     empty schema, leaving LLM/MCP/REST consumers to guess argument names —
     which surfaced as TypeError loops when the agent called such tools. Params
-    without annotations map to "any"; *args/**kwargs are skipped.
+    without annotations map to "any"; *args/**kwargs are skipped. The `_actor`
+    parameter is also skipped: execute() injects it from the caller's
+    ActorContext, so publishing it would invite callers to pass it (a
+    duplicate-keyword TypeError) and leak harness plumbing into tool schemas.
     """
     if cap.input_model is not None:
         return dataclass_to_json_schema(cap.input_model)
@@ -106,6 +109,8 @@ def capability_input_schema(cap: Capability) -> dict[str, Any]:
     required: list[str] = []
     for param in params:
         if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+            continue
+        if param.name == "_actor":  # execute()-injected; never caller-supplied
             continue
         properties[param.name] = _annotation_to_schema(hints.get(param.name), param.default)
         if param.default is inspect.Parameter.empty:
