@@ -704,7 +704,7 @@ def build_agent(
             **memory_tools(registry, audit),
             **extension_tools(registry, audit),
             **session_tools(registry, master.sessions, session_index, log, audit),
-            **observe_tools(registry, log, audit),
+            **observe_tools(registry, audit),
             **jobs_tools(registry, audit),
             **tools_tools(registry, audit),
         }

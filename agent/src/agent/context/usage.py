@@ -123,7 +123,7 @@ def usage_status(
     auto_compact_at: int,
 ) -> dict[str, Any]:
     """Usage facts for the current transcript, consumed by the status line,
-    the context_status tool, and the auto-compact trigger."""
+    the context tool, and the auto-compact trigger."""
     estimate = estimate_messages(messages)
     used = max(estimate, tracker.last_reported)
     return {
@@ -150,7 +150,7 @@ def over_threshold(status: dict[str, Any]) -> bool:
 #: Rounding the displayed usage to 5% buckets keeps the line byte-identical
 #: across most turns (cache survives), while the auto-compact trigger keeps
 #: using the exact percentage. Exact numbers stay available on demand via the
-#: context_status tool (tool results land at the transcript tail, which does
+#: context tool (tool results land at the transcript tail, which does
 #: not break the prefix).
 STATUS_PCT_BUCKET = 5
 

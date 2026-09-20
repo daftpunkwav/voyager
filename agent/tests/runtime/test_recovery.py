@@ -133,9 +133,9 @@ class TestToolRetry:
         assert "[工具失败]" in out and "TimeoutException" in out
         assert counter["calls"] == 1
 
-    async def test_spawn_subagent_is_write_never_retried(self, tmp_path) -> None:
-        """spawn_subagent has side effects (creates a run instance): marked write, so on failure the
-        handler runs once instead of retrying like a read-only tool and spawning twice."""
+    async def test_subagent_spawn_is_write_never_retried(self, tmp_path) -> None:
+        """subagent(action=spawn) has side effects (creates a run instance): marked write, so on
+        failure the handler runs once instead of retrying like a read-only tool and spawning twice."""
         from agent.tools.team import subagent_tool
         from platform_capability import Registry, capability
 

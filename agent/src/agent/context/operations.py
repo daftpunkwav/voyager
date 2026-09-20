@@ -1,9 +1,9 @@
 """The shared context-management operations: ONE implementation that both
 surfaces bind to under the same names.
 
-The LLM tool (tools/meta/context_tools: context_status / compact_context) and
-the human capability (capabilities/context: context_status / compact_context)
-are thin transport bindings around these functions — the tool resolves the
+The LLM tool (tools/context: action status / compact) and the human
+capability (capabilities/context: action status / compact) are thin transport
+bindings around these functions — the tool resolves the
 executing instance via the current_instance ContextVar, the capability
 resolves the addressed session and persists afterwards. Same name, same
 engine, two drivers.

@@ -1,6 +1,6 @@
 """Session-scoped plan gate: while active, the system prompt carries a
 review-phase section (explore and design only, no side effects) and the model
-can leave the phase only through exit_plan_mode, which asks the human.
+can leave the phase only through plan(action=exit), which asks the human.
 
 Pure state and prompt text. The toggle is human-side (a review gate must
 stay under human control); the gate is in-memory interaction state — a

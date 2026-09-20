@@ -170,7 +170,7 @@ class TestDispatchReadonly:
             await app.master.handle_user_message("please review the code")
             await settle(app)
             dispatched = [i for i in app.spawner.instances.values() if i.name != "chat"]
-            assert dispatched, "spawn_subagent must have dispatched an instance"
+            assert dispatched, "subagent(action=spawn) must have dispatched an instance"
             inst = dispatched[0]
             assert inst.task.readonly is True
             assert "write" not in inst.toolbelt.names()

@@ -33,7 +33,7 @@ NotifyFn = Callable[[str], Awaitable[None]]  # L1 notice outlet
 
 
 class SkillRecallSource(Protocol):
-    """Sourcing surface for the load_skill / recall_memory tools
+    """Sourcing surface for the skill / memory tools
     (implemented by context.loader.OnDemandLoader)."""
 
     def skill_text(self, name: str) -> str: ...

@@ -1,9 +1,9 @@
 """Permission engine facade: hot-readable dimension snapshots dispatched to
 the per-dimension decision functions (network / fs / app / shell — one file
 each since phase 21; the skill dimension is decided inline below).
-Decisions are pure; confirmation interaction lives in the Toolbelt
-(tools/base.py), and remembered confirmations live in
-policy.approvals.ApprovalStore.
+Decisions are pure; the confirmation interaction lives in the invoke pipeline
+(tools/core/invoke.py) — since the confirm channel retired, its one survivor
+is the write_roots residual keyed by Decision.confirm_scope.
 
 Resource counting (rounds/tokens/concurrency) is tracked at execution
 points; the engine only provides the limits (ResourcePolicy).

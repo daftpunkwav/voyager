@@ -2,8 +2,9 @@
 
 Key design: when dispatching a subagent, trimmed() performs capability-surface
 trimming — "cannot write files" is not a verbal constraint; the write tool is
-genuinely absent. Every call goes through a policy check; L1
-prompts, L2 asks the user via the confirm callback.
+genuinely absent. Every call goes through a policy check; the L1 notice is
+pushed via the notify callback, and the L2 confirm callback survives only for
+the write_roots residual (invoke.py retires it everywhere else).
 
 Call implementation lives in agent.tools.core.invoke; Toolbelt.call remains a thin
 wrapper and the public API is unchanged.

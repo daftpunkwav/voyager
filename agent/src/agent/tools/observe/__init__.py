@@ -5,16 +5,13 @@ capability (the roster tools moved into the aggregated tools tool)."""
 from __future__ import annotations
 
 from platform_capability import Registry
-from platform_eventbus import EventLog
 
 from agent.tools.core.base import AgentTool
 from agent.tools.core.self_capability import AuditSinks
 from agent.tools.observe.observe import observe_tool
 
 
-def observe_tools(
-    registry: Registry, log: EventLog, audit: AuditSinks | None = None
-) -> dict[str, AgentTool]:
+def observe_tools(registry: Registry, audit: AuditSinks | None = None) -> dict[str, AgentTool]:
     tool = observe_tool(registry, audit)
     return {tool.name: tool}
 
