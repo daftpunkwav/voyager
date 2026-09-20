@@ -118,7 +118,13 @@ class RoutingServiceLLM(ServiceLLM):
         self,
         messages: list[dict[str, Any]],
         tools: list[ToolSpec] | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> LLMReply:
+        if response_format is not None:
+            # Same contract as ServiceLLM.complete: the routing transport does
+            # not enforce schemas on the wire; TypeError tells structured-output
+            # callers to fall back to prompt-injected mode.
+            raise TypeError("RoutingServiceLLM does not support response_format")
         chain = self._chain()
         if not chain:
             return await super().complete(messages, tools)

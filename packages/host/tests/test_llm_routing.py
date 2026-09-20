@@ -152,7 +152,7 @@ class TestRoutingFallback:
 class TestBuildWiring:
     async def test_arbiter_transport_differs_from_chat(self, tmp_path) -> None:
         class Marked:
-            async def complete(self, messages, tools=None):
+            async def complete(self, messages, tools=None, response_format=None):
                 return None
 
         app = build_agent(

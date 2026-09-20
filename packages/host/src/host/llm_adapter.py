@@ -116,7 +116,13 @@ class ServiceLLM:
         self,
         messages: list[dict[str, Any]],
         tools: list[ToolSpec] | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> LLMReply:
+        if response_format is not None:
+            # The service transport cannot enforce a schema on the wire, so it
+            # rejects the kwarg with TypeError — the signal complete_structured
+            # uses to fall back to prompt-injected structured output.
+            raise TypeError("ServiceLLM does not support response_format")
         provider = await self._resolve_provider()
         if provider is None:
             return LLMReply(text=NO_PROVIDER_TEXT, degraded=True)
