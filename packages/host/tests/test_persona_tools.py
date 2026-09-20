@@ -12,6 +12,7 @@ The aggregate assembly is the source of truth for the tool surface: internal
 tools plus {domain}__* injected by the domain bridge (host.bridge).
 """
 
+import re
 from pathlib import Path
 
 from agent.personas import PERSONAS
@@ -43,7 +44,12 @@ def _persona_tool_audit(agent_app) -> list[str]:
             for t in allow
             if t.endswith("*") and len(t) > 1 and not any(n.startswith(t[:-1]) for n in real)
         ]
-        mentioned = sorted(t for t in real if t in persona.system_prompt)
+        # Word-boundary matching: a real tool name appearing as a substring of
+        # a longer identifier (graph__list_index_jobs contains "jobs") is not
+        # a prompt mention.
+        mentioned = sorted(
+            t for t in real if re.search(rf"\b{re.escape(t)}\b", persona.system_prompt)
+        )
         if persona.tool_allow is None:
             problems += [
                 f"{key}: prompt names a nonexistent tool {t}" for t in mentioned if t not in real

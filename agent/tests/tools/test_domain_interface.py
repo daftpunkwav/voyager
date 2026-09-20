@@ -85,7 +85,7 @@ class TestDomainWiring:
     async def test_list_tools_capability_lists_domain_tools(self, tmp_path) -> None:
         app = self._app(tmp_path)
         try:
-            out = await execute(app.registry, "list_tools", USER_CTX, {})
+            out = await execute(app.registry, "tools", USER_CTX, {"action": "list"})
             names = {t["name"] for t in out}
             assert "notes__create_note" in names
         finally:

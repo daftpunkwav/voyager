@@ -60,8 +60,8 @@ beforeEach(() => {
   callCapabilityMock.mockReset();
   callCapabilityMock.mockImplementation(
     (_domain: string, name: string, args: Record<string, unknown>) => {
-      if (name === 'list_tools') return Promise.resolve(TOOLS);
-      if (name === 'describe_tool') {
+      if (name === 'tools' && args?.action === 'list') return Promise.resolve(TOOLS);
+      if (name === 'tools' && args?.action === 'describe') {
         return args.name === 'read_file'
           ? Promise.resolve(READ_FILE_DETAIL)
           : Promise.reject(new Error('unknown tool'));
@@ -105,12 +105,13 @@ describe('settings tools catalog', () => {
     await waitFor(() => expect(screen.getByText('run_shell')).toBeTruthy());
   });
 
-  it('expanding a row lazily calls describe_tool and renders the parameter schema', async () => {
+  it('expanding a row lazily calls tools(describe) and renders the parameter schema', async () => {
     render(<ToolsCatalog />);
     await waitFor(() => expect(screen.getByText('read_file')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /read_file/ }));
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'describe_tool', {
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'tools', {
+        action: 'describe',
         name: 'read_file',
       })
     );

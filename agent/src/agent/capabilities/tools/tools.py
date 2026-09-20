@@ -1,12 +1,6 @@
-"""search_tools capability: lexical lookup over the current tool roster.
-
-With domain bridges and mounted MCP servers the roster can hold dozens of
-tools whose schemas are only shown after activation (graded loading) - the
-model needs a way to find the right name without dumping every description
-into context. Simple term scoring: hits in the tool name weigh above hits in
-the description; a tool matches when at least one query term hits. This is
-plain lexical matching, not BM25.
-"""
+"""tools capability: the tool roster's self-management surface — one action
+parameter covers list/describe/search. The agent's tools tool binds this
+same capability."""
 
 from __future__ import annotations
 
@@ -53,13 +47,29 @@ def rank_tools(roster: list[dict], query: str, *, limit: int = 8) -> list[dict]:
 def register(reg: Registry, deps: CapabilityDeps) -> None:
     @capability(
         reg,
-        name="search_tools",
+        name="tools",
         description=(
-            "Find tools on the current roster by keyword (lexical match on name"
-            " and description); use before activate_tools when the exact name is"
-            " unknown"
+            "Tool-surface self-management: action list (roster with dimension/"
+            "write/class metadata), describe (name — full metadata with schema), "
+            "search (query,limit — lexical match; use before activate_tools)"
         ),
     )
-    def search_tools(query: str, limit: int = 8) -> list[dict]:
-        roster = [{"name": s.name, "description": s.description} for s in deps.toolbelt.specs()]
-        return rank_tools(roster, query, limit=limit)
+    def tools(action: str = "list", name: str = "", query: str = "", limit: int = 8) -> dict | list:
+        if action == "list":
+            # Roster matches the ToolSpec the LLM sees (built-in tools + domain
+            # bridges such as notes__*); parameter schemas stay out of the
+            # list (token volume) and live behind describe.
+            return deps.toolbelt.roster()
+        if action == "describe":
+            return deps.toolbelt.describe(name)
+        if action == "search":
+            roster = [{"name": s.name, "description": s.description} for s in deps.toolbelt.specs()]
+            return rank_tools(roster, query, limit=limit)
+        from platform_contracts import ErrorSuffix, ServiceError
+
+        raise ServiceError(
+            "agent",
+            ErrorSuffix.INVALID_INPUT,
+            f"unknown action: {action!r}",
+            hint="valid actions: list/describe/search",
+        )

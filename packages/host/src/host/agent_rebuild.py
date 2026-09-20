@@ -52,7 +52,7 @@ from platform_contracts import (
 
 from .bridge import make_domain_tools
 from .embedder_adapter import ServiceEmbedder
-from .jobs_router import make_job_cancel_router
+from .jobs_router import make_job_cancel_router, make_job_reorder_router
 from .lifecycle import close_quietly
 from .llm_routing import PersonaRoutingServiceLLM, RoutingServiceLLM
 
@@ -133,6 +133,7 @@ class AgentRebuilder:
             settings_store=self.settings_store,
             extra_tools=make_domain_tools(self.domain_mounts, audit=self.audit, quota=self.quota),
             job_cancel=make_job_cancel_router(self.call, JobsView(self.event_log)),
+            job_reorder=make_job_reorder_router(self.call, JobsView(self.event_log)),
             audit=self.audit,
             embedder=ServiceEmbedder(self.call_sync, self.settings_store),
             purpose_llms={

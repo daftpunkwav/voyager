@@ -53,7 +53,7 @@ function backend(_domain: string, name: string, args: Record<string, unknown>) {
           system_prompt: '',
         },
       ]);
-    case 'list_tools':
+    case 'tools':
       return Promise.resolve([
         { name: 'read_file', description: 'read file', dimension: 'fs', write: false },
         { name: 'write_file', description: 'write file', dimension: 'fs', write: true },
@@ -164,7 +164,7 @@ describe('settings subagents section (create/edit dialog)', () => {
     render(<SubagentsSection />);
     await waitFor(() => expect(screen.getByRole('button', { name: '+ 新建' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '+ 新建' }));
-    // The dialog opens after the lazy list_tools fetch resolves
+    // The dialog opens after the lazy tools(list) fetch resolves
     await waitFor(() => expect(screen.getByLabelText('名称')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('名称'), { target: { value: 'repo_scout' } });
     fireEvent.change(screen.getByLabelText('描述'), { target: { value: 'scans repos' } });

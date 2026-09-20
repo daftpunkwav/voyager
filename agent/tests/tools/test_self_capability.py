@@ -31,13 +31,15 @@ class TestCapabilityTool:
         )
         try:
             tool = capability_tool(
-                app.registry, "set_profile", description="x", audit=[sink], write=True
+                app.registry, "memory", description="x", audit=[sink], write=True
             )
             belt = _belt(app, {tool.name: tool})
-            out = await belt.call(ToolCall("1", "set_profile", {"key": "lang", "value": "zh"}))
+            out = await belt.call(
+                ToolCall("1", "memory", {"action": "remember", "key": "lang", "value": "zh"})
+            )
             assert "ok" in out
             assert app.memory.profile.all() == {"lang": "zh"}
-            entries = [e for e in sink.entries if e.capability == "set_profile"]
+            entries = [e for e in sink.entries if e.capability == "memory"]
             assert entries and entries[-1].actor_kind == "agent" and entries[-1].ok is True
         finally:
             app.close()
@@ -58,14 +60,16 @@ class TestCapabilityTool:
         try:
             tool = capability_tool(
                 app.registry,
-                "set_profile",
+                "memory",
                 description="x",
                 audit=[sink],
                 write=True,
                 guard=lambda args: "[已拒绝] nope" if args.get("key") == "blocked" else None,
             )
             belt = _belt(app, {tool.name: tool})
-            out = await belt.call(ToolCall("1", "set_profile", {"key": "blocked", "value": "v"}))
+            out = await belt.call(
+                ToolCall("1", "memory", {"action": "remember", "key": "blocked", "value": "v"})
+            )
             assert out.startswith("[已拒绝]")
             assert app.memory.profile.all() == {}
             assert sink.entries == []
@@ -85,11 +89,11 @@ class TestCapabilityTool:
                 return False
 
             tool = capability_tool(
-                app.registry, "clear_memory", description="x", write=True, irreversible=True
+                app.registry, "memory", description="x", write=True, irreversible=True
             )
             belt = _belt(app, {tool.name: tool}, confirm=_deny)
             app.memory.profile.set("k", "v")
-            out = await belt.call(ToolCall("1", "clear_memory", {"zone": "profile"}))
+            out = await belt.call(ToolCall("1", "memory", {"action": "clear", "zone": "profile"}))
             assert "cleared" in out
             assert asked == [] and app.memory.profile.all() == {}
         finally:

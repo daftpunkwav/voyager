@@ -66,7 +66,7 @@ export async function listPersonas<T = unknown>(): Promise<T[]> {
 }
 
 export async function listTools<T = unknown>(): Promise<T[]> {
-  const raw = await callCapability<T[] | { tools: T[] }>('agent', 'list_tools', {});
+  const raw = await callCapability<T[] | { tools: T[] }>('agent', 'tools', { action: 'list' });
   return asArray(raw, 'tools');
 }
 
@@ -80,7 +80,7 @@ export function deleteSubagent(name: string): Promise<{ deleted?: string }> {
 
 /** describe_tool: full metadata for one tool roster entry (parameters schema included). */
 export function describeTool<T = unknown>(name: string): Promise<T> {
-  return callCapability<T>('agent', 'describe_tool', { name });
+  return callCapability<T>('agent', 'tools', { action: 'describe', name });
 }
 
 export function cancelRun(idOrName: string): Promise<{ cancelled?: string[] } | unknown> {
@@ -108,20 +108,25 @@ export function reportPageContext(args: Record<string, unknown>): Promise<unknow
   return callCapability('agent', 'report_page_context', args);
 }
 
+/** The aggregated memory capability: one action parameter (design §3). */
+function memoryCap<T>(action: string, params: Record<string, unknown> = {}): Promise<T> {
+  return callCapability<T>('agent', 'memory', { action, ...params });
+}
+
 export function getMemory<T = unknown>(): Promise<T> {
-  return callCapability<T>('agent', 'get_memory', {});
+  return memoryCap<T>('query');
 }
 
 export function setProfile(key: string, value: unknown): Promise<unknown> {
-  return callCapability('agent', 'set_profile', { key, value });
+  return memoryCap('remember', { key, value });
 }
 
 export function deleteProfile(key: string): Promise<unknown> {
-  return callCapability('agent', 'delete_profile', { key });
+  return memoryCap('forget', { key });
 }
 
 export function clearMemory(zone: string): Promise<unknown> {
-  return callCapability('agent', 'clear_memory', { zone });
+  return memoryCap('clear', { zone });
 }
 
 export async function listPlugins<T = unknown>(): Promise<T[]> {
@@ -182,7 +187,7 @@ export interface ResourceQuota {
 }
 
 export function getResourceQuota(): Promise<ResourceQuota> {
-  return callCapability<ResourceQuota>('agent', 'get_resource_quota', {}).then(
+  return callCapability<ResourceQuota>('agent', 'observe', { action: 'quota' }).then(
     unwrapDataField<ResourceQuota>
   );
 }

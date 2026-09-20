@@ -33,7 +33,7 @@ CORE_TOOLS = (
     "ask_user",
     "spawn_subagent",
     "load_skill",
-    "recall_memory",
+    "memory",
     "request_context",
     "todowrite",
     # The workspace working set (read/write/edit/glob/grep/bash are

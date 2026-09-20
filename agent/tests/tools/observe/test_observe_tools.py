@@ -1,5 +1,5 @@
-"""Observe tools: read_events (allowlisted event feed), get_resource_quota,
-list_tools."""
+"""Aggregated observe + tools surfaces: read_events' allowlisted event feed,
+the quota snapshot, and the roster list/describe/search actions."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def _belt(app) -> Toolbelt:
     return Toolbelt(dict(root._tools), root._policy, confirm=_yes, notify=_noop)
 
 
-class TestReadEvents:
+class TestObserveEvents:
     async def test_allowlist_and_incremental_cursor(self, tmp_path) -> None:
         app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
         try:
@@ -36,7 +36,9 @@ class TestReadEvents:
                 app.registry, "set_setting", USER_CTX, {"key": "agent.style", "value": "terse"}
             )
             out = json.loads(
-                await belt.call(ToolCall("1", "read_events", {"types": ["settings.changed"]}))
+                await belt.call(
+                    ToolCall("1", "observe", {"action": "events", "types": ["settings.changed"]})
+                )
             )
             assert out["events"] and out["events"][-1]["type"] == "settings.changed"
             assert out["events"][-1]["actor"] == "user:local"
@@ -44,13 +46,21 @@ class TestReadEvents:
             more = json.loads(
                 await belt.call(
                     ToolCall(
-                        "2", "read_events", {"types": ["settings.changed"], "after_seq": latest}
+                        "2",
+                        "observe",
+                        {
+                            "action": "events",
+                            "types": ["settings.changed"],
+                            "after_seq": latest,
+                        },
                     )
                 )
             )
             assert more["events"] == []
             refused = json.loads(
-                await belt.call(ToolCall("3", "read_events", {"types": ["agent.delta"]}))
+                await belt.call(
+                    ToolCall("3", "observe", {"action": "events", "types": ["agent.delta"]})
+                )
             )
             assert refused["error"].startswith("[参数错误]")
         finally:
@@ -58,22 +68,35 @@ class TestReadEvents:
 
 
 class TestQuotaAndRoster:
-    async def test_quota_and_roster(self, tmp_path) -> None:
+    async def test_quota(self, tmp_path) -> None:
         app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
         try:
             belt = _belt(app)
             app.meter.record(
                 MeterRecord(kind="llm", name="t", ms=1.0, input_tokens=5, output_tokens=5)
             )
-            quota = json.loads(await belt.call(ToolCall("1", "get_resource_quota", {})))
+            quota = json.loads(await belt.call(ToolCall("1", "observe", {"action": "quota"})))
             assert quota == {
                 "tokens_used_today": 10,
                 "daily_tokens": 0,
                 "cost_usd": 0.0,
                 "cost_unknown_models": ["t"],  # unknown model: surfaced, not priced
             }
-            roster = json.loads(await belt.call(ToolCall("2", "list_tools", {})))
+        finally:
+            app.close()
+
+    async def test_roster_list_and_describe(self, tmp_path) -> None:
+        app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
+        try:
+            belt = _belt(app)
+            roster = json.loads(await belt.call(ToolCall("1", "tools", {"action": "list"})))
             names = {t["name"] for t in roster}
-            assert {"read", "cancel_run", "read_events"} <= names
+            assert {"read", "cancel_run", "observe", "session"} <= names
+            entry = next(t for t in roster if t["name"] == "session")
+            assert entry["class"] in ("R", "D")
+            detail = json.loads(
+                await belt.call(ToolCall("2", "tools", {"action": "describe", "name": "todowrite"}))
+            )
+            assert "action" in detail["parameters"]["properties"]
         finally:
             app.close()

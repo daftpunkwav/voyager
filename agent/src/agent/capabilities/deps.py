@@ -43,3 +43,4 @@ class CapabilityDeps:
     goal_manager: Any = None  # master.goal.GoalManager (durable session goals)
     session_index: Any = None  # runtime.session_index.SessionIndex (session search action)
     log: Any = None  # platform_eventbus.EventLog (session read action pages the history)
+    job_reorder: Any = None  # async (job_id, priority) -> dict, host-routed to the source domain

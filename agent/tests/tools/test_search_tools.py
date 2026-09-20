@@ -1,7 +1,7 @@
 """Tests for the search_tools capability: lexical scoring over the roster,
 empty/whitespace queries, limit handling, and the live registry binding."""
 
-from agent.capabilities.observe.search_tools import rank_tools
+from agent.capabilities.tools.tools import rank_tools
 
 _ROSTER = [
     {"name": "notes__create_note", "description": "新建一条笔记"},
@@ -45,7 +45,10 @@ async def test_registry_binding_returns_scored_hits(tmp_path) -> None:
     app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
     try:
         hits = await execute(
-            app.registry, "search_tools", ActorContext(actor=LOCAL_USER), {"query": "todo"}
+            app.registry,
+            "tools",
+            ActorContext(actor=LOCAL_USER),
+            {"action": "search", "query": "todo"},
         )
         names = [h["name"] for h in hits]
         assert "todowrite" in names and "todowrite" in names

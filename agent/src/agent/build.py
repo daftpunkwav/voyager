@@ -96,7 +96,6 @@ from agent.tools import (
     plan_tools,
     propose_skill_tool,
     reach_out_tool,
-    recall_memory_tool,
     request_context_tool,
     scratchpad_tool,
     search_tools,
@@ -105,6 +104,7 @@ from agent.tools import (
     spawn_tool,
     team_tools,
     todo_tools,
+    tools_tools,
     web_tools,
 )
 from agent.tools.core.result_budget import MAX_AGE_SECONDS, bound_spill_dir, spill_result
@@ -219,13 +219,7 @@ def _build_tools(
     registry.add(StaticToolSource("interact", {ask.name: ask, req.name: req}))
     skill = load_skill_tool(on_demand)
     propose_skill = propose_skill_tool(workspace / "skills")
-    recall = recall_memory_tool(on_demand)
-    registry.add(
-        StaticToolSource(
-            "memory",
-            {skill.name: skill, propose_skill.name: propose_skill, recall.name: recall},
-        )
-    )
+    registry.add(StaticToolSource("skill", {skill.name: skill, propose_skill.name: propose_skill}))
     # Plan/todos + scratchpad: persisted under the workspace; the plan file is
     # resolved per executing session (todos/<session>.json, global todo.json
     # for session-less work), the scratchpad is shared across turns/instances
@@ -262,6 +256,8 @@ def build_agent(
     purpose_llms: dict[str, LLMClient]
     | None = None,  # per-purpose transports (host injects RoutingServiceLLM); absent -> chat llm
     job_cancel: Any | None = None,  # async (job_id) -> dict, host-routed to the source domain
+    job_reorder: Any
+    | None = None,  # async (job_id, priority) -> dict, host-routed to the source domain
 ) -> AgentApp:
     data_dir = Path(data_dir)
     if llm is None:
@@ -722,6 +718,7 @@ def build_agent(
             sessions=master.sessions,  # same manager the agent session tools use (one engine, two drivers)
             jobs=jobs_view,  # task.* projection (read-only)
             job_cancel=job_cancel,  # host-routed to the source domain's cancel capability
+            job_reorder=job_reorder,  # host-routed to the source domain's reorder capability
             blackboard=blackboard,  # task-scoped shared notes (read/write tools below)
             approvals=approval_store,  # remembered L2 grants (list/revoke capabilities)
             plan_gates=plan_gates,  # human-side review-phase toggle
@@ -744,6 +741,7 @@ def build_agent(
             **session_tools(registry, master.sessions, session_index, log, audit),
             **observe_tools(registry, log, audit),
             **jobs_tools(registry, audit),
+            **tools_tools(registry, audit),
         }
     )
     # One-shot proactive message outlet: fire-and-forget, bound to the

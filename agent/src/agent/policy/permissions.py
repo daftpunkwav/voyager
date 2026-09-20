@@ -77,22 +77,18 @@ TOOL_CLASS: dict[str, str] = {
     # session surface (aggregated; delete is the one irreversible action)
     "session": CLASS_R,
     "session.delete": CLASS_D,
-    # observation / tool self-management
-    "read_events": CLASS_R,
-    "list_tools": CLASS_R,
-    "describe_tool": CLASS_R,
-    "search_tools": CLASS_R,
-    "get_resource_quota": CLASS_R,
+    # observation (aggregated; events/quota) and tool self-management
+    "observe": CLASS_R,
+    "tools": CLASS_R,
     "activate_tools": CLASS_R,
-    # jobs: observing is R, cancelling loses work
-    "list_jobs": CLASS_R,
-    "cancel_job": CLASS_D,
-    # memory: reads R, persistent writes D
-    "get_memory": CLASS_R,
-    "recall_memory": CLASS_R,
-    "set_profile": CLASS_D,
-    "delete_profile": CLASS_D,
-    "clear_memory": CLASS_D,
+    # jobs (aggregated): observing/reordering is R, cancelling loses work
+    "jobs": CLASS_R,
+    "jobs.cancel": CLASS_D,
+    # memory (aggregated): reads R, persistent writes D
+    "memory": CLASS_R,
+    "memory.remember": CLASS_D,
+    "memory.forget": CLASS_D,
+    "memory.clear": CLASS_D,
     # skills
     "load_skill": CLASS_R,
     "propose_skill": CLASS_R,

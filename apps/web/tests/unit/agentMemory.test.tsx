@@ -44,17 +44,19 @@ const SNAPSHOT = {
 
 function backend(_domain: string, name: string, args: Record<string, unknown>) {
   switch (name) {
-    case 'get_memory':
-      return Promise.resolve(SNAPSHOT);
+    case 'memory': {
+      const action = String(args.action ?? 'query');
+      if (action === 'query') return Promise.resolve(SNAPSHOT);
+      if (action === 'clear') {
+        const zone = String(args.zone);
+        return Promise.resolve({ zone, cleared: { [zone]: 4 } });
+      }
+      return Promise.resolve({ ok: true });
+    }
     case 'get_setting':
       return Promise.resolve({ value: args.key === 'agent.memory.retention_days' ? 90 : '热心' });
     case 'set_setting':
       return Promise.resolve({ value: args.value });
-    case 'clear_memory':
-      return Promise.resolve({ zone: args.zone, cleared: { [String(args.zone)]: 4 } });
-    case 'set_profile':
-    case 'delete_profile':
-      return Promise.resolve({ ok: true });
     default:
       return Promise.resolve({});
   }
@@ -96,29 +98,38 @@ describe('settings page memory section (phase-08)', () => {
     const dialog = screen.getByRole('dialog');
     // The confirm copy states that the timeline/notes/projects are preserved
     expect(within(dialog).getByText(/对话时间线、笔记与项目会保留/)).toBeTruthy();
-    expect(callCapabilityMock).not.toHaveBeenCalledWith('agent', 'clear_memory', { zone: 'all' });
+    expect(callCapabilityMock).not.toHaveBeenCalledWith('agent', 'memory', {
+      action: 'clear',
+      zone: 'all',
+    });
 
     // Scope with within(dialog): the working-memory section on the page also has a "clear" button with the same name
     fireEvent.click(within(dialog).getByRole('button', { name: '清空' }));
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'clear_memory', { zone: 'all' })
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'memory', {
+        action: 'clear',
+        zone: 'all',
+      })
     );
     await waitFor(() =>
       expect(useUIStore.getState().toasts.some((t) => t.type === 'success')).toBe(true)
     );
   });
 
-  it('deleting a profile key calls delete_profile and refetches get_memory on success', async () => {
+  it('deleting a profile key calls memory(forget) and refetches memory(query) on success', async () => {
     renderSection();
     await waitFor(() => expect(screen.getByText('中文')).toBeTruthy());
 
     fireEvent.click(screen.getByRole('button', { name: '删除' }));
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'delete_profile', {
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'memory', {
+        action: 'forget',
         key: '语言偏好',
       })
     );
-    await waitFor(() => expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'get_memory', {}));
+    await waitFor(() =>
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'memory', { action: 'query' })
+    );
   });
 
   it('retention days read/write goes through settings.set_setting / get_setting', async () => {

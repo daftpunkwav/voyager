@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import pytest
 from agent.llm import FakeLLM, LLMReply
-from agent.llm_structured import StructuredResult
 from agent.llm_structured import (
     SchemaSpec,
+    StructuredResult,
     complete_structured,
     extract_json_from_text,
     to_schema_spec,

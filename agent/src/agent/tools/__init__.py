@@ -20,13 +20,14 @@ from agent.tools.interact import (
     request_context_tool,
 )
 from agent.tools.jobs import jobs_tools
-from agent.tools.memory import memory_tools, recall_memory_tool
+from agent.tools.memory import memory_tools
 from agent.tools.net import web_tools
 from agent.tools.observe import observe_tools
 from agent.tools.plan import goal_tools, plan_tools, scratchpad_tool
 from agent.tools.session import session_tools
 from agent.tools.skill import load_skill_tool, propose_skill_tool
 from agent.tools.team import spawn_tool, team_tools
+from agent.tools.tools import tools_tools
 from agent.tools.workspace import (
     DEFAULT_CATEGORIES,
     TodoStore,
@@ -66,7 +67,6 @@ __all__ = [
     "plan_tools",
     "propose_skill_tool",
     "reach_out_tool",
-    "recall_memory_tool",
     "request_context_tool",
     "scratchpad_tool",
     "search_tools",
@@ -75,5 +75,6 @@ __all__ = [
     "spawn_tool",
     "team_tools",
     "todo_tools",
+    "tools_tools",
     "web_tools",
 ]

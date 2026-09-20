@@ -172,7 +172,7 @@ class TestRestartPersistence:
         app2 = build_agent(data_dir=data, workspace_dir=ws, llm=fake)
         try:
             assert app2.meter.tokens_used_today() == 18  # restart does not reset to zero
-            quota = await execute(app2.registry, "get_resource_quota", USER_CTX, {})
+            quota = await execute(app2.registry, "observe", USER_CTX, {"action": "quota"})
             assert (
                 quota["tokens_used_today"] == 18
             )  # the capability reads the same persisted source

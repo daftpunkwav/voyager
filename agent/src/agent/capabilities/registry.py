@@ -19,6 +19,7 @@ from agent.capabilities import (
     settings,
     skill,
     team,
+    tools,
     workspace,
 )
 from agent.capabilities.deps import CapabilityDeps
@@ -29,6 +30,7 @@ def build_agent_registry(deps: CapabilityDeps) -> Registry:
     settings.register(reg, deps)
     observe.register(reg, deps)
     skill.register(reg, deps)
+    tools.register(reg, deps)
     team.register(reg, deps)
     extension.register(reg, deps)
     memory.register(reg, deps)

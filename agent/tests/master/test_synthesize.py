@@ -2,9 +2,9 @@
 through verbatim, long results get condensed via the LLM, and any synthesis
 failure degrades to the capped excerpt without losing the notice."""
 
-import pytest
 from typing import cast
 
+import pytest
 from agent.llm import FakeLLM, LLMClient, LLMReply
 from agent.master.synthesize import FALLBACK_CHARS, SYNTHESIZE_THRESHOLD, synthesize_result
 

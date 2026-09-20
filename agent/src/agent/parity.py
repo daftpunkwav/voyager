@@ -51,7 +51,6 @@ AGENT_ONLY_TOOLS: dict[str, str] = {
     "activate_tools": "graded schema activation, per-instance mechanism",
     "read_board": "task-scoped shared notes among sibling subagents (no human board page)",
     "write_board": "task-scoped shared notes among sibling subagents (no human board page)",
-    "read_events": "bounded reader of the activity feed (human has the activity page)",
     "read": "workspace hand",
     "write": "workspace hand",
     "edit": "workspace hand",

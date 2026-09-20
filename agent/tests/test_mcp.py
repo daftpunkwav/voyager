@@ -83,7 +83,7 @@ async def _add(app, **overrides) -> dict:
 
 
 async def _list_tools(app) -> set[str]:
-    return {t["name"] for t in await execute(app.registry, "list_tools", USER_CTX, {})}
+    return {t["name"] for t in await execute(app.registry, "tools", USER_CTX, {"action": "list"})}
 
 
 class TestAddAndPreview:

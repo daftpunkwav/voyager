@@ -471,7 +471,9 @@ class TestMcpRegistration:
         servers = await execute(app.registry, "list_mcp_servers", USER_CTX, {})
         assert [s["id"] for s in servers] == ["example-search"]
         assert servers[0]["approved"] == []  # registered only, no tools approved
-        tools = {t["name"] for t in await execute(app.registry, "list_tools", USER_CTX, {})}
+        tools = {
+            t["name"] for t in await execute(app.registry, "tools", USER_CTX, {"action": "list"})
+        }
         assert not [n for n in tools if n.startswith("mcp__")]
 
     async def test_missing_mcp_json_skipped(self, app, tmp_path) -> None:
@@ -586,7 +588,9 @@ class TestItemApproval:
         assert (
             servers[0]["approved"] == []
         )  # registered pending approval; tools never auto-approved
-        tools = {t["name"] for t in await execute(app.registry, "list_tools", USER_CTX, {})}
+        tools = {
+            t["name"] for t in await execute(app.registry, "tools", USER_CTX, {"action": "list"})
+        }
         assert not [n for n in tools if n.startswith("mcp__")]
 
     async def test_item_mcp_empty_not_registered(self, app, tmp_path) -> None:

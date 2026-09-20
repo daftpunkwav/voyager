@@ -37,47 +37,40 @@ class TestRegistrySurface:
             "add_mcp_server",
             "answer_question",
             "approve_mcp_tools",
-            "cancel_job",
             "cancel_run",
-            "clear_memory",
             "compact_context",
             "context_status",
-            "delete_profile",
             "delete_subagent",
-            "describe_tool",
-            "get_memory",
-            "get_resource_quota",
             "get_settings",
             "goal_manage",
             "install_plugin",
+            "jobs",
             "list_approvals",
-            "list_jobs",
             "list_mcp_servers",
             "list_personas",
             "list_plugins",
             "list_resumable_checkpoints",
             "list_skills",
             "list_subagents",
-            "list_tools",
             "list_user_hooks",
             "load_skill",
+            "memory",
+            "observe",
             "pause_run",
             "plan_mode_set",
             "preview_mcp_tools",
             "rate_turn",
-            "recall_memory",
             "register_subagent",
             "reload_user_hooks",
             "remove_mcp_server",
             "report_page_context",
             "resume_run",
             "revoke_approval",
-            "search_tools",
             "session",
             "set_plugin_approval",
-            "set_profile",
             "set_setting",
             "todowrite",
+            "tools",
             "uninstall_plugin",
             "wait_subagent",
         ]
@@ -209,7 +202,7 @@ class TestResourceQuota:
 
     async def test_empty_meter_defaults(self, app) -> None:
         """Empty meter: usage 0, no cost, no unknown models; daily_tokens reads the settings default of 0 (= unlimited)."""
-        result = await execute(app.registry, "get_resource_quota", USER_CTX, {})
+        result = await execute(app.registry, "observe", USER_CTX, {"action": "quota"})
         assert result == {
             "tokens_used_today": 0,
             "daily_tokens": 0,
@@ -228,7 +221,7 @@ class TestResourceQuota:
             USER_CTX,
             {"key": "agent.resource.daily_tokens", "value": 1000},
         )
-        result = await execute(app.registry, "get_resource_quota", USER_CTX, {})
+        result = await execute(app.registry, "observe", USER_CTX, {"action": "quota"})
         assert result == {
             "tokens_used_today": 370,
             "daily_tokens": 1000,
@@ -246,9 +239,9 @@ class TestResourceQuota:
         )
         result = await execute(
             app.registry,
-            "get_resource_quota",
+            "observe",
             AGENT_CTX,
-            {},
+            {"action": "quota"},
         )
         assert result == {
             "tokens_used_today": 0,
@@ -348,9 +341,12 @@ class TestMemorySurface:
 
     async def test_get_memory_shape_and_profile(self, app) -> None:
         await execute(
-            app.registry, "set_profile", USER_CTX, {"key": "language", "value": "Chinese"}
+            app.registry,
+            "memory",
+            USER_CTX,
+            {"action": "remember", "key": "language", "value": "Chinese"},
         )
-        out = await execute(app.registry, "get_memory", USER_CTX, {})
+        out = await execute(app.registry, "memory", USER_CTX, {"action": "query"})
         assert set(out) == {
             "profile",
             "episodic",
@@ -371,16 +367,22 @@ class TestMemorySurface:
         assert out["vector_recall"]["enabled"] is False  # standalone build: no embedder injected
 
     async def test_clear_memory_profile_empties_summary(self, app) -> None:
-        await execute(app.registry, "set_profile", USER_CTX, {"key": "k", "value": "v"})
-        out = await execute(app.registry, "clear_memory", USER_CTX, {"zone": "profile"})
+        await execute(
+            app.registry, "memory", USER_CTX, {"action": "remember", "key": "k", "value": "v"}
+        )
+        out = await execute(
+            app.registry, "memory", USER_CTX, {"action": "clear", "zone": "profile"}
+        )
         assert out == {"zone": "profile", "cleared": {"profile": 1}}
-        snapshot = await execute(app.registry, "get_memory", USER_CTX, {})
+        snapshot = await execute(app.registry, "memory", USER_CTX, {"action": "query"})
         assert snapshot["profile"]["summary"] == "(暂无用户画像)"
         assert snapshot["profile"]["items"] == []
 
     async def test_clear_memory_invalid_zone(self, app) -> None:
         with pytest.raises(ServiceError) as exc:
-            await execute(app.registry, "clear_memory", USER_CTX, {"zone": "everything"})
+            await execute(
+                app.registry, "memory", USER_CTX, {"action": "clear", "zone": "everything"}
+            )
         assert exc.value.body.code == "AGENT.INVALID_INPUT"
 
     async def test_get_memory_retention_zero_does_not_purge(self, app) -> None:
@@ -392,7 +394,7 @@ class TestMemorySurface:
             {"key": "agent.memory.retention_days", "value": 0},
         )
         app.memory.episodic.log("consider", "user is viewing langgraph")
-        out = await execute(app.registry, "get_memory", USER_CTX, {})
+        out = await execute(app.registry, "memory", USER_CTX, {"action": "query"})
         assert out["retention_days"] == 0
         assert out["purged_episodic"] == 0
         assert out["purged_semantic"] == 0
@@ -400,12 +402,19 @@ class TestMemorySurface:
 
     async def test_set_profile_empty_key_rejected(self, app) -> None:
         with pytest.raises(ServiceError) as exc:
-            await execute(app.registry, "set_profile", USER_CTX, {"key": "  ", "value": "x"})
+            await execute(
+                app.registry,
+                "memory",
+                USER_CTX,
+                {"action": "remember", "key": "  ", "value": "x"},
+            )
         assert exc.value.body.code == "AGENT.INVALID_INPUT"
 
     async def test_delete_profile_missing_key_is_noop(self, app) -> None:
         """A missing key is not an error (matching sqlite DELETE semantics)."""
-        out = await execute(app.registry, "delete_profile", USER_CTX, {"key": "nonexistent"})
+        out = await execute(
+            app.registry, "memory", USER_CTX, {"action": "forget", "key": "nonexistent"}
+        )
         assert out == {"key": "nonexistent", "ok": True}
 
 
@@ -484,7 +493,7 @@ class TestTeamSurface:
             extra_tools=bridge,
         )
         try:
-            tools = await execute(app.registry, "list_tools", USER_CTX, {})
+            tools = await execute(app.registry, "tools", USER_CTX, {"action": "list"})
             names = {t["name"] for t in tools}
             assert "notes__create_note" in names  # bridge tool
             assert "spawn_subagent" in names  # internal tool
@@ -598,7 +607,9 @@ class TestTeamSurface:
         assert inst.task.goal == "wake up"
 
     async def test_describe_tool_returns_metadata_and_schema(self, app) -> None:
-        info = await execute(app.registry, "describe_tool", USER_CTX, {"name": "read"})
+        info = await execute(
+            app.registry, "tools", USER_CTX, {"action": "describe", "name": "read"}
+        )
         assert info["name"] == "read"
         assert info["dimension"] == "fs"
         assert info["write"] is False
@@ -606,12 +617,14 @@ class TestTeamSurface:
 
     async def test_describe_tool_unknown_name_raises(self, app) -> None:
         with pytest.raises(ServiceError) as exc:
-            await execute(app.registry, "describe_tool", USER_CTX, {"name": "not_a_tool"})
+            await execute(
+                app.registry, "tools", USER_CTX, {"action": "describe", "name": "not_a_tool"}
+            )
         assert exc.value.body.code == "AGENT.NOT_FOUND"
 
     async def test_list_tools_entries_carry_classification(self, app) -> None:
         """list_tools adds dimension/write classification (schema stays behind describe_tool)."""
-        tools = await execute(app.registry, "list_tools", USER_CTX, {})
+        tools = await execute(app.registry, "tools", USER_CTX, {"action": "list"})
         read = next(t for t in tools if t["name"] == "read")
         assert read["dimension"] == "fs"
         assert read["write"] is False

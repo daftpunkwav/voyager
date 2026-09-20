@@ -1,7 +1,7 @@
 /**
  * @file usageDailyQuota
  * @description Unit tests for the usage page "today's token quota" card
- * (phase-63): mounts agent.get_resource_quota, verifies the used/limit
+ * (phase-63): mounts agent.observe(quota), verifies the used/limit
  * display, 0 = unlimited draws no progress bar, failure shows the error
  * state without crashing, and the progress bar turns warning-colored at the
  * cap.
@@ -51,7 +51,7 @@ describe('usage page today token quota (phase-63)', () => {
     expect(screen.getByText(/上限 5\.0K/)).toBeInTheDocument();
     expect(screen.getByText(/服务重启后当日用量仍累计/)).toBeInTheDocument();
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '24');
-    expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'get_resource_quota', {});
+    expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'observe', { action: 'quota' });
   });
 
   it('shows "no limit" when daily_tokens=0 and draws no fake progress bar', async () => {

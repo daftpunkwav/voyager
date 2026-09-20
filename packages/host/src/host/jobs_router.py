@@ -22,6 +22,13 @@ _CANCEL_CAPABILITIES: dict[str, tuple[str, str]] = {
     "graph": ("cancel_index", "job_id"),
 }
 
+#: domain -> reorder capability name (+ its arguments, in call order). Same
+#: extend-on-demand rule as the cancel map; priority is the numeric rank
+#: (lower value runs first).
+_REORDER_CAPABILITIES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "graph": ("reorder_queue", ("job_id", "priority")),
+}
+
 LateBoundCall = Callable[[str, str, dict[str, Any]], Awaitable[Any]]
 
 
@@ -44,4 +51,23 @@ def make_job_cancel_router(call: LateBoundCall, jobs_view: Any) -> Callable[[str
     return router
 
 
-__all__ = ["make_job_cancel_router"]
+def make_job_reorder_router(call: LateBoundCall, jobs_view: Any) -> Callable[[str, int], Any]:
+    async def router(job_id: str, priority: int) -> dict:
+        job = jobs_view.find(job_id)
+        if job is None:
+            raise ServiceError("agent", ErrorSuffix.NOT_FOUND, f"no such background job: {job_id}")
+        entry = _REORDER_CAPABILITIES.get(job.get("source") or "")
+        if entry is None:
+            raise ServiceError(
+                "agent",
+                ErrorSuffix.UNAVAILABLE,
+                f"domain {job.get('source')!r} exposes no reorder capability",
+                hint="extend the host job router when a domain grows reorderable jobs",
+            )
+        cap, args = entry
+        return await call(job["source"], cap, {args[0]: job_id, args[1]: priority})
+
+    return router
+
+
+__all__ = ["make_job_cancel_router", "make_job_reorder_router"]

@@ -163,9 +163,9 @@ class TestResourceQuotaFlow:
             deadline = time.time() + 8
             quota = {}
             while time.time() < deadline:
-                quota = client.post("/api/agent/capabilities/get_resource_quota", json={}).json()[
-                    "result"
-                ]
+                quota = client.post(
+                    "/api/agent/capabilities/observe", json={"action": "quota"}
+                ).json()["result"]
                 if quota.get("tokens_used_today", 0) > 0:
                     break
                 time.sleep(0.05)
@@ -191,9 +191,9 @@ class TestResourceQuotaFlow:
             first = {}
             deadline = time.time() + 8
             while time.time() < deadline:
-                first = client.post("/api/agent/capabilities/get_resource_quota", json={}).json()[
-                    "result"
-                ]
+                first = client.post(
+                    "/api/agent/capabilities/observe", json={"action": "quota"}
+                ).json()["result"]
                 if first.get("tokens_used_today", 0) > 0:
                     break
                 time.sleep(0.05)
@@ -205,7 +205,7 @@ class TestResourceQuotaFlow:
         # no conversation replay
         app2 = build(tmp_path / "data", tmp_path / "ws", llm=llm)
         with TestClient(app2) as client:
-            quota = client.post("/api/agent/capabilities/get_resource_quota", json={}).json()[
+            quota = client.post("/api/agent/capabilities/observe", json={"action": "quota"}).json()[
                 "result"
             ]
             assert quota["tokens_used_today"] >= first["tokens_used_today"] >= 18

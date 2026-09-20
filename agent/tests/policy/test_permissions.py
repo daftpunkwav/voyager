@@ -200,10 +200,10 @@ class TestInvokeWiring:
             app.close()
 
     async def test_tool_deny_rejects_and_default_full_executes(self, tmp_path) -> None:
-        app = await self._app(tmp_path, {"mode": "full", "deny": ["clear_memory"], "allow": []})
+        app = await self._app(tmp_path, {"mode": "full", "deny": ["memory.clear"], "allow": []})
         try:
             belt = app.spawner._toolbelt
-            out = await belt.call(ToolCall("1", "clear_memory", {"zone": "working"}))
+            out = await belt.call(ToolCall("1", "memory", {"action": "clear", "zone": "working"}))
             assert out.startswith("[权限拒绝]")
             # full mode: an irreversible app-dimension call executes directly
             # (confirm retired; the resolver + app lists are the gates)

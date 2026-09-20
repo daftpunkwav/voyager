@@ -50,7 +50,7 @@ from .agent_rebuild import AgentRebuilder, _teardown_agent, build_switch_router
 from .bridge import make_domain_tools
 from .call import bind_calls
 from .embedder_adapter import ServiceEmbedder
-from .jobs_router import make_job_cancel_router
+from .jobs_router import make_job_cancel_router, make_job_reorder_router
 from .lifecycle import close_quietly, close_wirings, start_wirings, stop_wirings
 from .llm_routing import PersonaRoutingServiceLLM, RoutingServiceLLM
 from .plan import enabled_from_settings, register_gateway_settings, select_enabled, topo_order
@@ -324,6 +324,7 @@ def build(
             settings_store=settings_store,
             extra_tools=make_domain_tools(mounts, audit=audit, quota=quota),
             job_cancel=make_job_cancel_router(call, JobsView(event_log)),
+            job_reorder=make_job_reorder_router(call, JobsView(event_log)),
             audit=audit,  # the agent's own governance tools audit as actor=agent into the same sinks
             embedder=ServiceEmbedder(call_sync, settings_store),  # vector recall via llm.embed
             # Purpose routing (phase 18): arbiter/distill/planner transports read

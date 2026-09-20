@@ -87,13 +87,13 @@ describe('quotaWarnMessage copy', () => {
 });
 
 describe('fetchQuotaGuard', () => {
-  it('reads get_resource_quota and decides; full → block', async () => {
+  it('reads observe(quota) and decides; full → block', async () => {
     callCapabilityMock.mockResolvedValue({ tokens_used_today: 5000, daily_tokens: 5000 });
     await expect(fetchQuotaGuard()).resolves.toEqual({
       action: 'block',
       reason: QUOTA_BLOCK_ZH,
     });
-    expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'get_resource_quota', {});
+    expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'observe', { action: 'quota' });
   });
 
   it('soft-fails open when the query fails → allow without throwing', async () => {

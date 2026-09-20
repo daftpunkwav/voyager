@@ -45,7 +45,7 @@ function backend(_domain: string, name: string, args: Record<string, unknown>) {
           system_prompt: '',
         },
       ]);
-    case 'list_tools':
+    case 'tools':
       return Promise.resolve([
         { name: 'read_file', description: 'read file' },
         { name: 'write_file', description: 'write file' },
