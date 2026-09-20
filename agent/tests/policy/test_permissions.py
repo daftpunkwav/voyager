@@ -39,8 +39,8 @@ class TestToolClass:
         assert TOOL_CLASS["todowrite"] == CLASS_R
         assert TOOL_CLASS["bash"] == CLASS_D
         assert TOOL_CLASS["session.delete"] == CLASS_D
-        assert TOOL_CLASS["spawn_subagent"] == CLASS_R
-        assert TOOL_CLASS["cancel_run"] == CLASS_D
+        assert TOOL_CLASS["subagent"] == CLASS_R
+        assert TOOL_CLASS["agent_instance.cancel"] == CLASS_D
 
     def test_unknown_is_dangerous(self) -> None:
         assert tool_class_of("notes__create_note") == CLASS_D

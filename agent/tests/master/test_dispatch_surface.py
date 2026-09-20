@@ -123,9 +123,10 @@ class TestDispatchReadonly:
         try:
             await execute(
                 app.registry,
-                "register_subagent",
+                "subagent",
                 ActorContext(actor=LOCAL_USER),
                 {
+                    "action": "register",
                     "name": "revbot",
                     "description": "review bot",
                     "allowed_tools": ["read", "write"],
@@ -151,8 +152,9 @@ class TestDispatchReadonly:
                     tool_calls=(
                         ToolCall(
                             "1",
-                            "spawn_subagent",
+                            "subagent",
                             {
+                                "action": "spawn",
                                 "goal": "review the code",
                                 "persona": "recon",
                                 "readonly": True,
@@ -388,9 +390,14 @@ class TestRegisterSurfaceValidation:
                 with pytest.raises(ServiceError) as exc:
                     await execute(
                         app.registry,
-                        "register_subagent",
+                        "subagent",
                         agent_ctx,
-                        {"name": "cheater", "description": "d", "allowed_tools": ["read", "write"]},
+                        {
+                            "action": "register",
+                            "name": "cheater",
+                            "description": "d",
+                            "allowed_tools": ["read", "write"],
+                        },
                     )
                 assert "write" in str(exc.value)
             finally:
@@ -411,9 +418,14 @@ class TestRegisterSurfaceValidation:
             try:
                 out = await execute(
                     app.registry,
-                    "register_subagent",
+                    "subagent",
                     ActorContext(actor=LOCAL_USER),
-                    {"name": "wide", "description": "d", "allowed_tools": ["read", "write"]},
+                    {
+                        "action": "register",
+                        "name": "wide",
+                        "description": "d",
+                        "allowed_tools": ["read", "write"],
+                    },
                 )
                 assert out["name"] == "wide"
             finally:

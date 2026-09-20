@@ -23,7 +23,7 @@ function asArray<T>(raw: T[] | { [k: string]: T[] | undefined }, key: string): T
   return Array.isArray(nested) ? nested : [];
 }
 
-/** list_subagents: definitions plus running instances. */
+/** subagent (action=list): definitions plus running instances. */
 export async function listSubagents(): Promise<{
   definitions: unknown[];
   running: unknown[];
@@ -31,7 +31,7 @@ export async function listSubagents(): Promise<{
   const raw = await callCapability<{
     definitions?: unknown[];
     running?: unknown[];
-  }>('agent', 'list_subagents', {});
+  }>('agent', 'subagent', { action: 'list' });
   return {
     definitions: raw.definitions ?? [],
     running: raw.running ?? [],
@@ -71,11 +71,11 @@ export async function listTools<T = unknown>(): Promise<T[]> {
 }
 
 export function registerSubagent(args: Record<string, unknown>): Promise<unknown> {
-  return callCapability('agent', 'register_subagent', args);
+  return callCapability('agent', 'subagent', { action: 'register', ...args });
 }
 
 export function deleteSubagent(name: string): Promise<{ deleted?: string }> {
-  return callCapability('agent', 'delete_subagent', { name });
+  return callCapability('agent', 'subagent', { action: 'unregister', name });
 }
 
 /** describe_tool: full metadata for one tool roster entry (parameters schema included). */
@@ -84,20 +84,22 @@ export function describeTool<T = unknown>(name: string): Promise<T> {
 }
 
 export function cancelRun(idOrName: string): Promise<{ cancelled?: string[] } | unknown> {
-  return callCapability('agent', 'cancel_run', { id_or_name: idOrName });
+  return callCapability('agent', 'agent_instance', { action: 'cancel', id_or_name: idOrName });
 }
 
 export async function listResumableCheckpoints<T = unknown>(): Promise<T[]> {
-  const raw = await callCapability<{ items?: T[] }>('agent', 'list_resumable_checkpoints', {});
+  const raw = await callCapability<{ items?: T[] }>('agent', 'agent_instance', {
+    action: 'checkpoints',
+  });
   return raw.items ?? [];
 }
 
 export function resumeRun(args: Record<string, unknown>): Promise<unknown> {
-  return callCapability('agent', 'resume_run', args);
+  return callCapability('agent', 'agent_instance', { action: 'resume', ...args });
 }
 
 export function abandonResumableCheckpoint(args: Record<string, unknown>): Promise<unknown> {
-  return callCapability('agent', 'abandon_resumable_checkpoint', args);
+  return callCapability('agent', 'agent_instance', { action: 'abandon', ...args });
 }
 
 export function answerQuestion(args: Record<string, unknown>): Promise<{ matched: boolean }> {

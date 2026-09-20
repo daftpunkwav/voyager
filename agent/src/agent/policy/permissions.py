@@ -65,8 +65,6 @@ TOOL_CLASS: dict[str, str] = {
     # plan / scratchpad / goals (main-goal guardrails live in the dispatch
     # rules, not in permissions)
     "scratchpad": CLASS_R,
-    "goal_read": CLASS_R,
-    "goal_write": CLASS_R,
     "plan": CLASS_R,
     # context window
     "context_status": CLASS_R,
@@ -99,20 +97,17 @@ TOOL_CLASS: dict[str, str] = {
     "preview_mcp_tools": CLASS_R,
     "list_user_hooks": CLASS_R,
     "reload_user_hooks": CLASS_D,
-    # team: spawn inherits the parent surface (R); register/unregister reshape
-    # the shared roster; run control splits on reversible vs work-losing
-    "spawn_subagent": CLASS_R,
-    "list_subagents": CLASS_R,
-    "wait_subagent": CLASS_R,
-    "register_subagent": CLASS_D,
-    "delete_subagent": CLASS_D,
-    "read_board": CLASS_R,
-    "write_board": CLASS_R,
-    "pause_run": CLASS_R,
-    "resume_run": CLASS_R,
-    "list_resumable_checkpoints": CLASS_R,
-    "cancel_run": CLASS_D,
-    "abandon_resumable_checkpoint": CLASS_D,
+    # team (aggregated): spawn inherits the parent surface (R);
+    # register/unregister reshape the shared roster; run control and goal
+    # lifecycle split on reversible vs work-losing / human-armed
+    "subagent": CLASS_R,
+    "subagent.register": CLASS_D,
+    "subagent.unregister": CLASS_D,
+    "agent_instance": CLASS_R,
+    "agent_instance.cancel": CLASS_D,
+    "agent_instance.abandon": CLASS_D,
+    "board": CLASS_R,
+    "goal": CLASS_R,
 }
 
 

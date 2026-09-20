@@ -215,7 +215,9 @@ class TestDiscover:
 
     async def test_capability_list_plugins_shape(self, app, tmp_path) -> None:
         make_plugin(tmp_path / "plugins", "example")
-        out = await execute(app.registry, "extension", USER_CTX, {"kind": "plugin", "action": "list"})
+        out = await execute(
+            app.registry, "extension", USER_CTX, {"kind": "plugin", "action": "list"}
+        )
         assert out == {"items": app.plugins.list()}
         assert out["items"][0]["name"] == "example"
 
@@ -333,7 +335,10 @@ class TestPersistAndReload:
         make_plugin(tmp_path / "plugins", "example", hook_enabled=True)
         assert "daily-note" not in [e["name"] for e in app.skills.index()]
         assert app.hooks.registered() == {}
-        assert await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"}) == []
+        assert (
+            await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"})
+            == []
+        )
 
     async def test_unapprove_hot_unloads(self, tmp_path) -> None:
         root = tmp_path / "plugins"
@@ -473,7 +478,9 @@ class TestMcpRegistration:
     async def test_servers_registered_pending_approval(self, app, tmp_path) -> None:
         make_plugin(tmp_path / "plugins", "example")
         await _approve(app)
-        servers = await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"})
+        servers = await execute(
+            app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"}
+        )
         assert [s["id"] for s in servers] == ["example-search"]
         assert servers[0]["approved"] == []  # registered only, no tools approved
         tools = {
@@ -525,7 +532,9 @@ class TestMcpRegistration:
         )
         out = await _approve(app)
         assert out["loaded"]["mcp_registered"] == 0
-        servers = await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"})
+        servers = await execute(
+            app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"}
+        )
         assert servers[0]["approved"] == [
             "*"
         ]  # the original package approval untouched by plugin approval
@@ -570,11 +579,11 @@ class TestItemApproval:
         # Unchecked skills are unreadable (absent from list_skills, load_skill gives NOT_FOUND)
         with pytest.raises(ServiceError) as exc:
             await execute(
-            app.registry,
-            "skill",
-            USER_CTX,
-            {"action": "load", "name": "beta"},
-        )
+                app.registry,
+                "skill",
+                USER_CTX,
+                {"action": "load", "name": "beta"},
+            )
         assert exc.value.body.code == "AGENT.NOT_FOUND"
         assert app.settings.get("agent.plugins.approvals") == {
             "multi": {"skills": ["alpha"], "hooks": [], "mcp": []}
@@ -593,7 +602,9 @@ class TestItemApproval:
         make_two_of_each(tmp_path / "plugins")
         out = await _approve_item(app, "multi", mcp=["multi-s1"])
         assert out["loaded"]["mcp_registered"] == 1
-        servers = await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"})
+        servers = await execute(
+            app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"}
+        )
         assert [s["id"] for s in servers] == ["multi-s1"]
         assert (
             servers[0]["approved"] == []
@@ -606,14 +617,19 @@ class TestItemApproval:
     async def test_item_mcp_empty_not_registered(self, app, tmp_path) -> None:
         make_two_of_each(tmp_path / "plugins")
         await _approve_item(app, "multi", skills=["alpha"], mcp=[])
-        assert await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"}) == []
+        assert (
+            await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"})
+            == []
+        )
         assert app.settings.get("agent.plugins.approvals")["multi"]["mcp"] == []
 
     async def test_item_mcp_star_registers_all(self, app, tmp_path) -> None:
         make_two_of_each(tmp_path / "plugins")
         out = await _approve_item(app, "multi", mcp="*")
         assert out["loaded"]["mcp_registered"] == 2
-        servers = await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"})
+        servers = await execute(
+            app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"}
+        )
         assert {s["id"] for s in servers} == {"multi-s1", "multi-s2"}
 
 
@@ -1089,7 +1105,10 @@ class TestMcpReclaim:
         assert out["approved"] is False
         assert out["mcp_reclaimed"] == ["example-search"]
         assert out["mcp_reclaim_skipped"] == []
-        assert await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"}) == []
+        assert (
+            await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"})
+            == []
+        )
 
     async def test_unapprove_keeps_user_manual_mcp(self, app, tmp_path) -> None:
         """A manually added server not declared in the plugin manifest is unaffected by the plugin revoke."""
@@ -1105,7 +1124,9 @@ class TestMcpReclaim:
             app.registry, "set_plugin_approval", USER_CTX, {"name": "example", "approved": False}
         )
         assert out["mcp_reclaimed"] == ["example-search"]
-        servers = await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"})
+        servers = await execute(
+            app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"}
+        )
         assert [s["id"] for s in servers] == ["manual-srv"]
 
     async def test_unapprove_skips_same_id_user_config(self, app, tmp_path) -> None:
@@ -1124,7 +1145,9 @@ class TestMcpReclaim:
         assert out["mcp_reclaimed"] == []
         assert [s["id"] for s in out["mcp_reclaim_skipped"]] == ["example-search"]
         assert out["mcp_reclaim_skipped"][0]["reason"]
-        servers = await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"})
+        servers = await execute(
+            app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"}
+        )
         assert [s["id"] for s in servers] == ["example-search"]  # the manual config survives
 
     async def test_unapprove_invalid_declaration_skips_honestly(self, app, tmp_path) -> None:
@@ -1196,7 +1219,10 @@ class TestMcpReclaim:
             app.registry, "set_plugin_approval", USER_CTX, {"name": "multi", "approved": False}
         )
         assert out2["mcp_reclaimed"] == ["multi-s1"]
-        assert await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"}) == []
+        assert (
+            await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"})
+            == []
+        )
 
     async def test_unapprove_deleted_dir_reclaims_from_item_record(self, tmp_path) -> None:
         """Directory deleted but the item approval record still lists ids -> reclaim follows the record; the list still clears."""
@@ -1215,9 +1241,12 @@ class TestMcpReclaim:
             )
             assert sorted(out["mcp_reclaimed"]) == ["multi-s1", "multi-s2"]
             assert app2.settings.get("agent.plugins.approvals") == {}
-            assert await execute(
-            app2.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"}
-        ) == []
+            assert (
+                await execute(
+                    app2.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"}
+                )
+                == []
+            )
         finally:
             app2.close()
 
@@ -1296,11 +1325,11 @@ class TestMcpReclaim:
         try:
             await _approve(app)
             await execute(
-            app.registry,
-            "extension",
-            USER_CTX,
-            {"kind": "mcp", "action": "preview", "id": "example-search"},
-        )
+                app.registry,
+                "extension",
+                USER_CTX,
+                {"kind": "mcp", "action": "preview", "id": "example-search"},
+            )
             assert "example-search" in sessions  # the session was opened
             out = await execute(
                 app.registry,
@@ -1336,11 +1365,11 @@ def zip_dir(src: Path, zip_path: Path, *, prefix: str = "") -> Path:
 
 async def _install(app, **args) -> dict:
     return await execute(
-            app.registry,
-            "extension",
-            USER_CTX,
-            {"kind": "plugin", "action": "install", **args},
-        )
+        app.registry,
+        "extension",
+        USER_CTX,
+        {"kind": "plugin", "action": "install", **args},
+    )
 
 
 def plugin_names(app) -> list[str]:
@@ -1643,11 +1672,11 @@ class TestInstallSemantics:
         src = build_plugin_src(tmp_path)
         with pytest.raises(ServiceError) as exc:
             await execute(
-            app.registry,
-            "extension",
-            None,
-            {"kind": "plugin", "action": "install", "source_dir": str(src)},
-        )
+                app.registry,
+                "extension",
+                None,
+                {"kind": "plugin", "action": "install", "source_dir": str(src)},
+            )
         assert exc.value.body.code == "CAPABILITY.AUTH_REQUIRED"
 
     async def test_install_not_auto_approved_anything(self, app, tmp_path) -> None:
@@ -1656,7 +1685,10 @@ class TestInstallSemantics:
         await _install(app, source_dir=str(src))
         assert "daily-note" not in [e["name"] for e in app.skills.index()]
         assert app.hooks.registered() == {}
-        assert await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"}) == []
+        assert (
+            await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"})
+            == []
+        )
 
     async def test_copy_failure_leaves_no_half_install(self, app, tmp_path, monkeypatch) -> None:
         """A failure mid-write -> the destination directory is rolled back and emptied."""
@@ -1717,11 +1749,11 @@ class TestUninstall:
         await _approve(app, "example")
         with pytest.raises(ServiceError) as exc:
             await execute(
-            app.registry,
-            "extension",
-            USER_CTX,
-            {"kind": "plugin", "action": "uninstall", "name": "example"},
-        )
+                app.registry,
+                "extension",
+                USER_CTX,
+                {"kind": "plugin", "action": "uninstall", "name": "example"},
+            )
         assert exc.value.body.code == "AGENT.CONFLICT"
         assert (tmp_path / "plugins" / "example" / "plugin.json").is_file()
 
@@ -1736,20 +1768,20 @@ class TestUninstall:
         assert app.plugins.find("linked") is not None  # discovery sees it through the link
         with pytest.raises(ServiceError) as exc:
             await execute(
-            app.registry,
-            "extension",
-            USER_CTX,
-            {"kind": "plugin", "action": "uninstall", "name": "linked"},
-        )
+                app.registry,
+                "extension",
+                USER_CTX,
+                {"kind": "plugin", "action": "uninstall", "name": "linked"},
+            )
         assert exc.value.body.code == "AGENT.INVALID_INPUT"
         assert real.is_dir()  # the link target is preserved intact
 
     async def test_uninstall_unknown_not_found(self, app) -> None:
         with pytest.raises(ServiceError) as exc:
             await execute(
-            app.registry,
-            "extension",
-            USER_CTX,
-            {"kind": "plugin", "action": "uninstall", "name": "ghost"},
-        )
+                app.registry,
+                "extension",
+                USER_CTX,
+                {"kind": "plugin", "action": "uninstall", "name": "ghost"},
+            )
         assert exc.value.body.code == "AGENT.NOT_FOUND"

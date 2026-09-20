@@ -360,11 +360,11 @@ class TestCapabilityContract:
                 {"on": "note.created", "description": "u", "enabled": True},
             )
             out = await execute(
-            app.registry,
-            "extension",
-            USER_CTX,
-            {"kind": "hook", "action": "reload"},
-        )
+                app.registry,
+                "extension",
+                USER_CTX,
+                {"kind": "hook", "action": "reload"},
+            )
             assert out == {"loaded": 1, "event_patterns": ["note.created"], "skipped": []}
             assert "note.created" in app.loop.patterns  # subscription sync already applied
         finally:
@@ -376,11 +376,11 @@ class TestCapabilityContract:
         app = self._build(tmp_path)
         try:
             out = await execute(
-            app.registry,
-            "extension",
-            AGENT_CTX,
-            {"kind": "hook", "action": "reload"},
-        )
+                app.registry,
+                "extension",
+                AGENT_CTX,
+                {"kind": "hook", "action": "reload"},
+            )
             assert set(out) >= {"loaded", "event_patterns", "skipped"}
         finally:
             app.memory.close()
@@ -390,11 +390,11 @@ class TestCapabilityContract:
         try:
             with pytest.raises(ServiceError) as exc:
                 await execute(
-            app.registry,
-            "extension",
-            None,
-            {"kind": "hook", "action": "reload"},
-        )
+                    app.registry,
+                    "extension",
+                    None,
+                    {"kind": "hook", "action": "reload"},
+                )
             assert exc.value.body.code == "CAPABILITY.AUTH_REQUIRED"
         finally:
             app.memory.close()
@@ -491,11 +491,11 @@ class TestLiveLoopIntegration:
                 {"on": "note.created", "description": "user observed", "enabled": True},
             )
             out = await execute(
-            app.registry,
-            "extension",
-            USER_CTX,
-            {"kind": "hook", "action": "reload"},
-        )
+                app.registry,
+                "extension",
+                USER_CTX,
+                {"kind": "hook", "action": "reload"},
+            )
             assert out["loaded"] == 1
             assert "note.created" in app.loop.patterns  # subscribed without a restart
             with caplog.at_level(logging.INFO, logger="agent.hooks.loader"):
@@ -521,11 +521,11 @@ class TestLiveLoopIntegration:
             assert "note.created" in app.loop.patterns  # subscribed by startup loading
             (hooks_dir / "u.json").unlink()
             await execute(
-            app.registry,
-            "extension",
-            USER_CTX,
-            {"kind": "hook", "action": "reload"},
-        )
+                app.registry,
+                "extension",
+                USER_CTX,
+                {"kind": "hook", "action": "reload"},
+            )
             assert "note.created" not in app.loop.patterns  # unsubscribed
             with caplog.at_level(logging.INFO, logger="agent.hooks.loader"):
                 await bus.publish(Event(type="note.created", actor=LOCAL_USER, payload={}))
@@ -558,22 +558,22 @@ class TestLiveLoopIntegration:
                 {"on": "note.created", "description": "user observed", "enabled": True},
             )
             await execute(
-            app.registry,
-            "extension",
-            USER_CTX,
-            {"kind": "hook", "action": "reload"},
-        )
+                app.registry,
+                "extension",
+                USER_CTX,
+                {"kind": "hook", "action": "reload"},
+            )
             assert app.hooks.registered() == {"on_event": 2}
             assert "note.created" in app.loop.patterns
             assert [s for s in app.hooks.sources if s.startswith("plugin:")] == plugin_sources
             # Delete the user file -> reload: the pattern is still kept because of the plugin
             (tmp_path / "ws" / "hooks" / "u.json").unlink()
             await execute(
-            app.registry,
-            "extension",
-            USER_CTX,
-            {"kind": "hook", "action": "reload"},
-        )
+                app.registry,
+                "extension",
+                USER_CTX,
+                {"kind": "hook", "action": "reload"},
+            )
             assert app.hooks.registered() == {"on_event": 1}
             assert "note.created" in app.loop.patterns
             # Revoke the plugin: with nobody wanting it, the pattern finally exits

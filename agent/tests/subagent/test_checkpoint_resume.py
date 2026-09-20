@@ -101,7 +101,7 @@ class TestBootAndList:
             loaded = store.load(state.run_id)
             assert loaded.status is RunStatus.PAUSED
             assert loaded.error == "process restarted, resumable"
-            out = await execute(app.registry, "list_resumable_checkpoints", USER_CTX, {})
+            out = await execute(app.registry, "agent_instance", USER_CTX, {"action": "checkpoints"})
             assert [i["run_id"] for i in out["items"]] == [state.run_id]
             item = out["items"][0]
             assert item["status"] == "paused"
@@ -135,7 +135,7 @@ class TestBootAndList:
         )
         app = _build(tmp_path)
         try:
-            out = await execute(app.registry, "list_resumable_checkpoints", USER_CTX, {})
+            out = await execute(app.registry, "agent_instance", USER_CTX, {"action": "checkpoints"})
             by_id = {i["run_id"]: i for i in out["items"]}
             store = CheckpointStore(rd / "checkpoints")
             assert store.load("legacy00001").status is RunStatus.FAILED  # legacy is not alive
@@ -156,7 +156,12 @@ class TestResumeRun:
         state = _seed_checkpoint(rd, _snapshot())
         app = _build(tmp_path)
         try:
-            out = await execute(app.registry, "resume_run", USER_CTX, {"run_id": state.run_id})
+            out = await execute(
+                app.registry,
+                "agent_instance",
+                USER_CTX,
+                {"action": "resume", "run_id": state.run_id},
+            )
             assert out["resumed"] == "instabcd"
             assert out["continuing"] is False
             inst = app.spawner.instances["instabcd"]
@@ -174,7 +179,12 @@ class TestResumeRun:
             assert inst.name == "scout"
             # A live instance already exists for this run (PAUSED counts as alive): re-resuming is rejected
             with pytest.raises(ServiceError):
-                await execute(app.registry, "resume_run", USER_CTX, {"run_id": state.run_id})
+                await execute(
+                    app.registry,
+                    "agent_instance",
+                    USER_CTX,
+                    {"action": "resume", "run_id": state.run_id},
+                )
         finally:
             app.memory.close()
 
@@ -185,9 +195,9 @@ class TestResumeRun:
         try:
             out = await execute(
                 app.registry,
-                "resume_run",
+                "agent_instance",
                 USER_CTX,
-                {"run_id": state.run_id, "continue_run": True},
+                {"action": "resume", "run_id": state.run_id, "continue_run": True},
             )
             assert out["continuing"] is True
             await asyncio.sleep(0.1)
@@ -195,7 +205,9 @@ class TestResumeRun:
             assert inst.status is RunStatus.COMPLETED
             assert inst.state.result
             # After the continued run the checkpoint is rewritten: terminal state, gone from the resume list
-            listed = await execute(app.registry, "list_resumable_checkpoints", USER_CTX, {})
+            listed = await execute(
+                app.registry, "agent_instance", USER_CTX, {"action": "checkpoints"}
+            )
             assert listed["items"] == []
         finally:
             app.memory.close()
@@ -268,9 +280,9 @@ class TestMidTurnCheckpoint:
         try:
             out = await execute(
                 app2.registry,
-                "resume_run",
+                "agent_instance",
                 USER_CTX,
-                {"run_id": inst.state.run_id, "continue_run": True},
+                {"action": "resume", "run_id": inst.state.run_id, "continue_run": True},
             )
             assert out["continuing"] is True
             await asyncio.sleep(0.1)
@@ -327,9 +339,9 @@ class TestMidTurnCheckpoint:
         try:
             await execute(
                 app.registry,
-                "resume_run",
+                "agent_instance",
                 USER_CTX,
-                {"run_id": state.run_id, "continue_run": True},
+                {"action": "resume", "run_id": state.run_id, "continue_run": True},
             )
             await asyncio.sleep(0.1)
             inst = app.spawner.instances["instabcd"]
@@ -355,7 +367,12 @@ class TestMidTurnCheckpoint:
         try:
             for rid in ("badpend01", "badpend02"):
                 with pytest.raises(ServiceError) as exc:
-                    await execute(app.registry, "resume_run", USER_CTX, {"run_id": rid})
+                    await execute(
+                        app.registry,
+                        "agent_instance",
+                        USER_CTX,
+                        {"action": "resume", "run_id": rid},
+                    )
                 assert exc.value.body.code == "AGENT.NOT_FOUND", rid
             assert app.spawner.instances == {}  # no half-built instance left behind on rejection
         finally:
@@ -368,10 +385,15 @@ class TestResumeRejections:
         state = _seed_checkpoint(rd, _snapshot(), run_id="legacy00001", with_resume=False)
         app = _build(tmp_path)
         try:
-            out = await execute(app.registry, "list_resumable_checkpoints", USER_CTX, {})
+            out = await execute(app.registry, "agent_instance", USER_CTX, {"action": "checkpoints"})
             assert out["items"] == []  # legacy was marked failed at boot, not alive
             with pytest.raises(ServiceError) as exc:
-                await execute(app.registry, "resume_run", USER_CTX, {"run_id": state.run_id})
+                await execute(
+                    app.registry,
+                    "agent_instance",
+                    USER_CTX,
+                    {"action": "resume", "run_id": state.run_id},
+                )
             assert exc.value.body.code == "AGENT.NOT_FOUND"
         finally:
             app.memory.close()
@@ -382,7 +404,12 @@ class TestResumeRejections:
         app = _build(tmp_path)
         try:
             with pytest.raises(ServiceError) as exc:
-                await execute(app.registry, "resume_run", USER_CTX, {"run_id": "convres001"})
+                await execute(
+                    app.registry,
+                    "agent_instance",
+                    USER_CTX,
+                    {"action": "resume", "run_id": "convres001"},
+                )
             assert exc.value.body.code == "AGENT.INVALID_INPUT"
         finally:
             app.memory.close()
@@ -393,7 +420,12 @@ class TestResumeRejections:
         app = _build(tmp_path)
         try:
             with pytest.raises(ServiceError) as exc:
-                await execute(app.registry, "resume_run", USER_CTX, {"run_id": "directres01"})
+                await execute(
+                    app.registry,
+                    "agent_instance",
+                    USER_CTX,
+                    {"action": "resume", "run_id": "directres01"},
+                )
             assert exc.value.body.code == "AGENT.INVALID_INPUT"
         finally:
             app.memory.close()
@@ -404,7 +436,12 @@ class TestResumeRejections:
         app = _build(tmp_path)
         try:
             with pytest.raises(ServiceError) as exc:
-                await execute(app.registry, "resume_run", USER_CTX, {"run_id": "doneresum01"})
+                await execute(
+                    app.registry,
+                    "agent_instance",
+                    USER_CTX,
+                    {"action": "resume", "run_id": "doneresum01"},
+                )
             assert exc.value.body.code == "AGENT.INVALID_INPUT"
         finally:
             app.memory.close()
@@ -413,7 +450,12 @@ class TestResumeRejections:
         app = _build(tmp_path)
         try:
             with pytest.raises(ServiceError) as exc:
-                await execute(app.registry, "resume_run", USER_CTX, {"run_id": "nosuchrun1"})
+                await execute(
+                    app.registry,
+                    "agent_instance",
+                    USER_CTX,
+                    {"action": "resume", "run_id": "nosuchrun1"},
+                )
             assert exc.value.body.code == "AGENT.NOT_FOUND"
         finally:
             app.memory.close()
@@ -434,11 +476,16 @@ class TestResumeRejections:
             store.save(st)
         app = _build(tmp_path)
         try:
-            out = await execute(app.registry, "list_resumable_checkpoints", USER_CTX, {})
+            out = await execute(app.registry, "agent_instance", USER_CTX, {"action": "checkpoints"})
             assert out["items"] == []
             for rid in ("corruptres1", "corruptres2"):
                 with pytest.raises(ServiceError) as exc:
-                    await execute(app.registry, "resume_run", USER_CTX, {"run_id": rid})
+                    await execute(
+                        app.registry,
+                        "agent_instance",
+                        USER_CTX,
+                        {"action": "resume", "run_id": rid},
+                    )
                 assert exc.value.body.code == "AGENT.NOT_FOUND", rid
         finally:
             app.memory.close()
@@ -454,14 +501,16 @@ class TestAbandonCheckpoint:
         try:
             out = await execute(
                 app.registry,
-                "abandon_resumable_checkpoint",
+                "agent_instance",
                 USER_CTX,
-                {"run_id": state.run_id},
+                {"action": "abandon", "run_id": state.run_id},
             )
             assert out == {"abandoned": state.run_id}
             # The on-disk file is gone and the run no longer appears in the list
             assert not (rd / "checkpoints" / f"{state.run_id}.json").exists()
-            listed = await execute(app.registry, "list_resumable_checkpoints", USER_CTX, {})
+            listed = await execute(
+                app.registry, "agent_instance", USER_CTX, {"action": "checkpoints"}
+            )
             assert listed["items"] == []
         finally:
             app.memory.close()
@@ -472,9 +521,9 @@ class TestAbandonCheckpoint:
             with pytest.raises(ServiceError) as exc:
                 await execute(
                     app.registry,
-                    "abandon_resumable_checkpoint",
+                    "agent_instance",
                     USER_CTX,
-                    {"run_id": "nosuchrun1"},
+                    {"action": "abandon", "run_id": "nosuchrun1"},
                 )
             assert exc.value.body.code == "AGENT.NOT_FOUND"
         finally:
@@ -489,9 +538,9 @@ class TestAbandonCheckpoint:
             with pytest.raises(ServiceError) as exc:
                 await execute(
                     app.registry,
-                    "abandon_resumable_checkpoint",
+                    "agent_instance",
                     USER_CTX,
-                    {"run_id": state.run_id},
+                    {"action": "abandon", "run_id": state.run_id},
                 )
             assert exc.value.body.code == "AGENT.NOT_FOUND"
             # Rejection must not delete the file
@@ -510,14 +559,16 @@ class TestAbandonCheckpoint:
         )
         app = _build(tmp_path)
         try:
-            listed = await execute(app.registry, "list_resumable_checkpoints", USER_CTX, {})
+            listed = await execute(
+                app.registry, "agent_instance", USER_CTX, {"action": "checkpoints"}
+            )
             item = next(i for i in listed["items"] if i["run_id"] == "convres001")
             assert item["resumable"] is False  # listed for visibility, abandon only
             out = await execute(
                 app.registry,
-                "abandon_resumable_checkpoint",
+                "agent_instance",
                 USER_CTX,
-                {"run_id": "convres001"},
+                {"action": "abandon", "run_id": "convres001"},
             )
             assert out == {"abandoned": "convres001"}
             assert not (rd / "checkpoints" / "convres001.json").exists()
@@ -530,17 +581,26 @@ class TestAbandonCheckpoint:
         state = _seed_checkpoint(rd, _snapshot())
         app = _build(tmp_path)
         try:
-            await execute(app.registry, "resume_run", USER_CTX, {"run_id": state.run_id})
-            running = (await execute(app.registry, "list_subagents", USER_CTX, {}))["running"]
+            await execute(
+                app.registry,
+                "agent_instance",
+                USER_CTX,
+                {"action": "resume", "run_id": state.run_id},
+            )
+            running = (await execute(app.registry, "subagent", USER_CTX, {"action": "list"}))[
+                "running"
+            ]
             assert any(r["id"] == "instabcd" for r in running)
 
             await execute(
                 app.registry,
-                "abandon_resumable_checkpoint",
+                "agent_instance",
                 USER_CTX,
-                {"run_id": state.run_id},
+                {"action": "abandon", "run_id": state.run_id},
             )
-            running = (await execute(app.registry, "list_subagents", USER_CTX, {}))["running"]
+            running = (await execute(app.registry, "subagent", USER_CTX, {"action": "list"}))[
+                "running"
+            ]
             assert all(r["id"] != "instabcd" for r in running)
             assert state.run_id not in app.spawner.instances
         finally:
@@ -590,9 +650,9 @@ class TestResumeContinueFailureVisible:
         try:
             out = await execute(
                 app.registry,
-                "resume_run",
+                "agent_instance",
                 USER_CTX,
-                {"run_id": state.run_id, "continue_run": True},
+                {"action": "resume", "run_id": state.run_id, "continue_run": True},
             )
             assert out["continuing"] is True
             await asyncio.sleep(0.2)
@@ -632,14 +692,16 @@ class TestResumeContinueFailureVisible:
         try:
             await execute(
                 app.registry,
-                "resume_run",
+                "agent_instance",
                 USER_CTX,
-                {"run_id": state.run_id, "continue_run": True},
+                {"action": "resume", "run_id": state.run_id, "continue_run": True},
             )
             await asyncio.sleep(0.2)
             store = CheckpointStore(rd / "checkpoints")
             assert store.load(state.run_id).status is RunStatus.COMPLETED
-            listed = await execute(app.registry, "list_resumable_checkpoints", USER_CTX, {})
+            listed = await execute(
+                app.registry, "agent_instance", USER_CTX, {"action": "checkpoints"}
+            )
             assert listed["items"] == []
             failed_evs = [
                 e

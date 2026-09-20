@@ -136,19 +136,22 @@ class TestToolRetry:
     async def test_spawn_subagent_is_write_never_retried(self, tmp_path) -> None:
         """spawn_subagent has side effects (creates a run instance): marked write, so on failure the
         handler runs once instead of retrying like a read-only tool and spawning twice."""
-        from agent.tools.team import spawn_tool
+        from agent.tools.team import subagent_tool
+        from platform_capability import Registry, capability
 
         calls = {"n": 0}
+        reg = Registry("agent")
 
-        async def failing_dispatch(*args, **kwargs):
+        @capability(reg, name="subagent", description="x")
+        async def subagent(action: str = "spawn", goal: str = "") -> dict:
             calls["n"] += 1
             raise RuntimeError("boom")
 
-        tool = spawn_tool(failing_dispatch)["spawn_subagent"]
+        tool = subagent_tool(reg)
         assert tool.write is True
         root = ensure_workdir(tmp_path / "ws")
-        belt = _belt(root, {"spawn_subagent": tool})
-        out = await belt.call(ToolCall("t1", "spawn_subagent", {"goal": "x"}))
+        belt = _belt(root, {"subagent": tool})
+        out = await belt.call(ToolCall("t1", "subagent", {"action": "spawn", "goal": "x"}))
         assert "[工具失败]" in out
         assert calls["n"] == 1
 

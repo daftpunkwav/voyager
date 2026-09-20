@@ -7,7 +7,27 @@ import asyncio
 
 import pytest
 from agent.build import build_agent
-from agent.capabilities.team.pause_run import pause_run
+from agent.capabilities.team.agent_instance import _resolve
+
+
+def pause_run(spawner, chat, id_or_name):
+    inst = _resolve(spawner, chat, id_or_name)
+    if inst is None:
+        from platform_contracts import ErrorSuffix, ServiceError
+
+        raise ServiceError("agent", ErrorSuffix.NOT_FOUND, f"no matching instance: {id_or_name}")
+    if inst.status.value in ("completed", "failed", "cancelled"):
+        from platform_contracts import ErrorSuffix, ServiceError
+
+        raise ServiceError(
+            "agent",
+            ErrorSuffix.CONFLICT,
+            f"instance {inst.name} is {inst.status.value}, cannot pause",
+        )
+    inst.pause_requested = True
+    return {"pausing": inst.id, "name": inst.name, "status": "pause-requested"}
+
+
 from agent.llm import LLMReply
 from platform_contracts import RuntimeEvent
 

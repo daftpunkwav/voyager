@@ -88,7 +88,6 @@ from agent.tools import (
     ensure_workdir,
     extension_tools,
     fs_tools,
-    goal_tools,
     jobs_tools,
     memory_tools,
     observe_tools,
@@ -100,7 +99,6 @@ from agent.tools import (
     session_tools,
     shell_tools,
     skill_tools,
-    spawn_tool,
     team_tools,
     todo_tools,
     tools_tools,
@@ -688,9 +686,7 @@ def build_agent(
     # visible next message; same injection channel as MCP mounting)
     toolbelt.register(
         {
-            **spawn_tool(master.dispatch_task),
             **plan_tools(plan_gates, asker),
-            **goal_tools(goal_manager),
         }
     )
     jobs_view = JobsView(log)
@@ -719,6 +715,7 @@ def build_agent(
             blackboard=blackboard,  # task-scoped shared notes (read/write tools below)
             approvals=approval_store,  # remembered L2 grants (list/revoke capabilities)
             plan_gates=plan_gates,  # human-side review-phase toggle
+            dispatch=master.dispatch_task,  # subagent spawn action
             goal_manager=goal_manager,  # durable session goals
             skills_dir=skills_dir,  # skill propose writes here
             session_index=session_index,  # session search action
@@ -733,7 +730,7 @@ def build_agent(
     # the shared event log directly.
     toolbelt.register(
         {
-            **team_tools(registry, audit, blackboard=blackboard),
+            **team_tools(registry, audit),
             **memory_tools(registry, audit),
             **extension_tools(registry, audit),
             **session_tools(registry, master.sessions, session_index, log, audit),

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
-from agent.capabilities.team.wait_subagent import wait_subagent
+from agent.capabilities.team.subagent import _wait_subagent as wait_subagent
 from agent.runtime.state import RunStatus
 from agent.subagent.spawn import Spawner
 from platform_contracts import ServiceError
@@ -80,10 +80,10 @@ async def test_timeout_is_capped_and_malformed_falls_back(monkeypatch) -> None:
     """A huge timeout is capped and a malformed one falls back to the default;
     both shrink to 0.2s here so the cap/fallback logic is observable without
     literally waiting for the production ceilings."""
-    import agent.capabilities.team.wait_subagent as mod
+    import agent.capabilities.team.subagent as mod
 
-    monkeypatch.setattr(mod, "MAX_TIMEOUT_S", 0.2)
-    monkeypatch.setattr(mod, "DEFAULT_TIMEOUT_S", 0.2)
+    monkeypatch.setattr(mod, "_MAX_TIMEOUT_S", 0.2)
+    monkeypatch.setattr(mod, "_DEFAULT_TIMEOUT_S", 0.2)
     inst = _inst(RunStatus.RUNNING)
     for bad in (10**9, "not-a-number"):
         out = await wait_subagent(_spawner_with(inst), "abc123", timeout_s=cast(float, bad))

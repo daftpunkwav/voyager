@@ -35,7 +35,10 @@ class TestCancelRun:
         assert inst.status.alive
 
         out = await execute(
-            app.registry, "cancel_run", ActorContext(actor=LOCAL_USER), {"id_or_name": "job"}
+            app.registry,
+            "agent_instance",
+            ActorContext(actor=LOCAL_USER),
+            {"action": "cancel", "id_or_name": "job"},
         )
         assert out["cancelled"] == [inst.id]
         with pytest.raises(asyncio.CancelledError):
@@ -46,7 +49,10 @@ class TestCancelRun:
         app = _app(tmp_path)
         with pytest.raises(ServiceError) as exc:
             await execute(
-                app.registry, "cancel_run", ActorContext(actor=LOCAL_USER), {"id_or_name": "ghost"}
+                app.registry,
+                "agent_instance",
+                ActorContext(actor=LOCAL_USER),
+                {"action": "cancel", "id_or_name": "ghost"},
             )
         assert exc.value.body.code == "AGENT.NOT_FOUND"
 
@@ -108,7 +114,10 @@ class TestCancelCascade:
             inst.state.status = RunStatus.RUNNING
 
         out = await execute(
-            app.registry, "cancel_run", ActorContext(actor=LOCAL_USER), {"id_or_name": "parent"}
+            app.registry,
+            "agent_instance",
+            ActorContext(actor=LOCAL_USER),
+            {"action": "cancel", "id_or_name": "parent"},
         )
         assert set(out["cancelled"]) == {parent.id, child.id, grandchild.id}
         assert parent.state.status is RunStatus.CANCELLED
@@ -126,7 +135,10 @@ class TestCancelCascade:
         b.state.status = RunStatus.RUNNING
 
         out = await execute(
-            app.registry, "cancel_run", ActorContext(actor=LOCAL_USER), {"id_or_name": "a"}
+            app.registry,
+            "agent_instance",
+            ActorContext(actor=LOCAL_USER),
+            {"action": "cancel", "id_or_name": "a"},
         )
         assert set(out["cancelled"]) == {a.id, b.id}
 
@@ -163,7 +175,10 @@ class TestCancelNoticeAndPending:
         child.state.status = RS.PENDING  # queued, no slot yet
 
         out = await execute(
-            app.registry, "cancel_run", ActorContext(actor=LOCAL_USER), {"id_or_name": "p"}
+            app.registry,
+            "agent_instance",
+            ActorContext(actor=LOCAL_USER),
+            {"action": "cancel", "id_or_name": "p"},
         )
         assert set(out["cancelled"]) == {parent.id, child.id}
         result = await app.spawner.start(child)  # slot "frees up"

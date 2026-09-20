@@ -113,7 +113,9 @@ class TestAddAndPreview:
             )
             assert result["ok"] is True and result["connected"] is False
             assert "connection refused" in result["error"] and result["preview"] == []
-            state = await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"})
+            state = await execute(
+                app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"}
+            )
             assert [s["id"] for s in state] == ["bad"]
         finally:
             app.memory.close()
@@ -253,7 +255,9 @@ class TestRemove:
             ToolCall(id="2", name="mcp__demo__search", arguments={})
         )
         assert "未知工具" in out
-        state = await execute(app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"})
+        state = await execute(
+            app.registry, "extension", USER_CTX, {"kind": "mcp", "action": "list"}
+        )
         assert state == []
         assert session.closed  # the session was closed
 
@@ -347,11 +351,11 @@ class TestRestart:
             assert "mcp__broken__search" not in app.spawner._toolbelt.names()
             fail_ids.clear()
             await execute(
-            app.registry,
-            "extension",
-            USER_CTX,
-            {"kind": "mcp", "action": "preview", "id": "broken"},
-        )
+                app.registry,
+                "extension",
+                USER_CTX,
+                {"kind": "mcp", "action": "preview", "id": "broken"},
+            )
             assert "mcp__broken__search" in app.spawner._toolbelt.names()
         finally:
             app.close()

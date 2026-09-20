@@ -91,7 +91,7 @@ class TestQuotaAndRoster:
             belt = _belt(app)
             roster = json.loads(await belt.call(ToolCall("1", "tools", {"action": "list"})))
             names = {t["name"] for t in roster}
-            assert {"read", "cancel_run", "observe", "session"} <= names
+            assert {"read", "agent_instance", "observe", "session"} <= names
             entry = next(t for t in roster if t["name"] == "session")
             assert entry["class"] in ("R", "D")
             detail = json.loads(

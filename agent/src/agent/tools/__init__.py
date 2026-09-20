@@ -23,10 +23,10 @@ from agent.tools.jobs import jobs_tools
 from agent.tools.memory import memory_tools
 from agent.tools.net import web_tools
 from agent.tools.observe import observe_tools
-from agent.tools.plan import goal_tools, plan_tools, scratchpad_tool
+from agent.tools.plan import plan_tools, scratchpad_tool
 from agent.tools.session import session_tools
 from agent.tools.skill import skill_tools
-from agent.tools.team import spawn_tool, team_tools
+from agent.tools.team import team_tools
 from agent.tools.tools import tools_tools
 from agent.tools.workspace import (
     DEFAULT_CATEGORIES,
@@ -58,7 +58,6 @@ __all__ = [
     "ensure_workdir",
     "extension_tools",
     "fs_tools",
-    "goal_tools",
     "graded_toolbelt",
     "jobs_tools",
     "memory_tools",
@@ -71,7 +70,6 @@ __all__ = [
     "session_tools",
     "shell_tools",
     "skill_tools",
-    "spawn_tool",
     "team_tools",
     "todo_tools",
     "tools_tools",

@@ -9,8 +9,9 @@ from agent.build import build_agent
 from agent.llm import FakeLLM
 from agent.master.goal import ACTIVE, PAUSED, GoalManager
 from agent.tools.core.self_capability import agent_context
+from platform_actor import ActorContext
 from platform_capability import execute
-from platform_contracts import ErrorSuffix, ServiceError
+from platform_contracts import LOCAL_USER, ActorKind, ActorRef, ErrorSuffix, ServiceError
 
 
 def _app(tmp_path):
@@ -196,13 +197,13 @@ class TestGoalRearm:
 
 
 class TestGoalCapabilityAndTools:
-    async def test_goal_manage_validates_action(self, tmp_path) -> None:
+    async def test_goal_action_validates_action(self, tmp_path) -> None:
         app = _app(tmp_path)
         try:
             with pytest.raises(ServiceError) as exc:
                 await execute(
                     app.registry,
-                    "goal_manage",
+                    "goal",
                     agent_context(),
                     {"session_id": "s1", "action": "nope"},
                 )
@@ -210,24 +211,41 @@ class TestGoalCapabilityAndTools:
         finally:
             app.close()
 
-    async def test_goal_manage_create_then_agent_reports_done(self, tmp_path) -> None:
+    async def test_goal_create_then_agent_reports_done(self, tmp_path) -> None:
+        """The human arms the goal (create); the agent's goal tool may only
+        report done/blocked — status=active is refused by the driver rule."""
+
         app = _app(tmp_path)
         try:
-            from agent.tools.plan import goal_tools
+            agent_ctx = ActorContext(
+                actor=ActorRef(kind=ActorKind.AGENT, id="agent.main", scopes=())
+            )
 
             out = await execute(
                 app.registry,
-                "goal_manage",
-                agent_context(),
+                "goal",
+                ActorContext(actor=LOCAL_USER),
                 {"session_id": "s1", "action": "create", "text": "ship it"},
             )
-            assert out["status"] == ACTIVE
+            assert out["main"]["status"] == ACTIVE
 
-            tools = goal_tools(app.master.goal_driver._goals)
-            bad = await tools["goal_write"].handler(status="active")
-            assert "参数错误" in str(bad)  # create/resume stays human-side
-            ok = await tools["goal_write"].handler(status="done", session_id="s1")
-            assert "done" in str(ok)
+            # agent cannot arm/resume the main goal (driver rule 1)
+            with pytest.raises(ServiceError) as exc:
+                await execute(
+                    app.registry,
+                    "goal",
+                    agent_ctx,
+                    {"session_id": "s1", "action": "status", "status": "active"},
+                )
+            assert exc.value.body.code.endswith(ErrorSuffix.FORBIDDEN.value)
+            # agent reports done
+            out = await execute(
+                app.registry,
+                "goal",
+                agent_ctx,
+                {"session_id": "s1", "action": "status", "status": "done"},
+            )
+            assert out["main"]["status"] == "done"
         finally:
             app.close()
 

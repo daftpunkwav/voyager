@@ -25,7 +25,9 @@ def skills_dir(tmp_path: Path) -> Path:
 
 class TestProposeSkill:
     def test_propose_skill_success(self, skills_dir: Path) -> None:
-        tool = skill_tool(loader=SkillLoader([skills_dir]), skills_dir=skills_dir)  # duck-typed loader
+        tool = skill_tool(
+            loader=SkillLoader([skills_dir]), skills_dir=skills_dir
+        )  # duck-typed loader
         res = asyncio.run(
             tool.handler(
                 action="propose",
@@ -79,7 +81,9 @@ class TestPolicyGate:
     the fs guards)."""
 
     async def test_writes_without_confirmation_by_default(self, skills_dir: Path) -> None:
-        tool = skill_tool(loader=SkillLoader([skills_dir]), skills_dir=skills_dir)  # duck-typed loader
+        tool = skill_tool(
+            loader=SkillLoader([skills_dir]), skills_dir=skills_dir
+        )  # duck-typed loader
         belt = Toolbelt({tool.name: tool}, PolicyEngine())
         out = await belt.call_detailed(
             ToolCall(

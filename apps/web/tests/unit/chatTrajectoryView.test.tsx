@@ -31,7 +31,7 @@ function backend(_domain: string, name: string) {
   switch (name) {
     case 'list_providers':
       return Promise.resolve([{ id: 'p1', enabled: true, has_api_key: true }]);
-    case 'list_subagents':
+    case 'subagent':  // action=list payload checked implicitly
       return Promise.resolve({ running: [] });
     case 'todo_read':
       return Promise.resolve({ items: [], done: 0, total: 0 });

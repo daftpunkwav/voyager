@@ -334,7 +334,10 @@ describe('RightPanel', () => {
     await waitFor(() => expect(screen.getByText('indexer')).toBeTruthy());
     fireEvent.click(screen.getByText('indexer'));
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'cancel_run', { id_or_name: 'r9' })
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'agent_instance', {
+        action: 'cancel',
+        id_or_name: 'r9',
+      })
     );
   });
 });

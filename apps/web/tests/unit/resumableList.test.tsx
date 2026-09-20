@@ -1,7 +1,7 @@
 /**
  * @file resumableList
  * @description Phase-70 A unit tests: the team page resumable task list.
- * List rendering, resume (resume_run continue_run=true), abandon (confirm +
+ * List rendering, resume (agent_instance action=resume, continue_run=true), abandon (confirm +
  * abandon), the empty state, and retry on load failure.
  */
 
@@ -30,13 +30,11 @@ let items: Array<Record<string, unknown>> = [];
 
 function backend(_domain: string, name: string, args: Record<string, unknown>) {
   switch (name) {
-    case 'list_resumable_checkpoints':
-      return Promise.resolve({ items });
-    case 'resume_run':
-    case 'abandon_resumable_checkpoint':
+    case 'agent_instance':
+      if (args.action === 'checkpoints') return Promise.resolve({ items });
       items = items.filter((i) => i.run_id !== args.run_id);
       return Promise.resolve(
-        name === 'resume_run'
+        args.action === 'resume'
           ? { resumed: 'inst1', run_id: args.run_id, status: 'running', continuing: true }
           : { abandoned: args.run_id }
       );
@@ -78,13 +76,14 @@ describe('resumable task list (phase-70 A)', () => {
     expect(screen.getByText(/分钟前/)).toBeTruthy();
   });
 
-  it('clicking resume: resume_run (continue_run=true) + success toast + the entry disappears after refresh', async () => {
+  it('clicking resume: agent_instance(resume, continue_run=true) + success toast + the entry disappears after refresh', async () => {
     items = [sampleItem()];
     render(<ResumableList />);
     fireEvent.click(await screen.findByRole('button', { name: '继续' }));
 
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'resume_run', {
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'agent_instance', {
+        action: 'resume',
         run_id: 'runresum001',
         continue_run: true,
       })
@@ -100,14 +99,15 @@ describe('resumable task list (phase-70 A)', () => {
     expect(screen.getByText('暂无可恢复任务')).toBeTruthy();
   });
 
-  it('clicking abandon: calls abandon_resumable_checkpoint after confirming + toast + the entry disappears', async () => {
+  it('clicking abandon: calls agent_instance(action=abandon) after confirming + toast + the entry disappears', async () => {
     items = [sampleItem()];
     render(<ResumableList />);
     fireEvent.click(await screen.findByRole('button', { name: '放弃' }));
 
     expect(window.confirm).toHaveBeenCalled();
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'abandon_resumable_checkpoint', {
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'agent_instance', {
+        action: 'abandon',
         run_id: 'runresum001',
       })
     );
@@ -127,13 +127,16 @@ describe('resumable task list (phase-70 A)', () => {
     const btn = await screen.findByRole('button', { name: '继续' });
     expect(btn.hasAttribute('disabled')).toBe(true);
     expect(btn.getAttribute('title')).toContain('仍在运行中');
-    // clicking the disabled button does not trigger resume_run
+    // clicking the disabled button does not trigger agent_instance(resume)
     fireEvent.click(btn);
-    expect(callCapabilityMock).not.toHaveBeenCalledWith('agent', 'resume_run', expect.anything());
+    expect(
+        callCapabilityMock.mock.calls.some((c) => c[1] === 'agent_instance' && c[2]?.action === 'resume')
+      ).toBe(false);
     // abandon is unaffected (phase-70 semantics: stop the instance + delete the checkpoint)
     fireEvent.click(screen.getByRole('button', { name: '放弃' }));
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'abandon_resumable_checkpoint', {
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'agent_instance', {
+        action: 'abandon',
         run_id: 'runresum001',
       })
     );
@@ -145,11 +148,9 @@ describe('resumable task list (phase-70 A)', () => {
     render(<ResumableList />);
     fireEvent.click(await screen.findByRole('button', { name: '放弃' }));
 
-    expect(callCapabilityMock).not.toHaveBeenCalledWith(
-      'agent',
-      'abandon_resumable_checkpoint',
-      expect.anything()
-    );
+    expect(
+      callCapabilityMock.mock.calls.some((c) => c[1] === 'agent_instance' && c[2]?.action === 'abandon')
+    ).toBe(false);
     expect(screen.getByText('scout')).toBeTruthy();
   });
 
@@ -186,7 +187,8 @@ describe('resumable task list (phase-70 A)', () => {
     expect(screen.queryByRole('button', { name: '继续' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '放弃' }));
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'abandon_resumable_checkpoint', {
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'agent_instance', {
+        action: 'abandon',
         run_id: 'orphan0001',
       })
     );

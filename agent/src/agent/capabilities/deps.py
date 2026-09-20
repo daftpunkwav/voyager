@@ -42,6 +42,7 @@ class CapabilityDeps:
     plan_gates: Any = None  # context.plan_gate.PlanGates (session review-phase state)
     goal_manager: Any = None  # master.goal.GoalManager (durable session goals)
     skills_dir: Any = None  # user skills directory (skill propose writes there)
+    dispatch: Any = None  # master.dispatch_task (subagent spawn action)
     session_index: Any = None  # runtime.session_index.SessionIndex (session search action)
     log: Any = None  # platform_eventbus.EventLog (session read action pages the history)
     job_reorder: Any = None  # async (job_id, priority) -> dict, host-routed to the source domain

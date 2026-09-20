@@ -29,17 +29,15 @@ class TestExtensionTools:
         )
         try:
             belt = _belt(app)
-            assert (
-                '"items"'
-                in await belt.call(ToolCall("1", "extension", {"kind": "plugin", "action": "list"}))
+            assert '"items"' in await belt.call(
+                ToolCall("1", "extension", {"kind": "plugin", "action": "list"})
             )
             assert (
                 await belt.call(ToolCall("2", "extension", {"kind": "mcp", "action": "list"}))
                 == "[]"
             )
-            assert (
-                '"items"'
-                in await belt.call(ToolCall("3", "extension", {"kind": "hook", "action": "list"}))
+            assert '"items"' in await belt.call(
+                ToolCall("3", "extension", {"kind": "hook", "action": "list"})
             )
         finally:
             app.close()
@@ -62,7 +60,11 @@ class TestExtensionTools:
 
             belt = _belt(app, confirm=_deny)
             for args in (
-                {"kind": "plugin", "action": "install", "source_dir": str(tmp_path / "ws" / "nope")},
+                {
+                    "kind": "plugin",
+                    "action": "install",
+                    "source_dir": str(tmp_path / "ws" / "nope"),
+                },
                 {"kind": "plugin", "action": "uninstall", "name": "nope"},
             ):
                 out = await belt.call(ToolCall("1", "extension", args))

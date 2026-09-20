@@ -33,39 +33,33 @@ def app(tmp_path):
 class TestRegistrySurface:
     async def test_capability_names_frozen(self, app) -> None:
         assert app.registry.names() == [
-            "abandon_resumable_checkpoint",
             "add_mcp_server",
+            "agent_instance",
             "answer_question",
             "approve_mcp_tools",
-            "cancel_run",
+            "board",
             "context",
-            "delete_subagent",
             "extension",
             "get_settings",
-            "goal_manage",
+            "goal",
             "jobs",
             "list_approvals",
             "list_personas",
-            "list_resumable_checkpoints",
             "list_skills",
-            "list_subagents",
             "memory",
             "observe",
-            "pause_run",
             "plan",
             "rate_turn",
-            "register_subagent",
             "remove_mcp_server",
             "report_page_context",
-            "resume_run",
             "revoke_approval",
             "session",
             "set_plugin_approval",
             "set_setting",
             "skill",
+            "subagent",
             "todowrite",
             "tools",
-            "wait_subagent",
         ]
 
 
@@ -283,7 +277,7 @@ class TestSurface:
         assert await task is True
 
     async def test_list_subagents_shape(self, app) -> None:
-        out = await execute(app.registry, "list_subagents", USER_CTX, {})
+        out = await execute(app.registry, "subagent", USER_CTX, {"action": "list"})
         assert set(out) == {"definitions", "running"}
         assert isinstance(out["definitions"], list)
 
@@ -305,7 +299,7 @@ class TestSurface:
             await app2.master.handle_user_message("look at the directory")
 
             async def _chat_has_step() -> bool:
-                out = await execute(app2.registry, "list_subagents", USER_CTX, {})
+                out = await execute(app2.registry, "subagent", USER_CTX, {"action": "list"})
                 chat = next((r for r in out["running"] if r["name"] == "chat"), None)
                 return bool(chat and chat.get("last_step"))
 
@@ -315,7 +309,7 @@ class TestSurface:
             while not await _chat_has_step():
                 assert asyncio.get_running_loop().time() < deadline, "no step trail yet"
                 await asyncio.sleep(0.01)
-            out = await execute(app2.registry, "list_subagents", USER_CTX, {})
+            out = await execute(app2.registry, "subagent", USER_CTX, {"action": "list"})
             running = out["running"]
             assert running
             for r in running:
@@ -432,9 +426,10 @@ class TestTeamSurface:
     async def test_register_subagent_persisted_and_listed(self, app) -> None:
         out = await execute(
             app.registry,
-            "register_subagent",
+            "subagent",
             USER_CTX,
             {
+                "action": "register",
                 "name": "scout",
                 "description": "read-only scout",
                 "mode": "direct",
@@ -445,13 +440,10 @@ class TestTeamSurface:
             "name": "scout",
             "mode": "direct",
             "allowed_tools": ["web_search", "web_fetch"],
-            "max_rounds": None,
-            "max_tool_calls": None,
-            "network_mode": "",
-            "readonly": False,
-            "enabled": True,
-        }  # no tiers given: rounds None, network empty string (inherits global)
-        defs = (await execute(app.registry, "list_subagents", USER_CTX, {}))["definitions"]
+        }
+        defs = (await execute(app.registry, "subagent", USER_CTX, {"action": "list"}))[
+            "definitions"
+        ]
         mine = next(d for d in defs if d["name"] == "scout")
         assert mine["mode"] == "direct"
         assert mine["allowed_tools"] == ["web_search", "web_fetch"]
@@ -462,9 +454,10 @@ class TestTeamSurface:
         with pytest.raises(ServiceError) as exc:
             await execute(
                 app.registry,
-                "register_subagent",
+                "subagent",
                 USER_CTX,
                 {
+                    "action": "register",
                     "name": "bad",
                     "description": "x",
                     "mode": "flow-mode",
@@ -494,7 +487,7 @@ class TestTeamSurface:
             tools = await execute(app.registry, "tools", USER_CTX, {"action": "list"})
             names = {t["name"] for t in tools}
             assert "notes__create_note" in names  # bridge tool
-            assert "spawn_subagent" in names  # internal tool
+            assert "subagent" in names  # internal tool
             assert "read" in names
             bridge_tool = next(t for t in tools if t["name"] == "notes__create_note")
             assert bridge_tool["description"] == "[notes] create note"  # passed through verbatim
@@ -505,9 +498,10 @@ class TestTeamSurface:
         """Dispatching a custom subagent by name: the allowlist trim is enforced for real, not a prompt-level constraint."""
         await execute(
             app.registry,
-            "register_subagent",
+            "subagent",
             USER_CTX,
             {
+                "action": "register",
                 "name": "scout2",
                 "description": "read-only scout",
                 "mode": "direct",
@@ -522,9 +516,10 @@ class TestTeamSurface:
         """Creation tiers: rounds/network show up in the list card shape after registration."""
         await execute(
             app.registry,
-            "register_subagent",
+            "subagent",
             USER_CTX,
             {
+                "action": "register",
                 "name": "capped",
                 "description": "limited scout",
                 "max_rounds": 5,
@@ -532,7 +527,9 @@ class TestTeamSurface:
                 "network_mode": "off",
             },
         )
-        defs = (await execute(app.registry, "list_subagents", USER_CTX, {}))["definitions"]
+        defs = (await execute(app.registry, "subagent", USER_CTX, {"action": "list"}))[
+            "definitions"
+        ]
         mine = next(d for d in defs if d["name"] == "capped")
         assert mine["max_rounds"] == 5
         assert mine["max_tool_calls"] == 9
@@ -543,9 +540,10 @@ class TestTeamSurface:
         with pytest.raises(ServiceError) as exc:
             await execute(
                 app.registry,
-                "register_subagent",
+                "subagent",
                 USER_CTX,
                 {
+                    "action": "register",
                     "name": "bad_net",
                     "description": "x",
                     "network_mode": "everything",
@@ -557,9 +555,10 @@ class TestTeamSurface:
         with pytest.raises(ServiceError) as exc:
             await execute(
                 app.registry,
-                "register_subagent",
+                "subagent",
                 USER_CTX,
                 {
+                    "action": "register",
                     "name": "bad_rounds",
                     "description": "x",
                     "max_rounds": 0,
@@ -569,27 +568,38 @@ class TestTeamSurface:
 
     async def test_delete_subagent_removes_definition(self, app) -> None:
         await execute(
-            app.registry, "register_subagent", USER_CTX, {"name": "doomed", "description": "x"}
+            app.registry,
+            "subagent",
+            USER_CTX,
+            {"action": "register", "name": "doomed", "description": "x"},
         )
-        result = await execute(app.registry, "delete_subagent", USER_CTX, {"name": "doomed"})
+        result = await execute(
+            app.registry, "subagent", USER_CTX, {"action": "unregister", "name": "doomed"}
+        )
         assert result == {"deleted": "doomed"}
-        defs = (await execute(app.registry, "list_subagents", USER_CTX, {}))["definitions"]
+        defs = (await execute(app.registry, "subagent", USER_CTX, {"action": "list"}))[
+            "definitions"
+        ]
         assert all(d["name"] != "doomed" for d in defs)
 
     async def test_delete_subagent_unknown_name_raises(self, app) -> None:
         with pytest.raises(ServiceError) as exc:
-            await execute(app.registry, "delete_subagent", USER_CTX, {"name": "ghost"})
+            await execute(
+                app.registry, "subagent", USER_CTX, {"action": "unregister", "name": "ghost"}
+            )
         assert exc.value.body.code == "AGENT.NOT_FOUND"
 
     async def test_disabled_subagent_listed_but_refused_at_dispatch(self, app) -> None:
         """enabled=False keeps the definition visible; dispatch refuses it until re-enabled."""
         await execute(
             app.registry,
-            "register_subagent",
+            "subagent",
             USER_CTX,
-            {"name": "sleeper", "description": "x", "enabled": False},
+            {"action": "register", "name": "sleeper", "description": "x", "enabled": False},
         )
-        defs = (await execute(app.registry, "list_subagents", USER_CTX, {}))["definitions"]
+        defs = (await execute(app.registry, "subagent", USER_CTX, {"action": "list"}))[
+            "definitions"
+        ]
         assert next(d for d in defs if d["name"] == "sleeper")["enabled"] is False
         with pytest.raises(ServiceError) as exc:
             await app.master.dispatch_task("wake up", persona="sleeper")
@@ -597,9 +607,9 @@ class TestTeamSurface:
         # Re-enable (same register path the settings toggle uses) -> dispatchable again
         await execute(
             app.registry,
-            "register_subagent",
+            "subagent",
             USER_CTX,
-            {"name": "sleeper", "description": "x", "enabled": True},
+            {"action": "register", "name": "sleeper", "description": "x", "enabled": True},
         )
         inst = await app.master.dispatch_task("wake up", persona="sleeper")
         assert inst.task.goal == "wake up"
@@ -634,9 +644,10 @@ class TestTeamSurface:
         """Dispatch clamping to the stricter side: custom rounds stricter than global win; looser ones fall back to global."""
         await execute(
             app.registry,
-            "register_subagent",
+            "subagent",
             USER_CTX,
             {
+                "action": "register",
                 "name": "tight",
                 "description": "small steps",
                 "max_rounds": 5,
@@ -644,9 +655,10 @@ class TestTeamSurface:
         )
         await execute(
             app.registry,
-            "register_subagent",
+            "subagent",
             USER_CTX,
             {
+                "action": "register",
                 "name": "loose",
                 "description": "wants loose limits",
                 "max_rounds": 99,
@@ -665,9 +677,10 @@ class TestTeamSurface:
 
         await execute(
             app.registry,
-            "register_subagent",
+            "subagent",
             USER_CTX,
             {
+                "action": "register",
                 "name": "net_all",
                 "description": "wants full network",
                 "network_mode": "all",
@@ -694,7 +707,7 @@ class TestRunningOnlyAlive:
         inst.cancel()
         await app.spawner.cancel(inst.id)
 
-        out = await execute(app.registry, "list_subagents", USER_CTX, {})
+        out = await execute(app.registry, "subagent", USER_CTX, {"action": "list"})
         assert all(r["id"] != inst.id for r in out["running"])
         # The instance remains introspectable in memory (not force-popped by design)
         assert inst.id in app.spawner.instances
@@ -713,7 +726,7 @@ class TestRunningOnlyAlive:
             inst.state.status = status
             ids.append(inst.id)
 
-        out = await execute(app.registry, "list_subagents", USER_CTX, {})
+        out = await execute(app.registry, "subagent", USER_CTX, {"action": "list"})
         listed = {r["id"] for r in out["running"]}
         assert set(ids) <= listed
 
@@ -729,7 +742,7 @@ class TestRunningOnlyAlive:
         try:
             await app.master.handle_user_message("hello")
             await asyncio.sleep(0.1)
-            out = await execute(app.registry, "list_subagents", USER_CTX, {})
+            out = await execute(app.registry, "subagent", USER_CTX, {"action": "list"})
             # The chat instance matches by name=chat (same rule as cancel_run); after answering one
             # round it sits in WAITING_INPUT, still alive, so the badge stays visible and is not dropped as finished
             assert any(r["name"] == "chat" for r in out["running"])

@@ -87,6 +87,14 @@ class GoalManager:
             return None
         return self._save(goal.with_status(status))
 
+    def set_text(self, session: str, text: str) -> Goal | None:
+        """Replace the goal text, keeping status and the round counter."""
+        goal = self.get(session)
+        if goal is None:
+            return None
+        updated = Goal(goal.session, text, goal.status, goal.rounds, goal.day)
+        return self._save(updated)
+
     def clear(self, session: str) -> None:
         if self._store is not None:
             self._store.set_meta(self._key(session), "")

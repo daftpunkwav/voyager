@@ -31,7 +31,7 @@ from agent.tools.core.base import AgentTool, Toolbelt
 #: cross-domain, so kept always active
 CORE_TOOLS = (
     "ask_user",
-    "spawn_subagent",
+    "subagent",
     "skill",
     "memory",
     "request_context",

@@ -36,7 +36,6 @@ HUMAN_ONLY_CAPABILITIES: dict[str, str] = {
     "set_setting": "reachable as settings__set_setting via the domain bridge",
     # The review gate decides when the agent may act: the switch must stay in
     # human hands (the agent can only submit a plan and wait).
-    "goal_manage": "creates/pauses/resumes durable goals; the auto-continuation budget stays human-controlled",
     # Turn rating shapes the user's own view of the conversation.
     "rate_turn": "the user rates the agent's turn, never the other way around",
 }
@@ -45,11 +44,8 @@ HUMAN_ONLY_CAPABILITIES: dict[str, str] = {
 #: and internal channels, or bounded readers of transports the human already
 #: has a page for.
 AGENT_ONLY_TOOLS: dict[str, str] = {
-    "spawn_subagent": "agent's dispatch hand (human dispatches through chat)",
     "request_context": "subagent -> master internal channel",
     "activate_tools": "graded schema activation, per-instance mechanism",
-    "read_board": "task-scoped shared notes among sibling subagents (no human board page)",
-    "write_board": "task-scoped shared notes among sibling subagents (no human board page)",
     "read": "workspace hand",
     "write": "workspace hand",
     "edit": "workspace hand",
@@ -60,8 +56,6 @@ AGENT_ONLY_TOOLS: dict[str, str] = {
     "web_search": "network hand",
     "ask_user": "agent -> human question channel",
     "reach_out": "one-shot proactive message (fire-and-forget; the human is the recipient)",
-    "goal_read": "durable-goal status reader",
-    "goal_write": "agent progress report (done/blocked only; lifecycle stays human-side)",
     "scratchpad": "in-harness working scratchpad for intermediate thinking and step tracking",
 }
 

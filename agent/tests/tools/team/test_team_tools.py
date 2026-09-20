@@ -1,5 +1,6 @@
 """Team governance tools: same capabilities as the team page, driven by the
-agent through the toolbelt (policy tier + audit)."""
+agent through the toolbelt (policy tier + audit). The four aggregated tools
+(subagent / agent_instance / board / goal) replace the twelve single tools."""
 
 from __future__ import annotations
 
@@ -28,17 +29,27 @@ class TestTeamTools:
             out = await belt.call(
                 ToolCall(
                     "1",
-                    "register_subagent",
-                    {"name": "scout", "description": "d", "mode": "direct", "readonly": True},
+                    "subagent",
+                    {
+                        "action": "register",
+                        "name": "scout",
+                        "description": "d",
+                        "mode": "direct",
+                        "readonly": True,
+                    },
                 )
             )
             assert '"scout"' in out
-            listed = await belt.call(ToolCall("2", "list_subagents", {}))
+            listed = await belt.call(ToolCall("2", "subagent", {"action": "list"}))
             assert "scout" in listed
             inst = app.spawner.spawn(TaskBook(goal="g", mode=Mode.REACT), persona="recon", name="v")
-            cancelled = await belt.call(ToolCall("3", "cancel_run", {"id_or_name": inst.id}))
+            cancelled = await belt.call(
+                ToolCall("3", "agent_instance", {"action": "cancel", "id_or_name": inst.id})
+            )
             assert inst.id in cancelled
-            missing = await belt.call(ToolCall("4", "cancel_run", {"id_or_name": "nope"}))
+            missing = await belt.call(
+                ToolCall("4", "agent_instance", {"action": "cancel", "id_or_name": "nope"})
+            )
             assert missing.startswith("[工具失败]")
         finally:
             app.close()
@@ -56,11 +67,11 @@ class TestTeamTools:
 
             belt = _belt(app, confirm=_deny)
             out = await belt.call(
-                ToolCall("1", "abandon_resumable_checkpoint", {"run_id": "r-none"})
+                ToolCall("1", "agent_instance", {"action": "abandon", "run_id": "r-none"})
             )
             assert "[已取消]" not in out and "[需确认]" not in out
             assert asked == []
-            listed = await belt.call(ToolCall("2", "list_resumable_checkpoints", {}))
+            listed = await belt.call(ToolCall("2", "agent_instance", {"action": "checkpoints"}))
             assert '"items"' in listed
         finally:
             app.close()

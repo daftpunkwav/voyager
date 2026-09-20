@@ -50,31 +50,26 @@ function backend(_domain: string, name: string, args: Record<string, unknown>) {
         { name: 'read_file', description: 'read file' },
         { name: 'write_file', description: 'write file' },
       ]);
-    case 'list_subagents':
-      return Promise.resolve({ definitions, running });
-    case 'register_subagent': {
-      definitions = [
-        ...definitions.filter((d) => d.name !== args.name),
-        {
+    case 'subagent':
+      if (args.action === 'list') return Promise.resolve({ definitions, running });
+      if (args.action === 'register') {
+        definitions = [
+          ...definitions.filter((d) => d.name !== args.name),
+          {
+            name: args.name,
+            mode: (args.mode as string) ?? 'react',
+            description: args.description,
+            persona: (args.persona as string) ?? '',
+            ...args,
+          },
+        ];
+        return Promise.resolve({
           name: args.name,
-          mode: args.mode ?? 'react',
-          description: args.description,
-          persona: args.persona ?? '',
+          mode: (args.mode as string) ?? 'react',
           allowed_tools: (args.allowed_tools as string[] | undefined) ?? null,
-          max_rounds: (args.max_rounds as number | undefined) ?? null,
-          max_tool_calls: (args.max_tool_calls as number | undefined) ?? null,
-          network_mode: (args.network_mode as string | undefined) ?? '',
-        },
-      ];
-      return Promise.resolve({
-        name: args.name,
-        mode: args.mode ?? 'react',
-        allowed_tools: args.allowed_tools ?? null,
-      });
-    }
-    case 'cancel_run':
-      running = running.filter((r) => r.id !== args.id_or_name && r.name !== args.id_or_name);
-      return Promise.resolve({ cancelled: [args.id_or_name] });
+        });
+      }
+      return Promise.resolve({});
     default:
       return Promise.resolve({});
   }
@@ -125,7 +120,8 @@ describe('agent register form (phase-07)', () => {
 
     // payload shape: exactly four fields, no allowed_tools key
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'register_subagent', {
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'subagent', {
+        action: 'register',
         name: 'scout',
         description: 'read-only scout',
         mode: 'react',
@@ -144,16 +140,15 @@ describe('agent register form (phase-07)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '注册' }));
     expect(screen.getByText('指定白名单时至少勾选 1 项工具')).toBeTruthy();
-    expect(callCapabilityMock).not.toHaveBeenCalledWith(
-      'agent',
-      'register_subagent',
-      expect.anything()
-    );
+    expect(
+      callCapabilityMock.mock.calls.some((c) => c[1] === 'subagent' && c[2]?.action === 'register')
+    ).toBe(false);
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'read_file' }));
     fireEvent.click(screen.getByRole('button', { name: '注册' }));
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'register_subagent', {
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'subagent', {
+        action: 'register',
         name: 'scout',
         description: 'recon',
         mode: 'react',
@@ -169,11 +164,9 @@ describe('agent register form (phase-07)', () => {
     fireEvent.click(screen.getByRole('button', { name: '注册' }));
 
     expect(screen.getByText(/名称须为小写/)).toBeTruthy();
-    expect(callCapabilityMock).not.toHaveBeenCalledWith(
-      'agent',
-      'register_subagent',
-      expect.anything()
-    );
+    expect(
+      callCapabilityMock.mock.calls.some((c) => c[1] === 'subagent' && c[2]?.action === 'register')
+    ).toBe(false);
   });
 
   it('registering with rounds + network (phase-10): the request body carries the three new keys and the card shows the levels', async () => {
@@ -186,7 +179,8 @@ describe('agent register form (phase-07)', () => {
     fireEvent.click(screen.getByRole('button', { name: '注册' }));
 
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'register_subagent', {
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'subagent', {
+        action: 'register',
         name: 'guard',
         description: 'gatekeeper',
         mode: 'react',
@@ -209,11 +203,9 @@ describe('agent register form (phase-07)', () => {
     fireEvent.click(screen.getByRole('button', { name: '注册' }));
 
     expect(screen.getByText(/ReAct 轮数须为正整数/)).toBeTruthy();
-    expect(callCapabilityMock).not.toHaveBeenCalledWith(
-      'agent',
-      'register_subagent',
-      expect.anything()
-    );
+    expect(
+      callCapabilityMock.mock.calls.some((c) => c[1] === 'subagent' && c[2]?.action === 'register')
+    ).toBe(false);
   });
 
   it('an existing name shows an overwrite confirm first and submits only after confirming', async () => {
@@ -231,17 +223,15 @@ describe('agent register form (phase-07)', () => {
     fireEvent.click(screen.getByRole('button', { name: '注册' }));
 
     expect(screen.getByRole('dialog')).toBeTruthy();
-    expect(callCapabilityMock).not.toHaveBeenCalledWith(
-      'agent',
-      'register_subagent',
-      expect.anything()
-    );
+    expect(
+      callCapabilityMock.mock.calls.some((c) => c[1] === 'subagent' && c[2]?.action === 'register')
+    ).toBe(false);
 
     fireEvent.click(screen.getByRole('button', { name: '覆盖' }));
     await waitFor(() =>
       expect(callCapabilityMock).toHaveBeenCalledWith(
         'agent',
-        'register_subagent',
+        'subagent',
         expect.objectContaining({ name: 'scout' })
       )
     );
@@ -271,13 +261,14 @@ describe('instance current step (phase-20)', () => {
 });
 
 describe('instance emergency stop (phase-07)', () => {
-  it('stopping a running instance calls cancel_run(id) and removes it from the list immediately', async () => {
+  it('stopping a running instance calls agent_instance(cancel, id) and removes it from the list immediately', async () => {
     await renderPage();
     expect(screen.getByText('indexer')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '急停' }));
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'cancel_run', {
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'agent_instance', {
+        action: 'cancel',
         id_or_name: 'run-1',
       })
     );
@@ -295,7 +286,8 @@ describe('instance emergency stop (phase-07)', () => {
     fireEvent.click(screen.getByRole('button', { name: '急停' }));
     await waitFor(() => expect(useChatStore.getState().thinking).toBe(false));
     await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'cancel_run', { id_or_name: 'chat' })
+      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'agent_instance', {
+        action: 'cancel', id_or_name: 'chat' })
     );
     expect(useChatStore.getState().messages).toHaveLength(0);
     expect(useUIStore.getState().toasts.some((t) => t.message.includes('对话主实例'))).toBe(true);
