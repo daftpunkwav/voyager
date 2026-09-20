@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   git hash-object docs/subsystems/eventbus.md docs/subsystems/eventbus.zh.md
+docs/subsystems/eventbus.md: 9e254a0df416b2a4d39d117abdc3b5b16136ea5e
+docs/subsystems/eventbus.zh.md: f28f60e3c19358cb7f7fa79bb43604291c1a16a1
