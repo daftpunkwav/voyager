@@ -42,6 +42,27 @@ class TestToolClass:
         assert TOOL_CLASS["subagent"] == CLASS_R
         assert TOOL_CLASS["agent_instance.cancel"] == CLASS_D
 
+    def test_table_tracks_the_real_roster(self, tmp_path) -> None:
+        """No stale keys: every entry names a live roster tool (the P1 flat
+        names died with the aggregation; a leftover key would classify nothing
+        while the real tool reads as unknown=D)."""
+        from agent.build import build_agent
+
+        app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
+        try:
+            roster = set(app.spawner._toolbelt.names())
+        finally:
+            app.close()
+        # activate_tools is constructed inline in graded_toolbelt (per-instance
+        # view), so it never sits on the root roster
+        roster.add("activate_tools")
+        stale = sorted({k.split(".")[0] for k in TOOL_CLASS if k.split(".")[0] not in roster})
+        assert stale == []
+        # the aggregated surfaces are classified, not unknown=D
+        assert tool_class_of("context", "status") == CLASS_R
+        assert tool_class_of("extension", "list") == CLASS_R
+        assert tool_class_of("extension", "install") == CLASS_D
+
     def test_unknown_is_dangerous(self) -> None:
         assert tool_class_of("notes__create_note") == CLASS_D
         assert tool_class_of("mcp__demo__search") == CLASS_D
@@ -118,8 +139,20 @@ class TestModes:
         assert rp.check("read", {"path": "x"}) is None
         assert rp.check("web_fetch", {"url": "https://x"}) is None
         assert rp.check("write", {"path": "x"}) is not None
-        assert rp.check("install_plugin", {"name": "p"}) is not None
+        assert rp.check("extension", {"kind": "plugin", "action": "install"}) is not None
         assert rp.check("mcp__demo__search", {"query": "x"}) is not None
+
+    def test_no_dangerous_allows_aggregated_read_tools(self) -> None:
+        """The aggregated context/extension surfaces must not fall through to
+        unknown=D: their P1 flat names (context_status, list_plugins, ...) are
+        gone, so the tool-level keys are what read_only/no_dangerous consult."""
+        rp = _resolver({"mode": "no_dangerous", "deny": [], "allow": []})
+        assert rp.check("context", {"action": "status"}) is None
+        assert rp.check("extension", {"kind": "plugin", "action": "list"}) is None
+        assert rp.check("extension", {"kind": "mcp", "action": "preview"}) is None
+        # lifecycle actions stay D even though the tool default is R
+        assert rp.check("extension", {"kind": "hook", "action": "reload"}) is not None
+        assert rp.check("extension", {"kind": "plugin", "action": "uninstall"}) is not None
 
     def test_no_dangerous_allow_rescues_whole_tool(self) -> None:
         rp = _resolver({"mode": "no_dangerous", "deny": [], "allow": ["bash"]})

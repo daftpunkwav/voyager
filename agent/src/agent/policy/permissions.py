@@ -25,9 +25,9 @@ Malformed values degrade independently: an unknown mode reads as full and
 unparsable list entries are skipped, so a corrupt value falls back to the
 factory default instead of bricking the agent.
 
-The class table is the single source of truth for R/D. P1 keys are the flat
-tool names; the surface aggregation (P3) re-keys entries to "tool.action"
-with the tool-level entry as the default — one table, one system.
+The class table is the single source of truth for R/D. Keys are the
+aggregated tool names ("tool") with "tool.action" entries overriding the
+tool-level default — one table, one system.
 """
 
 from __future__ import annotations
@@ -65,9 +65,8 @@ TOOL_CLASS: dict[str, str] = {
     # rules, not in permissions)
     "scratchpad": CLASS_R,
     "plan": CLASS_R,
-    # context window
-    "context_status": CLASS_R,
-    "compact_context": CLASS_R,
+    # context window (aggregated tool; actions status/compact are both R)
+    "context": CLASS_R,
     # network
     "web_fetch": CLASS_R,
     "web_search": CLASS_R,
@@ -88,14 +87,14 @@ TOOL_CLASS: dict[str, str] = {
     "memory.clear": CLASS_D,
     # skills (aggregated; propose lands in the loader-indexed library)
     "skill": CLASS_R,
-    # extension: lists/previews R, lifecycle D
-    "list_plugins": CLASS_R,
-    "install_plugin": CLASS_D,
-    "uninstall_plugin": CLASS_D,
-    "list_mcp_servers": CLASS_R,
-    "preview_mcp_tools": CLASS_R,
-    "list_user_hooks": CLASS_R,
-    "reload_user_hooks": CLASS_D,
+    # extension (aggregated kind×action): every list/preview action is R via
+    # the tool-level default; the three lifecycle actions are unique per kind
+    # (install/uninstall only for plugin, reload only for hook), so plain
+    # "extension.<action>" keys are unambiguous
+    "extension": CLASS_R,
+    "extension.install": CLASS_D,
+    "extension.uninstall": CLASS_D,
+    "extension.reload": CLASS_D,
     # team (aggregated): spawn inherits the parent surface (R);
     # register/unregister reshape the shared roster; run control and goal
     # lifecycle split on reversible vs work-losing / human-armed
