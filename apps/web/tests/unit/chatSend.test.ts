@@ -257,7 +257,7 @@ describe('loadChatSessions: active-session lane reconciliation', () => {
     });
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.includes('session_list')) {
+      if (url.includes('capabilities/session')) {
         return Promise.resolve(
           jsonResponse({
             result: {
@@ -301,7 +301,7 @@ describe('loadChatSessions: active-session lane reconciliation', () => {
     });
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.includes('session_list')) {
+      if (url.includes('capabilities/session')) {
         return Promise.resolve(
           jsonResponse({
             result: {

@@ -41,3 +41,5 @@ class CapabilityDeps:
     approvals: Any  # policy.approvals.ApprovalStore (remembered L2 grants)
     plan_gates: Any = None  # context.plan_gate.PlanGates (session review-phase state)
     goal_manager: Any = None  # master.goal.GoalManager (durable session goals)
+    session_index: Any = None  # runtime.session_index.SessionIndex (session search action)
+    log: Any = None  # platform_eventbus.EventLog (session read action pages the history)

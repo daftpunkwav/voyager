@@ -12,16 +12,10 @@ from __future__ import annotations
 
 #: Agent-registry capabilities with no agent tool of the same name.
 HUMAN_ONLY_CAPABILITIES: dict[str, str] = {
-    # Interaction contract: moving the conversation the user is looking at
-    # breaks the conversational contract; the agent navigates instead.
-    "set_active_session": "moves the user's view (interaction integrity); agent uses navigate",
     # Direction human -> agent: the agent asks via ask_user and receives the
     # answer through the same broker; the reply channel is not a tool.
     "answer_question": "reply channel for AskUser (human -> agent direction)",
     "report_page_context": "UI -> agent page feed (human -> agent direction)",
-    # Persisted session snapshot detail: the agent reads history through
-    # read_history (paged, bounded) instead of dumping a whole snapshot.
-    "get_session": "agent reads history via read_history (bounded paging)",
     # Already resident in the system prompt: a tool would be redundant.
     "list_skills": "skill index is resident in the system prompt",
     "list_personas": "persona roster is resident in the system prompt",
@@ -44,10 +38,7 @@ HUMAN_ONLY_CAPABILITIES: dict[str, str] = {
     # human hands (the agent can only submit a plan and wait).
     "plan_mode_set": "toggles the plan review gate; human-controlled by design",
     "goal_manage": "creates/pauses/resumes durable goals; the auto-continuation budget stays human-controlled",
-    # Session list curation and turn rating shape the user's own view of the
-    # conversation history; the agent reads via read_history / session_search.
-    "pin_session": "curates the user's session list (human prerogative)",
-    "archive_session": "curates the user's session list (human prerogative)",
+    # Turn rating shapes the user's own view of the conversation.
     "rate_turn": "the user rates the agent's turn, never the other way around",
 }
 
@@ -61,7 +52,6 @@ AGENT_ONLY_TOOLS: dict[str, str] = {
     "read_board": "task-scoped shared notes among sibling subagents (no human board page)",
     "write_board": "task-scoped shared notes among sibling subagents (no human board page)",
     "read_events": "bounded reader of the activity feed (human has the activity page)",
-    "read_history": "bounded reader of chat history (human has the chat page)",
     "read": "workspace hand",
     "write": "workspace hand",
     "edit": "workspace hand",
@@ -73,8 +63,6 @@ AGENT_ONLY_TOOLS: dict[str, str] = {
     "ask_user": "agent -> human question channel",
     "reach_out": "one-shot proactive message (fire-and-forget; the human is the recipient)",
     "exit_plan_mode": "plan review submission (human approves through the ask channel)",
-    "session_search": "bounded FTS reader of conversation history (human has the chat page)",
-    "session_trace": "fork lineage reader (lineage is recorded for search, not a page)",
     "goal_read": "durable-goal status reader",
     "goal_write": "agent progress report (done/blocked only; lifecycle stays human-side)",
     "scratchpad": "in-harness working scratchpad for intermediate thinking and step tracking",

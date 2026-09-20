@@ -45,9 +45,10 @@ class TestCapabilityTool:
     async def test_schema_is_derived_from_the_capability(self, tmp_path) -> None:
         app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
         try:
-            tool = capability_tool(app.registry, "rename_session", description="x")
-            assert set(tool.schema["properties"]) == {"session_id", "title"}
-            assert tool.schema.get("required") == ["session_id", "title"]
+            tool = capability_tool(app.registry, "session", description="x")
+            assert "action" in tool.schema["properties"]
+            assert "session_id" in tool.schema["properties"]
+            assert tool.schema.get("required") == ["action"]
         finally:
             app.close()
 

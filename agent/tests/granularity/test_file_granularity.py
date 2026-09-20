@@ -29,6 +29,7 @@ TOOL_MECHANISMS: dict[str, str] = {
     "workspace/jail.py": "path jail shared by every fs/search tool (inner defense layer)",
     "workspace/workdir.py": "default working-directory layout used by assembly",
     "workspace/todo_store.py": "todo.json persistence + read_plan projection shared by tool and capability",
+    "session/actions.py": "one action dispatch (session_action + interaction guard) shared by the session capability and tool",
     "workspace/edit_matchers.py": "fuzzy match chain (uniqueness-guarded degradation ladder) behind edit",
     "workspace/console_decode.py": "UTF-8 / console-codepage (GBK, UTF-16 on NULs) decode of child output shared by bash",
     "workspace/write_journal.py": "content-addressed write backup behind the fs write tools (checkpoint/audit support)",

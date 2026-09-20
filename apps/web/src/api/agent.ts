@@ -189,7 +189,7 @@ export function getResourceQuota(): Promise<ResourceQuota> {
 
 // ---- Chat sessions & context (multi-session) --------------------------
 
-/** One row of agent.session_list. */
+/** One row of agent.session(action=list). */
 export interface ChatSessionRow {
   session_id: string;
   title: string;
@@ -202,31 +202,36 @@ export interface ChatSessionRow {
   archived?: boolean;
 }
 
+/** The aggregated session capability: one action parameter (design §3). */
+function sessionCap<T>(action: string, params: Record<string, unknown> = {}): Promise<T> {
+  return callCapability<T>('agent', 'session', { action, ...params });
+}
+
 export async function listSessions(): Promise<{
   sessions: ChatSessionRow[];
   active: string;
 }> {
-  const raw = await callCapability<{
+  const raw = await sessionCap<{
     sessions?: ChatSessionRow[];
     active?: string;
-  }>('agent', 'session_list', {});
+  }>('list');
   return { sessions: raw.sessions ?? [], active: raw.active ?? '' };
 }
 
 export function createSession(title = ''): Promise<{ session_id: string; title: string }> {
-  return callCapability('agent', 'session_create', { title });
+  return sessionCap('create', { title });
 }
 
 export function renameSession(sessionId: string, title: string): Promise<unknown> {
-  return callCapability('agent', 'rename_session', { session_id: sessionId, title });
+  return sessionCap('rename', { session_id: sessionId, title });
 }
 
 export function deleteSession(sessionId: string): Promise<unknown> {
-  return callCapability('agent', 'delete_session', { session_id: sessionId });
+  return sessionCap('delete', { session_id: sessionId });
 }
 
 export function setActiveSession(sessionId: string): Promise<unknown> {
-  return callCapability('agent', 'set_active_session', { session_id: sessionId });
+  return sessionCap('set_active', { session_id: sessionId });
 }
 
 export function forkSession(
@@ -234,7 +239,7 @@ export function forkSession(
   title = '',
   keepMessages = 0
 ): Promise<{ session_id: string; forked_from?: string }> {
-  return callCapability('agent', 'session_fork', {
+  return sessionCap('fork', {
     source_session_id: sourceSessionId,
     title,
     keep_messages: keepMessages,
@@ -242,11 +247,11 @@ export function forkSession(
 }
 
 export function pinSession(sessionId: string, pinned = true): Promise<unknown> {
-  return callCapability('agent', 'pin_session', { session_id: sessionId, pinned });
+  return sessionCap('pin', { session_id: sessionId, pinned });
 }
 
 export function archiveSession(sessionId: string, archived = true): Promise<unknown> {
-  return callCapability('agent', 'archive_session', { session_id: sessionId, archived });
+  return sessionCap('archive', { session_id: sessionId, archived });
 }
 
 /** User verdict on a finished agent turn, stored as memory (agent.rate_turn). */

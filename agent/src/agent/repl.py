@@ -173,13 +173,15 @@ class ReplSession:
         elif cmd == "memory":
             self._out(f"{_fmt(await self._call('get_memory'))}\n")
         elif cmd == "sessions":
-            self._out(f"{_fmt(await self._call('session_list'))}\n")
+            self._out(f"{_fmt(await self._call('session', {'action': 'list'}))}\n")
         elif cmd == "session":
             # /session <id>: switch the active session; bare /session: list
             if arg:
-                self._out(f"{_fmt(await self._call('set_active_session', {'session_id': arg}))}\n")
+                self._out(
+                    f"{_fmt(await self._call('session', {'action': 'set_active', 'session_id': arg}))}\n"
+                )
             else:
-                self._out(f"{_fmt(await self._call('session_list'))}\n")
+                self._out(f"{_fmt(await self._call('session', {'action': 'list'}))}\n")
         elif cmd == "replay":
             self._replay(arg)
         elif cmd == "compact":

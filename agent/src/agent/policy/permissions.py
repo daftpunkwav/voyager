@@ -74,15 +74,9 @@ TOOL_CLASS: dict[str, str] = {
     # network
     "web_fetch": CLASS_R,
     "web_search": CLASS_R,
-    # session surface (delete is the one irreversible op)
-    "session_list": CLASS_R,
-    "session_create": CLASS_R,
-    "session_fork": CLASS_R,
-    "read_history": CLASS_R,
-    "rename_session": CLASS_R,
-    "delete_session": CLASS_D,
-    "session_search": CLASS_R,
-    "session_trace": CLASS_R,
+    # session surface (aggregated; delete is the one irreversible action)
+    "session": CLASS_R,
+    "session.delete": CLASS_D,
     # observation / tool self-management
     "read_events": CLASS_R,
     "list_tools": CLASS_R,

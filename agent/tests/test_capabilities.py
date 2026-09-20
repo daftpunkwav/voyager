@@ -37,19 +37,16 @@ class TestRegistrySurface:
             "add_mcp_server",
             "answer_question",
             "approve_mcp_tools",
-            "archive_session",
             "cancel_job",
             "cancel_run",
             "clear_memory",
             "compact_context",
             "context_status",
             "delete_profile",
-            "delete_session",
             "delete_subagent",
             "describe_tool",
             "get_memory",
             "get_resource_quota",
-            "get_session",
             "get_settings",
             "goal_manage",
             "install_plugin",
@@ -65,7 +62,6 @@ class TestRegistrySurface:
             "list_user_hooks",
             "load_skill",
             "pause_run",
-            "pin_session",
             "plan_mode_set",
             "preview_mcp_tools",
             "rate_turn",
@@ -73,15 +69,11 @@ class TestRegistrySurface:
             "register_subagent",
             "reload_user_hooks",
             "remove_mcp_server",
-            "rename_session",
             "report_page_context",
             "resume_run",
             "revoke_approval",
             "search_tools",
-            "session_create",
-            "session_fork",
-            "session_list",
-            "set_active_session",
+            "session",
             "set_plugin_approval",
             "set_profile",
             "set_setting",
@@ -735,33 +727,42 @@ class TestRunningOnlyAlive:
 
 
 class TestSessionSurface:
-    async def test_session_capabilities_share_manager_with_tools(self, app) -> None:
-        """The human path (capabilities) and the agent path (session tools)
-        drive the same SessionManager: a session created via capability is
+    async def test_session_capability_shares_manager_with_tool(self, app) -> None:
+        """The human path (capability) and the agent path (session tool) drive
+        the same SessionManager: a session created via the capability is
         immediately visible through the tool surface."""
         from agent.tools import session_tools
 
-        created = await execute(app.registry, "session_create", USER_CTX, {"title": "能力建的"})
+        created = await execute(
+            app.registry, "session", USER_CTX, {"action": "create", "title": "能力建的"}
+        )
         sid = created["session_id"]
-        assert "session_list" in app.spawner._toolbelt.names()
-        listing = await execute(app.registry, "session_list", USER_CTX, {})
+        assert "session" in app.spawner._toolbelt.names()
+        listing = await execute(app.registry, "session", USER_CTX, {"action": "list"})
         assert any(r["session_id"] == sid and r["title"] == "能力建的" for r in listing["sessions"])
-        rows = await session_tools(app.master.sessions)["session_list"].handler()
+        tool = session_tools(app.registry, app.master.sessions)["session"]
+        rows = await tool.handler(action="list")
         assert any(r["session_id"] == sid for r in rows["sessions"])
 
     async def test_set_active_and_get_session(self, app) -> None:
-        created = await execute(app.registry, "session_create", USER_CTX, {})
+        created = await execute(app.registry, "session", USER_CTX, {"action": "create"})
         sid = created["session_id"]
-        await execute(app.registry, "set_active_session", USER_CTX, {"session_id": sid})
-        listing = await execute(app.registry, "session_list", USER_CTX, {})
+        await execute(
+            app.registry, "session", USER_CTX, {"action": "set_active", "session_id": sid}
+        )
+        listing = await execute(app.registry, "session", USER_CTX, {"action": "list"})
         assert listing["active"] == sid
-        detail = await execute(app.registry, "get_session", USER_CTX, {"session_id": sid})
+        detail = await execute(
+            app.registry, "session", USER_CTX, {"action": "get", "session_id": sid}
+        )
         assert detail["found"] is True
         assert detail["history"] == []
 
     async def test_delete_session_refuses_unknown(self, app) -> None:
         with pytest.raises(ServiceError):
-            await execute(app.registry, "delete_session", USER_CTX, {"session_id": "nope"})
+            await execute(
+                app.registry, "session", USER_CTX, {"action": "delete", "session_id": "nope"}
+            )
 
     async def test_compact_context_skips_small_context(self, app) -> None:
         out = await execute(app.registry, "compact_context", USER_CTX, {})

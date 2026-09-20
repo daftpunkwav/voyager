@@ -38,7 +38,7 @@ class TestToolClass:
         assert TOOL_CLASS["read"] == CLASS_R
         assert TOOL_CLASS["todowrite"] == CLASS_R
         assert TOOL_CLASS["bash"] == CLASS_D
-        assert TOOL_CLASS["delete_session"] == CLASS_D
+        assert TOOL_CLASS["session.delete"] == CLASS_D
         assert TOOL_CLASS["spawn_subagent"] == CLASS_R
         assert TOOL_CLASS["cancel_run"] == CLASS_D
 

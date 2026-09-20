@@ -100,8 +100,6 @@ from agent.tools import (
     request_context_tool,
     scratchpad_tool,
     search_tools,
-    session_governance_tools,
-    session_retrieval_tools,
     session_tools,
     shell_tools,
     spawn_tool,
@@ -699,9 +697,7 @@ def build_agent(
         {
             **spawn_tool(master.dispatch_task),
             **plan_tools(plan_gates, asker),
-            **session_retrieval_tools(session_index, master.sessions),
             **goal_tools(goal_manager),
-            **session_tools(master.sessions),
         }
     )
     jobs_view = JobsView(log)
@@ -730,20 +726,22 @@ def build_agent(
             approvals=approval_store,  # remembered L2 grants (list/revoke capabilities)
             plan_gates=plan_gates,  # human-side review-phase toggle
             goal_manager=goal_manager,  # durable session goals
+            session_index=session_index,  # session search action
+            log=log,  # session read action pages the shared history
         )
     )
     # Agent-side projection of the agent's own governance/observation
     # capabilities: each tool runs the same registry entry the human REST
     # path mounts, as the agent actor, through the same guard chain and audit
     # sinks (one implementation, two projections). Sessions that the user is
-    # looking at are protected by agent-side preconditions; read_events and
-    # read_history page the shared event log directly.
+    # looking at are protected by agent-side preconditions; read_events pages
+    # the shared event log directly.
     toolbelt.register(
         {
             **team_tools(registry, audit, blackboard=blackboard),
             **memory_tools(registry, audit),
             **extension_tools(registry, audit),
-            **session_governance_tools(registry, master.sessions, log, audit),
+            **session_tools(registry, master.sessions, session_index, log, audit),
             **observe_tools(registry, log, audit),
             **jobs_tools(registry, audit),
         }

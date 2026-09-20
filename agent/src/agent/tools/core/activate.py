@@ -52,11 +52,9 @@ CORE_TOOLS = (
     # compacts proactively (the harness auto-triggers at the threshold too)
     "context_status",
     "compact_context",
-    # Agent-side session surface: list / create / fork stay resident; rename /
-    # delete / history and the governance tools are activated on demand
-    "session_list",
-    "session_create",
-    "session_fork",
+    # Agent-side session surface: one aggregated tool (list/create/fork/…);
+    # activation granularity is the whole surface (known cost, design §9.3)
+    "session",
     # Usage self-awareness: the llm domain's usage stats are preactivated so
     # the model can check its own consumption without an activation round
     "llm__get_usage_stats",
