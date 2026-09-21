@@ -19,7 +19,7 @@
 
 ## 推送前:质量门禁
 
-仓库没有 CI,本地门禁就是门禁。每次推送前运行,并直接确认退出码为绿(不要从管道推断):
+GitHub Actions 会在每次推送与 pull request 上运行同一套门禁([.github/workflows/ci.yml](.github/workflows/ci.yml));CI 红即阻断合并。本地同样要在每次推送前运行,并直接确认退出码为绿(不要从管道推断):
 
 ```bash
 npm run gate        # gate:py && gate:web

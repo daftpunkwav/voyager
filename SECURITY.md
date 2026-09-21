@@ -2,7 +2,9 @@
 
 ## Supported versions
 
-Only the `main` branch receives security fixes. There are no tagged releases.
+Security fixes land on the `main` branch and are published as tagged
+releases. The only tagged release so far is `v0.1.0`; it receives fixes
+until the next tag.
 
 ## Reporting a vulnerability
 

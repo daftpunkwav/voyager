@@ -35,8 +35,10 @@ scripts win.
 
 ## Before you push: quality gates
 
-The repository has no CI; the local gates are the gate. Run them before every
-push and confirm a green exit code directly (do not infer it from a pipe):
+GitHub Actions runs the gates on every push and pull request
+([.github/workflows/ci.yml](.github/workflows/ci.yml)); a red gate there
+blocks the merge. Run them locally as well before every push and confirm a
+green exit code directly (do not infer it from a pipe):
 
 ```bash
 npm run gate        # gate:py && gate:web
