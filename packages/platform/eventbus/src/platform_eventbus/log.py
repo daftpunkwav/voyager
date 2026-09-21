@@ -34,6 +34,11 @@ CREATE INDEX IF NOT EXISTS idx_events_ts   ON events(ts);
 #: fnmatch wildcards (same semantics as Subscription.matches: fnmatchcase)
 _GLOB_CHARS = frozenset("*?[")
 
+#: Raw rows fetched per window when glob refinement is active: generous
+#: enough that sparse matches (few refined hits per raw page) need few round
+#: trips, while each query stays an index range scan.
+_GLOB_WINDOW = 1000
+
 
 @dataclass(frozen=True)
 class Retention:
@@ -208,6 +213,11 @@ class EventLog:
         LIKE (avoiding a full scan on very large logs), then refine with
         fnmatch. The refinement matters because a literal 'task.*' would not
         be matched by IN, so catch-up stays consistent with push delivery.
+
+        Glob refinement runs BEFORE the limit is applied: a page that loses
+        rows to refinement must not masquerade as the tail (callers treat a
+        short page as "no more rows"), so refined matches are collected in
+        raw windows until `limit` matches or the log ends.
         """
         sql = "SELECT seq, id, type, actor, payload, ts, trace_id FROM events WHERE seq > ?"
         params: list[object] = [after_seq]
@@ -219,12 +229,32 @@ class EventLog:
                 sql += " AND " + cond
                 exact = [t for t in types if not (_GLOB_CHARS & set(t))]
                 globs = [t for t in types if _GLOB_CHARS & set(t)]
-        sql += " ORDER BY seq ASC LIMIT ?"
-        params.append(limit)
-        with self._lock:
-            rows = self._conn.execute(sql, params).fetchall()
-        rows = _refine_rows(rows, exact, globs)
-        return [(int(r[0]), _row_to_event(r)) for r in rows]
+        if not globs:
+            sql += " ORDER BY seq ASC LIMIT ?"
+            params.append(limit)
+            with self._lock:
+                rows = self._conn.execute(sql, params).fetchall()
+            return [(int(r[0]), _row_to_event(r)) for r in rows]
+        collected: list[tuple] = []
+        cursor = after_seq
+        while len(collected) < limit:
+            window_sql = sql + " ORDER BY seq ASC LIMIT ?"
+            window_params = [*params, max(limit, _GLOB_WINDOW)]
+            with self._lock:
+                rows = self._conn.execute(window_sql, window_params).fetchall()
+            if not rows:
+                break
+            cursor = int(rows[-1][0])
+            collected.extend(_refine_rows(rows, exact, globs))
+            # Narrow the next window past everything just read (matches and
+            # refined-out rows alike), so sparse matches cannot loop forever
+            sql = "SELECT seq, id, type, actor, payload, ts, trace_id FROM events WHERE seq > ?"
+            params = [cursor]
+            if types:
+                cond = _type_condition(types, params)
+                if cond:
+                    sql += " AND " + cond
+        return [(int(r[0]), _row_to_event(r)) for r in collected[:limit]]
 
     def read_before(
         self,
@@ -239,6 +269,9 @@ class EventLog:
         the page immediately before the cursor, not the oldest page — this is
         what makes backward history paging behave as "load earlier events".
         Type filters use the same subscription semantics as read_after.
+        Glob refinement runs BEFORE the limit is applied (same contract as
+        read_after: a refined-short page must not masquerade as the head of
+        the remaining log).
         """
         sql = "SELECT seq, id, type, actor, payload, ts, trace_id FROM events WHERE seq < ?"
         params: list[object] = [before_seq]
@@ -250,13 +283,37 @@ class EventLog:
                 sql += " AND " + cond
                 exact = [t for t in types if not (_GLOB_CHARS & set(t))]
                 globs = [t for t in types if _GLOB_CHARS & set(t)]
-        sql += " ORDER BY seq DESC LIMIT ?"
-        params.append(limit)
-        with self._lock:
-            rows = self._conn.execute(sql, params).fetchall()
-        rows = _refine_rows(rows, exact, globs)
-        rows.reverse()
-        return [(int(r[0]), _row_to_event(r)) for r in rows]
+        if not globs:
+            sql += " ORDER BY seq DESC LIMIT ?"
+            params.append(limit)
+            with self._lock:
+                rows = self._conn.execute(sql, params).fetchall()
+            rows.reverse()
+            return [(int(r[0]), _row_to_event(r)) for r in rows]
+        collected: list[tuple] = []
+        cursor = before_seq
+        while len(collected) < limit:
+            window_sql = sql + " ORDER BY seq DESC LIMIT ?"
+            window_params = [*params, max(limit, _GLOB_WINDOW)]
+            with self._lock:
+                rows = self._conn.execute(window_sql, window_params).fetchall()
+            if not rows:
+                break
+            cursor = int(rows[-1][0])
+            collected[:0] = _refine_rows(rows, exact, globs)
+            # Narrow the next window below everything just read (matches and
+            # refined-out rows alike), so sparse matches cannot loop forever
+            sql = "SELECT seq, id, type, actor, payload, ts, trace_id FROM events WHERE seq < ?"
+            params = [cursor]
+            if types:
+                cond = _type_condition(types, params)
+                if cond:
+                    sql += " AND " + cond
+        # collected is newest-first (DESC windows prepended): the page closest
+        # to before_seq is its head; return it in ascending order
+        kept = collected[:limit]
+        kept.reverse()
+        return [(int(r[0]), _row_to_event(r)) for r in kept]
 
     def close(self) -> None:
         self._conn.close()

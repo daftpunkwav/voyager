@@ -85,6 +85,28 @@ class TestEventLog:
         assert log.read_before(before_seq=1) == []
         assert log.read_before(before_seq=0) == []
 
+    def test_glob_refinement_runs_before_limit_forward(self, log) -> None:
+        """A char-class glob over-matches via prefix LIKE ('task.?' matches
+        'task.toolong'), and the refined-out rows must not consume the limit:
+        the read keeps collecting until `limit` real matches or the log ends.
+        With limit applied to the raw page first, this returned a single row
+        and callers misread it as the tail of the log."""
+        log.append(_ev("task.toolong"))  # LIKE 'task.%' catches it; fnmatch rejects
+        log.append(_ev("task.a"))
+        log.append(_ev("task.b"))
+        rows = log.read_after(types=["task.?"], limit=2)
+        assert [e.type for _, e in rows] == ["task.a", "task.b"]
+
+    def test_glob_refinement_runs_before_limit_backward(self, log) -> None:
+        """Backward reads obey the same contract: the window closest to the
+        cursor keeps collecting refined matches instead of stopping at a
+        refined-short raw page."""
+        log.append(_ev("task.a"))
+        log.append(_ev("task.toolong"))  # refined out
+        log.append(_ev("task.b"))
+        rows = log.read_before(before_seq=4, types=["task.?"], limit=2)
+        assert [e.type for _, e in rows] == ["task.a", "task.b"]
+
     def test_roundtrip_preserves_fields(self, log) -> None:
         ev = _ev("user.message", text="hello")
         log.append(ev)
