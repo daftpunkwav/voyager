@@ -24,14 +24,14 @@
 
 `engines/adapter.py` — `EngineAdapter` 按设置 `graph.engine.mode`(`auto`/`c`/`python`)选择引擎:
 
-- **C sidecar** — `engines/c/client.py` `CEngineClient` 走 HTTP,默认 `http://127.0.0.1:8123`(`graph.engine.c_url`;sidecar 自身读 `ENGINE_PORT`,默认 9750,`ENGINE_CACHE_DIR` → `data/graph-engine-cache/`)。
+- **C sidecar** — `engines/c/client.py` `CEngineClient` 走 HTTP,默认 `http://127.0.0.1:8123`(`graph.engine.c_url`)。sidecar 是独立进程(默认端口 9750,见 `engines/c/core/README.md`),**不会被自动拉起**——`auto` 模式下健康探测不通即回落 Python。目前 Voyager 实际只使用 `/api/index`、`/api/index-status` 与 `/api/project-health` 三个端点。
 - **Python 回退** — `engines/python/engine.py` `GraphEngine`,含 `engine_search`/`engine_query`/`engine_architecture` 子模块与按语言索引器(`engines/python/indexer/`:python、jsts、markdown、正则回退);数据根 `data/runtime/graph/engine-python/` 加 `data/graph-db/`。
 
 C 引擎不可用时,适配器在总线上发布 `graph.engine.fallback`。
 
 ## 管线
 
-- `pipelines/code/analyze.py` — `analyze_repo`:引擎索引 → 以 `source="code"` 导入规范存储,随后自动关系分析。
+- `pipelines/code/analyze.py` — `analyze_repo`:引擎索引 → 以 `source="code"` 导入规范存储,随后自动关系分析。注意:导出步骤调用的 `export_graph` 目前只有 Python 引擎实现——若选中 C sidecar(且可达)该步会失败;sidecar 休眠期间的已知缺口。
 - `pipelines/l0/relate.py` — `run_l0`:跨资源关系,经注入的 `call_sync("sources", "list_sources", ...)` 取来源 — graph 从不 import sources。
 - `pipelines/ai/guide.py` — 校验 AI 写入的节点与关系。
 
