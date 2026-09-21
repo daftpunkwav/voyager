@@ -72,7 +72,9 @@ def build_activity_router(bus: EventBus, limiter: RateLimiter) -> APIRouter:
     @router.get("/api/activity/feed")
     async def activity_feed(after_seq: int = 0, types: str = "", limit: int = 200) -> dict:
         type_list = tuple(t for t in types.split(",") if t) or None
-        rows = bus.log.read_after(after_seq=after_seq, types=type_list, limit=limit)
+        rows = bus.log.read_after(
+            after_seq=after_seq, types=type_list, limit=max(1, min(limit, 1000))
+        )
         return {"events": [{"seq": seq, **e.to_dict()} for seq, e in rows]}
 
     return router

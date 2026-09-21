@@ -92,6 +92,10 @@ _FILTER_CHUNK = 400
 #: Page size for SSE catch-up replays (read_after caps each call; a short
 #: page marks the caught-up tail)
 _REPLAY_PAGE = 500
+#: Absolute per-request page ceiling for history/trajectory/activity reads,
+#: matching the rawllm endpoint's min(limit, 1000) convention: callers page
+#: with cursors, and an unbounded limit would read the whole log into memory
+_MAX_PAGE = 1000
 #: Idle seconds before a live SSE stream emits a keep-alive comment line
 _SSE_IDLE_PING_S = 15.0
 
@@ -249,7 +253,7 @@ def build_chat_router(
         return more rows. `session` narrows the page to one chat session's
         rows (payload filter; the gateway keeps storing zero business data)."""
         sid = _session_or_400(session)
-        max_rows = max(1, limit)
+        max_rows = max(1, min(limit, _MAX_PAGE))
         rows = _page(
             lambda **kw: log.read_before(**kw) if "before_seq" in kw else log.read_after(**kw),
             _HISTORY_TYPES,
@@ -279,7 +283,7 @@ def build_chat_router(
         history, over agent.step rows only (see the module contract for
         regrouping)."""
         sid = _session_or_400(session)
-        max_rows = max(1, limit)
+        max_rows = max(1, min(limit, _MAX_PAGE))
         if trajectory is not None:
             # Projection path: same cursor contract, no log scan
             steps, more = trajectory.steps_page(
