@@ -25,15 +25,29 @@ _ZONES = ("profile", "episodic", "semantic", "working")
 
 
 class Memory:
+    _STORES = ("profile", "episodic", "semantic")
+
     def __init__(self, root: str | Path, *, embedder: Any | None = None) -> None:
-        root = Path(root)
-        root.mkdir(parents=True, exist_ok=True)
-        self.profile = ProfileMemory(root / "profile.db")
-        self.episodic = EpisodicMemory(root / "episodic.db")
-        self.semantic = SemanticMemory(root / "semantic.db")
+        # On-disk stores open lazily on first access (see __getattr__): a
+        # working-only Memory never touches the disk, and a root the process
+        # cannot create only fails when a durable store is actually needed.
+        self._root = Path(root)
         self.working = WorkingMemory()
         self._embedder = embedder  # optional vector channel (memory.vector.EmbeddingFn)
         self._vector_note = ""  # last degradation reason ("" = vector channel served)
+
+    def __getattr__(self, name: str) -> Any:
+        # Only called when normal lookup fails: materialize the durable store
+        # on first use and cache it as an instance attribute.
+        if name in self._STORES:
+            store = {
+                "profile": ProfileMemory,
+                "episodic": EpisodicMemory,
+                "semantic": SemanticMemory,
+            }[name](self._root / f"{name}.db")
+            setattr(self, name, store)
+            return store
+        raise AttributeError(name)
 
     def _vector_candidates(self) -> list[tuple[str, str, str, dict[str, Any]]]:
         """Recall candidate pool for the vector channel: (source, identity,
@@ -155,9 +169,10 @@ class Memory:
         return out
 
     def close(self) -> None:
-        self.profile.close()
-        self.episodic.close()
-        self.semantic.close()
+        for name in self._STORES:
+            store = self.__dict__.get(name)
+            if store is not None:
+                store.close()
 
 
 __all__ = [

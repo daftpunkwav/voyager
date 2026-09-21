@@ -16,7 +16,15 @@ def decode_console_output(raw: bytes) -> str:
         return raw.decode("utf-8")
     except UnicodeDecodeError:
         pass
-    candidates = ("gbk", "utf-16") if os.name == "nt" else (locale.getpreferredencoding(),)
+    candidates: tuple[str, ...]
+    if os.name == "nt":
+        candidates = ("gbk", "utf-16")
+    else:
+        # A GBK/cp936 byte stream is not limited to Windows hosts (SSH to a
+        # legacy Windows box, cross-platform CI artifacts), so keep the same
+        # fallbacks after the locale's preferred encoding.
+        preferred = locale.getpreferredencoding()
+        candidates = (preferred, "gbk", "utf-16") if preferred else ("gbk", "utf-16")
     if b"\x00" in raw:
         # Console-codepage text never contains NUL bytes; NULs signal UTF-16
         # output (some PowerShell pipelines). GBK would "succeed" on those
