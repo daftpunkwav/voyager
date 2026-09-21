@@ -358,8 +358,12 @@ def build_switch_router() -> APIRouter:
             raise ServiceError(
                 "host", ErrorSuffix.INVALID_INPUT, "request body must be JSON"
             ) from None
-        raw = str((body or {}).get("dir") or "")
-        marker = str((body or {}).get("marker") or "")[:64]
+        if not isinstance(body, dict):
+            raise ServiceError(
+                "host", ErrorSuffix.INVALID_INPUT, "request body must be a JSON object"
+            )
+        raw = str(body.get("dir") or "")
+        marker = str(body.get("marker") or "")[:64]
         return await switch_workspace(rebuilder, request.app, raw, marker)
 
     return router
