@@ -134,8 +134,10 @@ describe('settings page memory section (phase-08)', () => {
 
   it('retention days read/write goes through settings.set_setting / get_setting', async () => {
     renderSection();
-    const input = await screen.findByLabelText('情节记忆保留天数');
-    expect((input as HTMLInputElement).value).toBe('90');
+    const input = (await screen.findByLabelText('情节记忆保留天数')) as HTMLInputElement;
+    // The draft starts empty and fills after the async get_setting resolves;
+    // asserting right after mount is a race on slow/loaded CI runners.
+    await waitFor(() => expect(input.value).toBe('90'));
 
     fireEvent.change(input, { target: { value: '30' } });
     fireEvent.blur(input);
