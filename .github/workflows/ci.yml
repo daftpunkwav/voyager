@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  gate-py:
+    name: gate:py (ruff + import-linter + mypy + pytest + graph:check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python workspace
+        run: uv sync
+
+      - name: ruff format/check
+        run: npm run lint:py
+
+      - name: import-linter layering contracts
+        run: npm run lint:imports
+
+      - name: mypy
+        run: npm run typecheck:py
+
+      - name: pytest (branch coverage, 90% floor)
+        run: npm run test:py
+
+      - name: dependency graph freshness
+        run: npm run graph:check
+
+  gate-web:
+    name: gate:web (tsc + eslint + vitest + i18n keys + prettier)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install Node workspace
+        run: npm ci
+
+      - name: tsc
+        run: npm run typecheck:web
+
+      - name: eslint
+        run: npm run lint:web
+
+      - name: vitest
+        run: npm run test:web
+
+      - name: i18n key parity
+        run: npm run i18n:web
+
+      - name: prettier
+        run: npm run format:web
