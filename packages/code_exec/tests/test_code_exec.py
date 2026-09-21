@@ -221,3 +221,22 @@ class TestExecutorDiscipline:
         )
         assert result.status == "timeout" and result.stdout == ""
         await asyncio.sleep(0.1)  # reap completes; the suite must not hang
+
+    async def test_early_eof_does_not_escape_timeout(self, tmp_path, monkeypatch) -> None:
+        """A child that closes its output descriptors and keeps running must
+        not be reported as completed with exit code 0: pipe EOF precedes
+        process exit, so the executor must reap the child (and stay inside
+        the timeout envelope) before reading the return code."""
+        from code_exec import executor
+
+        monkeypatch.setattr(executor.shutil, "which", lambda name: None)  # no docker
+        result = await run_in_runtime(
+            self._host_runtime(),
+            "import os, time; os.close(1); os.close(2); time.sleep(30)",
+            timeout=2,
+            memory_mb=256,
+            network=False,
+            use_host_fallback=True,
+            workspace=tmp_path,
+        )
+        assert result.status == "timeout"

@@ -115,6 +115,20 @@ async def _collect(proc: asyncio.subprocess.Process) -> tuple[bytes, bytes]:
     return out, err
 
 
+async def _finish(proc: asyncio.subprocess.Process) -> tuple[bytes, bytes]:
+    """Read pipes to EOF, then reap the child.
+
+    Pipes can reach EOF before the process exits: a child may close or
+    redirect its descriptors and keep running. Waiting for the child after
+    the reads keeps the exit code accurate, prevents a daemonized child from
+    escaping the timeout envelope, and avoids "subprocess still running"
+    noise when the handle is garbage-collected.
+    """
+    out, err = await _collect(proc)
+    await proc.wait()
+    return out, err
+
+
 async def _execute(
     args: list[str],
     *,
@@ -131,7 +145,7 @@ async def _execute(
         cwd=str(cwd) if cwd is not None else None,
     )
     try:
-        stdout_b, stderr_b = await asyncio.wait_for(_collect(proc), timeout=timeout)
+        stdout_b, stderr_b = await asyncio.wait_for(_finish(proc), timeout=timeout)
     except TimeoutError:
         proc.kill()
         # Reap the killed child; without this the process handle lingers
