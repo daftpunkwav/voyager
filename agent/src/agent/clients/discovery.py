@@ -7,8 +7,10 @@ MCP consumption. Broken or reserved directories are skipped; startup never
 breaks.
 
 Skip rules are duplicated here on purpose: agent must not import
-host (import-linter agent-no-domain). Keep the reserved-name set
-in lockstep with docs-local/design/2026-09-06-three-source-roots.md §5.2.
+host (import-linter agent-no-domain). The reserved-name set mirrors
+packages/host/src/host/scan.py plus `gateway` — the gateway card is
+assembled by host, so from the agent's read-only viewpoint it is not
+an agent-facing service either.
 """
 
 from __future__ import annotations

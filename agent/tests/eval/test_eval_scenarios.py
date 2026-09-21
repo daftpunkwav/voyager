@@ -4,8 +4,8 @@ state, and budget behavior. Fully offline and hermetic — real-model
 evaluation is triggered manually against the same scenarios.
 
 Run: npm run eval          # compare against the baseline
-Regenerate: npm run eval:update (deliberate behavior changes only; a diff
-means a model-facing behavior changed) + refresh docs-local/eval-baseline.md.
+Regenerate: npm run eval:update (deliberate behavior changes only; the
+diff of agent/tests/eval/baseline.json is the model-facing behavior record).
 """
 
 from __future__ import annotations

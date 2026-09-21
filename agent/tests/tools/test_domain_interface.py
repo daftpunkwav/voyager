@@ -1,4 +1,4 @@
-"""Pins the domain tool integration contract (docs-local/phases/14):
+"""Pins the domain tool integration contract:
 a domain package plugs into the agent through ToolSource / extra_tools with
 `<domain>__<capability>` naming, becomes visible to list_tools, and honors
 prefix-trim + graded domain activation. Domain packages must fit this contract;

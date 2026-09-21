@@ -3,7 +3,7 @@ readable form — the framework redacts sensitive-argument names at the call
 boundary (summarize_args), and set_api_key writes the key into
 platform_secrets instead of any log or settings row. Handlers still receive
 raw values (single implementation today); the credential-reference refactor
-stays deferred (ruling recorded in docs-local/phases/21-security.md).
+stays deferred.
 """
 
 from __future__ import annotations
