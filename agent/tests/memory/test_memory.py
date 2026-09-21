@@ -64,6 +64,11 @@ class TestStores:
         m.working.clear()
         assert m.working.recent() == []
 
+    def test_unknown_attribute_raises(self, tmp_path) -> None:
+        m = Memory(tmp_path)
+        with pytest.raises(AttributeError):
+            m.no_such_store  # noqa: B018 (attribute access is the assertion)
+
 
 class TestFacade:
     def test_recall_aggregates_with_source(self, tmp_path) -> None:

@@ -286,7 +286,10 @@ class TestEditFuzzyRegression:
 
     async def test_leading_newline_indented_block_not_double_indented(self, workdir) -> None:
         target = workdir / "repo" / "deep.py"
-        target.write_text("def f():\n        return x\n", encoding="utf-8")
+        # CRLF bytes: exact (LF needle) must fail on every platform so the
+        # fuzzy ladder is exercised identically (write_text would translate
+        # "\n" and make the scenario Windows-only)
+        target.write_bytes(b"def f():\r\n        return x\r\n")
         out = await _belt(workdir, confirm=_yes).call(
             ToolCall(
                 "1",

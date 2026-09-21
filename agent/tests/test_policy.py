@@ -467,9 +467,9 @@ class TestShellReadRootsGuard:
         engine = self._engine(tmp_path, read_roots=(str(root),))
         for cmd in (
             f"rm -rf {root / 'keep'}",
-            f"del /q {root}\\a.txt",
+            f"del /q {root / 'a.txt'}",
             f"cp a.txt {root / 'pwn.txt'}",
-            f"move x {root}\\pwn.txt",
+            f"move x {root / 'pwn.txt'}",
         ):
             d = engine.decide(Action(dimension="shell", target=cmd, write=True))
             assert not d.allow, cmd
@@ -509,7 +509,9 @@ class TestShellReadRootsGuard:
         root = tmp_path / "docs"
         settings = _FakeSettings({"agent.fs.read_roots": [str(root)]})
         engine = PolicyEngine(fs=FsPolicy(roots=(str(tmp_path / "ws"),)), settings=settings)
-        d = engine.decide(Action(dimension="shell", target=f"echo x > {root}\\a.txt", write=True))
+        d = engine.decide(
+            Action(dimension="shell", target=f"echo x > {root / 'a.txt'}", write=True)
+        )
         assert not d.allow
 
 
