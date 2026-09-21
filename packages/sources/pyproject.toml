@@ -1,6 +1,6 @@
 [project]
 name = "sources"
-version = "0.2.0"
+version = "0.1.0"
 description = "Resource library domain service (repos, documents, pages)"
 requires-python = ">=3.11"
 dependencies = [

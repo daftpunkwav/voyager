@@ -1,7 +1,7 @@
 {
   "name": "app",
   "private": true,
-  "version": "2.0.0",
+  "version": "0.1.0",
   "workspaces": [
     "apps/*"
   ],
@@ -22,7 +22,7 @@
     "lint:py": "uv run ruff format --check packages agent scripts && uv run ruff check packages agent scripts",
     "lint:imports": "uv run lint-imports --config import-linter.ini",
     "typecheck:py": "uv run mypy packages agent",
-    "test:py": "uv run pytest -q",
+    "test:py": "uv run pytest -q --cov=agent --cov=packages --cov-branch --cov-report=term --cov-fail-under=90",
     "audit:web": "npm audit --audit-level=high",
     "eval": "uv run pytest agent/tests/eval -q",
     "eval:update": "uv run python scripts/update_eval_baseline.py",

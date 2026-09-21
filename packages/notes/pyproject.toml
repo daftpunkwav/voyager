@@ -1,6 +1,6 @@
 [project]
 name = "notes"
-version = "0.5.0"
+version = "0.1.0"
 description = "Notes domain service"
 requires-python = ">=3.11"
 dependencies = [

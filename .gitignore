@@ -22,6 +22,8 @@ build/
 # Test runner outputs (Playwright default results dir; vitest/istanbul coverage)
 test-results/
 coverage/
+.coverage
+coverage.json
 
 # ===================== Data & Runtime =====================
 # data/: DB files + WAL/SHM, cache dirs, backups - none of them committed

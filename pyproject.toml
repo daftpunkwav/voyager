@@ -1,6 +1,6 @@
 [project]
 name = "app"
-version = "2.0.0"
+version = "0.1.0"
 description = "AI-driven open source project learning platform (monorepo root)"
 requires-python = ">=3.11"
 dependencies = [
@@ -11,7 +11,7 @@ dependencies = [
     "python-docx>=1.2.0",
     "python-multipart>=0.0.32",
     # Every workspace member is an editable install (src layout, see
-    # docs-local/design/2026-09-10-packages-src-layout.md). The root is the
+    # [tool.uv.workspace] below). The root is the
     # deployable aggregate: it lists the composition root plus every domain
     # host may discover, since discovery is by module card, not by import.
     "agent",
@@ -37,11 +37,10 @@ dependencies = [
 ]
 
 [tool.uv.workspace]
-# Three source roots (docs-local/design/2026-09-06-three-source-roots.md):
-# agent/ + packages/ here; apps/ is the npm workspace. Every member is a real
+# Three source roots (agent/ + packages/ here; apps/ is the npm workspace —
+# the layout is documented in docs/architecture.md). Every member is a real
 # package installed in editable mode with a src layout: domain/host code in
 # packages/<name>/src/<name>/, agent code in agent/src/agent/
-# (2026-09-10-packages-src-layout.md).
 members = [
     "agent",
     "packages/host",
@@ -93,6 +92,7 @@ dev = [
     "mypy>=1.13",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
+    "pytest-cov>=7.1.0",
     "ruff>=0.8.0",
 ]
 
