@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   git hash-object docs\testing.md docs\testing.zh.md
-docs/testing.md: 37f1b126c073b23058af8913f51f5012c206e538
-docs/testing.zh.md: b31f3694e09180316a2035ba2675fba3d372cbd4
+docs/testing.md: b6d8f03116ab84264ecebbde2ed7ee472452d48d
+docs/testing.zh.md: ade719171563a3152923e74a08e772961a134efe

@@ -26,13 +26,13 @@
 
 ## 依赖图检查
 
-`scripts/gen_dep_graph.py` 从 `import-linter` 检查的同一批 import 再生成包依赖图;提交的图过期时 `npm run graph:check` 失败。
+`scripts/gen_dep_graph.py` 从 `import-linter` 检查的同一批 import 再生成包依赖图;提交的图过期时 `npm run graph:check` 失败。产物是双语文档对 `docs/catalog/module-graph.md` + `module-graph.zh.md` 及其一致性记录 `module-graph.i18n.yaml`。
 
 ## 运行门禁
 
 ```sh
 npm run gate        # gate:py && gate:web
-npm run gate:py     # ruff + import-linter + mypy + pytest + graph:check
+npm run gate:py     # ruff + import-linter + mypy + pytest(分支覆盖率,≥90% 红线)+ graph:check
 npm run gate:web    # tsc + eslint + vitest + i18n 键 + prettier
 ```
 

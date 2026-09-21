@@ -42,6 +42,7 @@ Voyager 是一个本地优先的 agent 伴侣工作台:Python 后端(FastAPI + S
 | [tool-catalog.zh.md](catalog/tool-catalog.zh.md) | agent 工具面:内置工具、能力聚合工具、MCP 命名、激活 |
 | [config-catalog.zh.md](catalog/config-catalog.zh.md) | 按属主分组的注册设置键,含类型与声明模块 |
 | [data-layout.zh.md](catalog/data-layout.zh.md) | `data/` 下的运行时数据布局:每个存储、归属模块与保留策略 |
+| [module-graph.zh.md](catalog/module-graph.zh.md) | 包依赖图(mermaid),与 `import-linter` 检查所依据的 import 同源再生成 |
 
 ## 前端(`web/`)
 

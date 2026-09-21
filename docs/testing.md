@@ -26,13 +26,13 @@ Configured in the root `pyproject.toml`: `testpaths = ["packages", "agent"]`, im
 
 ## Dependency graph check
 
-`scripts/gen_dep_graph.py` regenerates the package dependency graph from the same imports `import-linter` checks; `npm run graph:check` fails when the committed graph is stale.
+`scripts/gen_dep_graph.py` regenerates the package dependency graph from the same imports `import-linter` checks; `npm run graph:check` fails when the committed graph is stale. The output is the bilingual pair `docs/catalog/module-graph.md` + `module-graph.zh.md` plus its `module-graph.i18n.yaml` consistency record.
 
 ## Running the gates
 
 ```sh
 npm run gate        # gate:py && gate:web
-npm run gate:py     # ruff + import-linter + mypy + pytest + graph:check
+npm run gate:py     # ruff + import-linter + mypy + pytest (branch coverage, ≥90% floor) + graph:check
 npm run gate:web    # tsc + eslint + vitest + i18n keys + prettier
 ```
 

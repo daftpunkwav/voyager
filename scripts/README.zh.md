@@ -9,7 +9,7 @@
 | 脚本 | 调用方 | 职责 |
 | --- | --- | --- |
 | `bootstrap_readmes.py` | —（无 npm 脚本） | 一次性生成器：为其内部 `CONTENT` 表所列的后端包与 agent 目录写出带固定段落（Purpose、Configuration、Extension Points、Model Experience、Known Limitations、...）的契约式 README 骨架；会跳过已包含 `## Purpose` 与 `## Known Limitations` 段落的文件。 |
-| `gen_dep_graph.py` | `npm run graph` | 重新生成 `docs-local/arch-diagrams/module-graph.md` —— 一张用 grimp 依 `import-linter.ini` 所声明的 `root_packages` 构建的 mermaid 依赖图（直接 import 按顶层包聚合，输出经过排序）。带 `--check`（暴露为 `npm run graph:check`）时，文件缺失或过期即以退出码 1 结束。 |
+| `gen_dep_graph.py` | `npm run graph` | 重新生成已提交的 `docs/catalog/module-graph` 双语文档对及其一致性记录 —— 一张用 grimp 依 `import-linter.ini` 所声明的 `root_packages` 构建的 mermaid 依赖图（直接 import 按顶层包聚合，输出经过排序）。带 `--check`（暴露为 `npm run graph:check`）时，三个文件任一缺失或过期即以退出码 1 结束。 |
 | `update_eval_baseline.py` | `npm run eval:update` | 重新生成 agent 评测基线：运行 `agent/tests/eval/test_eval_scenarios.py` 中的每个场景，并重写该模块所引用的基线 JSON。 |
 
 ## 备注

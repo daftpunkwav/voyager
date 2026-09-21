@@ -1,0 +1,98 @@
+# 模块依赖图
+
+[English](module-graph.md) | 中文
+
+由 `scripts/gen_dep_graph.py` 依 `import-linter.ini` 所声明的 `root_packages` 生成
+(按顶层包聚合直接 import)。请勿手改;变更 import 后运行 `npm run graph`。
+
+```mermaid
+graph LR
+    subgraph harness
+        p_agent["agent"]
+    end
+    subgraph runtime
+        p_gateway["gateway"]
+        p_host["host"]
+    end
+    subgraph platform
+        p_platform_actor["platform_actor"]
+        p_platform_capability["platform_capability"]
+        p_platform_contracts["platform_contracts"]
+        p_platform_eventbus["platform_eventbus"]
+        p_platform_health["platform_health"]
+        p_platform_secrets["platform_secrets"]
+        p_platform_settings["platform_settings"]
+        p_platform_webguard["platform_webguard"]
+    end
+    subgraph domains
+        p_browser["browser"]
+        p_code_exec["code_exec"]
+        p_graph["graph"]
+        p_llm["llm"]
+        p_notes["notes"]
+        p_office["office"]
+        p_settings["settings"]
+        p_sources["sources"]
+    end
+    p_agent --> p_platform_actor
+    p_agent --> p_platform_capability
+    p_agent --> p_platform_contracts
+    p_agent --> p_platform_eventbus
+    p_agent --> p_platform_settings
+    p_agent --> p_platform_webguard
+    p_browser --> p_platform_capability
+    p_browser --> p_platform_contracts
+    p_browser --> p_platform_eventbus
+    p_browser --> p_platform_settings
+    p_code_exec --> p_platform_capability
+    p_code_exec --> p_platform_contracts
+    p_code_exec --> p_platform_eventbus
+    p_code_exec --> p_platform_settings
+    p_gateway --> p_platform_actor
+    p_gateway --> p_platform_capability
+    p_gateway --> p_platform_contracts
+    p_gateway --> p_platform_eventbus
+    p_gateway --> p_platform_settings
+    p_graph --> p_platform_capability
+    p_graph --> p_platform_contracts
+    p_graph --> p_platform_eventbus
+    p_graph --> p_platform_settings
+    p_host --> p_agent
+    p_host --> p_gateway
+    p_host --> p_platform_actor
+    p_host --> p_platform_capability
+    p_host --> p_platform_contracts
+    p_host --> p_platform_eventbus
+    p_host --> p_platform_secrets
+    p_host --> p_platform_settings
+    p_llm --> p_platform_capability
+    p_llm --> p_platform_contracts
+    p_llm --> p_platform_secrets
+    p_llm --> p_platform_settings
+    p_notes --> p_platform_capability
+    p_notes --> p_platform_contracts
+    p_notes --> p_platform_eventbus
+    p_notes --> p_platform_settings
+    p_office --> p_platform_capability
+    p_office --> p_platform_contracts
+    p_office --> p_platform_eventbus
+    p_office --> p_platform_settings
+    p_platform_actor --> p_platform_contracts
+    p_platform_capability --> p_platform_actor
+    p_platform_capability --> p_platform_contracts
+    p_platform_eventbus --> p_platform_contracts
+    p_platform_health --> p_platform_contracts
+    p_platform_health --> p_platform_eventbus
+    p_platform_settings --> p_platform_contracts
+    p_platform_settings --> p_platform_eventbus
+    p_settings --> p_platform_capability
+    p_settings --> p_platform_contracts
+    p_settings --> p_platform_eventbus
+    p_settings --> p_platform_settings
+    p_sources --> p_platform_capability
+    p_sources --> p_platform_contracts
+    p_sources --> p_platform_eventbus
+    p_sources --> p_platform_secrets
+    p_sources --> p_platform_settings
+    p_sources --> p_platform_webguard
+```

@@ -42,6 +42,7 @@ Index: [subsystems/README.md](subsystems/README.md).
 | [tool-catalog.md](catalog/tool-catalog.md) | The agent tool surface: builtin tools, aggregated capability-backed tools, MCP naming, activation |
 | [config-catalog.md](catalog/config-catalog.md) | Registered settings keys by owner, with types and declaring modules |
 | [data-layout.md](catalog/data-layout.md) | Runtime data layout under `data/`: every store, its owning module, and retention |
+| [module-graph.md](catalog/module-graph.md) | The package dependency graph (mermaid), regenerated from the same imports `import-linter` checks |
 
 ## Frontend (`web/`)
 
