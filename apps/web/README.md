@@ -8,17 +8,17 @@ The single frontend application: a React 19 + TypeScript + Vite single-page app 
 
 Run from this directory with `npm run <script>`, or from the repository root via the `-w web` aliases shown in parentheses. Requires Node >= 20.11.
 
-| Script | Alias (repo root) | What it does |
-| --- | --- | --- |
-| `dev` | `dev:web` | Vite dev server on `127.0.0.1:5173` (`VITE_PORT`, strict port); proxies `/api` and `/health` to `VITE_API_TARGET` (default `http://127.0.0.1:8000`). Port and proxy live in `vite.config.ts`. |
-| `build` | `build:web` | `tsc --noEmit` type check followed by `vite build` into `dist/`. |
-| `preview` | `preview:web` | Serve the production build locally. |
-| `test` | `test:web` | Vitest unit tests from `tests/unit` (jsdom environment, setup file `tests/setup.ts`). Variants: `test:watch`, `test:coverage`. |
-| `test:e2e` | — | Playwright specs from `tests/e2e`; `playwright.config.ts` boots its own dev server on port `5193` (`E2E_PORT`). |
-| `lint` | `lint:web` | ESLint over `src/` with `--max-warnings 0` (flat config in `eslint.config.js`). |
-| `typecheck` | `typecheck:web` | `tsc --noEmit` against the tsconfig that extends `../config/tsconfig.base.json`. |
-| `i18n:check` | `i18n:web` | i18n key consistency check (`scripts/check-i18n-keys.mjs`). |
-| `format` / `format:check` | `format:web` (check) | Prettier write / check over the package. |
+| Script                    | Alias (repo root)    | What it does                                                                                                                                                                                  |
+| ------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dev`                     | `dev:web`            | Vite dev server on `127.0.0.1:5173` (`VITE_PORT`, strict port); proxies `/api` and `/health` to `VITE_API_TARGET` (default `http://127.0.0.1:8000`). Port and proxy live in `vite.config.ts`. |
+| `build`                   | `build:web`          | `tsc --noEmit` type check followed by `vite build` into `dist/`.                                                                                                                              |
+| `preview`                 | `preview:web`        | Serve the production build locally.                                                                                                                                                           |
+| `test`                    | `test:web`           | Vitest unit tests from `tests/unit` (jsdom environment, setup file `tests/setup.ts`). Variants: `test:watch`, `test:coverage`.                                                                |
+| `test:e2e`                | —                    | Playwright specs from `tests/e2e`; `playwright.config.ts` boots its own dev server on port `5193` (`E2E_PORT`).                                                                               |
+| `lint`                    | `lint:web`           | ESLint over `src/` with `--max-warnings 0` (flat config in `eslint.config.js`).                                                                                                               |
+| `typecheck`               | `typecheck:web`      | `tsc --noEmit` against the tsconfig that extends `../config/tsconfig.base.json`.                                                                                                              |
+| `i18n:check`              | `i18n:web`           | i18n key consistency check (`scripts/check-i18n-keys.mjs`).                                                                                                                                   |
+| `format` / `format:check` | `format:web` (check) | Prettier write / check over the package.                                                                                                                                                      |
 
 ## Layout (`src/`)
 

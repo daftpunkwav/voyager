@@ -8,17 +8,17 @@
 
 在本目录内以 `npm run <script>` 运行，或在仓库根经括号中所示的 `-w web` 别名运行。要求 Node >= 20.11。
 
-| 脚本 | 别名（仓库根） | 作用 |
-| --- | --- | --- |
-| `dev` | `dev:web` | Vite dev server，监听 `127.0.0.1:5173`（`VITE_PORT`，严格端口）；把 `/api` 与 `/health` 代理到 `VITE_API_TARGET`（默认 `http://127.0.0.1:8000`）。端口与代理位于 `vite.config.ts`。 |
-| `build` | `build:web` | 先 `tsc --noEmit` 类型检查，随后 `vite build` 输出到 `dist/`。 |
-| `preview` | `preview:web` | 在本地伺服生产构建。 |
-| `test` | `test:web` | 来自 `tests/unit` 的 Vitest 单元测试（jsdom 环境，setup 文件为 `tests/setup.ts`）。变体：`test:watch`、`test:coverage`。 |
-| `test:e2e` | — | 来自 `tests/e2e` 的 Playwright 规格；`playwright.config.ts` 会在端口 `5193`（`E2E_PORT`）自启 dev server。 |
-| `lint` | `lint:web` | 以 `--max-warnings 0` 对 `src/` 运行 ESLint（flat 配置位于 `eslint.config.js`）。 |
-| `typecheck` | `typecheck:web` | 对继承 `../config/tsconfig.base.json` 的 tsconfig 运行 `tsc --noEmit`。 |
-| `i18n:check` | `i18n:web` | i18n 键一致性检查（`scripts/check-i18n-keys.mjs`）。 |
-| `format` / `format:check` | `format:web`（check） | 对本包运行 Prettier 写入 / 检查。 |
+| 脚本                      | 别名（仓库根）        | 作用                                                                                                                                                                                |
+| ------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dev`                     | `dev:web`             | Vite dev server，监听 `127.0.0.1:5173`（`VITE_PORT`，严格端口）；把 `/api` 与 `/health` 代理到 `VITE_API_TARGET`（默认 `http://127.0.0.1:8000`）。端口与代理位于 `vite.config.ts`。 |
+| `build`                   | `build:web`           | 先 `tsc --noEmit` 类型检查，随后 `vite build` 输出到 `dist/`。                                                                                                                      |
+| `preview`                 | `preview:web`         | 在本地伺服生产构建。                                                                                                                                                                |
+| `test`                    | `test:web`            | 来自 `tests/unit` 的 Vitest 单元测试（jsdom 环境，setup 文件为 `tests/setup.ts`）。变体：`test:watch`、`test:coverage`。                                                            |
+| `test:e2e`                | —                     | 来自 `tests/e2e` 的 Playwright 规格；`playwright.config.ts` 会在端口 `5193`（`E2E_PORT`）自启 dev server。                                                                          |
+| `lint`                    | `lint:web`            | 以 `--max-warnings 0` 对 `src/` 运行 ESLint（flat 配置位于 `eslint.config.js`）。                                                                                                   |
+| `typecheck`               | `typecheck:web`       | 对继承 `../config/tsconfig.base.json` 的 tsconfig 运行 `tsc --noEmit`。                                                                                                             |
+| `i18n:check`              | `i18n:web`            | i18n 键一致性检查（`scripts/check-i18n-keys.mjs`）。                                                                                                                                |
+| `format` / `format:check` | `format:web`（check） | 对本包运行 Prettier 写入 / 检查。                                                                                                                                                   |
 
 ## 布局（`src/`）
 
