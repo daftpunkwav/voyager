@@ -39,8 +39,6 @@ const char *engine_language_name(EngineLanguage lang);
  * On read failure, defaults to ENGINE_LANG_MATLAB. */
 EngineLanguage engine_disambiguate_m(const char *path);
 
-EngineLanguage engine_disambiguate_cls(const char *path);
-
 /* Disambiguate .inc files: returns ENGINE_LANG_C. */
 EngineLanguage engine_disambiguate_inc(const char *path);
 

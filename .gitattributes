@@ -3,3 +3,15 @@
 # Same for TOML data files (persona definitions embed multi-line prompts: a
 # stray CRLF inside the heredoc strings would change the system prompt bytes)
 *.toml text eol=lf
+# Shell scripts must stay LF in the working tree: WSL/`sh` rejects CRLF
+# ("set: Illegal option -"), and the C engine build invokes them directly.
+*.sh text eol=lf
+
+# Vendored third-party code (tree-sitter runtime + 49 grammars + lz4/zstd/etc):
+# ~11.8M generated parser lines would otherwise swamp the language bar (98.7% C).
+# Exclude from language statistics and code search; files stay in the repo.
+packages/graph/src/graph/engines/c/core/internal/engine/vendored/** linguist-vendored
+packages/graph/src/graph/engines/c/core/internal/engine/vendored/** -linguist-readable
+
+# Generated LSP stdlib lookup tables (typeshed / go stdlib / ... compiled to C data)
+packages/graph/src/graph/engines/c/core/internal/engine/lsp/generated/*.c linguist-generated

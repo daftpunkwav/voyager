@@ -696,10 +696,6 @@ static EngineLanguage detect_file_language(const char *entry_name, const char *a
     if (dot && strcmp(dot, ".m") == 0) {
         lang = engine_disambiguate_m(abs_path);
     }
-    /* Special: .cls is shared by ObjectScript UDL and Apex */
-    if (dot && strcmp(dot, ".cls") == 0) {
-        lang = engine_disambiguate_cls(abs_path);
-    }
     /* Special: .inc → C include fragment */
     if (dot && strcmp(dot, ".inc") == 0) {
         lang = engine_disambiguate_inc(abs_path);

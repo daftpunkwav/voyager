@@ -5,23 +5,19 @@ Internal symbols uniformly use the `engine_*` / `ENGINE_*` prefixes (neutralized
 
 ## Capabilities
 
-- HTTP: `/api/layout`, `/api/index`, `/api/index-status`, `/api/project-health`, `DELETE /api/project`, etc.
+- HTTP: `/api/index`, `/api/index-status`, `/api/project-health`, `DELETE /api/project`
 - JSON-RPC: `POST /rpc` (`tools/call`: `search_graph`, `get_graph_schema`, `trace_path`, etc.)
-- **Excludes** the upstream React `graph-ui`; visualization is handled by Voyager `apps/web`
-
-> The C engine only provides functional APIs (`/api/layout`, `/rpc`); frontend visualization is handled by Voyager `apps/web`. The asset_pack frontend asset serving has been removed.
+- **Excludes** the upstream React `graph-ui`; visualization is handled by Voyager `apps/web` (the asset_pack frontend asset serving has been removed)
 
 ## Build
 
 Dependencies (WSL/Ubuntu example): `build-essential`, `make`, `zlib1g-dev`, `python3`.
 
-**The Makefile entry point is `Makefile` (formerly `Makefile.rp`).**
-
 Windows (WSL recommended):
 
 ```powershell
 # From the repo root or this directory
-.\services\graph_engine\graph_engine_core\scripts\build.ps1
+.\packages\graph\src\graph\engines\c\core\scripts\build.ps1
 ```
 
 Or:
@@ -35,7 +31,7 @@ make -f Makefile -j$(nproc) graph-engine
 
 ## Run
 
-When the C engine runs directly (not via the API), it reads `ENGINE_CACHE_DIR` / `ENGINE_ALLOWED_ROOT` (getenv inside the source):
+When the C engine runs directly, it reads `ENGINE_CACHE_DIR` / `ENGINE_ALLOWED_ROOT` (getenv inside the source):
 
 ```bash
 export ENGINE_CACHE_DIR="<repo>/data/graph-engine-cache"
@@ -43,11 +39,13 @@ export ENGINE_ALLOWED_ROOT="<roots allowed for indexing>"
 ./graph-engine --ui=true --port=9750
 ```
 
-The Voyager API integrates with it via environment variables (on the API side, `graph_engine_runtime/sidecar.py` translates the application-level `GRAPH_*` configuration into engine-level `ENGINE_*` at the boundary):
-
-- `GRAPH_ENGINE_URL=http://127.0.0.1:9750`
-- `GRAPH_ENGINE_BIN=<the executable built from this directory>`
-- Optional: `GRAPH_CACHE_DIR` (graph SQLite cache root)
+To point the Voyager API at a running sidecar, set the `graph.engine.c_url`
+setting (default `http://127.0.0.1:8123`) to the engine's actual address —
+the engine's own default port is 9750, so pass `--port=8123` (or change
+`graph.engine.c_url`) to make the two meet. The sidecar is **not started
+automatically**: start it manually before switching `graph.engine.mode` to
+`c`; in `auto` mode the API falls back to the built-in Python engine when
+the health probe fails.
 
 ## License
 

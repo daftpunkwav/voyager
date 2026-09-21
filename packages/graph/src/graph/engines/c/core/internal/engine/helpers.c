@@ -146,14 +146,6 @@ static const char *generic_keywords[] = {
     "def",      "fn",        "func",      "fun",    "proc",   "sub",       "method",  "async",
     "await",    "yield",     NULL};
 
-/* Puppet reserves control-flow words but NOT `include`/`require`/`contain`,
- * which are ordinary built-in functions invoked as calls. Using the generic
- * list would wrongly drop `include`/`require` call edges, so Puppet gets its
- * own reserved-word set that omits them. */
-static const char *puppet_keywords[] = {"true",   "false",  "undef",    "if",      "elsif",  "else",
-                                        "unless", "case",   "and",      "or",      "in",     "node",
-                                        "class",  "define", "inherits", "default", "return", NULL};
-
 // True when `label` names a type-like container definition (see engine.h). Single
 // source of truth for the type-resolution / registry / IMPLEMENTS / LSP-type
 // consumers — adding a label here updates them all.
@@ -682,7 +674,6 @@ static const char *func_kinds_scala[] = {"function_definition", NULL};
 static const char *func_kinds_kotlin[] = {"function_declaration", NULL};
 static const char *func_kinds_elixir[] = {"call", NULL}; // def/defp are call nodes
 static const char *func_kinds_haskell[] = {"function", "value_definition", NULL};
-static const char *func_kinds_ocaml[] = {"value_definition", "let_binding", NULL};
 static const char *func_kinds_zig[] = {"function_declaration", "test_declaration", NULL};
 static const char *func_kinds_bash[] = {"function_definition", NULL};
 static const char *func_kinds_erlang[] = {"function_clause", NULL};
@@ -1142,7 +1133,6 @@ static const char *module_parents_zig[] = {"source_file", NULL};
 static const char *module_parents_bash[] = {"program", NULL};
 static const char *module_parents_erlang[] = {"source", "source_file", NULL};
 static const char *module_parents_haskell[] = {"declarations", NULL};
-static const char *module_parents_ocaml[] = {"compilation_unit", NULL};
 static const char *module_parents_elixir[] = {"source", NULL};
 static const char *module_parents_html[] = {"document", NULL};
 static const char *module_parents_css[] = {"stylesheet", NULL};
@@ -1152,12 +1142,7 @@ static const char *module_parents_config[] = {
     "document", "table", "table_array_element", "section", "object", "element", "array", NULL};
 static const char *module_parents_hcl[] = {"config_file", NULL};
 static const char *module_parents_makefile[] = {"makefile", NULL};
-static const char *module_parents_commonlisp[] = {"source", NULL};
 static const char *module_parents_matlab[] = {"source_file", NULL};
-static const char *module_parents_form[] = {"source_file", NULL};
-static const char *module_parents_magma[] = {"source_file", NULL};
-/* tree-sitter-properties roots at `file`. */
-static const char *module_parents_properties[] = {"file", "source_file", NULL};
 
 // Check if parent node kind matches direct-or-grandparent for scripting languages.
 // Returns true if pk matches root_kind, or pk matches wrapper_kind and grandparent is root_kind.

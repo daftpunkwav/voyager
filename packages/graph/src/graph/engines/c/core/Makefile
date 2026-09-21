@@ -368,7 +368,6 @@ CLI_SRCS = src/cli/cli.c src/cli/progress_sink.c src/cli/hook_augment.c src/cli/
 UI_SRCS = \
     src/ui/config.c \
     src/ui/http_server.c \
-    src/ui/layout3d.c \
     src/ui/httpd.c \
     src/ui/asset_pack_stub.c
 

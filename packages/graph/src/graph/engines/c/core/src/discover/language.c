@@ -584,20 +584,11 @@ EngineLanguage engine_language_for_filename(const char *filename) {
     /* Probe compound extensions (e.g. ".blade.php") from the first dot toward
      * the last. Built-in compounds are checked first so e.g. Laravel Blade
      * templates map to Blade rather than the single-extension fallback (PHP);
-     * user config can still add more (#258). */
-    static const struct {
-        const char *ext;
-        EngineLanguage lang;
-    } COMPOUND_EXT_TABLE[] = {
-    };
+     * user config can still add more (#258). The built-in compound table is
+     * currently empty — all surviving languages use single last-dot lookup. */
     const engine_userconfig_t *ucfg = engine_get_user_lang_config();
     const char *p = strchr(filename, '.');
     while (p && p < last_dot) {
-        for (size_t i = 0; i < sizeof(COMPOUND_EXT_TABLE) / sizeof(COMPOUND_EXT_TABLE[0]); i++) {
-            if (strcmp(p, COMPOUND_EXT_TABLE[i].ext) == 0) {
-                return COMPOUND_EXT_TABLE[i].lang;
-            }
-        }
         if (ucfg) {
             EngineLanguage lang = engine_userconfig_lookup(ucfg, p);
             if (lang != ENGINE_LANG_COUNT) {
@@ -612,7 +603,7 @@ EngineLanguage engine_language_for_filename(const char *filename) {
 }
 
 const char *engine_language_name(EngineLanguage lang) {
-    if (lang < 0 || lang >= ENGINE_LANG_COUNT) {
+    if (lang >= ENGINE_LANG_COUNT) {
         return "Unknown";
     }
     return LANG_NAMES[lang] ? LANG_NAMES[lang] : "Unknown";
@@ -681,11 +672,6 @@ EngineLanguage engine_disambiguate_m(const char *path) {
     }
 
     return ENGINE_LANG_MATLAB;
-}
-
-/* Disambiguate .cls files: .cls is Salesforce Apex. */
-EngineLanguage engine_disambiguate_cls(const char *path) {
-    (void)path;
 }
 
 /* Disambiguate .inc files: treat as C include fragment. */
