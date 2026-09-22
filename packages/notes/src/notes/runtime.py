@@ -16,7 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from platform_capability import Registry
+from platform_capability import Registry, current_chat_session
 from platform_contracts import ActorKind, ActorRef, ErrorSuffix, Event, ServiceError
 from platform_eventbus import EventBus
 from platform_settings import SettingsStore
@@ -73,6 +73,11 @@ def get_any(nid: str) -> dict:
 async def emit(type_: str, note_id: str, **payload) -> None:
     deps = require_deps()
     if deps.bus is not None:
+        # Attribute the event to the chat turn that caused it (session-filtered
+        # consumers route on this); '' outside a turn = stay session-less.
+        session = current_chat_session.get()
+        if session:
+            payload["session"] = session
         await deps.bus.publish(
             Event(type=type_, actor=ACTOR, payload={"note_id": note_id, **payload})
         )

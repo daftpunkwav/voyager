@@ -82,8 +82,10 @@ _STREAM_TYPES = (
     DomainEvent.NOTES_UI_CHANGED,
     DomainEvent.WORKSPACE_SWITCHED,
 )
-# note.created rides along so note receipts survive a refresh (the UI
-# rebuilds its deliverable cards from the same history page).
+# note.created rows carry the creating session (stamped by the agent runtime
+# via the capability invocation context), so a session-filtered history page
+# still rebuilds the deliverable receipts after a refresh — and only for the
+# conversation that created them.
 _HISTORY_TYPES = (DomainEvent.USER_MESSAGE, DomainEvent.AGENT_MESSAGE, DomainEvent.NOTE_CREATED)
 #: Step rows for trajectory rebuilds (execution detail, never the timeline).
 _TRAJECTORY_TYPES = (DomainEvent.AGENT_STEP,)
@@ -101,15 +103,12 @@ _SSE_IDLE_PING_S = 15.0
 
 
 def _in_session(event: Event, session: str) -> bool:
-    """Session match: exact id equality over the payload field; rows without
-    the field (legacy) belong to the global lane and match no filter — except
-    note receipts, which are session-less by nature (the notes domain does
-    not know the chat session) and ride along every lane so their cards
-    survive a refresh."""
-    ev_session = str(event.payload.get("session") or "")
-    if event.type == DomainEvent.NOTE_CREATED:
-        return not ev_session or ev_session == session
-    return ev_session == session
+    """Session match: exact id equality over the payload field. Rows without
+    the field match no lane: legacy rows predate multi-session, and domain
+    events created outside a chat turn (REST, notes UI, imports) belong to no
+    conversation. Events raised inside a chat turn carry the session — the
+    agent runtime stamps it via the capability invocation context."""
+    return str(event.payload.get("session") or "") == session
 
 
 class TrajectoryReader(Protocol):

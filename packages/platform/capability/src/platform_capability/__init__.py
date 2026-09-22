@@ -3,6 +3,7 @@ auth/quota/audit at the entry point.
 """
 
 from platform_capability.audit_db import SqliteAuditSink
+from platform_capability.context import current_chat_session
 from platform_capability.define import Capability, capability, coerce_input
 from platform_capability.gen_mcp import (
     build_server,
@@ -43,6 +44,7 @@ __all__ = [
     "capability",
     "capability_input_schema",
     "coerce_input",
+    "current_chat_session",
     "dataclass_to_json_schema",
     "execute",
     "summarize_args",

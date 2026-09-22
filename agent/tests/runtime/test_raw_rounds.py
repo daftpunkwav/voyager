@@ -154,3 +154,30 @@ class TestCrossTurnNumbering:
         await inst.run_turn("ok")
         await inst.run_turn("ok")
         assert captured == [1, 2]
+
+    async def test_turn_stamps_the_capability_session_context(self) -> None:
+        """Domain capabilities called mid-turn read the session from the
+        capability invocation context; it must reset after the turn."""
+        from agent.runtime.events import RuntimeEvents
+        from agent.runtime.state import RunState
+        from agent.subagent.instance import SubagentInstance, TaskBook
+        from platform_capability import current_chat_session
+
+        seen: list[str] = []
+
+        class ProbeLLM(FakeLLM):
+            async def complete(self, messages, tools=None):
+                seen.append(current_chat_session.get())
+                return await super().complete(messages, tools)
+
+        inst = SubagentInstance(
+            task=TaskBook(goal="goal", conversational=True, session="sess-1"),
+            toolbelt=_belt(),
+            llm=ProbeLLM([LLMReply(text="ok")]),
+            system_prompt="sys",
+            events=RuntimeEvents(cast(EventBus, self._CaptureBus([]))),
+            state=RunState(task="goal"),
+        )
+        await inst.run_turn("ok")
+        assert seen == ["sess-1"]
+        assert current_chat_session.get() == ""

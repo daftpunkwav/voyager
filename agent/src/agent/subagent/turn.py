@@ -13,6 +13,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
+from platform_capability import current_chat_session
 from platform_contracts import DomainEvent, RuntimeEvent
 
 from agent.context.editor import SUMMARY_MARK
@@ -113,6 +114,10 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
             # transcript through this ContextVar; set inside the try so the
             # finally always resets it, even when the turn is cancelled
             token = current_instance.set(inst)
+            # Domain capabilities called during this turn (create_note etc.)
+            # read this to stamp their events with the session, so history
+            # pages and SSE routing attribute them to the right chat lane
+            session_token = current_chat_session.set(inst.session)
             result = await run_mode(
                 inst.task.mode or Mode.REACT,
                 llm=inst.llm,
@@ -203,6 +208,7 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
             # will fire; clear _turn_messages to stop mis-capturing
             inst._turn_messages = None
             current_instance.reset(token)
+            current_chat_session.reset(session_token)
             # Fold this turn's round count into the raw-log numbering base so
             # the next turn's raw rounds continue past it instead of colliding
             inst._fold_raw_round_base()

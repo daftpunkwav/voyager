@@ -63,6 +63,29 @@ class TestCrud:
         types = [e.type for _, e in log.read_after()]
         assert types == ["note.created", "note.edited"]
 
+
+class TestSessionAttribution:
+    async def test_events_carry_chat_session_inside_a_turn(self, deps) -> None:
+        """The agent runtime stamps the executing chat session; session-filtered
+        consumers (chat history, SSE lanes) route on it."""
+        from platform_capability import current_chat_session
+
+        _, log = deps
+        token = current_chat_session.set("sess-abc")
+        try:
+            await execute(registry, "create_note", AGENT_CTX, {"title": "from chat"})
+        finally:
+            current_chat_session.reset(token)
+        (_, event), *_ = log.read_after()
+        assert event.payload["session"] == "sess-abc"
+
+    async def test_events_stay_session_less_outside_a_turn(self, deps) -> None:
+        """REST / UI / import paths have no chat context: no session key."""
+        _, log = deps
+        await execute(registry, "create_note", USER_CTX, {"title": "outside chat"})
+        (_, event), *_ = log.read_after()
+        assert "session" not in event.payload
+
     async def test_delete_moves_to_trash_and_restore(self, deps) -> None:
         """Soft-delete semantics: delete moves to trash (recoverable); purge removes for good."""
         _, log = deps
