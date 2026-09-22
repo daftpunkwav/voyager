@@ -1,4 +1,5 @@
 {
+  "page.title": "Activity",
   "loading": "Loading activity feed…",
   "filter.aria": "Filter activity type",
   "filter.all": "All operations",
@@ -18,5 +19,6 @@
   "empty.description": "Changes the agent makes to the system will show up here",
   "probe.summary": "Activity · {{count}} entries",
   "filter.noteEdited": "Notes edited",
-  "filter.fileWrite": "File writes"
+  "filter.fileWrite": "File writes",
+  "feed.label": "Operations"
 }

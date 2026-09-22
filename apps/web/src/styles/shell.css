@@ -2206,49 +2206,77 @@ a.chat-card:hover {
 .activity-page {
   display: flex;
   flex-direction: column;
-  gap: 12px;
   min-height: 0;
 }
-.activity-page__toolbar {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-/* GlassSelect defaults to width:100%; toolbar filters stay compact */
-.activity-page__toolbar .glass-select {
-  width: 168px;
-}
-/* Activity feed rows (shared widget: standalone page + settings tab).
-   A quiet operations log: no dots, no hairlines — grouping comes from
-   spacing, feedback from a soft hover surface. */
-.activity-card {
-  padding: 6px 0;
-  min-height: 0;
-}
-.activity-list {
-  list-style: none;
+.activity-page .settings-section {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+}
+/* Activity feed (shared widget: standalone page + settings tab). The list
+   sits flat on the section panel — same discipline as the LLM provider rail:
+   a small-caps head with the row count, compact hover rows, no nested card. */
+.activity-feed {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.activity-feed__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+.activity-feed__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-500);
+}
+.activity-feed__count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-400);
+  font-variant-numeric: tabular-nums;
+}
+.activity-feed__filters {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+.activity-feed__filters .glass-select {
+  width: 168px;
+}
+/* Scoped to .activity-feed: overview.css also styles a generic .activity-list
+   (the overview page's pill list) and would otherwise bleed its 12px gap in. */
+.activity-feed .activity-feed__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   overflow-y: auto;
   flex: 1;
   min-height: 0;
-  margin: 0;
-  padding: 0;
 }
 .activity-row {
   display: flex;
   align-items: baseline;
-  gap: 14px;
-  padding: 7px 14px;
-  font-size: 12.5px;
-  line-height: 1.5;
-  transition: background-color 140ms ease;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-700);
+  transition: background var(--dur-fast, 150ms) var(--ease);
   /* Long-list render optimization: skip rendering off-screen rows (CSS approximation of virtual scrolling) */
   content-visibility: auto;
   contain-intrinsic-size: auto 34px;
 }
 .activity-row:hover {
-  background: var(--bg-100);
+  background: rgba(127, 127, 127, 0.08);
 }
 .activity-row--muted .activity-row__text {
   color: var(--text-500);
@@ -2265,7 +2293,8 @@ a.chat-card:hover {
 .activity-row__text {
   flex: 1;
   min-width: 0;
-  color: var(--text-800);
+  font-weight: 500;
+  color: var(--text-700);
   overflow-wrap: anywhere;
 }
 .activity-row__origin {

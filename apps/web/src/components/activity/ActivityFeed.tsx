@@ -9,7 +9,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GlassCard } from '@/components/common/GlassCard';
 import { GlassSelect } from '@/components/common/GlassSelect';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
@@ -113,31 +112,35 @@ export function ActivityFeed({ kind, onKindChange, onLoaded }: ActivityFeedProps
   }, [sessions]);
 
   return (
-    <>
-      <div className="activity-page__toolbar">
-        {/* A real select (not the projects page's invisible overlay): the
-            invisible absolute-position variant used here before rendered as
-            a full-bleed native blue dropdown. */}
-        <GlassSelect
-          size="sm"
-          value={kind}
-          options={KIND_OPTIONS.map((o) => ({ value: o.value, label: t(o.key) }))}
-          onChange={(v) => onKindChange(v)}
-          aria-label={t('filter.aria')}
-        />
-        <GlassSelect
-          size="sm"
-          value={session}
-          options={[
-            { value: '', label: t('filter.sessionAll') },
-            ...sessions.map((s) => ({
-              value: s.session_id,
-              label: s.title || s.session_id,
-            })),
-          ]}
-          onChange={(v) => setSession(v)}
-          aria-label={t('filter.sessionAria')}
-        />
+    <div className="activity-feed">
+      <div className="activity-feed__head">
+        <span className="activity-feed__label">{t('feed.label')}</span>
+        <span className="activity-feed__count">{loading ? '…' : events.length}</span>
+        <div className="activity-feed__filters">
+          {/* A real select (not the projects page's invisible overlay): the
+              invisible absolute-position variant used here before rendered as
+              a full-bleed native blue dropdown. */}
+          <GlassSelect
+            size="sm"
+            value={kind}
+            options={KIND_OPTIONS.map((o) => ({ value: o.value, label: t(o.key) }))}
+            onChange={(v) => onKindChange(v)}
+            aria-label={t('filter.aria')}
+          />
+          <GlassSelect
+            size="sm"
+            value={session}
+            options={[
+              { value: '', label: t('filter.sessionAll') },
+              ...sessions.map((s) => ({
+                value: s.session_id,
+                label: s.title || s.session_id,
+              })),
+            ]}
+            onChange={(v) => setSession(v)}
+            aria-label={t('filter.sessionAria')}
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -162,33 +165,29 @@ export function ActivityFeed({ kind, onKindChange, onLoaded }: ActivityFeedProps
           />
         </div>
       ) : (
-        <div className="page-scaffold__body">
-          <GlassCard className="activity-card">
-            <ul className="activity-list">
-              {events.map((ev) => {
-                const s = summarize(ev);
-                const origin = String(ev.payload?.session ?? '');
-                return (
-                  <li
-                    key={ev.seq ?? `${ev.ts}-${ev.id}`}
-                    className={`activity-row activity-row--${s.tone}`}
-                  >
-                    <span className="activity-row__time mono">
-                      {ev.ts ? formatRowTime(ev.ts, i18n.language) : ''}
-                    </span>
-                    <span className="activity-row__text">{s.text}</span>
-                    {origin !== '' && (
-                      <span className="activity-row__origin">
-                        {t('fromSession', { title: sessionTitle(origin) })}
-                      </span>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </GlassCard>
-        </div>
+        <ul className="activity-feed__list">
+          {events.map((ev) => {
+            const s = summarize(ev);
+            const origin = String(ev.payload?.session ?? '');
+            return (
+              <li
+                key={ev.seq ?? `${ev.ts}-${ev.id}`}
+                className={`activity-row activity-row--${s.tone}`}
+              >
+                <span className="activity-row__time mono">
+                  {ev.ts ? formatRowTime(ev.ts, i18n.language) : ''}
+                </span>
+                <span className="activity-row__text">{s.text}</span>
+                {origin !== '' && (
+                  <span className="activity-row__origin">
+                    {t('fromSession', { title: sessionTitle(origin) })}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       )}
-    </>
+    </div>
   );
 }

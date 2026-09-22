@@ -1,4 +1,5 @@
 {
+  "page.title": "活动",
   "loading": "加载活动流中…",
   "filter.aria": "筛选活动类型",
   "filter.all": "全部操作",
@@ -18,5 +19,6 @@
   "empty.description": "Agent 对系统做出更改后会显示在这里",
   "probe.summary": "活动 · {{count}} 条",
   "filter.noteEdited": "编辑笔记",
-  "filter.fileWrite": "写文件"
+  "filter.fileWrite": "写文件",
+  "feed.label": "操作记录"
 }
