@@ -37,6 +37,20 @@ const KIND_OPTIONS: Array<{ value: string; key: string }> = [
   { value: EventType.SETTINGS_CHANGED, key: 'activity:filter.settingsChanged' },
 ];
 
+/** Operation-event types the agent-only scope narrows to when no kind is
+ *  picked: conversation messages also carry the session stamp, so the bare
+ *  agent filter alone would still show them. */
+const OPERATION_TYPES = [
+  EventType.NOTE_CREATED,
+  EventType.NOTE_EDITED,
+  EventType.NOTE_DELETED,
+  EventType.NOTE_RESTORED,
+  EventType.NOTE_PURGED,
+  EventType.SOURCE_ADDED,
+  EventType.SOURCE_REMOVED,
+  EventType.SESSION_DELETED,
+].join(',');
+
 interface ActivityFeedProps {
   /** Current kind filter ('' = all) */
   kind: string;
@@ -73,7 +87,10 @@ export function ActivityFeed({ kind, onKindChange, onLoaded }: ActivityFeedProps
     setError(null);
     (async () => {
       try {
-        const feed = await fetchActivityFeed(kind, { agentOnly, session });
+        const feed = await fetchActivityFeed(agentOnly && !kind ? OPERATION_TYPES : kind, {
+          agentOnly,
+          session,
+        });
         if (!alive) return;
         setEvents(feed);
         onLoaded?.(feed.length);

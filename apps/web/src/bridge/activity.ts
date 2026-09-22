@@ -71,6 +71,8 @@ async function reportActivity(body: {
 /** Activity page replay: reads the event stream; non-2xx throws with the backend envelope message.
  *  The gateway's activity_feed filter parameter is `types` (comma-separated event
  *  types, fnmatch semantics) — a `kind` param would be silently ignored.
+ *  Defaults to the newest window (`recent=true`): paging forward from seq 0
+ *  would surface the log's oldest rows, not current activity.
  *  `agentOnly` keeps events attributed to a chat turn (payload.session);
  *  `session` narrows to one session's events (implies agent). */
 export async function fetchActivityFeed(
@@ -78,6 +80,7 @@ export async function fetchActivityFeed(
   opts: { agentOnly?: boolean; session?: string } = {}
 ): Promise<FeedEvent[]> {
   const url = new URL('/api/activity/feed', window.location.origin);
+  url.searchParams.set('recent', 'true');
   if (kind) url.searchParams.set('types', kind);
   if (opts.agentOnly) url.searchParams.set('agent', 'true');
   if (opts.session) url.searchParams.set('session', opts.session);

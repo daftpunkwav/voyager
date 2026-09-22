@@ -76,17 +76,24 @@ def build_activity_router(bus: EventBus, limiter: RateLimiter) -> APIRouter:
         limit: int = 200,
         agent: bool = False,
         session: str = "",
+        recent: bool = False,
     ) -> dict:
-        """Activity feed. `agent=true` keeps only events attributed to a chat
-        turn (payload.session stamped by the capability invocation context);
-        `session=<id>` keeps only one session's events (implies agent). The
-        type filter still narrows the SQL read; these two filter in memory
-        afterwards, so a heavily filtered page may return fewer rows than
-        `limit` even when older matches exist — callers page with after_seq."""
+        """Activity feed. `recent=true` returns the newest `limit` events
+        instead of paging forward from after_seq. `agent=true` keeps only
+        events attributed to a chat turn (payload.session stamped by the
+        capability invocation context); `session=<id>` keeps only one
+        session's events (implies agent). The type filter still narrows the
+        SQL read; agent/session filter in memory afterwards, so a heavily
+        filtered page may return fewer rows than `limit`."""
         type_list = tuple(t for t in types.split(",") if t) or None
-        rows = bus.log.read_after(
-            after_seq=after_seq, types=type_list, limit=max(1, min(limit, 1000))
-        )
+        cap = max(1, min(limit, 1000))
+        if recent and after_seq <= 0:
+            rows = bus.log.read_before(
+                before_seq=bus.log.latest_seq() + 1, types=type_list, limit=cap
+            )
+            rows.reverse()  # keep the feed's oldest-first row order
+        else:
+            rows = bus.log.read_after(after_seq=after_seq, types=type_list, limit=cap)
 
         def _wanted(ev: Event) -> bool:
             ev_session = str(ev.payload.get("session") or "")
