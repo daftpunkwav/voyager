@@ -107,8 +107,11 @@ async def complete_stream(
             client.stream("POST", url, headers=headers, json=body) as resp,
         ):
             if resp.status_code >= 400:
-                _dump_rejected_request(url, body, resp)
+                # Read first, then dump: a streaming response has no readable
+                # .text before aread() (httpx raises ResponseNotRead), so the
+                # dump must be handed the already-read error body.
                 text = (await resp.aread()).decode("utf-8", errors="replace")
+                _dump_rejected_request(url, body, resp.status_code, text)
                 _raise_typed_text(resp.status_code, text)
             in_body = True
             async for chunk in parser(resp):

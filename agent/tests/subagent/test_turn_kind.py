@@ -82,10 +82,10 @@ class _RecordingEvents:
 
 
 def test_degraded_task_turn_fails_instead_of_completing() -> None:
-    """A task turn whose LLM round degraded (quota / provider failure) did NOT
-    run: it must land FAILED with the degraded text as the error and emit
-    RunFailed - wait_subagent callers must see the failure, not a completed
-    result that never happened."""
+    """A task turn that ended on a degraded placeholder (quota / provider
+    failure) instead of a model answer: it must land FAILED with the degraded
+    text as the error and emit RunFailed - wait_subagent callers must see the
+    failure, not a completed result that never materialized."""
 
     async def _down(_messages, _tools=None):
         return LLMReply(text="(LLM call failed: quota)", degraded=True)

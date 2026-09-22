@@ -96,14 +96,14 @@ def main():
             "properties": {"q": {"type": "string", "default": ""}},
             "required": [],
         },
-        "C: `default` member present (the member _clean_anthropic_schema strips)",
+        "C: property-level `default` member (tolerated or not? _clean_anthropic_schema strips top-level members only)",
     )
     call(
         base,
         key,
         model,
         {"type": "object", "properties": {"q": {"type": "string"}}, "required": []},
-        "D: default stripped (the schema gen_mcp emits now)",
+        "D: no default member (the wire shape after the top-level strip)",
     )
 
 

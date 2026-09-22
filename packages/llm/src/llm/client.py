@@ -445,28 +445,32 @@ async def _post(
     except httpx.TransportError as exc:  # transient connect/DNS/timeout: retryable
         raise TransientError(f"{type(exc).__name__}: {exc}") from exc
     if resp.status_code >= 400:
-        _dump_rejected_request(url, body, resp)
+        _dump_rejected_request(url, body, resp.status_code, resp.text)
     _raise_typed(resp)
     return resp
 
 
-def _dump_rejected_request(url: str, body: dict[str, Any], resp: httpx.Response) -> None:
+def _dump_rejected_request(url: str, body: dict[str, Any], status: int, response_text: str) -> None:
     """Write the full rejected request/response pair when LLM_DEBUG_DUMP_DIR is
     set: the only way to see what a strict provider actually disliked (its
-    error body rarely names the parameter)."""
+    error body rarely names the parameter). The response text comes in from the
+    caller: a streaming response has no readable .text before aread() (httpx
+    raises ResponseNotRead), so the stream path reads first and passes it here.
+    Headers are never written (the api key must not land on disk)."""
     dump_dir = os.environ.get("LLM_DEBUG_DUMP_DIR")
     if not dump_dir:
         return
     try:
         path = Path(dump_dir)
         path.mkdir(parents=True, exist_ok=True)
-        (path / f"llm-{int(time.time() * 1000)}.json").write_text(
+        # time_ns: retries can hit several rejections within one millisecond
+        (path / f"llm-{time.time_ns()}.json").write_text(
             json.dumps(
                 {
                     "url": url,
                     "request": body,
-                    "status": resp.status_code,
-                    "response": resp.text[:4000],
+                    "status": status,
+                    "response": response_text[:4000],
                 },
                 ensure_ascii=False,
                 indent=2,

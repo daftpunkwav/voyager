@@ -248,9 +248,11 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
                     # finished turn into a failure (master's persist would be skipped)
                     log.warning("failed to deliver the turn reply for %s", inst.name, exc_info=True)
         elif _turn_degraded(inst):
-            # A task turn whose LLM rounds all degraded (provider 4xx/quota)
-            # did NOT run: mark it failed instead of dressing the failure up as
-            # a completed result — wait_subagent callers must see the failure.
+            # A task turn that ended on degraded harness text (provider
+            # 4xx/quota placeholder instead of a model answer — earlier rounds
+            # may still have run tools): mark it failed instead of dressing the
+            # failure up as a completed result — wait_subagent callers must see
+            # the failure.
             inst.state.status = RunStatus.FAILED
             inst.state.error = result
             try:
