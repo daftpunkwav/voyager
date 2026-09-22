@@ -298,5 +298,9 @@
   "tool.bash": "Run command",
   "tool.todowrite": "Manage plan",
   "feed.fileWrite": "Wrote file {{path}}",
-  "feed.fileEdit": "Edited file {{path}}"
+  "feed.fileEdit": "Edited file {{path}}",
+  "panel.viewRun": "View run",
+  "run.loading": "Loading the run…",
+  "run.empty": "No steps yet",
+  "run.instanceId": "instance {{id}}"
 }

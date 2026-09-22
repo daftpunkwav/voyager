@@ -277,12 +277,18 @@ def build_chat_router(
         before_seq: int | None = None,
         limit: int = trajectory_page_size,
         session: str = "",
+        run_id: str = "",
     ) -> dict:
         """Step page with the same three cursor modes and session filter as
         history, over agent.step rows only (see the module contract for
-        regrouping)."""
+        regrouping). With `run_id`: the full step list of one run (a subagent
+        view), cursor parameters ignored."""
         sid = _session_or_400(session)
         max_rows = max(1, min(limit, _MAX_PAGE))
+        if run_id:
+            if trajectory is None:
+                return {"has_more": False, "steps": []}
+            return {"has_more": False, "steps": trajectory.run_steps(run_id)}
         if trajectory is not None:
             # Projection path: same cursor contract, no log scan
             steps, more = trajectory.steps_page(

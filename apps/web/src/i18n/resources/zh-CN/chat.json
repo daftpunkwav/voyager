@@ -298,5 +298,9 @@
   "tool.bash": "执行命令",
   "tool.todowrite": "管理计划",
   "feed.fileWrite": "写入文件 {{path}}",
-  "feed.fileEdit": "编辑文件 {{path}}"
+  "feed.fileEdit": "编辑文件 {{path}}",
+  "panel.viewRun": "查看执行",
+  "run.loading": "正在加载执行记录…",
+  "run.empty": "还没有执行步骤",
+  "run.instanceId": "实例 {{id}}"
 }

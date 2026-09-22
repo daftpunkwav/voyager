@@ -3067,3 +3067,101 @@ a.chat-card:hover {
 .sidebar-sessions__ctx button:hover {
   background: var(--bg-200);
 }
+
+/* Subagent execution view (modal, opened from the side panel's agents list) */
+.chat-run-overlay .chat-run {
+  width: min(780px, 100%);
+  max-height: min(82vh, 780px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-0);
+  border: 1px solid var(--bg-300);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+[data-theme='dark'] .chat-run-overlay .chat-run {
+  background: var(--bg-100);
+  border-color: rgba(255, 255, 255, 0.09);
+}
+.chat-run__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 10px;
+}
+.chat-run__name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-800);
+}
+.chat-run__status {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--brand-600);
+  background: rgba(10, 132, 255, 0.12);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+[data-theme='dark'] .chat-run__status {
+  color: var(--brand-400);
+}
+.chat-run__elapsed {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-400);
+  font-variant-numeric: tabular-nums;
+}
+.chat-run__close {
+  margin-left: auto;
+  border: none;
+  background: none;
+  color: var(--text-400);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.chat-run__close:hover {
+  background: var(--bg-200);
+  color: var(--text-700);
+}
+.chat-run__goal {
+  margin: 0;
+  padding: 0 16px 10px;
+  font-size: 12.5px;
+  color: var(--text-500);
+}
+.chat-run__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 16px 16px;
+}
+.chat-run__empty {
+  margin: 24px 0;
+  text-align: center;
+  color: var(--text-400);
+  font-size: 12.5px;
+}
+.chat-run__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--bg-200);
+}
+.chat-run__stop {
+  border: 1px solid rgba(255, 59, 48, 0.4);
+  background: none;
+  color: var(--error);
+  font: 600 12px/1.2 var(--font-sans);
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background var(--dur-fast, 150ms) var(--ease);
+}
+.chat-run__stop:hover {
+  background: rgba(255, 59, 48, 0.08);
+}

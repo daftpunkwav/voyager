@@ -18,7 +18,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { type TodoItem, listSubagents, listTodos } from '@/api/agent';
-import { interruptInstance } from '@/bridge/chatSend';
+import { SubagentRunDialog } from '@/widgets/chat/SubagentRunDialog';
 import { routes } from '@/utils/routes';
 import { formatDurationSec } from '@/utils/trajectory';
 import { useChatStore } from '@/stores/chatStore';
@@ -26,6 +26,8 @@ import { useChatStore } from '@/stores/chatStore';
 /** A list_subagents.running entry (status is a RunStatus.value from agent/runtime/state.py). */
 interface RunningInstance {
   id: string;
+  /** The instance's run_id (trajectory/raw-log key); absent on older backends. */
+  run_id?: string;
   name: string;
   status: string;
   goal: string;
@@ -136,6 +138,8 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   // Ticks while subagents run so their elapsed time stays honest between polls.
   const [now, setNow] = useState(() => Date.now());
+  // The subagent execution view (dialog) currently open, if any.
+  const [runView, setRunView] = useState<RunningInstance | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -203,18 +207,19 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
             {running.map((r) => {
               const elapsed =
                 r.started_ts > 0 ? Math.max(0, Math.round(now / 1000 - r.started_ts)) : null;
+              const isMain = r.conversational === true;
               return (
                 <li key={r.id}>
                   <button
                     type="button"
                     className="chat-side__agent"
                     title={t('chat:panel.badgeTitle', { goal: r.goal, status: r.status })}
-                    onClick={() => void interruptInstance(r.id)}
+                    onClick={() => setRunView(isMain ? null : r)}
                   >
                     <span className="chat-side__pulse" aria-hidden />
                     <span className="chat-side__agentmain">
                       <span className="chat-side__agent-name">
-                        {r.conversational === true ? t('chat:panel.mainAgent') : r.name}
+                        {isMain ? t('chat:panel.mainAgent') : r.name}
                       </span>
                       {r.goal ? <span className="chat-side__agent-goal">{r.goal}</span> : null}
                     </span>
@@ -223,7 +228,7 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
                         {formatDurationSec(elapsed, t)}
                       </span>
                     ) : null}
-                    <span className="chat-side__agent-stop">{t('chat:composer.stop')}</span>
+                    <span className="chat-side__agent-stop">{t('chat:panel.viewRun')}</span>
                   </button>
                 </li>
               );
@@ -269,6 +274,11 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
           <p className="chat-side__empty small muted">{t('chat:panel.deliverablesEmpty')}</p>
         ) : null}
       </SideSection>
+      <SubagentRunDialog
+        instance={runView}
+        open={runView !== null}
+        onClose={() => setRunView(null)}
+      />
     </aside>
   );
 }

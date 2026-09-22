@@ -92,6 +92,26 @@ export function fetchTrajectory(limit = 500, session?: string): Promise<ChatEven
     .catch(() => []);
 }
 
+/** One run's full step list (the subagent execution view): the trajectory
+ *  API's run_id mode returns raw projection rows; they are wrapped into
+ *  ChatEvent-shaped objects so chatStore.toTurnStep can parse them like SSE
+ *  events. */
+export async function fetchRunSteps(runId: string): Promise<ChatEvent[]> {
+  const resp = await fetch(`/api/chat/trajectory?run_id=${encodeURIComponent(runId)}`, {
+    credentials: 'include',
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const body = (await resp.json().catch(() => null)) as {
+    steps?: Array<Record<string, unknown>>;
+  } | null;
+  return (body?.steps ?? []).map((row) => ({
+    seq: Number(row.seq ?? 0),
+    type: 'agent.step',
+    payload: { ...row },
+    ts: Number(row.ts ?? 0),
+  })) as ChatEvent[];
+}
+
 /** One recorded raw LLM round (GET /api/chat/rawllm): the exact transcript
  *  the model received and the raw response, verbatim. */
 export interface RawLlmRound {

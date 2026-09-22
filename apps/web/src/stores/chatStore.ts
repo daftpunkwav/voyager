@@ -277,6 +277,10 @@ interface ChatState {
   cards: Record<string, ProgressCard>;
   cardOrder: string[];
   artifacts: NoteArtifact[];
+  /** Per-run step logs (run_id -> steps), the subagent execution view's data
+   *  source: hydrated from /api/chat/trajectory?run_id and appended live by
+   *  the AGENT_STEP dispatch. */
+  runSteps: Record<string, TurnStep[]>;
   question: PendingQuestion | null;
   connected: boolean;
   thinking: boolean;
@@ -310,6 +314,9 @@ interface ChatState {
   /** Backfill persisted steps (/api/chat/trajectory) and regroup closed
    *  turns; the still-open turn merges into the live slot. */
   applyTrajectory: (events: ChatEvent[]) => void;
+  /** Seed one run's step log from the trajectory API (subagent view); live
+   *  AGENT_STEP dispatch appends afterwards. Idempotent by seq. */
+  hydrateRunSteps: (runId: string, events: ChatEvent[]) => void;
   /** Backward-page fetch in flight (top loader indicator + trigger re-entry guard). */
   setHistoryLoading: (v: boolean) => void;
   /** SSE event dispatch (agent.ask, task.*, agent.message, note.created, etc.); pure state transitions, unit-testable. */
@@ -448,6 +455,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   cards: {},
   cardOrder: [],
   artifacts: [],
+  runSteps: {},
   question: null,
   connected: false,
   thinking: false,
@@ -670,6 +678,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ trails: next, steps: openSteps.slice(-200) });
   },
 
+  hydrateRunSteps: (runId, events) => {
+    if (!runId) return;
+    const incoming = events
+      .filter((e) => e.type === EventType.AGENT_STEP)
+      .map((e) => ({ runId, step: toTurnStep(e) }))
+      .filter(({ step }) => (step.runId ?? runId) === runId)
+      .map(({ step }) => step);
+    set((state) => {
+      const prev = state.runSteps[runId] ?? [];
+      const seen = new Set(prev.map((s) => s.seq));
+      const merged = [...prev, ...incoming.filter((s) => !seen.has(s.seq))].sort(
+        (a, b) => a.seq - b.seq
+      );
+      if (merged.length === prev.length) return state; // nothing new: skip the notify
+      return { runSteps: { ...state.runSteps, [runId]: merged } };
+    });
+  },
+
   dispatch: (ev) => {
     const p = ev.payload;
     // Session routing: an event stamped with another session's id goes to
@@ -780,6 +806,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
           currentStep: { name: step.name, subagent: step.subagent },
           steps,
         });
+        // Mirror into the per-run log so a subagent execution view (run_id
+        // keyed) sees live steps without refetching.
+        if (step.runId) {
+          const runPrev = get().runSteps[step.runId] ?? [];
+          if (!runPrev.some((s) => s.seq === step.seq)) {
+            set({
+              runSteps: {
+                ...get().runSteps,
+                [step.runId]: [...runPrev, step].sort((a, b) => a.seq - b.seq),
+              },
+            });
+          }
+        }
         break;
       }
       case EventType.AGENT_DELTA: {

@@ -322,7 +322,7 @@ describe('RightPanel', () => {
     expect(screen.getByText(/没有正在运行/)).toBeTruthy();
   });
 
-  it('clicking a running agent interrupts that instance', async () => {
+  it('clicking a running agent opens the execution view instead of interrupting', async () => {
     listSubagentsMock.mockResolvedValue({
       running: [{ id: 'r9', name: 'indexer', status: 'running', goal: '建索引', started_ts: 1 }],
     });
@@ -333,11 +333,12 @@ describe('RightPanel', () => {
     );
     await waitFor(() => expect(screen.getByText('indexer')).toBeTruthy());
     fireEvent.click(screen.getByText('indexer'));
-    await waitFor(() =>
-      expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'agent_instance', {
-        action: 'cancel',
-        id_or_name: 'r9',
-      })
-    );
+    // The click opens the run view (stop moved inside it, away from misfires)
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+    expect(
+      callCapabilityMock.mock.calls.some(
+        (c) => c[0] === 'agent' && c[1] === 'agent_instance' && c[2]?.action === 'cancel'
+      )
+    ).toBe(false);
   });
 });
