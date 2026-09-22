@@ -1284,6 +1284,11 @@ a.chat-card:hover {
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  /* In dark theme the only backdrop behind the composer is the black body and
+     its 24px dot grid, so blur(16px) has nothing to soften — but at fractional
+     browser zoom it resamples the grid into visible vertical banding. Drop it. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 [data-theme='dark'] .chat-input:focus-within {
   border-color: rgba(255, 255, 255, 0.2);
