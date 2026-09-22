@@ -1,9 +1,9 @@
 /**
  * @file policyNotifyToast
- * @description L1 policy-notify toast unit tests (phase-40 §9.9):
- * agent.policy.notify only fires an info toast and never enters the chat
- * timeline; a blank message fires nothing; all other events still go through
- * chatStore.dispatch.
+ * @description agent.policy.notify is no longer surfaced: batch operations
+ * fired one toast per write call and flooded the chat page. The event must
+ * neither raise a toast nor enter the chat timeline; other events still go
+ * through chatStore.dispatch.
  */
 
 import { render } from '@testing-library/react';
@@ -44,21 +44,12 @@ beforeEach(() => {
   );
 });
 
-describe('agent.policy.notify → toast(phase-40)', () => {
-  it('shows an info toast on the event and keeps the message out of the timeline', () => {
+describe('agent.policy.notify stays silent (operations live in the activity page)', () => {
+  it('raises no toast and keeps the message out of the timeline', () => {
     render(<HookProbe />);
-    handler()({ seq: 1, type: 'agent.policy.notify', payload: { message: 'write_file: g.txt' } });
-    const toasts = useUIStore.getState().toasts;
-    expect(toasts).toHaveLength(1);
-    expect(toasts[0].type).toBe('info');
-    expect(toasts[0].message).toBe('write_file: g.txt');
-    expect(useChatStore.getState().messages).toHaveLength(0);
-  });
-
-  it('does not show a toast when message is blank', () => {
-    render(<HookProbe />);
-    handler()({ seq: 2, type: 'agent.policy.notify', payload: { message: '   ' } });
+    handler()({ seq: 1, type: 'agent.policy.notify', payload: { message: 'session: session' } });
     expect(useUIStore.getState().toasts).toHaveLength(0);
+    expect(useChatStore.getState().messages).toHaveLength(0);
   });
 
   it('still dispatches other events into chatStore as before (regression)', () => {

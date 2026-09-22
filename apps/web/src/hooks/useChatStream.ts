@@ -92,9 +92,9 @@ export function useChatStream(onNavigate: (path: string) => void) {
         return;
       }
       if (ev.type === EventType.AGENT_POLICY_NOTIFY) {
-        // L1 permission notice: surface as an info toast only, never into the chat timeline
-        const msg = String(ev.payload?.message ?? '').trim();
-        if (msg) useUIStore.getState().addToast({ type: 'info', message: msg });
+        // L1 permission notices (one per write call, so they flood during
+        // batch operations) are no longer surfaced here: the activity page is
+        // the operations log, and the tool rows in the trail show the calls.
         return;
       }
       if (ev.type === EventType.SKILL_PROPOSED) {
