@@ -239,6 +239,13 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
                 # not masquerade as a normal answer: the latest llm step carries
                 # the degraded flag, so read it back instead of sniffing prefixes.
                 await inst.reply_sink(result, "error" if _turn_degraded(inst) else "message")
+        elif _turn_degraded(inst):
+            # A task turn whose LLM rounds all degraded (provider 4xx/quota)
+            # did NOT run: mark it failed instead of dressing the failure up as
+            # a completed result — wait_subagent callers must see the failure.
+            inst.state.status = RunStatus.FAILED
+            inst.state.error = result
+            await inst.events.emit(RuntimeEvent.RUN_FAILED, run_id=inst.state.run_id, error=result)
         else:
             inst.state.status = RunStatus.COMPLETED
             await inst.events.emit(

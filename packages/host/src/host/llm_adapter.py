@@ -101,11 +101,14 @@ class ServiceLLM:
                     break
         provider = provider or usable[0]
         # llm.default_model (composer model picker) wins over the provider's
-        # first enabled model; an explicit constructor model still wins over both
-        return {
-            **provider,
-            "model": self._model or default_model or _fallback_model(provider),
-        }
+        # first enabled model — but only when the provider actually serves it:
+        # a stale or renamed id would 400 on the wire for every call that has
+        # no per-conversation override (task subagents).
+        models = provider.get("models") or []
+        picked = self._model or (default_model if default_model in models else "")
+        if not picked:
+            picked = _fallback_model(provider)
+        return {**provider, "model": picked}
 
     def _tool_payload(self, tools: list[ToolSpec] | None) -> list[dict] | None:
         if not tools:

@@ -43,6 +43,7 @@ from .client import (
     _anthropic_tools,
     _chat_messages,
     _chat_tools,
+    _dump_rejected_request,
     _parse_tool_calls,
     _raise_typed_text,
     _resolve_tool_messages,
@@ -158,6 +159,7 @@ async def complete_stream(
             client.stream("POST", url, headers=headers, json=body) as resp,
         ):
             if resp.status_code >= 400:
+                _dump_rejected_request(url, body, resp)
                 text = (await resp.aread()).decode("utf-8", errors="replace")
                 _raise_typed_text(resp.status_code, text)
             in_body = True

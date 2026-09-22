@@ -24,9 +24,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import os
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -111,6 +114,9 @@ class TransientError(ProviderError):
         retry_after: float = 0.0,
     ) -> None:
         super().__init__(message, status=status, retriable=retriable, retry_after=retry_after)
+
+
+_logger = logging.getLogger("llm.client")
 
 
 @dataclass(frozen=True)
@@ -315,12 +321,23 @@ def _chat_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+def _clean_anthropic_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Strict providers (MiniMax's anthropic layer) reject input schemas with
+    non-standard members. `default` is JSON-Schema-legal but not part of the
+    anthropic tool dialect, so strip it; make sure a bare fragment still
+    declares an object type."""
+    cleaned = {k: v for k, v in schema.items() if k != "default"}
+    if "type" not in cleaned:
+        cleaned["type"] = "object"
+    return cleaned
+
+
 def _anthropic_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         {
             "name": t["name"],
             "description": t.get("description", ""),
-            "input_schema": t.get("schema") or {"type": "object"},
+            "input_schema": _clean_anthropic_schema(t.get("schema") or {"type": "object"}),
         }
         for t in tools
     ]
@@ -428,8 +445,37 @@ async def _post(
         raise TransientError(f"{type(exc).__name__}: {exc}", retriable=False) from exc
     except httpx.TransportError as exc:  # transient connect/DNS/timeout: retryable
         raise TransientError(f"{type(exc).__name__}: {exc}") from exc
+    if resp.status_code >= 400:
+        _dump_rejected_request(url, body, resp)
     _raise_typed(resp)
     return resp
+
+
+def _dump_rejected_request(url: str, body: dict[str, Any], resp: httpx.Response) -> None:
+    """Write the full rejected request/response pair when LLM_DEBUG_DUMP_DIR is
+    set: the only way to see what a strict provider actually disliked (its
+    error body rarely names the parameter)."""
+    dump_dir = os.environ.get("LLM_DEBUG_DUMP_DIR")
+    if not dump_dir:
+        return
+    try:
+        path = Path(dump_dir)
+        path.mkdir(parents=True, exist_ok=True)
+        (path / f"llm-{int(time.time() * 1000)}.json").write_text(
+            json.dumps(
+                {
+                    "url": url,
+                    "request": body,
+                    "status": resp.status_code,
+                    "response": resp.text[:4000],
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+    except Exception as exc:  # noqa: BLE001 - diagnostics never break the call path
+        _logger.debug("llm debug dump failed: %s", exc)
 
 
 #: Reasoning-effort names and their Anthropic thinking budgets (tokens).

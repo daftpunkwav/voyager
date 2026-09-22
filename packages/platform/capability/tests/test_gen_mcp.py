@@ -73,7 +73,10 @@ class TestSignatureSchema:
         assert schema["properties"]["tags"] == {"type": "array", "items": {"type": "string"}}
         assert schema["required"] == ["title"]
 
-    async def test_varargs_skipped_and_unannotated_params_stay_any(self) -> None:
+    async def test_varargs_skipped_and_unannotated_params_typed_string(self) -> None:
+        """Unannotated params fall back to a permissive string: providers
+        validate tool schemas strictly and reject a property with no `type`
+        (MiniMax's anthropic layer answers a bare 400 InvalidParameter)."""
         reg = Registry("misc")
 
         @capability(reg, name="flex", description="flexible")
@@ -82,7 +85,7 @@ class TestSignatureSchema:
 
         schema = build_tool_specs(reg)[0]["inputSchema"]
         assert set(schema["properties"]) == {"a", "extra"}
-        assert schema["properties"]["a"] == {}
+        assert schema["properties"]["a"] == {"type": "string"}
         assert schema["properties"]["extra"] == {"type": "object"}
 
     async def test_actor_param_is_not_published(self) -> None:

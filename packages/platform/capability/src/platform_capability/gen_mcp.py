@@ -75,7 +75,11 @@ def _annotation_to_schema(expected: Any, default: Any = inspect.Parameter.empty)
     elif expected is dict or origin is dict:
         schema = {"type": "object"}
     else:
-        schema = {}
+        # Unannotated parameter: providers validate tool schemas strictly
+        # (MiniMax's anthropic layer rejects a property with no `type` with a
+        # bare 400 InvalidParameter), so fall back to a permissive string
+        # rather than an untyped {} fragment.
+        schema = {"type": "string"}
     if default is not inspect.Parameter.empty and default is not None:
         schema["default"] = default
     return schema
