@@ -15,3 +15,7 @@ packages/graph/src/graph/engines/c/core/internal/engine/vendored/** -linguist-re
 
 # Generated LSP stdlib lookup tables (typeshed / go stdlib / ... compiled to C data)
 packages/graph/src/graph/engines/c/core/internal/engine/lsp/generated/*.c linguist-generated
+
+# Self-written C engine: hide from GitHub language bar (keeps highlight/search,
+# only excludes stats). Scoped to engine dir so future .c/.h there stay hidden.
+packages/graph/src/graph/engines/c/** -linguist-detectable
