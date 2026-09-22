@@ -138,6 +138,7 @@
   "rawlog.response": "响应",
   "rawlog.loading": "加载中…",
   "rawlog.empty": "该轮没有原始记录",
+  "rawlog.toggle": "展开或收起这一轮的原始请求与响应",
   "session.untitled": "未命名会话",
   "store.navigated": "已跳转:{{path}}",
   "store.stageCompleted": "已完成",

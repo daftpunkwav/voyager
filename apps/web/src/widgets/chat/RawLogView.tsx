@@ -28,27 +28,47 @@ function pretty(raw: string): string {
 
 function RoundCard({ round }: { round: RawLlmRound }) {
   const { t } = useTranslation('chat');
+  // Collapsed by default: the log tab is a scanning surface; bodies render
+  // only for the round being inspected (large <pre>s add up fast).
+  const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<'request' | 'response'>('request');
   const time = new Date(round.ts * 1000).toLocaleTimeString();
   // Memoized: the raw bodies can be large, and re-parsing on every render of
   // the card (e.g. the count-note state change above) is wasted work.
   const body = useMemo(
-    () => pretty(tab === 'request' ? round.request : round.response),
-    [tab, round.request, round.response]
+    () => (open ? pretty(tab === 'request' ? round.request : round.response) : ''),
+    [open, tab, round.request, round.response]
   );
+  // A tab click on a collapsed card expands it into that tab; on an open card
+  // it just switches panes (collapsing is the header toggle's job).
+  const pickTab = (next: 'request' | 'response') => {
+    setTab(next);
+    setOpen(true);
+  };
   return (
-    <section className="chat-log__round">
+    <section className={`chat-log__round${open ? ' is-open' : ''}`}>
       <div className="chat-log__head">
-        <span className="chat-log__meta">
-          {t('chat:trace.roundN', { n: round.round })} · {time}
-        </span>
+        <button
+          type="button"
+          className="chat-log__toggle"
+          aria-expanded={open}
+          aria-label={t('chat:rawlog.toggle')}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span className="chat-log__chevron" aria-hidden>
+            {open ? '▾' : '▸'}
+          </span>
+          <span className="chat-log__meta">
+            {t('chat:trace.roundN', { n: round.round })} · {time}
+          </span>
+        </button>
         <div className="chat-log__tabs" role="tablist">
           <button
             type="button"
             role="tab"
             aria-selected={tab === 'request'}
             className={`chat-log__tab${tab === 'request' ? ' is-active' : ''}`}
-            onClick={() => setTab('request')}
+            onClick={() => pickTab('request')}
           >
             {t('chat:rawlog.request')}
           </button>
@@ -57,13 +77,13 @@ function RoundCard({ round }: { round: RawLlmRound }) {
             role="tab"
             aria-selected={tab === 'response'}
             className={`chat-log__tab${tab === 'response' ? ' is-active' : ''}`}
-            onClick={() => setTab('response')}
+            onClick={() => pickTab('response')}
           >
             {t('chat:rawlog.response')}
           </button>
         </div>
       </div>
-      <pre className="chat-log__body">{body}</pre>
+      {open ? <pre className="chat-log__body">{body}</pre> : null}
     </section>
   );
 }

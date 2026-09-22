@@ -138,6 +138,7 @@
   "rawlog.response": "Response",
   "rawlog.loading": "Loading…",
   "rawlog.empty": "No raw record for this round",
+  "rawlog.toggle": "Expand or collapse this round's raw request and response",
   "session.untitled": "Untitled session",
   "store.navigated": "Navigated: {{path}}",
   "store.stageCompleted": "Completed",
