@@ -42,6 +42,22 @@ function clip(text: unknown, max = 60): string {
   return s.length > max ? `${s.slice(0, max)}…` : s;
 }
 
+/** Tool-step detail args -> object. The agent serializes arguments to a
+ *  compact JSON string (modes/base.capped_args), so a plain property read
+ *  would always miss; older/object shapes still pass through. */
+function detailArgs(detail: Record<string, unknown>): Record<string, unknown> {
+  const raw = detail.args;
+  if (typeof raw === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+  return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+}
+
 /** Build a summary from per-type templates for the agent-operations feed.
  *  The gateway's agent scope already excludes conversation traffic and the
  *  user's own actions, so only operation templates live here; unrecognized
@@ -91,7 +107,9 @@ export function summarize(ev: FeedEvent): RowSummary {
       };
     case EventType.SOURCE_REMOVED:
       return {
-        text: i18n.t('chat:feed.sourceRemoved', { name: clip(p.title ?? p.source_id, 40) }),
+        text: i18n.t('chat:feed.sourceRemoved', {
+          name: clip(p.name ?? p.title ?? p.source_id, 40),
+        }),
         tone: 'muted',
       };
     case EventType.AGENT_STEP: {
@@ -103,8 +121,7 @@ export function summarize(ev: FeedEvent): RowSummary {
         const tool = String(p.name ?? '');
         if (tool === 'write' || tool === 'edit') {
           const detail = (p.detail ?? {}) as Record<string, unknown>;
-          const args = (detail.args ?? {}) as Record<string, unknown>;
-          const path = clip(String(args.path ?? ''), 44);
+          const path = clip(String(detailArgs(detail).path ?? ''), 44);
           return {
             text: i18n.t(tool === 'write' ? 'chat:feed.fileWrite' : 'chat:feed.fileEdit', { path }),
             tone: 'normal',

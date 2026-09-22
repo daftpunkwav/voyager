@@ -46,6 +46,21 @@ class TestSessionManager:
         finally:
             app.close()
 
+    def test_delete_drops_queued_inbox(self, tmp_path) -> None:
+        """Deleting a session drops its queued-message inbox: messages parked
+        while its turn was running belong to the dead conversation and must
+        never drain into a later session recreated with the same id."""
+        app = _app(tmp_path, FakeLLM())
+        try:
+            mgr = app.master.sessions
+            created = mgr.create(title="短命会话")
+            sid = created["session_id"]
+            app.master._session_inbox(sid).append(("排队消息", None))
+            mgr.delete(sid)
+            assert app.master._inboxes.get(sid) is None
+        finally:
+            app.close()
+
     def test_delete_lands_session_deleted_event(self, tmp_path) -> None:
         """session.deleted carries the deleted session's title; when the delete
         happened inside a chat turn (capability invocation context set) the

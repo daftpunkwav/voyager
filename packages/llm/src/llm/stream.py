@@ -1,17 +1,10 @@
 """LLM streaming client: SSE incremental parsing with complete's
-error classification.
-
-Responsibilities:
-- Parse SSE line-by-line per wire format (chat = OpenAI Chat
-  Completions, anthropic = Messages, responses = OpenAI Responses)
-- Aggregate deltas into text chunks plus a final aggregate chunk shaped like
-  complete's return (text / tool_calls / usage / model)
-- Classify errors like complete: pre-first-packet errors keep retryable
-  semantics; mid-stream errors are never retried automatically
+request building and error classification.
 
 client.py handles one-shot requests; this module only does streaming:
 line-by-line SSE parsing and incremental aggregation per wire format
-(chat, anthropic, responses), producing dict chunks —
+(chat = OpenAI Chat Completions, anthropic = Messages, responses = OpenAI
+Responses), producing dict chunks —
 several `{"type": "text", "text": <delta>}` chunks and a final
 `{"type": "final", "text", "tool_calls", "usage", "model"}` chunk (same shape
 as the complete capability return, so adapters map them uniformly).
@@ -38,20 +31,28 @@ import httpx
 
 from .client import (
     _TIMEOUT,
+    ProviderError,
     TransientError,
-    _anthropic_messages,
-    _anthropic_tools,
-    _chat_messages,
-    _chat_tools,
     _dump_rejected_request,
     _parse_tool_calls,
     _raise_typed_text,
-    _resolve_tool_messages,
-    _split_system,
-    reasoning_fields,
+    _wire_request,
 )
 from .inline_split import InlineTagSplitter, parse_tool_blocks
-from .wire_responses import responses_input, responses_sse, responses_tools
+from .wire_responses import responses_sse
+
+
+def _midstream_error(error: Any) -> ProviderError:
+    """Build the ProviderError for an error frame inside an HTTP-200 stream
+    (chat: a data frame carrying an error object; anthropic: an error event).
+    Deltas were already consumed, so it is never retried — the agent's
+    degraded-reply path folds it into a readable failure instead of the stream
+    ending as a truncated but normal-looking final chunk."""
+    if isinstance(error, dict):
+        message = error.get("message") or error.get("type") or error
+    else:
+        message = error
+    return ProviderError(f"provider stream error: {message}", status=200)
 
 
 def _safe_arguments(raw: str) -> dict[str, Any]:
@@ -80,76 +81,23 @@ async def complete_stream(
     """Streaming completion: yields text deltas and a final aggregate chunk."""
     fmt = provider["api_format"]
     base = provider["base_url"].rstrip("/")
-    messages = _resolve_tool_messages(messages)
+    url, headers, body = _wire_request(
+        fmt,
+        base,
+        api_key=api_key,
+        model=model,
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        tools=tools,
+        reasoning_effort=reasoning_effort,
+        stream=True,
+    )
     if fmt == "responses":
-        instructions, inp = responses_input(messages)
-        body = {
-            "model": model,
-            "instructions": instructions,
-            "input": inp
-            or [
-                {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": "(no content, please continue)"}],
-                }
-            ],
-            "max_output_tokens": max_tokens,
-            # No temperature (reasoning models reject it) and store=False
-            # (local-first: no provider-side retention).
-            "store": False,
-            "stream": True,
-        }
-        if tools:
-            body["tools"] = responses_tools(tools)
-        body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
-        url = f"{base}/responses"
-        headers = {"Authorization": f"Bearer {api_key}"}
         parser = responses_sse
     elif fmt == "anthropic":
-        system, rest = _split_system(messages)
-        body = {
-            "model": model,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "system": system,
-            "messages": _anthropic_messages(rest)
-            or [
-                {"role": "user", "content": "(no content, please continue)"},
-            ],
-            "stream": True,
-        }
-        if tools:
-            body["tools"] = _anthropic_tools(tools)
-        body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
-        # Anthropic forbids temperature when extended thinking is enabled.
-        # Thinking and tool use coexist (interleaved thinking); the echo of
-        # stored thinking blocks happens in _anthropic_messages.
-        if "thinking" in body:
-            body.pop("temperature", None)
-        url = f"{base}/v1/messages"
-        headers = {
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        }
         parser = _anthropic_sse
     else:
-        body = {
-            "model": model,
-            "messages": _chat_messages(messages)
-            or [
-                {"role": "user", "content": "(no content, please continue)"},
-            ],
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "stream": True,
-            "stream_options": {"include_usage": True},
-        }
-        if tools:
-            body["tools"] = _chat_tools(tools)
-        body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
-        url = f"{base}/chat/completions"
-        headers = {"Authorization": f"Bearer {api_key}"}
         parser = _chat_sse
 
     in_body = False  # False = pre-first-packet (connection/status), True = body streaming
@@ -195,6 +143,11 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
             obj = json.loads(data)
         except ValueError:
             continue  # skip non-JSON lines (comments/keep-alives)
+        if obj.get("error") is not None:
+            # OpenAI-compatible endpoints report mid-stream failures (content
+            # filter, overload) as a data frame with an error object; ending
+            # here would silently truncate the answer into a final chunk.
+            raise _midstream_error(obj["error"])
         model = str(obj.get("model") or model)
         if obj.get("usage"):
             usage = obj["usage"]
@@ -286,6 +239,11 @@ async def _anthropic_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
         except ValueError:
             continue
         kind = obj.get("type")
+        if kind == "error":
+            # Anthropic reports mid-stream failures (overloaded_error etc.) as
+            # an error event; ending here would silently truncate the answer
+            # into a final chunk with no output_tokens accounting.
+            raise _midstream_error(obj.get("error"))
         if kind == "message_start":
             message = obj.get("message") or {}
             model = str(message.get("model") or model)

@@ -21,6 +21,7 @@ capability (schema derived, audit symmetric).
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from platform_capability import Registry, capability
 from platform_contracts import ActorKind, ActorRef, ErrorSuffix, ServiceError
@@ -32,8 +33,24 @@ from agent.subagent.registry import SubagentDef, SubagentRegistry
 from agent.subagent.spawn import Spawner
 from agent.subagent.surface import surface_misses
 
+log = logging.getLogger("agent.capabilities.subagent")
+
 #: Held references so the GC cannot drop a background send mid-run
 _send_tasks: set[asyncio.Task] = set()
+
+
+def _release_send_task(task: asyncio.Task) -> None:
+    """Done callback for fire-and-forget sends: drop the strong reference and
+    retrieve the exception so a failed continuation is logged instead of
+    surfacing only as a GC-time 'exception was never retrieved' warning (the
+    run's own failure is already on its state / RUN_FAILED event)."""
+    _send_tasks.discard(task)
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        log.warning("subagent send continuation failed: %s: %s", type(exc).__name__, exc)
+
 
 _TERMINAL = frozenset({RunStatus.COMPLETED, RunStatus.FAILED, RunStatus.CANCELLED})
 _POLL_S = 0.5
@@ -140,6 +157,16 @@ async def subagent_action(
     enabled: bool = True,
     _actor: ActorRef | None = None,
 ) -> dict | list:
+    if allowed_tools is not None and not isinstance(allowed_tools, (list, tuple)):
+        # Unmodeled capability: args pass through unvalidated, and a lenient
+        # provider returning the array as a string would explode under
+        # tuple("write") into per-character tool names, silently gutting the
+        # spawned/registered surface
+        raise ServiceError(
+            "agent",
+            ErrorSuffix.INVALID_INPUT,
+            "allowed_tools must be a list of tool names",
+        )
     if action == "spawn":
         if deps.dispatch is None:
             raise ServiceError("agent", ErrorSuffix.UNAVAILABLE, "no dispatch wired for spawn")
@@ -225,7 +252,7 @@ async def subagent_action(
             raise ServiceError("agent", ErrorSuffix.INVALID_INPUT, "message must not be empty")
         task = asyncio.create_task(deps.spawner.start(inst, text))
         _send_tasks.add(task)
-        task.add_done_callback(_send_tasks.discard)
+        task.add_done_callback(_release_send_task)
         return {"sent": inst.id, "name": inst.name, "status": inst.status.value}
     raise ServiceError(
         "agent",

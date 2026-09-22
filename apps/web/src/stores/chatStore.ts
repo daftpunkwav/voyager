@@ -102,7 +102,7 @@ export interface TurnStep {
   summary: string;
   subagent: string;
   ts?: number;
-  /** Structured facts (M3+ backends; absent on older rows): */
+  /** Structured facts (backends that emit step detail; absent on older rows): */
   runId?: string;
   /** Tool steps: provider call id, capped args JSON, outcome, latency. */
   toolCallId?: string;
@@ -386,6 +386,68 @@ function pruneCards(
   return { cards, order: nextOrder };
 }
 
+/** Caps for the per-run step logs (the subagent execution view's data source):
+ *  a long-lived tab (persistent floating window) would otherwise accumulate
+ *  every finished run's full trail forever. */
+const RUN_STEPS_CAP = 800;
+const RUNS_CAP = 50;
+
+/** Trim each run's log to RUN_STEPS_CAP, then evict the runs whose earliest
+ *  step is oldest until back under RUNS_CAP (an actively running run is
+ *  always the newest and survives). */
+function pruneRunSteps(runSteps: Record<string, TurnStep[]>): Record<string, TurnStep[]> {
+  const trimmed: Record<string, TurnStep[]> = {};
+  for (const [id, steps] of Object.entries(runSteps)) {
+    trimmed[id] = steps.length > RUN_STEPS_CAP ? steps.slice(-RUN_STEPS_CAP) : steps;
+  }
+  const ids = Object.keys(trimmed);
+  if (ids.length <= RUNS_CAP) return trimmed;
+  const oldestFirst = [...ids].sort(
+    (a, b) => (trimmed[a][0]?.seq ?? 0) - (trimmed[b][0]?.seq ?? 0)
+  );
+  for (const id of oldestFirst.slice(0, ids.length - RUNS_CAP)) {
+    delete trimmed[id];
+  }
+  return trimmed;
+}
+
+/** Number() coercion that refuses NaN/Infinity: a malformed wire value falls
+ *  back instead of leaking NaN into state (a "NaN%" progress label, delta
+ *  rounds that never compare equal and reset the typing slot every frame). */
+function numOr(value: unknown, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/** SSE frame payloads -> timeline rows. The active-session path (dispatch)
+ *  and the archived-lane path (dispatchToLane) build the same rows, so the
+ *  construction is shared and the two routes cannot drift. */
+function toUserMessage(ev: ChatEvent, p: Record<string, unknown>): ChatMessage {
+  return { seq: ev.seq, role: 'user', content: String(p.content ?? ''), ts: ev.ts };
+}
+
+function toAgentMessage(ev: ChatEvent, p: Record<string, unknown>): ChatMessage {
+  return {
+    seq: ev.seq,
+    role: 'agent',
+    content: String(p.content ?? ''),
+    ts: ev.ts,
+    // Cast: the wire value is backend-controlled; unknown kinds render as
+    // plain answers, which is the intended degradation.
+    kind: typeof p.kind === 'string' ? (p.kind as ChatMessageKind) : undefined,
+  };
+}
+
+/** note.created payload -> artifact receipt (dedup stays at the call site:
+ *  the active path checks the global list, the lane path filters its own). */
+function toArtifact(p: Record<string, unknown>, seq: number): NoteArtifact {
+  return {
+    seq,
+    noteId: String(p.note_id ?? ''),
+    title: String(p.title ?? i18n.t('chat:store.untitledNote')),
+  };
+}
+
 /** History rows (user.message/agent.message events) -> message stream items. */
 function historyToMessages(events: ChatEvent[]): ChatMessage[] {
   return events
@@ -540,16 +602,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         question: null,
         lastSteps: lane.steps,
         steps: [],
-        messages: [
-          ...lane.messages,
-          {
-            seq: ev.seq,
-            role: 'agent',
-            content: String(p.content ?? ''),
-            ts: ev.ts,
-            kind: typeof p.kind === 'string' ? (p.kind as ChatMessageKind) : undefined,
-          },
-        ],
+        messages: [...lane.messages, toAgentMessage(ev, p)],
       };
       set({ lanes: { ...get().lanes, [sessionId]: next } });
     } else if (ev.type === EventType.AGENT_ASK) {
@@ -566,17 +619,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({
         lanes: {
           ...get().lanes,
-          [sessionId]: {
-            ...lane,
-            messages: [
-              ...lane.messages,
-              { seq: ev.seq, role: 'user', content: String(p.content ?? ''), ts: ev.ts },
-            ],
-          },
+          [sessionId]: { ...lane, messages: [...lane.messages, toUserMessage(ev, p)] },
         },
       });
     } else if (ev.type === EventType.AGENT_DELTA) {
-      const round = Number(p.round ?? 1);
+      const round = numOr(p.round, 1);
       const prev = lane.streaming;
       const same = prev !== null && prev.round === round;
       set({
@@ -594,11 +641,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
       });
     } else if (ev.type === EventType.NOTE_CREATED) {
-      const artifact = {
-        seq: ev.seq,
-        noteId: String(p.note_id ?? ''),
-        title: String(p.title ?? i18n.t('chat:store.untitledNote')),
-      };
+      const artifact = toArtifact(p, ev.seq);
       if (!artifact.noteId) return;
       set({
         lanes: {
@@ -692,12 +735,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         (a, b) => a.seq - b.seq
       );
       if (merged.length === prev.length) return state; // nothing new: skip the notify
-      return { runSteps: { ...state.runSteps, [runId]: merged } };
+      return { runSteps: pruneRunSteps({ ...state.runSteps, [runId]: merged }) };
     });
   },
 
   dispatch: (ev) => {
-    const p = ev.payload;
+    // A frame without a payload (malformed/cross-version row) must degrade to
+    // empty fields, not throw mid-dispatch and kill the stream consumer.
+    const p = ev.payload ?? {};
     // Session routing: an event stamped with another session's id goes to
     // that lane's archived snapshot (final messages must never be lost);
     // session-less events (task results, policy notices) stay global.
@@ -715,13 +760,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // the bubble must still appear, and the turn counts as live — the
         // agent.delta guard below keys on the thinking flag.
         if (!Number.isFinite(ev.seq) || get().messages.some((m) => m.seq === ev.seq)) break;
-        set({
-          thinking: true,
-          messages: [
-            ...get().messages,
-            { seq: ev.seq, role: 'user', content: String(p.content ?? ''), ts: ev.ts },
-          ],
-        });
+        set({ thinking: true, messages: [...get().messages, toUserMessage(ev, p)] });
         break;
       }
       case EventType.AGENT_MESSAGE: {
@@ -749,16 +788,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           roundTexts: [],
           steps: [],
           trails,
-          messages: [
-            ...get().messages,
-            {
-              seq: ev.seq,
-              role: 'agent',
-              content: String(p.content ?? ''),
-              ts: ev.ts,
-              kind: typeof p.kind === 'string' ? (p.kind as ChatMessageKind) : undefined,
-            },
-          ],
+          messages: [...get().messages, toAgentMessage(ev, p)],
         });
         break;
       }
@@ -783,11 +813,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       case EventType.NOTE_CREATED: {
         // Note artifact card (appears whether the user or the agent saved it; click navigates to the notes page).
         // SSE replays may re-deliver the same event: dedup by seq so the card never doubles.
-        const artifact = {
-          seq: ev.seq,
-          noteId: String(p.note_id ?? ''),
-          title: String(p.title ?? i18n.t('chat:store.untitledNote')),
-        };
+        const artifact = toArtifact(p, ev.seq);
         if (!artifact.noteId || get().artifacts.some((a) => a.seq === artifact.seq)) break;
         set({
           artifacts: [...get().artifacts, artifact],
@@ -802,23 +828,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // SSE replays (lagged catch-up, reconnect) may re-deliver a step: the
         // append must stay idempotent by seq, unlike the overwrite-only slot
         const steps = prev.some((s) => s.seq === step.seq) ? prev : [...prev, step].slice(-200);
-        set({
-          currentStep: { name: step.name, subagent: step.subagent },
-          steps,
-        });
         // Mirror into the per-run log so a subagent execution view (run_id
         // keyed) sees live steps without refetching.
+        let runSteps = get().runSteps;
         if (step.runId) {
-          const runPrev = get().runSteps[step.runId] ?? [];
+          const runPrev = runSteps[step.runId] ?? [];
           if (!runPrev.some((s) => s.seq === step.seq)) {
-            set({
-              runSteps: {
-                ...get().runSteps,
-                [step.runId]: [...runPrev, step].sort((a, b) => a.seq - b.seq),
-              },
+            runSteps = pruneRunSteps({
+              ...runSteps,
+              [step.runId]: [...runPrev, step].sort((a, b) => a.seq - b.seq),
             });
           }
         }
+        // One set (not two): both slices land in a single store notification,
+        // so per-step subscribers are walked once per arriving step.
+        set({
+          currentStep: { name: step.name, subagent: step.subagent },
+          steps,
+          runSteps,
+        });
         break;
       }
       case EventType.AGENT_DELTA: {
@@ -833,7 +861,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // round after tool rounds) freezes the finished round's lead-in text for the
         // inline trace and restarts the slot — lead-in text of intermediate rounds
         // never carries into the final round, agent.message is the authoritative message
-        const round = Number(p.round ?? 1);
+        const round = numOr(p.round, 1);
         const prev = get().streaming;
         const same = prev !== null && prev.round === round;
         const roundTexts =
@@ -861,7 +889,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         cards[key] = {
           key,
           label: taskLabel(p, prev?.label ?? key),
-          progress: Number(p.progress ?? prev?.progress ?? 0),
+          progress: numOr(p.progress, prev?.progress ?? 0),
           stage: String(p.stage ?? prev?.stage ?? i18n.t('chat:store.stageRunning')),
           status: 'running',
           kind: p.kind === undefined ? prev?.kind : String(p.kind),

@@ -335,6 +335,37 @@ class TestTrajectory:
         assert body["steps"][0]["payload"]["run_id"] == "r1"
         assert body["steps"][0]["payload"]["detail"]["tool_call_id"] == "c-1"
 
+    def test_run_id_mode_routes_to_the_run_steps_reader(self, bus, tmp_path, echo_registry) -> None:
+        """run_id selects the run-scoped read of one subagent's full step list:
+        cursor parameters are ignored and has_more stays False (the subagent
+        execution view's data source)."""
+        calls: list[str] = []
+
+        class _Reader:
+            def run_steps(self, run_id: str):
+                calls.append(run_id)
+                return [{"seq": 7, "type": "agent.step", "payload": {"run_id": run_id}, "ts": 1.0}]
+
+        app = create_app(
+            [MountSpec(domain="echo", registry=echo_registry, probe=lambda: {"status": "up"})],
+            bus=bus,
+            db_path=tmp_path / "gw-run.db",
+            trajectory=_Reader(),
+        )
+        with TestClient(app) as c:
+            body = c.get("/api/chat/trajectory?run_id=r1&after_seq=99&limit=5").json()
+        assert calls == ["r1"]
+        assert body["has_more"] is False
+        assert body["steps"][0]["payload"]["run_id"] == "r1"
+
+    def test_run_id_mode_without_reader_degrades_to_empty(self, client) -> None:
+        """No trajectory projection wired: a run_id read returns an empty page
+        instead of a 500 (older deployments keep serving the chat)."""
+        assert client.get("/api/chat/trajectory?run_id=r1").json() == {
+            "has_more": False,
+            "steps": [],
+        }
+
     def test_newest_window_with_small_page(self, bus, tmp_path, echo_registry) -> None:
         app = create_app(
             [MountSpec(domain="echo", registry=echo_registry, probe=lambda: {"status": "up"})],
@@ -424,11 +455,76 @@ class TestActivity:
         steps = [e for e in ops if e["type"] == "agent.step"]
         assert len(steps) == 1 and steps[0]["payload"]["name"] == "write"
         # session narrowing stays inside the operations whitelist
-        scoped = client.get(
-            "/api/activity/feed?agent=true&recent=true&session=s1"
-        ).json()["events"]
+        scoped = client.get("/api/activity/feed?agent=true&recent=true&session=s1").json()["events"]
         assert scoped
-        assert all(e["payload"].get("session") == "s1" for e in scoped if e["type"] != "settings.changed")
+        assert all(
+            e["payload"].get("session") == "s1" for e in scoped if e["type"] != "settings.changed"
+        )
+
+    def test_feed_recent_agent_backfills_past_starved_windows(self, client, bus) -> None:
+        """recent+agent must keep walking backward while the in-memory
+        attribution filter starves the newest window: operations attributed to
+        a session that sit older than one window still surface. A single
+        newest-window read (the pre-backfill behavior) would return nothing."""
+        import asyncio
+
+        agent = ActorRef(kind=ActorKind.AGENT, id="agent.main")
+        # 2 attributed operations at the head of the log, then 15 operation
+        # rows without a session stamp crowd every newest window
+        for i in range(2):
+            asyncio.run(
+                bus.publish(
+                    Event(
+                        type=DomainEvent.NOTE_CREATED,
+                        actor=agent,
+                        payload={"note_id": f"n{i}", "session": "s1"},
+                    )
+                )
+            )
+        for i in range(15):
+            asyncio.run(
+                bus.publish(
+                    Event(
+                        type=DomainEvent.NOTE_CREATED,
+                        actor=agent,
+                        payload={"note_id": f"x{i}"},
+                    )
+                )
+            )
+        ops = client.get("/api/activity/feed?agent=true&recent=true&limit=3").json()["events"]
+        assert [e["payload"]["note_id"] for e in ops] == ["n0", "n1"]
+
+    def test_feed_recent_agent_prefilters_types_and_stops_at_log_head(self, client, bus) -> None:
+        """High-frequency non-operation rows (user.activity) must not evict
+        real operations from the bounded recent scan: the SQL read is
+        pre-filtered to the operation types, and the backfill stops at the log
+        head instead of looping forever."""
+        import asyncio
+
+        agent = ActorRef(kind=ActorKind.AGENT, id="agent.main")
+        for i in range(2):
+            asyncio.run(
+                bus.publish(
+                    Event(
+                        type=DomainEvent.NOTE_CREATED,
+                        actor=agent,
+                        payload={"note_id": f"n{i}", "session": "s1"},
+                    )
+                )
+            )
+        for i in range(100):
+            asyncio.run(
+                bus.publish(
+                    Event(
+                        type=DomainEvent.USER_ACTIVITY,
+                        actor=LOCAL_USER,
+                        payload={"kind": "page_view", "page": f"/p{i}"},
+                    )
+                )
+            )
+        ops = client.get("/api/activity/feed?agent=true&recent=true&limit=3").json()["events"]
+        assert [e["payload"]["note_id"] for e in ops] == ["n0", "n1"]
+        assert all(e["type"] == "note.created" for e in ops)
 
     def test_unknown_kind(self, client) -> None:
         r = client.post("/api/activity", json={"kind": "hack"})

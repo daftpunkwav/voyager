@@ -16,7 +16,8 @@ import { fetchRunSteps, interruptInstance } from '@/bridge/chatSend';
 import { useChatStore } from '@/stores/chatStore';
 import { formatDurationSec } from '@/utils/trajectory';
 
-/** Minimal shape of a list_subagents.running entry (see RightPanel). */
+/** Minimal shape of a list_subagents.running entry: the contract the panel's
+ *  polled list (RightPanel.RunningInstance) extends with its own filter fields. */
 export interface SubagentRunRef {
   id: string;
   run_id?: string;
@@ -33,16 +34,40 @@ interface SubagentRunDialogProps {
   onClose: () => void;
 }
 
+/** Elapsed-time chip with its own 1s tick. Kept as a leaf so the per-second
+ *  re-render stays local: hoisted into the dialog it would re-render the whole
+ *  step trail below (ClosedTurnTrace regroups up to RUN_STEPS_CAP rows) every
+ *  second while a run is active. */
+function RunElapsed({ startedTs, tick }: { startedTs: number; tick: boolean }) {
+  const { t } = useTranslation('chat');
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!tick) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [tick]);
+  return (
+    <span className="chat-run__elapsed">
+      {formatDurationSec(Math.max(0, Math.round(now / 1000 - startedTs)), t)}
+    </span>
+  );
+}
+
 export function SubagentRunDialog({ instance, open, onClose }: SubagentRunDialogProps) {
   const { t } = useTranslation('chat');
   const runId = instance?.run_id ?? '';
   const stored = useChatStore((s) => (runId ? s.runSteps[runId] : undefined));
   const steps = useMemo(() => stored ?? [], [stored]);
   const [hydrated, setHydrated] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    if (!open || !runId) return;
+    if (!open) return;
+    if (!runId) {
+      // No run id (older backend / no trajectory row yet): nothing to fetch —
+      // mark hydrated so the empty state shows instead of a loading line forever.
+      setHydrated(true);
+      return;
+    }
     setHydrated(false);
     let alive = true;
     fetchRunSteps(runId)
@@ -60,19 +85,7 @@ export function SubagentRunDialog({ instance, open, onClose }: SubagentRunDialog
     };
   }, [open, runId]);
 
-  // Elapsed clock ticks while the run is still going.
   const running = instance?.status === 'running';
-  useEffect(() => {
-    if (!open || !running) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [open, running]);
-
-  const elapsed = useMemo(() => {
-    if (!instance || !instance.started_ts) return '';
-    const end = running ? now / 1000 : now / 1000;
-    return formatDurationSec(Math.max(0, Math.round(end - instance.started_ts)), t);
-  }, [instance, running, now, t]);
 
   const finalText = useMemo(() => {
     for (let i = steps.length - 1; i >= 0; i -= 1) {
@@ -89,7 +102,7 @@ export function SubagentRunDialog({ instance, open, onClose }: SubagentRunDialog
           <span className="chat-run__name">{instance?.name}</span>
           {instance?.status ? <span className="chat-run__status">{instance.status}</span> : null}
           {instance && instance.started_ts > 0 ? (
-            <span className="chat-run__elapsed">{elapsed}</span>
+            <RunElapsed startedTs={instance.started_ts} tick={open && running} />
           ) : null}
           <button type="button" className="chat-run__close" onClick={onClose} aria-label="close">
             ✕

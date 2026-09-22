@@ -74,6 +74,7 @@ function backend(_domain: string, name: string, args: Record<string, unknown>) {
         definitions = definitions.filter((d) => d.name !== args.name);
         return Promise.resolve({ deleted: args.name });
       }
+      return Promise.resolve({});
     default:
       return Promise.resolve({});
   }

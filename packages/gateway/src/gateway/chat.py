@@ -8,7 +8,10 @@ Responsibilities:
   by default; before_seq pages backward, after_seq pages forward; optional
   `session` filter over the event payload)
 - GET /api/chat/trajectory: step rows (agent.step) for rebuilding the
-  execution trajectory after a refresh; same paging cursors as history
+  execution trajectory after a refresh; same paging cursors as history,
+  plus a run_id mode returning one run's full step list
+- GET /api/chat/rawllm: raw LLM round log served from the trajectory
+  projection (session page with full bodies; run rounds / one round)
 - GET /api/chat/stream: SSE delivery with after_seq resume (optional
   `session` filter)
 
@@ -61,8 +64,8 @@ _DOMAIN = "gateway"
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 #: Event types relevant to the human timeline (chat + progress + popups +
 #: navigation commands + artifact cards + settings hot-reload + L1 permission
-#: prompts + streaming deltas; note.edited is excluded — autosave would be
-#: high-frequency noise).
+#: prompts + streaming deltas + service health transitions; note.edited is
+#: excluded — autosave would be high-frequency noise).
 #: Types always use the contracts vocabulary constants; "task.*" is a
 #: subscription glob pattern, not a concrete type.
 _STREAM_TYPES = (
@@ -81,6 +84,7 @@ _STREAM_TYPES = (
     DomainEvent.SETTINGS_CHANGED,
     DomainEvent.NOTES_UI_CHANGED,
     DomainEvent.WORKSPACE_SWITCHED,
+    DomainEvent.SERVICE_HEALTH_CHANGED,
 )
 # note.created rows carry the creating session (stamped by the agent runtime
 # via the capability invocation context), so a session-filtered history page
@@ -108,7 +112,10 @@ def _in_session(event: Event, session: str) -> bool:
     events created outside a chat turn (REST, notes UI, imports) belong to no
     conversation. Events raised inside a chat turn carry the session — the
     agent runtime stamps it via the capability invocation context."""
-    return str(event.payload.get("session") or "") == session
+    payload = event.payload
+    # Non-object payloads (corrupt log row, json.loads of "null") match no
+    # lane instead of raising mid-scan and failing the whole page.
+    return isinstance(payload, dict) and str(payload.get("session") or "") == session
 
 
 class TrajectoryReader(Protocol):
@@ -119,6 +126,8 @@ class TrajectoryReader(Protocol):
     def steps_page(
         self, *, session: str, after_seq: int, before_seq: int | None, limit: int
     ) -> tuple[list[dict], bool]: ...
+
+    def run_steps(self, run_id: str) -> list[dict[str, Any]]: ...
 
     def raw_rounds(self, run_id: str) -> list[dict[str, Any]]: ...
 
@@ -142,6 +151,14 @@ def build_chat_router(
 
     def _actor(request: Request) -> ActorRef:
         return getattr(request.state, "actor", None) or LOCAL_USER
+
+    def _read(**kw):
+        """Log page in the direction the cursor names: before_seq reads
+        backward, after_seq reads forward (the one dispatch `_page`'s read
+        argument is built on; shared by history and trajectory)."""
+        if "before_seq" in kw:
+            return log.read_before(**kw)
+        return log.read_after(**kw)
 
     async def _json_body(request: Request) -> dict:
         """Parse and validate the request body: bad JSON / non-object -> 400, not 500."""
@@ -254,7 +271,7 @@ def build_chat_router(
         sid = _session_or_400(session)
         max_rows = max(1, min(limit, _MAX_PAGE))
         rows = _page(
-            lambda **kw: log.read_before(**kw) if "before_seq" in kw else log.read_after(**kw),
+            _read,
             _HISTORY_TYPES,
             sid,
             after_seq,
@@ -296,7 +313,7 @@ def build_chat_router(
             )
             return {"has_more": more, "steps": steps}
         rows = _page(
-            lambda **kw: log.read_before(**kw) if "before_seq" in kw else log.read_after(**kw),
+            _read,
             _TRAJECTORY_TYPES,
             sid,
             after_seq,
@@ -323,7 +340,9 @@ def build_chat_router(
         if trajectory is None:
             return {"rounds": [], "total": 0, "round": None}
         if sid and not run_id:
-            rounds, total = trajectory.raw_rounds_for_session(sid, limit=max(1, min(limit, 1000)))
+            rounds, total = trajectory.raw_rounds_for_session(
+                sid, limit=max(1, min(limit, _MAX_PAGE))
+            )
             return {"rounds": rounds, "total": total, "round": None}
         if not run_id:
             raise ServiceError(

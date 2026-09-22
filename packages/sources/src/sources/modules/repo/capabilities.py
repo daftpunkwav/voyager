@@ -109,7 +109,7 @@ async def import_repo(url: str, category: str = "", clone: bool = True) -> JobRe
     return JobRef(job_id=rid)
 
 
-@capability(registry, name="list_repos", description="Repo list (summaries, no README; §9.20)")
+@capability(registry, name="list_repos", description="Repo list (summaries, no README)")
 def list_repos(sort: str = "added", desc: bool = True, category: str = "") -> list[dict]:
     return require_deps().store.list(sort=sort, desc=desc, category=category)
 
@@ -157,6 +157,14 @@ def list_categories() -> list[str]:
     return require_deps().store.categories()
 
 
+def _within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(Path(root).resolve())
+        return True
+    except ValueError:
+        return False
+
+
 @capability(
     registry,
     name="remove_repo",
@@ -164,14 +172,27 @@ def list_categories() -> list[str]:
     reversible=False,
     cost=2,
 )
-def remove_repo(repo_id: str) -> dict:
+async def remove_repo(repo_id: str) -> dict:
     deps = require_deps()
     repo = _require_repo(repo_id)
     deps.store.remove(repo_id)
-    if repo["local_path"]:
+    if repo["local_path"] and _within(Path(repo["local_path"]), deps.workspace):
         # Local directory cleanup is done asynchronously by the worker
-        # (same queue as cloning, order preserved)
+        # (same queue as cloning, order preserved). Jail check before
+        # queueing: the worker rmtrees the stored path without further
+        # validation, so a tampered/stale row must never escape workspace/.
         deps.queue.put_nowait(("remove", repo_id, repo["local_path"]))
+    if deps.bus is not None:
+        # Same removal receipt as the doc/web submodules: sources-page query
+        # invalidation and the activity feed both key on source.removed
+        display = f"{repo['owner']}/{repo['name']}" if repo.get("owner") else str(repo["name"])
+        await deps.bus.publish(
+            Event(
+                type=DomainEvent.SOURCE_REMOVED,
+                actor=_REPO_ACTOR,
+                payload=with_session({"source_id": repo_id, "kind": "repo", "name": display}),
+            )
+        )
     return {"removed": repo_id, "name": repo["name"], "local_path": repo["local_path"]}
 
 

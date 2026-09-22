@@ -93,9 +93,10 @@ export function fetchTrajectory(limit = 500, session?: string): Promise<ChatEven
 }
 
 /** One run's full step list (the subagent execution view): the trajectory
- *  API's run_id mode returns raw projection rows; they are wrapped into
- *  ChatEvent-shaped objects so chatStore.toTurnStep can parse them like SSE
- *  events. */
+ *  API's run_id mode returns event-dict rows (seq/type/payload/ts, same shape
+ *  as the session steps_page), so only the numeric fields are coerced here —
+ *  spreading the row into payload would nest the real payload one level too
+ *  deep and toTurnStep would read empty fields. */
 export async function fetchRunSteps(runId: string): Promise<ChatEvent[]> {
   const resp = await fetch(`/api/chat/trajectory?run_id=${encodeURIComponent(runId)}`, {
     credentials: 'include',
@@ -107,7 +108,7 @@ export async function fetchRunSteps(runId: string): Promise<ChatEvent[]> {
   return (body?.steps ?? []).map((row) => ({
     seq: Number(row.seq ?? 0),
     type: 'agent.step',
-    payload: { ...row },
+    payload: (row.payload ?? {}) as Record<string, unknown>,
     ts: Number(row.ts ?? 0),
   })) as ChatEvent[];
 }
@@ -125,11 +126,15 @@ export interface RawLlmRound {
 
 /** The newest recorded raw LLM rounds of one session (the chat page's log
  *  tab) plus the session's total count, so the UI can say how much older
- *  exists beyond the backend's page. */
+ *  exists beyond the backend's page. `limit` narrows the full-body page
+ *  server-side (round bodies are verbatim transcripts, easily tens of KB
+ *  each); omitted = the backend default page (200 rounds). */
 export async function fetchRawLlmRounds(
-  session?: string
+  session?: string,
+  limit?: number
 ): Promise<{ rounds: RawLlmRound[]; total: number }> {
-  const resp = await fetch(`/api/chat/rawllm?session=${encodeURIComponent(session ?? '')}`, {
+  const lim = limit !== undefined ? `&limit=${limit}` : '';
+  const resp = await fetch(`/api/chat/rawllm?session=${encodeURIComponent(session ?? '')}${lim}`, {
     credentials: 'include',
   });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);

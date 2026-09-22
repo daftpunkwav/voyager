@@ -11,7 +11,8 @@
  * - On mount: rebuild history, subscribe to the chat SSE
  *   patterns, and mark the store connected; mirrored on unmount
  * - Forward stream events into chatStore, intercepting agent.navigate
- *   (validated internal path) and policy notices (info toast, no timeline)
+ *   (validated internal path); policy notices are dropped (the activity
+ *   page is the operations log)
  * - Toast failed background resumes before their card lands in the store
  */
 

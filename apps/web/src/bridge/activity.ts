@@ -11,7 +11,7 @@
  * - Read the privacy.activity_report switch at init and refresh it on
  *   settings.changed
  * - Fire page_view reports over POST /api/activity on route changes
- * - Fetch the activity feed replay (kind-filtered) for the activity page
+ * - Fetch the activity feed replay (type-filtered) for the activity page
  * - Swallow every reporting failure so the main flow is never disturbed
  *
  * This module must not depend on UI-layer components.
@@ -73,12 +73,14 @@ async function reportActivity(body: {
  *  conversation traffic and the user's own actions); non-2xx throws with the
  *  backend envelope message. Defaults to the newest window (`recent=true`):
  *  paging forward from seq 0 would surface the log's oldest rows, not
- *  current activity. `session` narrows to one originating session. */
-export async function fetchActivityFeed(kind: string, session = ''): Promise<FeedEvent[]> {
+ *  current activity. `types` is the gateway's comma-separated event-type
+ *  filter (same name as the query parameter); `session` narrows to one
+ *  originating session. */
+export async function fetchActivityFeed(types: string, session = ''): Promise<FeedEvent[]> {
   const url = new URL('/api/activity/feed', window.location.origin);
   url.searchParams.set('recent', 'true');
   url.searchParams.set('agent', 'true');
-  if (kind) url.searchParams.set('types', kind);
+  if (types) url.searchParams.set('types', types);
   if (session) url.searchParams.set('session', session);
   const resp = await fetch(url.toString(), { credentials: 'include' });
   if (!resp.ok) {

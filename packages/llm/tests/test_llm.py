@@ -964,6 +964,95 @@ class TestMessageTranslation:
         {"role": "user", "content": "continue"},
     ]
 
+    async def test_anthropic_tools_strip_default_and_backfill_type(self, monkeypatch) -> None:
+        """Strict anthropic layers reject non-standard schema members: a
+        top-level `default` (JSON-Schema-legal, not part of the anthropic tool
+        dialect) is stripped, and a bare fragment still declares type object.
+        Property-level schema stays untouched - the cleaning never widens."""
+        seen = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["tools"] = json.loads(request.content).get("tools")
+            return httpx.Response(
+                200,
+                json={"content": [{"type": "text", "text": "ok"}], "usage": {}, "model": "m"},
+            )
+
+        self._patch(monkeypatch, handler)
+        tools = [
+            {
+                "name": "write",
+                "description": "d",
+                "schema": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string", "default": "a.txt"}},
+                    "default": {"path": "a.txt"},
+                },
+            },
+            {"name": "bare", "description": "d", "schema": {}},
+        ]
+        await client_mod.complete(
+            self._ANTHROPIC,
+            api_key="sk",
+            model="m",
+            messages=[{"role": "user", "content": "hi"}],
+            tools=tools,
+        )
+        write, bare = seen["tools"]
+        assert write["input_schema"] == {
+            "type": "object",
+            "properties": {"path": {"type": "string", "default": "a.txt"}},
+        }
+        assert bare["input_schema"] == {"type": "object"}
+
+    async def test_rejected_request_dumps_into_debug_dir(self, tmp_path, monkeypatch) -> None:
+        """A rejected request (4xx) writes the full request/response pair into
+        LLM_DEBUG_DUMP_DIR - the only way to see what a strict provider
+        actually disliked - and the dump never masks the raised error."""
+        from llm.client import ProviderError
+
+        dump_dir = tmp_path / "dump"
+        monkeypatch.setenv("LLM_DEBUG_DUMP_DIR", str(dump_dir))
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, json={"error": {"message": "2013 schema invalid"}})
+
+        self._patch(monkeypatch, handler)
+        with pytest.raises(ProviderError):
+            await client_mod.complete(
+                self._ANTHROPIC,
+                api_key="sk",
+                model="m",
+                messages=[{"role": "user", "content": "hi"}],
+                tools=[{"name": "write", "description": "d", "schema": {"type": "object"}}],
+            )
+        dumps = list(dump_dir.glob("llm-*.json"))
+        assert len(dumps) == 1
+        dump = json.loads(dumps[0].read_text(encoding="utf-8"))
+        assert dump["status"] == 400
+        assert dump["url"].endswith("/v1/messages")
+        assert dump["request"]["tools"][0]["name"] == "write"
+        assert "2013" in dump["response"]
+
+    async def test_no_dump_dir_means_no_dump(self, tmp_path, monkeypatch) -> None:
+        """Without LLM_DEBUG_DUMP_DIR nothing is written (default quiet path)."""
+        from llm.client import ProviderError
+
+        monkeypatch.delenv("LLM_DEBUG_DUMP_DIR", raising=False)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, json={"error": {"message": "nope"}})
+
+        self._patch(monkeypatch, handler)
+        with pytest.raises(ProviderError):
+            await client_mod.complete(
+                self._ANTHROPIC,
+                api_key="sk",
+                model="m",
+                messages=[{"role": "user", "content": "hi"}],
+            )
+        assert not (tmp_path / "dump").exists()
+
     async def test_anthropic_flattens_bare_tool_role(self, monkeypatch) -> None:
         seen = {}
 

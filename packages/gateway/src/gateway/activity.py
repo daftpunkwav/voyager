@@ -52,13 +52,21 @@ _OPERATION_TYPES = frozenset(
 _WRITE_TOOLS = frozenset({"write", "edit"})
 
 
+def _payload_dict(ev: Event) -> dict:
+    """Event payload narrowed to a dict: log rows are rebuilt with a bare
+    json.loads of the stored payload, so a row written with a non-object
+    payload (null / list) must be skipped by the feed scan instead of raising
+    AttributeError mid-read (a 500 for the whole feed)."""
+    return ev.payload if isinstance(ev.payload, dict) else {}
+
+
 def _is_agent_operation(ev: Event) -> bool:
     """Whether one event records an operation the agent performed on the
     system (as opposed to conversation traffic or the user's own actions)."""
     if ev.type not in _OPERATION_TYPES:
         return False
+    payload = _payload_dict(ev)
     if ev.type == DomainEvent.AGENT_STEP:
-        payload = ev.payload
         return (
             str(payload.get("kind") or "") == "tool"
             and str(payload.get("name") or "") in _WRITE_TOOLS
@@ -68,7 +76,7 @@ def _is_agent_operation(ev: Event) -> bool:
         # The store stamps the real caller: agent turns publish with the AGENT
         # actor, the settings UI with LOCAL_USER.
         return ev.actor is not None and ev.actor.kind == ActorKind.AGENT
-    return bool(str(ev.payload.get("session") or ""))
+    return bool(str(payload.get("session") or ""))
 
 
 def build_activity_router(bus: EventBus, limiter: RateLimiter) -> APIRouter:
@@ -102,6 +110,13 @@ def build_activity_router(bus: EventBus, limiter: RateLimiter) -> APIRouter:
                 f"unknown activity kind: {kind!r}",
                 hint=f"allowed: {list(_ACTIVITY_KINDS)}",
             )
+        detail = body.get("detail")
+        if detail is None:
+            detail = {}
+        elif not isinstance(detail, dict):
+            # dict() over a string/number/list raises TypeError -> unhandled 500;
+            # a malformed shape is a client bug and gets a 400 instead
+            raise ServiceError(_DOMAIN, ErrorSuffix.INVALID_INPUT, "detail must be a JSON object")
         actor = _actor(request)
         limiter.check(actor.id)
         seq = await bus.publish(
@@ -111,7 +126,7 @@ def build_activity_router(bus: EventBus, limiter: RateLimiter) -> APIRouter:
                 payload={
                     "kind": kind,
                     "page": str(body.get("page") or ""),
-                    "detail": dict(body.get("detail") or {}),
+                    "detail": detail,
                 },
             )
         )
@@ -138,10 +153,13 @@ def build_activity_router(bus: EventBus, limiter: RateLimiter) -> APIRouter:
         cap = max(1, min(limit, 1000))
 
         def _wanted(ev: Event) -> bool:
-            if agent and not _is_agent_operation(ev):
+            # session implies agent: a session-scoped read is an operations
+            # read by contract (the docstring), so conversation traffic never
+            # leaks through a session-only query either.
+            if (agent or session) and not _is_agent_operation(ev):
                 return False
             if session:
-                return str(ev.payload.get("session") or "") == session
+                return str(_payload_dict(ev).get("session") or "") == session
             return True
 
         if recent and after_seq <= 0:
@@ -152,7 +170,7 @@ def build_activity_router(bus: EventBus, limiter: RateLimiter) -> APIRouter:
             # backward while the in-memory attribution filter starves the
             # window (bounded: 6 rounds x cap rows scanned).
             sql_types = type_list
-            if agent and sql_types is None:
+            if (agent or session) and sql_types is None:
                 sql_types = tuple(sorted(_OPERATION_TYPES))
             before = bus.log.latest_seq() + 1
             kept: list[tuple[int, Event]] = []

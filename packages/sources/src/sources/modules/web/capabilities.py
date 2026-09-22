@@ -180,7 +180,13 @@ async def save_url(
             _DOMAIN, ErrorSuffix.UNAVAILABLE, f"Fetch failed: {type(exc).__name__}: {exc}"
         ) from exc
     charset = resp.charset_encoding or "utf-8"
-    page_title, text, images = html_to_text(body.decode(charset, errors="replace"))
+    try:
+        html = body.decode(charset, errors="replace")
+    except LookupError:
+        # Hostile/broken Content-Type charset name (raised outside the fetch
+        # try above): utf-8 with replacement keeps the clip alive
+        html = body.decode("utf-8", errors="replace")
+    page_title, text, images = html_to_text(html)
     domain = urlparse(url).hostname or ""
     final_title = title.strip() or page_title or url
     pid = deps.store.add(

@@ -137,7 +137,14 @@ class Master:
             sink_fn=self._session_sink,
             store=session_store,
             bus=bus,
+            on_delete=self._drop_session_inbox,
         )
+
+    def _drop_session_inbox(self, session_id: str) -> None:
+        """Drop a deleted session's queued-message inbox: messages parked while
+        its turn was running belong to the dead conversation and must never
+        drain into a later session recreated with the same id."""
+        self._inboxes.pop(session_id, None)
 
     # -- reply plumbing -------------------------------------------------------
 
@@ -291,6 +298,14 @@ class Master:
 
         self.track_background(asyncio.create_task(_run()))
 
+    def _session_live(self, inst: SubagentInstance) -> bool:
+        """Whether the session still resolves to this exact instance: a delete
+        that raced a queued turn (status was not RUNNING yet) pops the cached
+        instance while the backgrounded task still holds the old reference —
+        running it would spend a full LLM turn on a deleted session and
+        strand orphan replies in the log."""
+        return self.sessions.instance_for(inst.session) is inst
+
     def _start_turn(
         self,
         inst: SubagentInstance,
@@ -308,6 +323,11 @@ class Master:
         async def _run() -> None:
             try:
                 async with self.sessions.lock_for(inst.session):
+                    if not self._session_live(inst):
+                        # Deleted while this turn sat queued: drop it and the
+                        # stale inbox (the session no longer exists).
+                        self._inboxes.pop(inst.session, None)
+                        return
                     if guard is not None and not _guard_allows(guard, inst.session):
                         log.info(
                             "pre-step guard cancelled the notice turn (session %s)",
@@ -324,6 +344,12 @@ class Master:
                     inbox = self._session_inbox(inst.session)
                     while inbox:  # queued messages are handled in order
                         queued, queued_guard = inbox.popleft()
+                        if not self._session_live(inst):
+                            # Session deleted mid-drain (status flickers
+                            # WAITING_INPUT between queued turns): the rest of
+                            # the queue belongs to a dead session.
+                            self._inboxes.pop(inst.session, None)
+                            break
                         if queued_guard is not None and not _guard_allows(
                             queued_guard, inst.session
                         ):

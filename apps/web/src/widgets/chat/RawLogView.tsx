@@ -33,8 +33,8 @@ function RoundCard({ round }: { round: RawLlmRound }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<'request' | 'response'>('request');
   const time = new Date(round.ts * 1000).toLocaleTimeString();
-  // Memoized: the raw bodies can be large, and re-parsing on every render of
-  // the card (e.g. the count-note state change above) is wasted work.
+  // Memoized: the raw bodies can be large, and re-parsing them on every
+  // parent-driven re-render of the card is wasted work.
   const body = useMemo(
     () => (open ? pretty(tab === 'request' ? round.request : round.response) : ''),
     [open, tab, round.request, round.response]
@@ -98,7 +98,21 @@ export function RawLogView() {
     let cancelled = false;
     setPage(null);
     setError(null);
-    fetchRawLlmRounds(activeId)
+    if (!activeId) {
+      // Legacy session-less view (sessions capability unavailable): the rawllm
+      // API requires a session or run id, so fetching would 400 — show the
+      // empty state instead of surfacing the backend error text.
+      setPage({ rounds: [], total: 0 });
+      return () => {
+        cancelled = true;
+      };
+    }
+    // Fetch exactly the rendered window: round bodies are verbatim transcripts
+    // (tens of KB each), so pulling the backend's default 200-round page for a
+    // 50-round render would transfer and JSON-parse 4x more than is shown.
+    // `total` still reports the session's full count, so the hidden-rounds
+    // note stays correct.
+    fetchRawLlmRounds(activeId, RENDER_LIMIT)
       .then((data) => {
         if (!cancelled) setPage(data);
       })
@@ -128,20 +142,13 @@ export function RawLogView() {
     return <div className="chat-log chat-log--empty">{t('chat:rawlog.empty')}</div>;
   }
   const hidden = rounds.length - visible.length + beyond;
-  if (hidden > 0) {
-    return (
-      <div className="chat-log">
+  return (
+    <div className="chat-log">
+      {hidden > 0 ? (
         <div className="chat-log__hidden small muted" role="note">
           {t('chat:rawlog.hiddenRounds', { n: hidden, shown: visible.length })}
         </div>
-        {visible.map((r) => (
-          <RoundCard key={`${r.run_id}-${r.round}-${r.ts}`} round={r} />
-        ))}
-      </div>
-    );
-  }
-  return (
-    <div className="chat-log">
+      ) : null}
       {visible.map((r) => (
         <RoundCard key={`${r.run_id}-${r.round}-${r.ts}`} round={r} />
       ))}

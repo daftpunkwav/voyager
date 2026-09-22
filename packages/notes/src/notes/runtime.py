@@ -12,6 +12,7 @@ Contains no concrete capabilities.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +24,8 @@ from platform_settings import SettingsStore
 
 from .domain import DOMAIN
 from .store import NoteStore
+
+log = logging.getLogger("notes.runtime")
 
 ACTOR = ActorRef(kind=ActorKind.SYSTEM, id="notes.service")
 registry = Registry(DOMAIN)
@@ -78,6 +81,12 @@ async def emit(type_: str, note_id: str, **payload) -> None:
         session = current_chat_session.get()
         if session:
             payload["session"] = session
-        await deps.bus.publish(
-            Event(type=type_, actor=ACTOR, payload={"note_id": note_id, **payload})
-        )
+        try:
+            await deps.bus.publish(
+                Event(type=type_, actor=ACTOR, payload={"note_id": note_id, **payload})
+            )
+        except Exception:
+            # The note write already succeeded: a broken event channel (event-log
+            # DB error) must not report the whole capability as failed after the
+            # fact.
+            log.warning("publishing %s event for note %s failed", type_, note_id, exc_info=True)

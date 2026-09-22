@@ -28,6 +28,7 @@ import {
   fetchChatHistory,
   fetchChatHistoryBefore,
   fetchRawLlmRounds,
+  fetchRunSteps,
   loadChatSessions,
   sendUserTurn,
 } from '@/bridge/chatSend';
@@ -236,6 +237,56 @@ describe('fetchRawLlmRounds', () => {
   it('resolves to an empty page when the body carries no rounds', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(null)));
     await expect(fetchRawLlmRounds('')).resolves.toEqual({ rounds: [], total: 0 });
+  });
+});
+
+describe('fetchRunSteps', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('unwraps run step rows with payload kept at one level', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        steps: [{ seq: 3, type: 'agent.step', payload: { run_id: 'r1', name: 'write' }, ts: 5 }],
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const events = await fetchRunSteps('r1');
+    // Spreading the row into payload would nest it one level too deep and
+    // toTurnStep would read empty fields
+    expect(events).toEqual([
+      { seq: 3, type: 'agent.step', payload: { run_id: 'r1', name: 'write' }, ts: 5 },
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/chat/trajectory?run_id=r1',
+      expect.objectContaining({ credentials: 'include' })
+    );
+  });
+
+  it('encodes the run id into the query string', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ steps: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(fetchRunSteps('r/1 x')).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/chat/trajectory?run_id=r%2F1%20x',
+      expect.anything()
+    );
+  });
+
+  it('coerces malformed numeric fields to 0 instead of leaking NaN', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ steps: [{ payload: { run_id: 'r1' } }] }))
+    );
+    const events = await fetchRunSteps('r1');
+    expect(events[0].seq).toBe(0);
+    expect(events[0].ts).toBe(0);
+  });
+
+  it('throws on a non-ok status instead of resolving to an empty list', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(null, 500)));
+    await expect(fetchRunSteps('r1')).rejects.toThrow('HTTP 500');
   });
 });
 

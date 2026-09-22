@@ -151,8 +151,9 @@ class ServiceLLM:
         return self._parse_complete(out)
 
     def _parse_complete(self, out: dict[str, Any]) -> LLMReply:
-        """One complete-capability result dict -> LLMReply (shared by complete
-        and the routing fallback path)."""
+        """One result dict -> LLMReply (shared by complete, the routing
+        fallback path, and complete_stream's final chunk: the capability
+        returns the same aggregate shape on both paths)."""
         usage = out.get("usage") or {}
         thinking_blocks = out.get("thinking_blocks") or ()
         return LLMReply(
@@ -213,31 +214,9 @@ class ServiceLLM:
             if not isinstance(chunk, dict):
                 continue
             if chunk.get("type") == "final":
-                usage = chunk.get("usage") or {}
-                thinking_blocks = chunk.get("thinking_blocks") or ()
-                yield StreamReply(
-                    final=LLMReply(
-                        text=chunk.get("text") or None,
-                        tool_calls=tuple(
-                            ToolCall(
-                                id=tc.get("id", ""),
-                                name=tc["name"],
-                                arguments=tc.get("arguments") or {},
-                            )
-                            for tc in chunk.get("tool_calls") or ()
-                            if isinstance(tc, dict) and "name" in tc
-                        ),
-                        usage=Usage(
-                            input_tokens=int(usage.get("input_tokens") or 0),
-                            output_tokens=int(usage.get("output_tokens") or 0),
-                        ),
-                        model=str(chunk.get("model") or ""),
-                        reasoning=str(chunk.get("reasoning") or ""),
-                        thinking_blocks=tuple(
-                            dict(b) for b in thinking_blocks if isinstance(b, dict)
-                        ),
-                    )
-                )
+                # Same dict shape as the complete capability's return: one
+                # mapping for both paths so the field parsing cannot drift.
+                yield StreamReply(final=self._parse_complete(chunk))
             elif chunk.get("type") == "reasoning":
                 # Live thinking stays on its own channel: mapping it to
                 # text_delta would spray reasoning into the answer stream.

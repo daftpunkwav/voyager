@@ -307,6 +307,37 @@ class TestChatStream:
         with pytest.raises(client_mod.ContextOverflowError):
             await _collect(_CHAT)
 
+    async def test_midstream_error_frame_raises(self, monkeypatch) -> None:
+        """An error object inside an HTTP-200 chat stream must surface as a
+        ProviderError, not end as a truncated normal-looking final chunk."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                text=_sse(
+                    {"choices": [{"delta": {"content": "partial"}}]},
+                    {"error": {"code": "content_filter", "message": "blocked mid-stream"}},
+                ),
+            )
+
+        _patch(monkeypatch, handler)
+        with pytest.raises(client_mod.ProviderError, match="blocked mid-stream"):
+            await _collect(_CHAT)
+
+    async def test_midstream_error_frame_non_retriable(self, monkeypatch) -> None:
+        """Deltas were already consumed by the time the error frame arrives:
+        the raised error must never be retried."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200, text=_sse({"choices": [{"delta": {"content": "p"}}]}, {"error": "boom"})
+            )
+
+        _patch(monkeypatch, handler)
+        with pytest.raises(client_mod.ProviderError) as exc:
+            await _collect(_CHAT)
+        assert exc.value.retriable is False
+
 
 class TestAnthropicStream:
     async def test_text_deltas_and_final(self, monkeypatch) -> None:
@@ -377,6 +408,31 @@ class TestAnthropicStream:
                 pass
 
         await _drain()  # no raise: normal SSE end
+
+    async def test_midstream_error_event_raises(self, monkeypatch) -> None:
+        """An anthropic error event inside an HTTP-200 stream (overloaded etc.)
+        must surface as a ProviderError, not end as a truncated final chunk."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            sse = (
+                "event: message_start\n"
+                "data: " + json.dumps({"type": "message_start", "message": {"model": "m"}}) + "\n\n"
+                "event: error\n"
+                "data: "
+                + json.dumps(
+                    {
+                        "type": "error",
+                        "error": {"type": "overloaded_error", "message": "Overloaded"},
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n\n"
+            )
+            return httpx.Response(200, text=sse)
+
+        _patch(monkeypatch, handler)
+        with pytest.raises(client_mod.ProviderError, match="Overloaded"):
+            await _collect(_ANTHROPIC)
 
     async def test_connect_error_retriable(self, monkeypatch) -> None:
         def handler(request: httpx.Request) -> httpx.Response:

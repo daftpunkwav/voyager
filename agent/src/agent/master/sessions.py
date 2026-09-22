@@ -78,10 +78,15 @@ class SessionManager:
         store: SessionStore | None = None,
         chat_goal: str = CHAT_GOAL,
         bus: EventBus | None = None,
+        on_delete: Callable[[str], None] | None = None,
     ) -> None:
         self._spawner = spawner
         self._sink_fn = sink_fn  # session_id -> reply sink for that session
         self._bus = bus
+        # Called with the deleted session id after in-memory teardown: the
+        # Master drops that session's queued-message inbox, so messages parked
+        # mid-turn cannot re-attach when the same id is recreated later.
+        self._on_delete = on_delete
         # session_id -> raw round recorder factory; attached post-construction
         # by the assembler (the trajectory store does not exist yet earlier).
         self._raw_fn: Callable[[str], Callable[[str, int, list, Any], Awaitable[None]]] | None = (
@@ -105,8 +110,10 @@ class SessionManager:
     # -- resolution & instances ---------------------------------------------
 
     def resolve(self, session_id: str = "", *, seed_title: str = "") -> SubagentInstance:
-        """Resolve a session id (or the active one) to its instance, creating
-        the session when missing. The first user message seeds the title of an
+        """Resolve a session id (or the active one) to its instance. Unknown
+        ids raise NOT_FOUND when a store is wired (creation is the caller's
+        fallback — see master.handle_user_message); store-less wiring spawns
+        instances on demand. The first user message seeds the title of an
         untitled session."""
         sid = self._normalize_target(session_id)
         inst = self._instances.get(sid)
@@ -303,6 +310,8 @@ class SessionManager:
         title = self._title_of(sid)
         self._instances.pop(sid, None)
         self._locks.pop(sid, None)
+        if self._on_delete is not None:
+            self._on_delete(sid)
         if self._store is not None:
             if self._store.get(sid) is None:
                 raise ServiceError("agent", ErrorSuffix.NOT_FOUND, f"session not found: {sid}")

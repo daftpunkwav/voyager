@@ -10,7 +10,7 @@
 
 `platform_contracts/events.py` 声明两族,由 agent 扩展:
 
-- **`DomainEvent`** — 总线上的跨域事实。固定名称包括:`user.message`、`user.online`、`user.activity`、`task.enqueued`/`task.progress`/`task.completed`/`task.failed`、`agent.message`、`agent.ask`、`agent.step`、`agent.delta`、`agent.observe`、`agent.policy.notify`、`agent.navigate`、`skill.proposed`、`settings.changed`、`service.health.changed`。各域补充自己的事件(`note.created`…`note.purged`、`notes.ui.changed`、`doc.created`、`doc.edited`、`source.added`/`source.removed`/`source.ready`、`graph.engine.fallback`)。
+- **`DomainEvent`** — 总线上的跨域事实。固定名称包括:`user.message`、`user.online`、`user.activity`、`task.enqueued`/`task.progress`/`task.completed`/`task.failed`、`agent.message`、`agent.ask`、`agent.step`、`agent.delta`、`agent.observe`、`agent.policy.notify`、`agent.navigate`、`skill.proposed`、`session.deleted`、`settings.changed`、`service.health.changed`。各域补充自己的事件(`note.created`…`note.purged`、`notes.ui.changed`、`doc.created`、`doc.edited`、`source.added`/`source.removed`/`source.ready`、`graph.engine.fallback`)。
 - **`RuntimeEvent`** — agent 运行生命周期(`RunStarted`、`LLMStarted`、`LLMStreaming`、`LLMCompleted`、`ToolStarted`、`ToolCompleted`、`ToolFailed`、`AgentPaused`、`AgentResumed`、`AgentCompleted`、`AgentCancelled`、`RunFailed`、`RunCancelled`);`agent/src/agent/runtime/events.py` 扩展 `ToolProgress` 与 `ThinkingStarted`/`ThinkingDelta`/`ThinkingCompleted`。
 
 每条事件携带 `seq`(日志位置)、`type`、`ts`、`trace_id` 与载荷。
@@ -34,7 +34,7 @@
 | gateway `POST /api/chat/messages` | `user.message` | agent `EventLoop` → `Master.handle_user_message`;聊天历史 API |
 | gateway `POST /api/activity` | `user.activity` | 活动 feed API |
 | agent ReAct 轮循环 | `agent.step`、`agent.delta`、`agent.message` | 轨迹投影、SSE → 前端轨迹与气泡 |
-| agent 策略 | `agent.policy.notify` | 前端通知 |
+| agent 策略 | `agent.policy.notify` | 无实时消费者:前端收到后丢弃(步骤轨迹与活动页承载调用记录) |
 | 域 worker(notes/sources/graph/code_exec) | `task.progress`/`task.completed`/`task.failed` | SSE → 前端任务进度 |
 | `SettingsStore` | `settings.changed` | 依赖设置的热读取方 |
 | 域 wiring | 生命周期事实(`note.created`、`source.ready` 等) | 前端 feed;钩子(`on_event`) |

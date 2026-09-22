@@ -187,9 +187,12 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
         except Exception as exc:  # record failure and report; never break the scheduler
             inst.state.status = RunStatus.FAILED
             inst.state.error = f"{type(exc).__name__}: {exc}"
-            await inst.events.emit(
-                RuntimeEvent.RUN_FAILED, run_id=inst.state.run_id, error=inst.state.error
-            )
+            try:
+                await inst.events.emit(
+                    RuntimeEvent.RUN_FAILED, run_id=inst.state.run_id, error=inst.state.error
+                )
+            except Exception:  # best effort: telemetry must not mask the real failure
+                log.debug("failed to emit RunFailed event", exc_info=True)
             # Conversational closure: a failed turn must still end the chat
             # exchange, otherwise the UI stays in the running state forever.
             if inst.task.conversational and inst.reply_sink is not None:
@@ -238,14 +241,24 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
                 # Degraded LLM text (quota / provider failure placeholders) must
                 # not masquerade as a normal answer: the latest llm step carries
                 # the degraded flag, so read it back instead of sniffing prefixes.
-                await inst.reply_sink(result, "error" if _turn_degraded(inst) else "message")
+                try:
+                    await inst.reply_sink(result, "error" if _turn_degraded(inst) else "message")
+                except Exception:  # best effort: the turn result is already in
+                    # history/state; a broken reply channel must not turn the
+                    # finished turn into a failure (master's persist would be skipped)
+                    log.warning("failed to deliver the turn reply for %s", inst.name, exc_info=True)
         elif _turn_degraded(inst):
             # A task turn whose LLM rounds all degraded (provider 4xx/quota)
             # did NOT run: mark it failed instead of dressing the failure up as
             # a completed result — wait_subagent callers must see the failure.
             inst.state.status = RunStatus.FAILED
             inst.state.error = result
-            await inst.events.emit(RuntimeEvent.RUN_FAILED, run_id=inst.state.run_id, error=result)
+            try:
+                await inst.events.emit(
+                    RuntimeEvent.RUN_FAILED, run_id=inst.state.run_id, error=result
+                )
+            except Exception:  # best effort: the failure is already on the state
+                log.debug("failed to emit degraded RunFailed event", exc_info=True)
         else:
             inst.state.status = RunStatus.COMPLETED
             await inst.events.emit(

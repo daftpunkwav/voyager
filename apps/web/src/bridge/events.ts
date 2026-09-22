@@ -30,7 +30,8 @@ export const EventType = {
   AGENT_DELTA: 'agent.delta',
   /** Agent observation notice (resource ready etc.; acted = auto-dispatched) */
   AGENT_OBSERVE: 'agent.observe',
-  /** L1 permission notice (info toast only, never the timeline) */
+  /** L1 permission notice (deliberately not surfaced live: no toast, no
+   *  timeline entry; the step trail and the activity page carry the calls) */
   AGENT_POLICY_NOTIFY: 'agent.policy.notify',
   /** Agent asks the frontend to navigate */
   AGENT_NAVIGATE: 'agent.navigate',

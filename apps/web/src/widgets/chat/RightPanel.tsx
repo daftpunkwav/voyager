@@ -8,7 +8,7 @@
  *   per-session list the LLM's todo_write maintains) with a done/total counter
  * - Agents: agent.list_subagents polled every 5s (no lifecycle SSE exists),
  *   filtered to the open session; each row shows the elapsed runtime and
- *   interrupts that instance on click
+ *   opens the run's execution view on click (interrupt lives inside the view)
  * - Deliverables: note artifacts from chatStore (note.created) plus the live
  *   task.* progress cards (rendered by TaskCards, passed in as children);
  *   the section stays visible with an empty hint when there is nothing to show
@@ -18,22 +18,15 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { type TodoItem, listSubagents, listTodos } from '@/api/agent';
-import { SubagentRunDialog } from '@/widgets/chat/SubagentRunDialog';
+import { SubagentRunDialog, type SubagentRunRef } from '@/widgets/chat/SubagentRunDialog';
 import { routes } from '@/utils/routes';
 import { formatDurationSec } from '@/utils/trajectory';
 import { useChatStore } from '@/stores/chatStore';
 
-/** A list_subagents.running entry (status is a RunStatus.value from agent/runtime/state.py). */
-interface RunningInstance {
-  id: string;
-  /** The instance's run_id (trajectory/raw-log key); absent on older backends. */
-  run_id?: string;
-  name: string;
-  status: string;
-  goal: string;
-  started_ts: number;
-  /** True = the chat session itself (Lucien), not a dispatched subagent. */
-  conversational?: boolean;
+/** A list_subagents.running entry (status is a RunStatus.value from agent/runtime/state.py).
+ *  Extends the run dialog's SubagentRunRef contract instead of re-declaring the
+ *  shared fields, so the two shapes cannot drift. */
+interface RunningInstance extends SubagentRunRef {
   /** Chat session this run belongs to ('' = session-less / older backend). */
   session?: string;
 }
@@ -176,6 +169,17 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(tick);
   }, [running.length]);
+
+  // A finished run drops out of the polled list: sync the open dialog so it
+  // stops ticking and offering Stop. The terminal status itself is not
+  // observable through this poll, so it degrades to the neutral "finished".
+  useEffect(() => {
+    setRunView((cur) =>
+      cur && cur.status === 'running' && !running.some((r) => r.id === cur.id)
+        ? { ...cur, status: 'finished' }
+        : cur
+    );
+  }, [running]);
 
   const hasDeliverables = artifacts.length > 0 || cardCount > 0;
 

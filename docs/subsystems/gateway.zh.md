@@ -19,9 +19,9 @@
 | 路由 | 端点 | 说明 |
 |---|---|---|
 | `mounts.py` | `GET /api/<domain>/capabilities`、`POST /api/<domain>/capabilities/{name}` | 每个域 registry 一个 `MountSpec`(`build_router`) |
-| `chat.py` | `POST /api/chat/messages`、`GET /api/chat/messages`、`GET /api/chat/trajectory`、`GET /api/chat/rawllm`、`GET /api/chat/stream` | 历史分页接受 `before_seq`/`after_seq`/`session`;SSE 支持 `after_seq` 续传、积压重放(`once=true`)、保活注释帧与 `_STREAM_TYPES` 过滤 |
+| `chat.py` | `POST /api/chat/messages`、`GET /api/chat/messages`、`GET /api/chat/trajectory`、`GET /api/chat/rawllm`、`GET /api/chat/stream` | 历史分页接受 `before_seq`/`after_seq`/`session`;trajectory 另有 `run_id` 模式(单个 run 的完整步骤列表),rawllm 读取轨迹投影的原始轮次;SSE 支持 `after_seq` 续传、积压重放(`once=true`)、保活注释帧与 `_STREAM_TYPES` 过滤 |
 | `session.py` | `GET /api/session/bootstrap` | 仅回环可用的 HttpOnly 会话 cookie,30 天 TTL |
-| `activity.py` | `POST /api/activity`、`GET /api/activity/feed` | 类型 `page_view`/`pointer`/`selection`/`manual` → 发布 `user.activity`;feed 支持 `types`(fnmatch)与 `agent`/`session`(按 `payload.session` 归属过滤,agent 回合内产生的事件才携带) |
+| `activity.py` | `POST /api/activity`、`GET /api/activity/feed` | 类型 `page_view`/`pointer`/`selection`/`manual` → 发布 `user.activity`;feed 支持 `recent`(最新窗口)、`types`(fnmatch)与 `agent`/`session` 归属过滤——操作白名单(笔记/资源生命周期、会话删除、agent 驱动的设置变更、文件写入)按 `payload.session` 归属,仅 agent 回合内产生的事件携带该字段 |
 | `uploads.py` | `POST /api/uploads` | multipart,上限 1 GiB,落在 `workspace/imports/` |
 | `workspace.py` | `GET /api/workspace/list`、`GET /api/workspace/read`、`GET /api/workspace/pick` | `read` 预览上限 256 KiB / 400 行;`pick` 只读浏览任意目录 |
 | `health.py` | `GET /health` | 聚合各 `HealthProbe` |

@@ -189,7 +189,7 @@ async def add_document(
 @capability(
     registry,
     name="list_documents",
-    description="Document list (summaries, no section bodies; §9.20)",
+    description="Document list (summaries, no section bodies)",
 )
 def list_documents(
     status: str = "",
@@ -219,7 +219,7 @@ def get_document(doc_id: str) -> dict:
 @capability(
     registry,
     name="get_doc_section",
-    description="Fetch a document section's full text on demand (1-based section number; §9.20 full-text tier)",
+    description="Fetch a document section's full text on demand (1-based section number)",
 )
 def get_doc_section(doc_id: str, section_no: int = 1) -> dict:
     deps = require_deps()

@@ -137,15 +137,15 @@ class SubagentInstance:
     persona: str = ""  # persona key captured at spawn; needed for per-turn system rebuild
     parent_run_id: str = ""  # dispatching instance's id (cancel cascade); "" = top-level
     build_system: Callable[[TaskBook, str, str], str] | None = None
-    # (task, persona key, turn input) -> system prompt; the third argument
-    # feeds the memory read policy's resident relevance layer
+    # (task, persona key, turn input) -> system prompt. Injected by the
+    # spawner and called fresh each turn in run_turn, so style/profile/page/
+    # digest/skill-index changes apply to the very next message; no builder
+    # reference held, avoiding a circular import. The third argument feeds
+    # the memory read policy's resident relevance layer.
     deadline: Any | None = (
         None  # runtime.deadline.Deadline (wall-clock caps), set by master per turn
     )
     pause_requested: bool = False  # cooperative pause: honored between steps (turn.py)
-    # System-rebuild function injected by the spawner, called fresh each turn
-    # in run_turn, so style/profile/page/digest/skill-index changes apply to
-    # the very next message; no builder reference held, avoiding a circular import
     sync_digest: Callable[..., None] | None = None
     # Refreshes the DigestStore as steps happen; duck-typed, digest.py not imported
     checkpoint_persist: Callable[[SubagentInstance], None] | None = None

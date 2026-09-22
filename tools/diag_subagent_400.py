@@ -21,7 +21,7 @@ for line in (ROOT / ".env").read_text(encoding="utf-8").splitlines():
         k, _, v = line.partition("=")
         os.environ.setdefault(k.strip(), v.strip().strip('"'))
 
-from platform_secrets import SecretStore  # noqa: E402
+from platform_secrets import SecretStore
 
 
 def call(base, key, model, input_schema, label):
@@ -48,7 +48,7 @@ def call(base, key, model, input_schema, label):
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=60):
             print(f"[{label}] HTTP 200")
             return True
     except urllib.error.HTTPError as exc:
@@ -78,14 +78,14 @@ def main():
         key,
         model,
         {"type": "object", "properties": {"value": {}}, "required": ["value"]},
-        "A: untyped property {} (pre-fix gen_mcp output)",
+        "A: untyped property {} (the schema gen_mcp used to emit)",
     )
     call(
         base,
         key,
         model,
         {"type": "object", "properties": {"value": {"type": "string"}}, "required": ["value"]},
-        "B: same but typed (the fix)",
+        "B: same but typed (the fallback gen_mcp emits now)",
     )
     call(
         base,
@@ -96,14 +96,14 @@ def main():
             "properties": {"q": {"type": "string", "default": ""}},
             "required": [],
         },
-        "C: `default` member present (as gen_mcp emits)",
+        "C: `default` member present (the member _clean_anthropic_schema strips)",
     )
     call(
         base,
         key,
         model,
         {"type": "object", "properties": {"q": {"type": "string"}}, "required": []},
-        "D: default stripped (the fix)",
+        "D: default stripped (the schema gen_mcp emits now)",
     )
 
 

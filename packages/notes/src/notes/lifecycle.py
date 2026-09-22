@@ -129,14 +129,18 @@ async def update_note(
         return get_any(note_id)
     if content is not None:
         deps.store.sync_links(note_id, content)
+    updated = get_any(note_id)
+    # title rides along like the other note.* events: the activity feed
+    # renders it verbatim instead of degrading to the raw note id
     await emit(
         DomainEvent.NOTE_EDITED,
         note_id,
+        title=updated["title"],
         content_changed=content is not None,
         pinned=pinned,
         archived=archived,
     )
-    return get_any(note_id)
+    return updated
 
 
 @capability(
@@ -157,8 +161,9 @@ async def link_note(note_id: str, source_id: str | None = None, node_id: str | N
     if node_id is not None:
         node_id = validate_node_id(node_id)
     deps.store.update(note_id, source_id=source_id, node_id=node_id)
-    await emit(DomainEvent.NOTE_EDITED, note_id, linked=True)
-    return get_any(note_id)
+    updated = get_any(note_id)
+    await emit(DomainEvent.NOTE_EDITED, note_id, title=updated["title"], linked=True)
+    return updated
 
 
 @capability(
@@ -223,6 +228,11 @@ async def purge_note(note_id: str) -> dict:
 async def empty_trash(max_age_days: int | None = None) -> dict:
     """No argument purges the whole trash; with N, only notes trashed more than N days ago."""
     deps = require_deps()
+    if max_age_days is not None and max_age_days < 0:
+        # A negative window puts the cutoff in the future: the age filter would
+        # silently invert into a full purge (irreversible) instead of the
+        # requested "older than N days" sweep.
+        raise ServiceError(DOMAIN, ErrorSuffix.INVALID_INPUT, "max_age_days must not be negative")
     rows = deps.store.list(state="trash", limit=10000)
     cutoff = None
     if max_age_days is not None:

@@ -9,8 +9,7 @@ Responsibilities:
 - Classify upstream errors (rate limit / auth / context overflow /
   transient) and retry retriable ones with bounded exponential backoff
 
-Supports three API formats: `chat` (OpenAI-compatible), `anthropic`
-(Messages) and `responses` (OpenAI Responses). Usage is written to the store by the caller after complete
+Usage is written to the store by the caller after complete
 succeeds (direct metering, not log parsing). The tools argument uses a
 neutral format [{"name", "description", "schema"}] (aligned with agent
 ToolSpec); tool_calls are normalized to [{"id", "name", "arguments": dict}]
@@ -116,7 +115,7 @@ class TransientError(ProviderError):
         super().__init__(message, status=status, retriable=retriable, retry_after=retry_after)
 
 
-_logger = logging.getLogger("llm.client")
+log = logging.getLogger("llm.client")
 
 
 @dataclass(frozen=True)
@@ -475,7 +474,7 @@ def _dump_rejected_request(url: str, body: dict[str, Any], resp: httpx.Response)
             encoding="utf-8",
         )
     except Exception as exc:  # noqa: BLE001 - diagnostics never break the call path
-        _logger.debug("llm debug dump failed: %s", exc)
+        log.debug("llm debug dump failed: %s", exc)
 
 
 #: Reasoning-effort names and their Anthropic thinking budgets (tokens).
@@ -520,6 +519,100 @@ def reasoning_fields(fmt: str, reasoning_effort: str, *, max_tokens: int) -> dic
 _THINKING_BLOCK_TYPES = ("thinking", "redacted_thinking")
 
 
+def _wire_request(
+    fmt: str,
+    base: str,
+    *,
+    api_key: str,
+    model: str,
+    messages: list[dict[str, Any]],
+    max_tokens: int,
+    temperature: float,
+    tools: list[dict[str, Any]] | None,
+    reasoning_effort: str,
+    stream: bool,
+) -> tuple[str, dict[str, str], dict[str, Any]]:
+    """Build one provider request (url, headers, body), shared by complete and
+    complete_stream: the two entry points differ only in the stream flag (and
+    chat streaming's include_usage), so the per-format encoding lives here —
+    duplicating it would mean every new request field is written twice.
+    Orphan tool results are resolved inside (_resolve_tool_messages)."""
+    messages = _resolve_tool_messages(messages)
+    if fmt == "responses":
+        instructions, inp = responses_input(messages)
+        body: dict[str, Any] = {
+            "model": model,
+            "instructions": instructions,
+            "input": inp
+            or [
+                {
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "(no content, please continue)"}],
+                }
+            ],
+            "max_output_tokens": max_tokens,
+            # No temperature: OpenAI reasoning models on this endpoint
+            # reject it. store=False keeps the conversation out of the
+            # provider's 30-day retention (local-first posture).
+            "store": False,
+        }
+        if tools:
+            body["tools"] = responses_tools(tools)
+        body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
+        url = f"{base}/responses"
+        headers = {"Authorization": f"Bearer {api_key}"}
+    elif fmt == "anthropic":
+        system, rest = _split_system(messages)
+        body = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "system": system,
+            # rest is empty (system only): never send an empty messages
+            # array or MiniMax answers 2013
+            "messages": _anthropic_messages(rest)
+            or [
+                {"role": "user", "content": "(no content, please continue)"},
+            ],
+        }
+        if tools:
+            body["tools"] = _anthropic_tools(tools)
+        body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
+        # Anthropic forbids temperature when extended thinking is enabled.
+        # Thinking and tool use coexist (interleaved thinking); the echo of
+        # stored thinking blocks happens in _anthropic_messages.
+        if "thinking" in body:
+            body.pop("temperature", None)
+        url = f"{base}/v1/messages"
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        }
+    else:
+        body = {
+            "model": model,
+            "messages": _chat_messages(messages)
+            or [
+                {"role": "user", "content": "(no content, please continue)"},
+            ],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if tools:
+            body["tools"] = _chat_tools(tools)
+        body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
+        url = f"{base}/chat/completions"
+        headers = {"Authorization": f"Bearer {api_key}"}
+    if stream:
+        body["stream"] = True
+        if fmt not in ("responses", "anthropic"):
+            # OpenAI-compatible streams must opt in to usage figures; without
+            # them metering could only record 0.
+            body["stream_options"] = {"include_usage": True}
+    return url, headers, body
+
+
 def _echoable_thinking_blocks(message: dict[str, Any]) -> list[dict[str, Any]]:
     """Stored thinking blocks of one neutral assistant message, sanitized for
     the wire: only well-formed thinking/redacted_thinking dicts pass, so a
@@ -556,39 +649,21 @@ async def complete(
 ) -> CompleteResult:
     fmt = provider["api_format"]
     base = provider["base_url"].rstrip("/")
-    messages = _resolve_tool_messages(messages)
+    url, headers, body = _wire_request(
+        fmt,
+        base,
+        api_key=api_key,
+        model=model,
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        tools=tools,
+        reasoning_effort=reasoning_effort,
+        stream=False,
+    )
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         if fmt == "responses":
-            instructions, inp = responses_input(messages)
-            body: dict[str, Any] = {
-                "model": model,
-                "instructions": instructions,
-                "input": inp
-                or [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "input_text", "text": "(no content, please continue)"}
-                        ],
-                    }
-                ],
-                "max_output_tokens": max_tokens,
-                # No temperature: OpenAI reasoning models on this endpoint
-                # reject it. store=False keeps the conversation out of the
-                # provider's 30-day retention (local-first posture).
-                "store": False,
-            }
-            if tools:
-                body["tools"] = responses_tools(tools)
-            body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
-            resp = await _send_with_retry(
-                lambda: _post(
-                    client,
-                    f"{base}/responses",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                    body=body,
-                )
-            )
+            resp = await _send_with_retry(lambda: _post(client, url, headers=headers, body=body))
             data = resp.json()
             if data.get("status") == "failed":
                 # Same contract as the stream's response.failed: ride the
@@ -607,39 +682,7 @@ async def complete(
                 reasoning=out["reasoning"],
             )
         if fmt == "anthropic":
-            system, rest = _split_system(messages)
-            body = {
-                "model": model,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "system": system,
-                # rest is empty (system only): never send an empty messages
-                # array or MiniMax answers 2013
-                "messages": _anthropic_messages(rest)
-                or [
-                    {"role": "user", "content": "(no content, please continue)"},
-                ],
-            }
-            if tools:
-                body["tools"] = _anthropic_tools(tools)
-            body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
-            # Anthropic forbids temperature when extended thinking is enabled.
-            # Thinking and tool use coexist (interleaved thinking); the echo
-            # of stored thinking blocks happens in _anthropic_messages.
-            if "thinking" in body:
-                body.pop("temperature", None)
-            resp = await _send_with_retry(
-                lambda: _post(
-                    client,
-                    f"{base}/v1/messages",
-                    headers={
-                        "x-api-key": api_key,
-                        "anthropic-version": "2023-06-01",
-                        "content-type": "application/json",
-                    },
-                    body=body,
-                )
-            )
+            resp = await _send_with_retry(lambda: _post(client, url, headers=headers, body=body))
             data = resp.json()
             usage = data.get("usage") or {}
             blocks = data.get("content") or []
@@ -671,26 +714,7 @@ async def complete(
                 reasoning=reasoning,
                 thinking_blocks=thinking_blocks,
             )
-        body = {
-            "model": model,
-            "messages": _chat_messages(messages)
-            or [
-                {"role": "user", "content": "(no content, please continue)"},
-            ],
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-        }
-        if tools:
-            body["tools"] = _chat_tools(tools)
-        body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
-        resp = await _send_with_retry(
-            lambda: _post(
-                client,
-                f"{base}/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}"},
-                body=body,
-            )
-        )
+        resp = await _send_with_retry(lambda: _post(client, url, headers=headers, body=body))
         data = resp.json()
         usage = data.get("usage") or {}
         choice = (data.get("choices") or [{}])[0]
