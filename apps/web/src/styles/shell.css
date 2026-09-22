@@ -2212,16 +2212,17 @@ a.chat-card:hover {
 .activity-page__toolbar {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
 }
-/* GlassSelect defaults to width:100%; as a lone toolbar filter it stays compact */
+/* GlassSelect defaults to width:100%; toolbar filters stay compact */
 .activity-page__toolbar .glass-select {
-  width: 200px;
+  width: 168px;
 }
 /* Activity feed rows (shared widget: standalone page + settings tab).
-   Hairline row list with a tone dot per entry; the card surface comes from
-   GlassCard. */
+   A quiet operations log: no dots, no hairlines — grouping comes from
+   spacing, feedback from a soft hover surface. */
 .activity-card {
-  padding: 4px 0;
+  padding: 6px 0;
   min-height: 0;
 }
 .activity-list {
@@ -2237,51 +2238,51 @@ a.chat-card:hover {
 .activity-row {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 14px;
+  padding: 7px 14px;
   font-size: 12.5px;
-  line-height: 1.55;
-  border-bottom: 1px solid var(--bg-200);
+  line-height: 1.5;
+  transition: background-color 140ms ease;
   /* Long-list render optimization: skip rendering off-screen rows (CSS approximation of virtual scrolling) */
   content-visibility: auto;
-  contain-intrinsic-size: auto 40px;
+  contain-intrinsic-size: auto 34px;
 }
-.activity-row:last-child {
-  border-bottom: 0;
-}
-.activity-row::before {
-  content: '';
-  flex: 0 0 6px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--brand-500);
-  align-self: center;
-}
-.activity-row--muted::before {
-  background: var(--text-300);
+.activity-row:hover {
+  background: var(--bg-100);
 }
 .activity-row--muted .activity-row__text {
   color: var(--text-500);
 }
-.activity-row--error::before {
-  background: var(--error);
-}
 .activity-row--error .activity-row__text {
   color: var(--error);
 }
-.activity-row .mono {
+.activity-row__time {
   flex: 0 0 auto;
   color: var(--text-400);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 .activity-row__text {
+  flex: 1;
   min-width: 0;
+  color: var(--text-800);
   overflow-wrap: anywhere;
+}
+.activity-row__origin {
+  flex: 0 0 auto;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-400);
+  font-size: 11.5px;
 }
 @media (max-width: 720px) {
   .activity-row {
     flex-wrap: wrap;
+  }
+  .activity-row__origin {
+    max-width: none;
   }
 }
 .team-list {

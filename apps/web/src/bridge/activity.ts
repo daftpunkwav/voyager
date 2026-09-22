@@ -68,22 +68,18 @@ async function reportActivity(body: {
   }
 }
 
-/** Activity page replay: reads the event stream; non-2xx throws with the backend envelope message.
- *  The gateway's activity_feed filter parameter is `types` (comma-separated event
- *  types, fnmatch semantics) — a `kind` param would be silently ignored.
- *  Defaults to the newest window (`recent=true`): paging forward from seq 0
- *  would surface the log's oldest rows, not current activity.
- *  `agentOnly` keeps events attributed to a chat turn (payload.session);
- *  `session` narrows to one session's events (implies agent). */
-export async function fetchActivityFeed(
-  kind: string,
-  opts: { agentOnly?: boolean; session?: string } = {}
-): Promise<FeedEvent[]> {
+/** Activity page replay: the agent operations log. Reads the event stream
+ *  with `agent=true` (the gateway whitelists operation events and drops
+ *  conversation traffic and the user's own actions); non-2xx throws with the
+ *  backend envelope message. Defaults to the newest window (`recent=true`):
+ *  paging forward from seq 0 would surface the log's oldest rows, not
+ *  current activity. `session` narrows to one originating session. */
+export async function fetchActivityFeed(kind: string, session = ''): Promise<FeedEvent[]> {
   const url = new URL('/api/activity/feed', window.location.origin);
   url.searchParams.set('recent', 'true');
+  url.searchParams.set('agent', 'true');
   if (kind) url.searchParams.set('types', kind);
-  if (opts.agentOnly) url.searchParams.set('agent', 'true');
-  if (opts.session) url.searchParams.set('session', opts.session);
+  if (session) url.searchParams.set('session', session);
   const resp = await fetch(url.toString(), { credentials: 'include' });
   if (!resp.ok) {
     // Prefer the message from the backend JSON envelope; without one (e.g. the dev

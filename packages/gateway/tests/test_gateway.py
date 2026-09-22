@@ -380,40 +380,55 @@ class TestActivity:
         assert feed[-1]["payload"]["page"] == "notes"
 
     def test_feed_agent_and_session_attribution_filters(self, client, bus) -> None:
-        """agent=true keeps only chat-turn-attributed events (payload.session);
-        session=<id> narrows further; unstamped rows are the manual lane."""
+        """agent=true keeps only agent operations: domain events stamped with
+        payload.session, settings changes published by the AGENT actor, and
+        write/edit tool steps. Conversation rows and the user's own actions
+        (unstamped domain events, LOCAL_USER settings changes, user.message)
+        stay out."""
         import asyncio
 
-        def _publish(note_id: str, session: str | None) -> None:
-            payload = {"note_id": note_id, "title": note_id}
-            if session:
-                payload["session"] = session
-            asyncio.run(
-                bus.publish(
-                    Event(
-                        type=DomainEvent.NOTE_CREATED,
-                        actor=ActorRef(kind=ActorKind.SYSTEM, id="notes.service"),
-                        payload=payload,
-                    )
-                )
-            )
+        def _publish(type_: str, payload: dict, actor: ActorRef) -> None:
+            asyncio.run(bus.publish(Event(type=type_, actor=actor, payload=payload)))
 
-        _publish("agent-note", "sess-1")
-        _publish("manual-note", None)
-        events = client.get("/api/activity/feed?types=note.created").json()["events"]
-        assert len(events) == 2
-        agent_events = client.get("/api/activity/feed?types=note.created&agent=true").json()[
-            "events"
-        ]
-        assert [e["payload"]["note_id"] for e in agent_events] == ["agent-note"]
-        session_events = client.get(
-            "/api/activity/feed?types=note.created&session=sess-1"
+        agent = ActorRef(kind=ActorKind.AGENT, id="agent.main")
+        system = ActorRef(kind=ActorKind.SYSTEM, id="notes.service")
+        _publish(DomainEvent.NOTE_CREATED, {"note_id": "n1", "title": "t", "session": "s1"}, system)
+        _publish(DomainEvent.NOTE_CREATED, {"note_id": "n2", "title": "t2"}, system)
+        _publish(DomainEvent.USER_MESSAGE, {"content": "hi", "session": "s1"}, LOCAL_USER)
+        _publish(DomainEvent.AGENT_MESSAGE, {"content": "hello", "session": "s1"}, agent)
+        _publish(DomainEvent.SETTINGS_CHANGED, {"key": "k", "value": 1}, agent)
+        _publish(DomainEvent.SETTINGS_CHANGED, {"key": "k2", "value": 2}, LOCAL_USER)
+        _publish(
+            DomainEvent.AGENT_STEP,
+            {
+                "kind": "tool",
+                "name": "write",
+                "session": "s1",
+                "detail": {"args": {"path": "a.ts"}},
+            },
+            agent,
+        )
+        _publish(
+            DomainEvent.AGENT_STEP,
+            {"kind": "tool", "name": "grep", "session": "s1", "detail": {"args": {}}},
+            agent,
+        )
+        ops = client.get("/api/activity/feed?agent=true&recent=true").json()["events"]
+        found = [(e["type"], e["payload"].get("note_id") or e["payload"].get("key")) for e in ops]
+        assert ("note.created", "n1") in found
+        assert ("note.created", "n2") not in found
+        assert ("user.message", None) not in found
+        assert ("agent.message", None) not in found
+        assert ("settings.changed", "k") in found
+        assert ("settings.changed", "k2") not in found
+        steps = [e for e in ops if e["type"] == "agent.step"]
+        assert len(steps) == 1 and steps[0]["payload"]["name"] == "write"
+        # session narrowing stays inside the operations whitelist
+        scoped = client.get(
+            "/api/activity/feed?agent=true&recent=true&session=s1"
         ).json()["events"]
-        assert [e["payload"]["note_id"] for e in session_events] == ["agent-note"]
-        other = client.get(
-            "/api/activity/feed?types=note.created&session=sess-other"
-        ).json()["events"]
-        assert other == []
+        assert scoped
+        assert all(e["payload"].get("session") == "s1" for e in scoped if e["type"] != "settings.changed")
 
     def test_unknown_kind(self, client) -> None:
         r = client.post("/api/activity", json={"kind": "hack"})
