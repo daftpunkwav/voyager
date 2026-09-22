@@ -2801,6 +2801,9 @@ a.chat-card:hover {
   text-align: center;
 }
 .chat-log__round {
+  /* Scroll container is display:flex; without this the rounds shrink to fit
+     instead of overflowing (cards collapse to their header). */
+  flex-shrink: 0;
   border: 1px solid var(--bg-300);
   border-radius: 12px;
   background: var(--bg-100);
