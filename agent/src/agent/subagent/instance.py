@@ -117,6 +117,13 @@ class SubagentInstance:
     #: for conversational instances; writes the raw LLM round log in the
     #: trajectory store. None = no raw log (subagents, tests).
     raw_recorder: Callable[[str, int, list, Any], Awaitable[None]] | None = None
+    #: Conversational run_ids persist across turns while react renumbers
+    #: rounds from 1 each turn; the base folds each finished turn's round
+    #: count in so stored rounds keep rising instead of colliding on
+    #: (run_id, round) - the store's INSERT OR REPLACE would silently drop
+    #: earlier turns' records.
+    _raw_round_base: int = 0
+    _raw_round_last: int = 0  # max round_n seen in the turn in progress
     name: str = ""
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     history: list[dict[str, Any]] = field(default_factory=list)
@@ -315,7 +322,14 @@ class SubagentInstance:
     async def _on_raw(self, round_n: int, messages: list, reply: Any) -> None:
         if self.raw_recorder is None:
             return
-        await self.raw_recorder(self.state.run_id, round_n, messages, reply)
+        self._raw_round_last = max(self._raw_round_last, round_n)
+        await self.raw_recorder(self.state.run_id, self._raw_round_base + round_n, messages, reply)
+
+    def _fold_raw_round_base(self) -> None:
+        """Turn teardown (run_turn's finally): continue raw numbering after
+        this turn's rounds so the next turn starts past them."""
+        self._raw_round_base += self._raw_round_last
+        self._raw_round_last = 0
 
     async def _on_event(self, type_: str, **payload: Any) -> None:
         return await turn.on_event(self, type_, **payload)

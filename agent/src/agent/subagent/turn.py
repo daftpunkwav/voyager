@@ -203,6 +203,9 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
             # will fire; clear _turn_messages to stop mis-capturing
             inst._turn_messages = None
             current_instance.reset(token)
+            # Fold this turn's round count into the raw-log numbering base so
+            # the next turn's raw rounds continue past it instead of colliding
+            inst._fold_raw_round_base()
         if any(SUMMARY_MARK in str(m.get("content") or "") for m in messages):
             # Persist compaction across turns: the summary has replaced the
             # condensed middle, so write it back into history and later turns

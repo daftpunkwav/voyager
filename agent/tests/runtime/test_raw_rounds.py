@@ -1,12 +1,14 @@
 """Raw LLM round log: TrajectoryStore raw_rounds round-trip and the REACT
 on_raw wiring (one full request transcript + response per round)."""
 
+from typing import cast
+
 from agent.llm import FakeLLM, LLMReply
 from agent.policy import PolicyEngine
 from agent.runtime.trajectory import TrajectoryStore
 from agent.subagent import Mode, ModeLimits, run_mode
 from agent.tools import AgentTool, Toolbelt
-from platform_eventbus import EventLog
+from platform_eventbus import EventBus, EventLog
 
 
 def _store(tmp_path) -> TrajectoryStore:
@@ -112,3 +114,43 @@ class TestReactWiring:
             Mode.DIRECT, llm=llm, toolbelt=None, messages=_msgs(), limits=ModeLimits()
         )
         assert result == "ok"
+
+
+class TestCrossTurnNumbering:
+    class _CaptureBus:
+        """Minimal EventBus stub: records published events (events uses publish only)."""
+
+        def __init__(self, sink: list) -> None:
+            self._sink = sink
+
+        async def publish(self, event) -> int:
+            self._sink.append(event)
+            return len(self._sink)
+
+    async def test_turns_continue_round_numbers_instead_of_resetting(self) -> None:
+        """Conversational run_ids persist across turns while react renumbers
+        rounds from 1 per turn; the instance must offset the second turn past
+        the first, or INSERT OR REPLACE silently drops the earlier records."""
+        from agent.runtime.events import RuntimeEvents
+        from agent.runtime.state import RunState
+        from agent.subagent.instance import SubagentInstance, TaskBook
+
+        llm = FakeLLM([LLMReply(text="answer one"), LLMReply(text="answer two")])
+        captured: list[int] = []
+
+        async def recorder(run_id: str, round_n: int, messages: list, reply: object) -> None:
+            captured.append(round_n)
+
+        inst = SubagentInstance(
+            task=TaskBook(goal="goal", conversational=True),
+            toolbelt=_belt(),
+            llm=llm,
+            system_prompt="sys",
+            events=RuntimeEvents(cast(EventBus, self._CaptureBus([]))),
+            state=RunState(task="goal"),
+            raw_recorder=recorder,
+        )
+        # "ok" matches the chitchat fast path: one LLM round per turn
+        await inst.run_turn("ok")
+        await inst.run_turn("ok")
+        assert captured == [1, 2]
