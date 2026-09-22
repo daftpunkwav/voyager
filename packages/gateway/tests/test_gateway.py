@@ -379,6 +379,42 @@ class TestActivity:
         feed = client.get("/api/activity/feed?types=user.activity").json()["events"]
         assert feed[-1]["payload"]["page"] == "notes"
 
+    def test_feed_agent_and_session_attribution_filters(self, client, bus) -> None:
+        """agent=true keeps only chat-turn-attributed events (payload.session);
+        session=<id> narrows further; unstamped rows are the manual lane."""
+        import asyncio
+
+        def _publish(note_id: str, session: str | None) -> None:
+            payload = {"note_id": note_id, "title": note_id}
+            if session:
+                payload["session"] = session
+            asyncio.run(
+                bus.publish(
+                    Event(
+                        type=DomainEvent.NOTE_CREATED,
+                        actor=ActorRef(kind=ActorKind.SYSTEM, id="notes.service"),
+                        payload=payload,
+                    )
+                )
+            )
+
+        _publish("agent-note", "sess-1")
+        _publish("manual-note", None)
+        events = client.get("/api/activity/feed?types=note.created").json()["events"]
+        assert len(events) == 2
+        agent_events = client.get("/api/activity/feed?types=note.created&agent=true").json()[
+            "events"
+        ]
+        assert [e["payload"]["note_id"] for e in agent_events] == ["agent-note"]
+        session_events = client.get(
+            "/api/activity/feed?types=note.created&session=sess-1"
+        ).json()["events"]
+        assert [e["payload"]["note_id"] for e in session_events] == ["agent-note"]
+        other = client.get(
+            "/api/activity/feed?types=note.created&session=sess-other"
+        ).json()["events"]
+        assert other == []
+
     def test_unknown_kind(self, client) -> None:
         r = client.post("/api/activity", json={"kind": "hack"})
         assert r.status_code == 400

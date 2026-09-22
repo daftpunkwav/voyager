@@ -46,6 +46,44 @@ class TestSessionManager:
         finally:
             app.close()
 
+    def test_delete_lands_session_deleted_event(self, tmp_path) -> None:
+        """session.deleted carries the deleted session's title; when the delete
+        happened inside a chat turn (capability invocation context set) the
+        payload.session marks the agent as the driver, human deletes stay
+        session-less."""
+        from platform_capability import current_chat_session
+        from platform_eventbus import EventBus, EventLog
+
+        app = _app(tmp_path, FakeLLM())
+        try:
+            mgr = app.master.sessions
+            created = mgr.create(title="短命会话")
+            sid = created["session_id"]
+            bus = EventBus(EventLog(tmp_path / "rd" / "events.db"))
+            try:
+                mgr.delete(sid)
+                rows = bus.log.read_after(types=("session.deleted",), limit=10)
+                assert rows, "session.deleted must land in the event log"
+                (_, ev) = rows[-1]
+                assert ev.payload["deleted"] == sid
+                assert ev.payload["title"] == "短命会话"
+                # human path (no invocation context): no session stamp
+                assert "session" not in ev.payload
+
+                created2 = mgr.create(title="另一个")
+                token = current_chat_session.set("sess-driver")
+                try:
+                    mgr.delete(created2["session_id"])
+                finally:
+                    current_chat_session.reset(token)
+                rows = bus.log.read_after(types=("session.deleted",), limit=10)
+                (_, ev2) = rows[-1]
+                assert ev2.payload["session"] == "sess-driver"
+            finally:
+                bus.log.close()
+        finally:
+            app.close()
+
     def test_fork_copies_history(self, tmp_path) -> None:
         app = _app(tmp_path, FakeLLM(default="Got it."))
         try:

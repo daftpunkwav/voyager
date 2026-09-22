@@ -116,6 +116,7 @@ class DomainEvent:
     AGENT_POLICY_NOTIFY = "agent.policy.notify"
     AGENT_NAVIGATE = "agent.navigate"
     SKILL_PROPOSED = "skill.proposed"
+    SESSION_DELETED = "session.deleted"
     NOTE_CREATED = "note.created"
     NOTE_EDITED = "note.edited"
     NOTE_DELETED = "note.deleted"

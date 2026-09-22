@@ -101,6 +101,21 @@ export function summarize(ev: FeedEvent): RowSummary {
         text: i18n.t('chat:feed.noteDeleted', { who, title: clip(p.title, 40) }),
         tone: 'muted',
       };
+    case EventType.NOTE_RESTORED:
+      return {
+        text: i18n.t('chat:feed.noteRestored', { who, title: clip(p.title, 40) }),
+        tone: 'normal',
+      };
+    case EventType.NOTE_PURGED:
+      return {
+        text: i18n.t('chat:feed.notePurged', { who, title: clip(p.title, 40) }),
+        tone: 'muted',
+      };
+    case EventType.SESSION_DELETED:
+      return {
+        text: i18n.t('chat:feed.sessionDeleted', { who, title: clip(p.title, 40) }),
+        tone: 'muted',
+      };
     case EventType.SOURCE_ADDED:
       return {
         text: i18n.t('chat:feed.sourceAdded', { who, name: clip(p.name ?? p.source_id, 40) }),

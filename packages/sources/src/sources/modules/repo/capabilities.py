@@ -26,6 +26,7 @@ from platform_contracts import (
 from platform_eventbus import EventBus
 from platform_secrets import SecretStore
 
+from .._shared.events import with_session
 from . import github
 from .store import RepoStore
 
@@ -98,7 +99,7 @@ async def import_repo(url: str, category: str = "", clone: bool = True) -> JobRe
             Event(
                 type=DomainEvent.SOURCE_ADDED,
                 actor=_REPO_ACTOR,
-                payload={"source_id": rid, "kind": "repo", "name": f"{owner}/{name}"},
+                payload=with_session({"source_id": rid, "kind": "repo", "name": f"{owner}/{name}"}),
             )
         )
     if clone:

@@ -29,6 +29,7 @@ from platform_contracts import (
 from platform_eventbus import EventBus
 from platform_settings import SettingsStore
 
+from .._shared.events import with_session
 from .._shared.text import valid_tag
 from .store import DocStore
 
@@ -177,7 +178,7 @@ async def add_document(
             Event(
                 type=DomainEvent.SOURCE_ADDED,
                 actor=_DOC_ACTOR,
-                payload={"source_id": did, "kind": "doc", "title": clean_title},
+                payload=with_session({"source_id": did, "kind": "doc", "title": clean_title}),
             )
         )
     if status == "parsing":
@@ -291,7 +292,7 @@ async def remove_document(doc_id: str) -> dict:
             Event(
                 type=DomainEvent.SOURCE_REMOVED,
                 actor=_DOC_ACTOR,
-                payload={"source_id": doc_id, "kind": "doc", "title": doc["title"]},
+                payload=with_session({"source_id": doc_id, "kind": "doc", "title": doc["title"]}),
             )
         )
     return {"removed": doc_id, "title": doc["title"]}

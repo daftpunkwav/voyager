@@ -36,6 +36,8 @@ export const EventType = {
   AGENT_NAVIGATE: 'agent.navigate',
   /** Agent detected a repeated tool flow and proposes saving it as a skill */
   SKILL_PROPOSED: 'skill.proposed',
+  /** A chat session was deleted (session field = the deleting turn's session, when agent-driven) */
+  SESSION_DELETED: 'session.deleted',
   /** Note lifecycle */
   NOTE_CREATED: 'note.created',
   NOTE_EDITED: 'note.edited',

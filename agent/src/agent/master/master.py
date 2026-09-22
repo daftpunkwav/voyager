@@ -136,6 +136,7 @@ class Master:
             spawner=spawner,
             sink_fn=self._session_sink,
             store=session_store,
+            bus=bus,
         )
 
     # -- reply plumbing -------------------------------------------------------

@@ -26,6 +26,7 @@ from platform_webguard.body import read_bounded
 from platform_webguard.dns_pin import default_resolver, literal_ips, pinned_request
 from platform_webguard.url_policy import as_ip, check_url_syntax, is_internal
 
+from .._shared.events import with_session
 from .store import WebStore, html_to_text, valid_tag
 
 _DOMAIN = "sources"
@@ -199,14 +200,14 @@ async def save_url(
             Event(
                 type=DomainEvent.SOURCE_ADDED,
                 actor=_WEB_ACTOR,
-                payload={"source_id": pid, "kind": "web", "title": final_title},
+                payload=with_session({"source_id": pid, "kind": "web", "title": final_title}),
             )
         )
         await deps.bus.publish(
             Event(
                 type=DomainEvent.SOURCE_READY,
                 actor=_WEB_ACTOR,
-                payload={"source_id": pid, "kind": "web", "title": final_title},
+                payload=with_session({"source_id": pid, "kind": "web", "title": final_title}),
             )
         )
     return _require_page(pid)
@@ -242,7 +243,7 @@ async def add_page(
             Event(
                 type=DomainEvent.SOURCE_ADDED,
                 actor=_WEB_ACTOR,
-                payload={"source_id": pid, "kind": "web", "title": title},
+                payload=with_session({"source_id": pid, "kind": "web", "title": title}),
             )
         )
     return _require_page(pid)
@@ -299,7 +300,7 @@ async def remove_page(page_id: str) -> dict:
             Event(
                 type=DomainEvent.SOURCE_REMOVED,
                 actor=_WEB_ACTOR,
-                payload={"source_id": page_id, "kind": "web", "title": item["title"]},
+                payload=with_session({"source_id": page_id, "kind": "web", "title": item["title"]}),
             )
         )
     return {"removed": page_id, "title": item["title"]}

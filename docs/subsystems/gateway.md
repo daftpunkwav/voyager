@@ -21,7 +21,7 @@ Source: `packages/gateway/src/gateway/`
 | `mounts.py` | `GET /api/<domain>/capabilities`, `POST /api/<domain>/capabilities/{name}` | one `MountSpec` per domain registry (`build_router`) |
 | `chat.py` | `POST /api/chat/messages`, `GET /api/chat/messages`, `GET /api/chat/trajectory`, `GET /api/chat/rawllm`, `GET /api/chat/stream` | history pages take `before_seq`/`after_seq`/`session`; SSE carries `after_seq` resume, backlog replay (`once=true`), keep-alive comments, and a `_STREAM_TYPES` filter |
 | `session.py` | `GET /api/session/bootstrap` | loopback-only HttpOnly session cookie, 30-day TTL |
-| `activity.py` | `POST /api/activity`, `GET /api/activity/feed` | kinds `page_view`/`pointer`/`selection`/`manual` → publishes `user.activity` |
+| `activity.py` | `POST /api/activity`, `GET /api/activity/feed` | kinds `page_view`/`pointer`/`selection`/`manual` → publishes `user.activity`; the feed takes `types` (fnmatch) plus `agent`/`session` attribution filters over `payload.session` (only events raised inside a chat turn carry it) |
 | `uploads.py` | `POST /api/uploads` | multipart, 1 GiB cap, lands under `workspace/imports/` |
 | `workspace.py` | `GET /api/workspace/list`, `GET /api/workspace/read`, `GET /api/workspace/pick` | `read` caps previews at 256 KiB / 400 lines; `pick` browses any directory read-only |
 | `health.py` | `GET /health` | aggregates `HealthProbe`s |

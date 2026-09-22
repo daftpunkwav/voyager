@@ -70,11 +70,32 @@ def build_activity_router(bus: EventBus, limiter: RateLimiter) -> APIRouter:
         return {"seq": seq}
 
     @router.get("/api/activity/feed")
-    async def activity_feed(after_seq: int = 0, types: str = "", limit: int = 200) -> dict:
+    async def activity_feed(
+        after_seq: int = 0,
+        types: str = "",
+        limit: int = 200,
+        agent: bool = False,
+        session: str = "",
+    ) -> dict:
+        """Activity feed. `agent=true` keeps only events attributed to a chat
+        turn (payload.session stamped by the capability invocation context);
+        `session=<id>` keeps only one session's events (implies agent). The
+        type filter still narrows the SQL read; these two filter in memory
+        afterwards, so a heavily filtered page may return fewer rows than
+        `limit` even when older matches exist — callers page with after_seq."""
         type_list = tuple(t for t in types.split(",") if t) or None
         rows = bus.log.read_after(
             after_seq=after_seq, types=type_list, limit=max(1, min(limit, 1000))
         )
-        return {"events": [{"seq": seq, **e.to_dict()} for seq, e in rows]}
+
+        def _wanted(ev: Event) -> bool:
+            ev_session = str(ev.payload.get("session") or "")
+            if session:
+                return ev_session == session
+            if agent:
+                return bool(ev_session)
+            return True
+
+        return {"events": [{"seq": seq, **e.to_dict()} for seq, e in rows if _wanted(e)]}
 
     return router

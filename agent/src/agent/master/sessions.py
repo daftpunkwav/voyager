@@ -24,7 +24,16 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from platform_contracts import ErrorSuffix, ServiceError
+from platform_capability import current_chat_session
+from platform_contracts import (
+    ActorKind,
+    ActorRef,
+    DomainEvent,
+    ErrorSuffix,
+    Event,
+    ServiceError,
+)
+from platform_eventbus import EventBus
 
 from agent.memory.session_store import (
     SessionSnapshot,
@@ -35,6 +44,11 @@ from agent.runtime.state import RunStatus
 from agent.subagent import Mode, Spawner, SubagentInstance, TaskBook
 
 log = logging.getLogger("agent.sessions")
+
+#: Emitter identity for session lifecycle events (the manager itself is the
+#: source; whether a *human* or the *agent* drove the delete is carried by
+#: the payload's session field, not the actor).
+_SESSIONS_ACTOR = ActorRef(kind=ActorKind.SYSTEM, id="agent.sessions")
 
 CHAT_GOAL = (
     "与用户对话,理解并满足需求。普通对话与顺手的小任务直接自己完成;"
@@ -63,9 +77,11 @@ class SessionManager:
         sink_fn: Callable[[str], Callable[[str], Awaitable[None]]],
         store: SessionStore | None = None,
         chat_goal: str = CHAT_GOAL,
+        bus: EventBus | None = None,
     ) -> None:
         self._spawner = spawner
         self._sink_fn = sink_fn  # session_id -> reply sink for that session
+        self._bus = bus
         # session_id -> raw round recorder factory; attached post-construction
         # by the assembler (the trajectory store does not exist yet earlier).
         self._raw_fn: Callable[[str], Callable[[str, int, list, Any], Awaitable[None]]] | None = (
@@ -284,6 +300,7 @@ class SessionManager:
                 ErrorSuffix.INVALID_INPUT,
                 f"session {sid} is running; cancel the turn before deleting",
             )
+        title = self._title_of(sid)
         self._instances.pop(sid, None)
         self._locks.pop(sid, None)
         if self._store is not None:
@@ -304,7 +321,26 @@ class SessionManager:
                     self._store.set_active(nxt)
                 else:
                     self._store.set_active("")
+        self._emit_session_deleted(sid, title)
         return {"deleted": sid}
+
+    def _emit_session_deleted(self, sid: str, title: str) -> None:
+        """Land a session.deleted row in the shared event log. Sync append:
+        this runs inside the sync capability dispatch, possibly on a worker
+        thread, so live SSE subscribers are not pushed - the activity page
+        reads the log and is the consumer. The session field marks
+        agent-initiated deletes (the invocation context is set inside a chat
+        turn); human deletes stay session-less, which is how the two are
+        told apart downstream."""
+        if self._bus is None:
+            return
+        payload: dict[str, Any] = {"deleted": sid, "title": title}
+        session = current_chat_session.get()
+        if session:
+            payload["session"] = session
+        self._bus.log.append(
+            Event(type=DomainEvent.SESSION_DELETED, actor=_SESSIONS_ACTOR, payload=payload)
+        )
 
     def set_active(self, session_id: str) -> dict[str, Any]:
         sid = (session_id or "").strip()
