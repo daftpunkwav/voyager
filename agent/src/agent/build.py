@@ -720,7 +720,8 @@ def build_agent(
     def _raw_round_fn(session_id: str):
         """Per-session raw LLM round recorder: the exact request transcript
         plus the response, stored in the trajectory store for the UI's raw
-        log view. Bodies are serialized once here; the store caps size."""
+        log view. Bodies are serialized once here, verbatim (retention is
+        handled by purge_raw_older_than_days, not a size cap)."""
 
         async def _record(run_id: str, round_n: int, messages: list, reply: object) -> None:
             response = json.dumps(
