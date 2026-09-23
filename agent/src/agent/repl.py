@@ -33,6 +33,7 @@ from platform_contracts import DomainEvent, Event
 from platform_eventbus import Subscription
 from platform_settings import SettingsStore
 
+from agent.context.usage import resolve_window
 from agent.llm import FakeLLM, LLMClient
 from agent.llm_http import HttpLLM, HttpLlmConfig
 from agent.main import AgentApp, build_agent
@@ -298,12 +299,17 @@ def _standalone_llm(settings: Any) -> LLMClient:
     base_url = str(settings.get("agent.llm.base_url") or "").strip()
     model = str(settings.get("agent.llm.model") or "").strip()
     if base_url and model:
+        # Wire cap from the same per-model resolution the app path uses
+        # (agent.context.max_output_tokens + model_profiles), not the
+        # transport's built-in default.
+        cap = resolve_window(settings, model).max_output_tokens
         return HttpLLM(
             HttpLlmConfig(
                 base_url=base_url,
                 api_key=str(settings.get("agent.llm.api_key") or ""),
                 model=model,
                 timeout_s=float(settings.get("agent.llm.timeout_s") or 120),
+                max_tokens=cap,
             )
         )
     return FakeLLM(

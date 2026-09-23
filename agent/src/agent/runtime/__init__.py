@@ -16,6 +16,7 @@ from agent.runtime.exporters import (
     SpanExporter,
     TraceDispatcher,
 )
+from agent.runtime.llm_output_cap import output_capped_llm
 from agent.runtime.llm_quota import is_quota_exceeded_reply, metered_llm
 from agent.runtime.loop import EventLoop
 from agent.runtime.meter import Meter, MeterRecord
@@ -58,6 +59,7 @@ __all__ = [
     "get_recent_critiques",
     "is_quota_exceeded_reply",
     "metered_llm",
+    "output_capped_llm",
     "recent_spans",
     "record_evaluation",
     "reset_current_trace",

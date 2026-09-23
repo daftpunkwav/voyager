@@ -207,6 +207,33 @@ class TestReAct:
         assert result == "你好,我在。"
         assert len(llm.calls) == 1
 
+    async def test_truncated_reply_marker_scopes_to_return_value(self) -> None:
+        """finish_reason=length (output-cap cut): the returned text carries a
+        visible truncation marker while this round's messages stay clean —
+        the model never sees the marker in-round. turn.py persists the marked
+        return value into inst.history, deliberately: the next turn should
+        know the previous answer was cut (the UI shows its own badge)."""
+        llm = FakeLLM([LLMReply(text="回答前半", meta={"finish_reason": "length"})])
+        messages = _msgs()
+        result = await run_mode(
+            Mode.REACT,
+            llm=llm,
+            toolbelt=_belt(),
+            messages=messages,
+            limits=ModeLimits(max_rounds=1),
+        )
+        assert "[输出被截断]" in result
+        assert "回答前半" in result
+        # this round's transcript keeps only the user turn: no in-round marker
+        assert [m["content"] for m in messages] == ["任务"]
+
+    async def test_truncated_marker_absent_when_finish_normal(self) -> None:
+        llm = FakeLLM([LLMReply(text="完整回答", meta={"finish_reason": "stop"})])
+        result = await run_mode(
+            Mode.REACT, llm=llm, toolbelt=None, messages=_msgs(), limits=ModeLimits(max_rounds=1)
+        )
+        assert result == "完整回答"
+
     async def test_nudge_declined_delivers_pre_nudge_answer(self) -> None:
         """Model answers in round 1, nudge fires (non-chitchat, zero tools), model
         declines tools in round 2: the pre-nudge answer is delivered, not the

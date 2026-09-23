@@ -58,6 +58,7 @@ from agent.runtime import (
     Scheduler,
     TraceDispatcher,
     metered_llm,
+    output_capped_llm,
 )
 from agent.runtime.jobs_view import JobsView
 from agent.runtime.queue_store import QueueStore
@@ -316,7 +317,14 @@ def build_agent(
             client, meter, quota_fn=lambda: settings.get("agent.resource.daily_tokens") or 0
         )
 
-    chat_llm = _metered(llm)
+    # Wire max_tokens: inject the configured per-model output budget into
+    # every call (agent.context.max_output_tokens + model_profiles) so the
+    # request honors user settings instead of the transport's built-in
+    # default. Innermost, so the quota gate still sees the original shape.
+    def _capped(client: LLMClient) -> LLMClient:
+        return output_capped_llm(client, settings)
+
+    chat_llm = _metered(_capped(llm))
     # Purpose routing (phase 18): arbiter, distillation, and the context
     # editor's planning call may run on lighter models resolved by the host
     # routing layer; without an injected transport everything shares the chat
@@ -338,9 +346,11 @@ def build_agent(
             tool_s = 90.0
         return max(10.0, tool_s - 15.0)
 
-    arbiter_llm = _metered(routes["arbiter"]) if "arbiter" in routes else chat_llm
-    distiller_llm = _metered(routes["distill"]) if "distill" in routes else chat_llm
-    planner_llm = _metered(routes["context_planner"]) if "context_planner" in routes else chat_llm
+    arbiter_llm = _metered(_capped(routes["arbiter"])) if "arbiter" in routes else chat_llm
+    distiller_llm = _metered(_capped(routes["distill"])) if "distill" in routes else chat_llm
+    planner_llm = (
+        _metered(_capped(routes["context_planner"])) if "context_planner" in routes else chat_llm
+    )
     events = RuntimeEvents(bus)
 
     async def _confirm(prompt: str) -> bool:
@@ -576,6 +586,22 @@ def build_agent(
             mcp_chars=cards.mcp_chars,
         )
 
+    def _budget_model_name() -> str:
+        """Model for per-profile window resolution: the client's attr first,
+        then the standalone-run setting, then the composer's chat model (what
+        an empty-model ServiceLLM actually serves per call). llm-domain keys
+        are unregistered in agent-only builds — those reads degrade to empty,
+        never raise."""
+        probe = str(getattr(llm, "model", "") or "")
+        for key in ("agent.llm.model", "llm.default_model"):
+            if probe:
+                break
+            try:
+                probe = str(settings.get(key) or "")
+            except ServiceError:
+                probe = ""
+        return probe
+
     spawner = Spawner(
         llm=chat_llm,
         toolbelt=toolbelt,
@@ -587,9 +613,7 @@ def build_agent(
         sync_digest=digests.upsert,  # refresh the DigestStore on steps
         budget_fn=lambda: budget_from_settings(
             settings,
-            # Window limits resolve per model: probe the client first, fall
-            # back to the standalone-run setting; unknown -> global defaults
-            model_name=str(getattr(llm, "model", "") or settings.get("agent.llm.model") or ""),
+            model_name=_budget_model_name(),
         ),  # hot-read context budget
         planner_llm=planner_llm,  # context editor planning client (may be routed)
     )
@@ -724,6 +748,11 @@ def build_agent(
         handled by purge_raw_older_than_days, not a size cap)."""
 
         async def _record(run_id: str, round_n: int, messages: list, reply: object) -> None:
+            # Provider response metadata (finish_reason / request id / service
+            # tier / created); empty values dropped so the stored shape stays
+            # tight.
+            meta = getattr(reply, "meta", None)
+            meta_dict = {k: v for k, v in meta.items() if v} if isinstance(meta, dict) else {}
             response = json.dumps(
                 {
                     "text": getattr(reply, "text", "") or "",
@@ -734,9 +763,20 @@ def build_agent(
                     ],
                     "degraded": bool(getattr(reply, "degraded", False)),
                     "model": getattr(reply, "model", ""),
+                    "meta": meta_dict,
                 },
                 ensure_ascii=False,
                 default=str,
+            )
+            # The exact provider request body (stream flags, temperature,
+            # reasoning fields, tools) as reported by the llm domain's final
+            # stream chunk; empty when the client did not report one (FakeLLM,
+            # non-streaming paths).
+            wire_body = getattr(reply, "request_body", None)
+            wire_request = (
+                json.dumps(wire_body, ensure_ascii=False, default=str)
+                if isinstance(wire_body, dict)
+                else ""
             )
             trajectory.record_raw_round(
                 run_id=run_id,
@@ -744,6 +784,7 @@ def build_agent(
                 round=round_n,
                 request=json.dumps(messages, ensure_ascii=False, default=str),
                 response=response,
+                wire_request=wire_request,
             )
 
         return _record

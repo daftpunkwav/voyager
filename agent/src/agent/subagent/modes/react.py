@@ -316,6 +316,13 @@ async def run_react(
                 # real steps, but the turn close-out must not present their
                 # text as a normal answer (see turn._turn_degraded).
                 "degraded": bool(reply.degraded),
+                # Truncation visibility: finish_reason=length/max_tokens means
+                # the answer was cut off by the output cap — the UI flags the
+                # round instead of presenting it as complete.
+                **({"truncated": True} if reply.truncated else {}),
+                # Provider response metadata (finish_reason / request id /
+                # service tier) for the step fact sheet; empty keys dropped.
+                **({"meta": {k: v for k, v in reply.meta.items() if v}} if reply.meta else {}),
                 # Full round output so the chat UI can show the complete
                 # thinking text, not just the 120-char summary prefix
                 **round_text_detail(reply.text or ""),
@@ -333,6 +340,22 @@ async def run_react(
             await on_raw(round_n, messages, reply)
         if reply.final:
             text = reply.text or ""
+            # Output-cap truncation (provider finish_reason): the answer the
+            # user is about to read is incomplete — say so instead of letting
+            # it pass as a normal ending. The marker scopes to the return
+            # value: this round's messages keep the model's own text (no
+            # in-round imitation), while turn.py persists the marked text into
+            # inst.history — deliberately, so the NEXT turn also knows the
+            # previous answer was cut and can offer to continue instead of
+            # treating it as complete (the web UI renders its own badge via
+            # the step's truncated flag).
+            truncated_reply = reply.truncated and text
+            user_text = (
+                f"{text}\n\n[输出被截断] 已达模型单次输出上限,回答不完整;"
+                "可在设置提高输出上限或让我分段继续。"
+                if truncated_reply
+                else text
+            )
             # With tool_calls this branch is unreachable - the loop is still
             # calling the API itself. Plain text = the model declared Final
             # Answer. A non-chitchat round with no Action yet does not count as
@@ -351,7 +374,7 @@ async def run_react(
                 # The continuation only confirmed "no tools needed": deliver the
                 # pre-nudge answer, not the forced justification
                 return pending_answer
-            return text
+            return user_text
         if toolbelt is None:
             return reply.text or "[无工具可用] LLM 请求了工具但未授予"
         # Tool-cap truncation: unexecuted calls stay out of assistant.tool_calls

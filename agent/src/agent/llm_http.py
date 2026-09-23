@@ -439,6 +439,7 @@ class HttpLLM:
         *,
         stream: bool,
         response_format: dict[str, Any] | None = None,
+        max_tokens: int | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "model": self._cfg.model,
@@ -456,7 +457,11 @@ class HttpLLM:
             body["tools"] = wire_tools
         if self._cfg.temperature is not None:
             body["temperature"] = self._cfg.temperature
-        if self._cfg.max_tokens is not None:
+        # Caller-resolved cap wins over the config default; both absent =
+        # no max_tokens on the wire (server default applies).
+        if max_tokens is not None:
+            body["max_tokens"] = max_tokens
+        elif self._cfg.max_tokens is not None:
             body["max_tokens"] = self._cfg.max_tokens
         return body
 
@@ -485,6 +490,9 @@ class HttpLLM:
             usage=_parse_usage(usage),
             reasoning=str(msg.get("reasoning_content") or "") + inline_reasoning,
             structured=structured,
+            meta={"finish_reason": str(choices[0].get("finish_reason") or "")}
+            if choices and choices[0].get("finish_reason")
+            else {},
         )
 
     async def complete(
@@ -492,8 +500,11 @@ class HttpLLM:
         messages: list[dict[str, Any]],
         tools: list[ToolSpec] | None = None,
         response_format: dict[str, Any] | None = None,
+        max_tokens: int | None = None,
     ) -> LLMReply:
-        body = self._payload(messages, tools, stream=False, response_format=response_format)
+        body = self._payload(
+            messages, tools, stream=False, response_format=response_format, max_tokens=max_tokens
+        )
         resp: httpx.Response | None = None
         net_error: Exception | None = None
         for attempt in range(_RETRY_ATTEMPTS + 1):
@@ -542,9 +553,12 @@ class HttpLLM:
         messages: list[dict[str, Any]],
         tools: list[ToolSpec] | None = None,
         response_format: dict[str, Any] | None = None,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[StreamReply]:
         """Yield StreamReply events: text deltas then one final aggregate."""
-        body = self._payload(messages, tools, stream=True, response_format=response_format)
+        body = self._payload(
+            messages, tools, stream=True, response_format=response_format, max_tokens=max_tokens
+        )
         async for ev in self._stream_events(body, response_format=response_format):
             yield ev
 

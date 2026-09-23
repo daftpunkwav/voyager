@@ -119,6 +119,7 @@ class RoutingServiceLLM(ServiceLLM):
         messages: list[dict[str, Any]],
         tools: list[ToolSpec] | None = None,
         response_format: dict[str, Any] | None = None,
+        max_tokens: int | None = None,
     ) -> LLMReply:
         if response_format is not None:
             # Same contract as ServiceLLM.complete: the routing transport does
@@ -127,7 +128,7 @@ class RoutingServiceLLM(ServiceLLM):
             raise TypeError("RoutingServiceLLM does not support response_format")
         chain = self._chain()
         if not chain:
-            return await super().complete(messages, tools)
+            return await super().complete(messages, tools, max_tokens=max_tokens)
         last_error = ""
         for index, hop in enumerate(chain):
             provider = (
@@ -139,7 +140,7 @@ class RoutingServiceLLM(ServiceLLM):
                 return LLMReply(text=NO_PROVIDER_TEXT, degraded=True)
             try:
                 return await self._complete_on(
-                    provider, self._model_for(provider, hop), messages, tools
+                    provider, self._model_for(provider, hop), messages, tools, max_tokens
                 )
             except ServiceError as exc:
                 last_error = exc.body.message
@@ -163,6 +164,7 @@ class RoutingServiceLLM(ServiceLLM):
         model: str,
         messages: list[dict[str, Any]],
         tools: list[ToolSpec] | None,
+        max_tokens: int | None = None,
     ) -> LLMReply:
         out = await self._call(
             self._llm_domain,
@@ -172,6 +174,7 @@ class RoutingServiceLLM(ServiceLLM):
                 "model": model,
                 "messages": messages,
                 "tools": self._tool_payload(tools),
+                **({"max_tokens": max_tokens} if max_tokens is not None else {}),
             },
         )
         return self._parse_complete(out)
@@ -180,12 +183,13 @@ class RoutingServiceLLM(ServiceLLM):
         self,
         messages: list[dict[str, Any]],
         tools: list[ToolSpec] | None = None,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[StreamReply]:
         """Streaming shares the chain for the INITIAL call; a mid-stream failure
         still propagates as ServiceError (the agent loop's recovery path owns it)."""
         chain = self._chain()
         if not chain:
-            async for reply in super().complete_stream(messages, tools):
+            async for reply in super().complete_stream(messages, tools, max_tokens=max_tokens):
                 yield reply
             return
         last_error = ""
@@ -199,16 +203,15 @@ class RoutingServiceLLM(ServiceLLM):
                 yield StreamReply(final=LLMReply(text=NO_PROVIDER_TEXT, degraded=True))
                 return
             try:
-                gen = await self._call(
-                    self._llm_domain,
-                    "complete_stream",
-                    {
-                        "provider_id": provider["id"],
-                        "model": self._model_for(provider, hop),
-                        "messages": messages,
-                        "tools": self._tool_payload(tools),
-                    },
-                )
+                args: dict[str, Any] = {
+                    "provider_id": provider["id"],
+                    "model": self._model_for(provider, hop),
+                    "messages": messages,
+                    "tools": self._tool_payload(tools),
+                }
+                if max_tokens is not None:
+                    args["max_tokens"] = max_tokens
+                gen = await self._call(self._llm_domain, "complete_stream", args)
             except ServiceError as exc:
                 last_error = exc.body.message
                 if index + 1 < len(chain):

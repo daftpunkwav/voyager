@@ -120,7 +120,10 @@ class ServiceLLM:
         messages: list[dict[str, Any]],
         tools: list[ToolSpec] | None = None,
         response_format: dict[str, Any] | None = None,
+        max_tokens: int | None = None,
     ) -> LLMReply:
+        """max_tokens: caller-resolved wire cap (the agent passes its
+        per-model budget); None = the capability's setting-backed default."""
         if response_format is not None:
             # The service transport cannot enforce a schema on the wire, so it
             # rejects the kwarg with TypeError — the signal complete_structured
@@ -130,16 +133,15 @@ class ServiceLLM:
         if provider is None:
             return LLMReply(text=NO_PROVIDER_TEXT, degraded=True)
         try:
-            out = await self._call(
-                self._llm_domain,
-                "complete",
-                {
-                    "provider_id": provider["id"],
-                    "model": self._model or provider.get("model", ""),
-                    "messages": messages,
-                    "tools": self._tool_payload(tools),
-                },
-            )
+            args: dict[str, Any] = {
+                "provider_id": provider["id"],
+                "model": self._model or provider.get("model", ""),
+                "messages": messages,
+                "tools": self._tool_payload(tools),
+            }
+            if max_tokens is not None:
+                args["max_tokens"] = max_tokens
+            out = await self._call(self._llm_domain, "complete", args)
         except ServiceError as exc:
             return LLMReply(
                 text=f"(LLM call failed: {exc.body.message})",
@@ -156,6 +158,8 @@ class ServiceLLM:
         returns the same aggregate shape on both paths)."""
         usage = out.get("usage") or {}
         thinking_blocks = out.get("thinking_blocks") or ()
+        request_body = out.get("request_body")
+        meta_raw = out.get("meta")
         return LLMReply(
             text=out.get("text") or None,
             tool_calls=tuple(
@@ -170,12 +174,19 @@ class ServiceLLM:
             model=str(out.get("model") or ""),
             reasoning=str(out.get("reasoning") or ""),
             thinking_blocks=tuple(dict(b) for b in thinking_blocks if isinstance(b, dict)),
+            # The exact wire body as built by the llm domain (stream flags and
+            # reasoning fields included); None from paths that do not report it.
+            request_body=request_body if isinstance(request_body, dict) else None,
+            # Provider response metadata (finish_reason / request id / ...);
+            # empty dict from paths that do not report it.
+            meta=dict(meta_raw) if isinstance(meta_raw, dict) else {},
         )
 
     async def complete_stream(
         self,
         messages: list[dict[str, Any]],
         tools: list[ToolSpec] | None = None,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[StreamReply]:
         """Streaming completion: provider resolution and initial-call degradation
         match complete.
@@ -191,16 +202,15 @@ class ServiceLLM:
             yield StreamReply(final=LLMReply(text=NO_PROVIDER_TEXT, degraded=True))
             return
         try:
-            gen = await self._call(
-                self._llm_domain,
-                "complete_stream",
-                {
-                    "provider_id": provider["id"],
-                    "model": self._model or provider.get("model", ""),
-                    "messages": messages,
-                    "tools": self._tool_payload(tools),
-                },
-            )
+            args: dict[str, Any] = {
+                "provider_id": provider["id"],
+                "model": self._model or provider.get("model", ""),
+                "messages": messages,
+                "tools": self._tool_payload(tools),
+            }
+            if max_tokens is not None:
+                args["max_tokens"] = max_tokens
+            gen = await self._call(self._llm_domain, "complete_stream", args)
         except ServiceError as exc:
             yield StreamReply(
                 final=LLMReply(

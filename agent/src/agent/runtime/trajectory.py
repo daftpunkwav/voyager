@@ -58,8 +58,11 @@ CREATE TABLE IF NOT EXISTS raw_rounds (
     ts       REAL NOT NULL,
     request  TEXT NOT NULL DEFAULT '',
     response TEXT NOT NULL DEFAULT '',
+    seq_round INTEGER NOT NULL DEFAULT 0,
+    wire_request TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (run_id, round)
 );
+CREATE INDEX IF NOT EXISTS idx_raw_rounds_session ON raw_rounds(session, seq_round);
 """
 
 #: Event types the projection folds; everything else is skipped by the read filter.
@@ -85,6 +88,46 @@ class TrajectoryStore:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self._conn.executescript(_SCHEMA)
+        # Migration for databases created before seq_round/wire_request existed:
+        # CREATE TABLE IF NOT EXISTS cannot add columns to an existing table.
+        cols = {r[1] for r in self._conn.execute("PRAGMA table_info(raw_rounds)").fetchall()}
+        if "seq_round" not in cols:
+            self._conn.execute(
+                "ALTER TABLE raw_rounds ADD COLUMN seq_round INTEGER NOT NULL DEFAULT 0"
+            )
+        if "wire_request" not in cols:
+            self._conn.execute(
+                "ALTER TABLE raw_rounds ADD COLUMN wire_request TEXT NOT NULL DEFAULT ''"
+            )
+        # executescript above already created the index on fresh databases;
+        # for pre-existing ones the CREATE INDEX IF NOT EXISTS in _SCHEMA ran
+        # before the ALTER, so re-run it now that all columns exist.
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_raw_rounds_session ON raw_rounds(session, seq_round)"
+        )
+        # Backfill session-global numbering for rows written before the
+        # column existed (seq_round = 0): renumber each session's rows by
+        # timestamp so the log page shows one continuous sequence across
+        # process restarts instead of one sequence per run_id. Rows already
+        # numbered (post-migration writes) keep theirs; new numbers continue
+        # after the session's max. Done in Python with an explicit ORDER BY:
+        # a single UPDATE with correlated subqueries would see its own partial
+        # writes (live-state semantics), making the numbering depend on the
+        # row scan order instead of the ts order promised here.
+        with self._conn:
+            for session, run_id, round_no in self._conn.execute(
+                "SELECT session, run_id, round FROM raw_rounds WHERE seq_round = 0"
+                " ORDER BY session, ts, round, run_id"
+            ).fetchall():
+                base = self._conn.execute(
+                    "SELECT COALESCE(MAX(seq_round), 0) FROM raw_rounds WHERE session = ?",
+                    (session,),
+                ).fetchone()[0]
+                self._conn.execute(
+                    "UPDATE raw_rounds SET seq_round = ? WHERE run_id = ? AND round = ?",
+                    (int(base) + 1, run_id, round_no),
+                )
+        self._conn.commit()
         self._lock = threading.Lock()
         self._closed = False
         self._log = log
@@ -298,12 +341,33 @@ class TrajectoryStore:
         round: int,
         request: str,
         response: str,
+        wire_request: str = "",
     ) -> None:
+        # Round numbering is session-global: run-scoped rounds restart at 1 on
+        # every process restart / new run_id, so the log page would show two
+        # colliding number sequences in one session. MAX(round)+1 per session
+        # keeps the displayed number monotonic with time; `round` (the
+        # run-scoped counter) is kept as a tiebreaker for same-tick inserts.
         with self._lock:
+            row = self._conn.execute(
+                "SELECT COALESCE(MAX(seq_round), 0) + 1 FROM raw_rounds WHERE session = ?",
+                (session,),
+            ).fetchone()
+            seq_round = int(row[0])
             self._conn.execute(
-                "INSERT OR REPLACE INTO raw_rounds (run_id, round, session, ts, request, response)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
-                (run_id, int(round), session, time.time(), request, response),
+                "INSERT OR REPLACE INTO raw_rounds"
+                " (run_id, round, session, ts, request, response, seq_round, wire_request)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    run_id,
+                    int(round),
+                    session,
+                    time.time(),
+                    request,
+                    response,
+                    seq_round,
+                    wire_request,
+                ),
             )
             self._conn.commit()
 
@@ -334,20 +398,21 @@ class TrajectoryStore:
                 ).fetchone()[0]
             )
             rows = self._conn.execute(
-                "SELECT run_id, round, session, ts, request, response"
-                # round as the tiebreaker: same-tick inserts must not make the
-                # newest-window selection nondeterministic
-                " FROM raw_rounds WHERE session = ? ORDER BY ts DESC, round DESC LIMIT ?",
+                "SELECT run_id, round, session, ts, request, response, seq_round, wire_request"
+                # seq_round (session-global, monotonic) leads; ts is the
+                # tiebreaker for rows written before the migration
+                " FROM raw_rounds WHERE session = ? ORDER BY seq_round DESC, ts DESC LIMIT ?",
                 (session, capped),
             ).fetchall()
         rounds = [
             {
                 "run_id": r[0],
-                "round": r[1],
+                "round": r[6] or r[1],  # legacy rows: fall back to the run-scoped round
                 "session": r[2],
                 "ts": r[3],
                 "request": r[4],
                 "response": r[5],
+                "wire_request": r[7],
             }
             for r in reversed(rows)  # DESC select -> return oldest first
         ]
@@ -366,10 +431,12 @@ class TrajectoryStore:
         return int(cur.rowcount or 0)
 
     def raw_round(self, run_id: str, round: int) -> dict[str, Any] | None:
-        """Full raw bodies of one round; None when not recorded."""
+        """Full raw bodies of one round; None when not recorded. `round` is
+        the run-scoped key; the returned `round` is the display number
+        (session-global when known, the run-scoped one for legacy rows)."""
         with self._lock:
             row = self._conn.execute(
-                "SELECT run_id, round, session, ts, request, response"
+                "SELECT run_id, round, session, ts, request, response, seq_round, wire_request"
                 " FROM raw_rounds WHERE run_id = ? AND round = ?",
                 (run_id, int(round)),
             ).fetchone()
@@ -377,11 +444,12 @@ class TrajectoryStore:
             return None
         return {
             "run_id": row[0],
-            "round": row[1],
+            "round": row[6] or row[1],
             "session": row[2],
             "ts": row[3],
             "request": row[4],
             "response": row[5],
+            "wire_request": row[7],
         }
 
 

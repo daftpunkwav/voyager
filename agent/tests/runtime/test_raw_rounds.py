@@ -52,6 +52,105 @@ class TestRawRoundsTable:
         store.close()
 
 
+class TestSessionGlobalNumbering:
+    def test_seq_round_continues_across_run_ids(self, tmp_path) -> None:
+        """Display numbering is session-global: a second run_id in the same
+        session (new process / new run) continues after the first's rounds
+        instead of restarting at 1."""
+        store = _store(tmp_path)
+        store.record_raw_round(run_id="r1", session="chat", round=1, request="a", response="a")
+        store.record_raw_round(run_id="r1", session="chat", round=2, request="b", response="b")
+        store.record_raw_round(run_id="r2", session="chat", round=1, request="c", response="c")
+        rounds, total = store.raw_rounds_for_session("chat", limit=10)
+        assert total == 3
+        assert [r["round"] for r in rounds] == [1, 2, 3]
+        store.close()
+
+    def test_seq_round_is_per_session(self, tmp_path) -> None:
+        store = _store(tmp_path)
+        store.record_raw_round(run_id="r1", session="s1", round=1, request="a", response="a")
+        store.record_raw_round(run_id="r2", session="s2", round=1, request="b", response="b")
+        s1, _ = store.raw_rounds_for_session("s1", limit=10)
+        s2, _ = store.raw_rounds_for_session("s2", limit=10)
+        assert [r["round"] for r in s1] == [1]
+        assert [r["round"] for r in s2] == [1]
+        store.close()
+
+    def test_wire_request_round_trip(self, tmp_path) -> None:
+        store = _store(tmp_path)
+        store.record_raw_round(
+            run_id="r",
+            session="chat",
+            round=1,
+            request="[]",
+            response="{}",
+            wire_request='{"stream": true}',
+        )
+        rounds, _ = store.raw_rounds_for_session("chat", limit=10)
+        assert rounds[0]["wire_request"] == '{"stream": true}'
+        full = store.raw_round("r", 1)
+        assert full is not None and full["wire_request"] == '{"stream": true}'
+        # absent wire_request -> empty string, not an error
+        store.record_raw_round(run_id="r2", session="chat", round=1, request="x", response="y")
+        rounds2, _ = store.raw_rounds_for_session("chat", limit=10)
+        assert [r["wire_request"] for r in rounds2] == ['{"stream": true}', ""]
+        store.close()
+
+    def test_migration_backfills_by_ts_not_row_order(self, tmp_path) -> None:
+        """Legacy rows (seq_round=0) written out of ts order get renumbered
+        by ts — the single UPDATE would see its own partial writes and number
+        by scan order instead, so this locks the Python-side renumber."""
+        import sqlite3
+
+        db = tmp_path / "trajectory.db"
+        store = _store(tmp_path)
+        conn = sqlite3.connect(db)
+        # (run_id, round, session, ts, request, response, seq_round, wire_request)
+        # ts order: run2/1 < run1/1 < run1/2 < run2/2; insert order differs.
+        conn.execute("INSERT INTO raw_rounds VALUES ('run2',1,'chat',99.0,'','',0,'')")
+        conn.execute("INSERT INTO raw_rounds VALUES ('run1',1,'chat',100.0,'','',0,'')")
+        conn.execute("INSERT INTO raw_rounds VALUES ('run1',2,'chat',101.0,'','',0,'')")
+        conn.execute("INSERT INTO raw_rounds VALUES ('run2',2,'chat',102.0,'','',0,'')")
+        conn.commit()
+        conn.close()
+        store.close()  # reopen: __init__ runs the backfill
+        store2 = TrajectoryStore(db, EventLog(tmp_path / "events.db"))
+        rows = store2._conn.execute(
+            "SELECT run_id, round, seq_round FROM raw_rounds ORDER BY ts"
+        ).fetchall()
+        assert [r[2] for r in rows] == [1, 2, 3, 4]
+        # second open: idempotent (no seq_round=0 rows left)
+        store2.close()
+        store3 = TrajectoryStore(db, EventLog(tmp_path / "events.db"))
+        rows2 = store3._conn.execute(
+            "SELECT run_id, round, seq_round FROM raw_rounds ORDER BY ts"
+        ).fetchall()
+        assert rows == rows2
+        store3.close()
+
+    def test_backfill_continues_after_post_migration_rows(self, tmp_path) -> None:
+        """Rows already numbered (written post-migration) keep their numbers;
+        the backfill of legacy rows continues after the session's max (even
+        when the legacy ts is older — renumbering already-shown numbers would
+        collide with the runtime MAX+1 allocator)."""
+        import sqlite3
+
+        db = tmp_path / "trajectory.db"
+        store = _store(tmp_path)
+        store.record_raw_round(run_id="new", session="chat", round=1, request="n", response="n")
+        conn = sqlite3.connect(db)
+        conn.execute("INSERT INTO raw_rounds VALUES ('old',1,'chat',50.0,'','',0,'')")
+        conn.commit()
+        conn.close()
+        store.close()
+        store2 = TrajectoryStore(db, EventLog(tmp_path / "events.db"))
+        rows = store2._conn.execute(
+            "SELECT run_id, seq_round FROM raw_rounds ORDER BY seq_round"
+        ).fetchall()
+        assert dict(rows) == {"new": 1, "old": 2}
+        store2.close()
+
+
 class TestRawRetentionAndPaging:
     def test_session_paging_returns_newest_window_with_total(self, tmp_path) -> None:
         store = _store(tmp_path)
@@ -171,6 +270,7 @@ class TestCrossTurnNumbering:
                 messages: list[dict[str, Any]],
                 tools: list[ToolSpec] | None = None,
                 response_format: dict[str, Any] | None = None,
+                max_tokens: int | None = None,
             ) -> LLMReply:
                 seen.append(current_chat_session.get())
                 return await super().complete(messages, tools)

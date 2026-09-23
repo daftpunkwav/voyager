@@ -72,7 +72,9 @@ def metered_llm(
         return None
 
     class _MeteredBase:
-        async def complete(self, messages, tools=None, response_format=None) -> LLMReply:
+        async def complete(
+            self, messages, tools=None, response_format=None, max_tokens=None
+        ) -> LLMReply:
             degraded = _quota_degraded()
             if degraded is not None:
                 return degraded
@@ -81,7 +83,9 @@ def metered_llm(
             ok = False  # success is recorded only after a full return; exceptions/cancel fail
             try:
                 try:
-                    reply = await llm.complete(messages, tools, response_format=response_format)
+                    reply = await llm.complete(
+                        messages, tools, response_format=response_format, max_tokens=max_tokens
+                    )
                 except TypeError:
                     reply = await llm.complete(messages, tools)
                 ok = True
@@ -102,10 +106,10 @@ def metered_llm(
                 )
 
     class _MeteredStreaming(_MeteredBase):
-        def complete_stream(self, messages, tools=None, response_format=None):
-            return self._stream(messages, tools, response_format=response_format)
+        def complete_stream(self, messages, tools=None, response_format=None, max_tokens=None):
+            return self._stream(messages, tools, response_format=response_format, max_tokens=max_tokens)
 
-        async def _stream(self, messages, tools=None, response_format=None):
+        async def _stream(self, messages, tools=None, response_format=None, max_tokens=None):
             degraded = _quota_degraded()
             if degraded is not None:
                 yield StreamReply(final=degraded)
@@ -115,7 +119,9 @@ def metered_llm(
             ok = False  # success is recorded only after the stream ends; mid-stream errors fail
             try:
                 try:
-                    stream = llm.complete_stream(messages, tools, response_format=response_format)
+                    stream = llm.complete_stream(
+                        messages, tools, response_format=response_format, max_tokens=max_tokens
+                    )
                 except TypeError:
                     stream = llm.complete_stream(messages, tools)
                 async for ev in stream:

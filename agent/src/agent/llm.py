@@ -113,6 +113,29 @@ class LLMReply:
     thinking_blocks: tuple[dict[str, Any], ...] = ()
     #: Parsed or validated structured data when schema/response_format was requested
     structured: Any = None
+    #: The exact provider request body as sent on the wire (stream flags,
+    #: temperature, thinking fields, tools). Attached by the llm domain's
+    # complete_stream final chunk; None when the client did not report it
+    # (non-streaming path, FakeLLM, older adapters). Feeds the raw round log.
+    request_body: dict[str, Any] | None = None
+    #: Provider response metadata, normalized across wire formats:
+    #: finish_reason (truncation visibility!), request_id, service_tier,
+    #: stop_sequence, created. Empty when not reported. A "length" /
+    #: "max_tokens" / "max_output_tokens" finish_reason means the answer was
+    #: cut off — consumers must surface that instead of treating the text as
+    #: complete.
+    meta: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def truncated(self) -> bool:
+        """The provider ended this response because the output cap ran out
+        (chat "length" / anthropic "max_tokens" / responses "incomplete"),
+        not because the model finished."""
+        return str(self.meta.get("finish_reason") or "") in (
+            "length",
+            "max_tokens",
+            "max_output_tokens",
+        )
 
     @property
     def final(self) -> bool:
@@ -141,6 +164,7 @@ class LLMClient(Protocol):
         messages: list[dict[str, Any]],
         tools: list[ToolSpec] | None = None,
         response_format: dict[str, Any] | None = None,
+        max_tokens: int | None = None,
     ) -> LLMReply: ...
 
 
@@ -155,7 +179,10 @@ class StreamingLLClient(Protocol):
     """
 
     def complete_stream(
-        self, messages: list[dict[str, Any]], tools: list[ToolSpec] | None = None
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[ToolSpec] | None = None,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[StreamReply]: ...
 
 
@@ -186,10 +213,13 @@ class FakeLLM:
         messages: list[dict[str, Any]],
         tools: list[ToolSpec] | None = None,
         response_format: dict[str, Any] | None = None,
+        max_tokens: int | None = None,
     ) -> LLMReply:
         call_record: dict[str, Any] = {"messages": messages, "tools": tools}
         if response_format is not None:
             call_record["response_format"] = response_format
+        if max_tokens is not None:
+            call_record["max_tokens"] = max_tokens
         self.calls.append(call_record)
         if self._dynamic is not None:
             try:
