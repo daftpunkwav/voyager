@@ -54,7 +54,7 @@ function RunElapsed({ startedTs, tick }: { startedTs: number; tick: boolean }) {
 }
 
 export function SubagentRunDialog({ instance, open, onClose }: SubagentRunDialogProps) {
-  const { t } = useTranslation('chat');
+  const { t } = useTranslation(['chat', 'common']);
   const runId = instance?.run_id ?? '';
   const stored = useChatStore((s) => (runId ? s.runSteps[runId] : undefined));
   const steps = useMemo(() => stored ?? [], [stored]);
@@ -104,7 +104,12 @@ export function SubagentRunDialog({ instance, open, onClose }: SubagentRunDialog
           {instance && instance.started_ts > 0 ? (
             <RunElapsed startedTs={instance.started_ts} tick={open && running} />
           ) : null}
-          <button type="button" className="chat-run__close" onClick={onClose} aria-label="close">
+          <button
+            type="button"
+            className="chat-run__close"
+            onClick={onClose}
+            aria-label={t('common:action.close')}
+          >
             ✕
           </button>
         </div>
