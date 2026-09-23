@@ -28,8 +28,18 @@ describe('hydrateRunSteps', () => {
 
   it('seeds one run’s log from agent.step rows only, ascending by seq', () => {
     useChatStore.getState().hydrateRunSteps('r1', [
-      { seq: 3, type: EventType.AGENT_STEP, payload: { run_id: 'r1', kind: 'tool', name: 'b' }, ts: 1 },
-      { seq: 1, type: EventType.AGENT_STEP, payload: { run_id: 'r1', kind: 'llm', name: 'round-1' }, ts: 1 },
+      {
+        seq: 3,
+        type: EventType.AGENT_STEP,
+        payload: { run_id: 'r1', kind: 'tool', name: 'b' },
+        ts: 1,
+      },
+      {
+        seq: 1,
+        type: EventType.AGENT_STEP,
+        payload: { run_id: 'r1', kind: 'llm', name: 'round-1' },
+        ts: 1,
+      },
       { seq: 2, type: EventType.AGENT_MESSAGE, payload: { content: 'not a step' }, ts: 1 },
     ]);
     const steps = useChatStore.getState().runSteps.r1;
@@ -40,10 +50,7 @@ describe('hydrateRunSteps', () => {
   it('drops rows whose own run_id disagrees with the requested run', () => {
     // The API narrows by run_id, but a row stamped for another run (stale
     // fetch racing a re-open) must never land under the wrong run's key.
-    useChatStore.getState().hydrateRunSteps('r1', [
-      stepEvent(1, 'r1'),
-      stepEvent(2, 'r2'),
-    ]);
+    useChatStore.getState().hydrateRunSteps('r1', [stepEvent(1, 'r1'), stepEvent(2, 'r2')]);
     expect(useChatStore.getState().runSteps.r1.map((s) => s.seq)).toEqual([1]);
   });
 

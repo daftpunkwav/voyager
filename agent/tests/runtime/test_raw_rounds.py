@@ -1,9 +1,9 @@
 """Raw LLM round log: TrajectoryStore raw_rounds round-trip and the REACT
 on_raw wiring (one full request transcript + response per round)."""
 
-from typing import cast
+from typing import Any, cast
 
-from agent.llm import FakeLLM, LLMReply
+from agent.llm import FakeLLM, LLMReply, ToolSpec
 from agent.policy import PolicyEngine
 from agent.runtime.trajectory import TrajectoryStore
 from agent.subagent import Mode, ModeLimits, run_mode
@@ -166,7 +166,12 @@ class TestCrossTurnNumbering:
         seen: list[str] = []
 
         class ProbeLLM(FakeLLM):
-            async def complete(self, messages, tools=None):
+            async def complete(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[ToolSpec] | None = None,
+                response_format: dict[str, Any] | None = None,
+            ) -> LLMReply:
                 seen.append(current_chat_session.get())
                 return await super().complete(messages, tools)
 
