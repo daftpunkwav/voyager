@@ -6,7 +6,7 @@ The resident machinery under `agent/src/agent/runtime/`, plus hooks and plugins.
 
 ## Trajectory
 
-`trajectory.py` — `TrajectoryStore` (`data/runtime/agent/trajectory.db`) is a rebuildable query projection over the event log. `catch_up()` (single writer, idempotent `INSERT OR IGNORE` by `seq`) folds `agent.step` and run-lifecycle events into `steps` and `runs` tables, with a cursor in `meta`. The `raw_rounds` table (`PRIMARY KEY (run_id, round)`) stores full request/response JSON per round, written via `master.sessions.set_raw_fn` for conversational instances only. Raw rows purge after `RAW_LOG_RETENTION_DAYS = 7`. Each `agent.step` event nudges `catch_up()` inline (`runtime/wire.py`). The gateway's `GET /api/chat/trajectory` and `GET /api/chat/rawllm` read this store.
+`trajectory.py` — `TrajectoryStore` (`data/runtime/agent/trajectory.db`) is a rebuildable query projection over the event log. `catch_up()` (single writer, idempotent `INSERT OR IGNORE` by `seq`) folds `agent.step` and run-lifecycle events into `steps` and `runs` tables, with a cursor in `meta`. The `raw_rounds` table (`PRIMARY KEY (run_id, round)`) stores full request/response JSON per round plus `wire_request` (the exact outbound wire body) and `seq_round` (a per-session continuous display round number, backfilled in a single transaction ordered by `ts`; reads order by it). Written via `master.sessions.set_raw_fn` for conversational instances only. Raw rows purge after `RAW_LOG_RETENTION_DAYS = 7`. Each `agent.step` event nudges `catch_up()` inline (`runtime/wire.py`). The gateway's `GET /api/chat/trajectory` and `GET /api/chat/rawllm` read this store.
 
 ## Session index
 

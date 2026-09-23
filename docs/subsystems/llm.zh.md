@@ -28,11 +28,13 @@
 
 ## 存储
 
-`store.py` — `ProviderStore`(SQLite `llm.db`):`providers`(base_url、api_format、models、enabled、custom)与 `usage`(ts、provider_id、model、caller、input/output/cached tokens、ok)。API key 绝不存这里 — 存入 `SecretStore`(`platform_secrets`)。`catalog.py` 持有 `BUILTIN_PROVIDERS` 预设(如 `openai`、`openai-responses`、`anthropic`、`deepseek`、`moonshot`)。
+`store.py` — `ProviderStore`(SQLite `llm.db`):`providers`(base_url、api_format、models、enabled、custom)与 `usage`(ts、provider_id、model、caller、input/output/cached/reasoning/cache-write tokens、ok)。API key 绝不存这里 — 存入 `SecretStore`(`platform_secrets`)。`catalog.py` 持有 `BUILTIN_PROVIDERS` 预设(如 `openai`、`openai-responses`、`anthropic`、`deepseek`、`moonshot`)。
 
 ## 用量与定价
 
 `complete` 对每次调用计量,包括失败(`ok=0`)。`get_usage_stats` 从 `usage` 表聚合。`pricing.py` 只在读取侧把 token 换算为成本,依据 `llm.pricing` 设置(`{"<模型或前缀>": {"input", "output"}}`,美元/每百万 token,最长前缀匹配);未定价模型不产生成本。`configured_reasoning_effort()` 热读 `llm.reasoning_effort`(`low`/`medium`/`high`/空)。
+
+两个推理能力都在回答文本之外返回归一化的响应元数据:`finish_reason`(按 wire 格式 — chat `finish_reason`、anthropic `stop_reason`、responses `status`)、`request_id`(取自 `x-request-id` / `request-id` / `anthropic-request-id` / `cf-ray`)、`response_id`(responses 格式)、`service_tier`、`stop_sequence`、`created`;usage 细分出各格式的 `reasoning_tokens` 与 `cache_write_tokens`。供应商拒绝响应携带 `request_id` 与被拒请求原文的 dump 路径。anthropic wire 上,流式解析器把 `message_delta.usage` 视为权威累计用量(非零字段覆盖 `message_start` 快照 — 现行契约;兼容端点在 `message_start` 只报 0 占位,同样适用)。`complete` 的 `max_tokens` 入参以 `0` 表示"自动":此时上限取自 `llm.max_output_tokens`。
 
 ## 设置
 

@@ -74,6 +74,8 @@ async def complete_stream(
     api_key: str,
     model: str,
     messages: list[dict[str, Any]],
+    # Innermost fallback only: callers (the capabilities) resolve the real
+    # cap from the llm.max_output_tokens setting and pass it explicitly.
     max_tokens: int = 4096,
     temperature: float = 0.7,
     tools: list[dict[str, Any]] | None = None,

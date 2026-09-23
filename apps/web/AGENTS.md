@@ -43,10 +43,25 @@ not part of the gate.
 ## Styles
 
 - Global layers live in `src/styles/` (`design-system.css`, per-page files
-  under `styles/pages/`). Component styles follow the conventions in the root
-  [AGENTS.md](../../AGENTS.md) (toast capsules, no left-edge chrome bars,
-  notes list density, danger buttons) — those rules are the reference, not
-  suggestions.
+  under `styles/pages/`). Component style conventions:
+  - Toast: the `.toast-container` handles horizontal centering (`left: 50%`
+    - `translateX(-50%)`); capsules animate vertical translate / opacity
+      only — never apply a `translateX` to a capsule that omits the horizontal
+      centering, and never redefine same-name `toast-in` / `toast-out`
+      keyframes in late-loaded styles (the first frame sits off-center then
+      snaps back). Semantic color goes only through the 4px left color bar
+      (error red / warning orange / success green / info blue).
+  - Chrome (cards / buttons / nav) must not use a left brand-color vertical
+    bar (`::before` / inset left edge / glass `::after` highlight) to mark
+    selected / active / pinned state; pinned items use a top-right pin icon,
+    nav active state uses background and text color. A blockquote's left
+    border belongs to content typography, not chrome.
+  - Notes list: card view stays equal-height at a given density
+    (`--notes-card-h` + `overflow: hidden`); density switches via CSS
+    variables and the main column keeps `scrollbar-gutter: stable`; the
+    batch action bar enters / exits by animating height + opacity.
+  - Danger buttons: `.is-danger` must override the generic button `color`
+    in the dark theme with `var(--error)`.
 - Do not redefine same-name keyframes or selectors in late-loaded stylesheets;
   check `src/styles/` for an existing definition first.
 

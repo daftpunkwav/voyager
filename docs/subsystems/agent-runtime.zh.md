@@ -6,7 +6,7 @@
 
 ## 轨迹
 
-`trajectory.py` — `TrajectoryStore`(`data/runtime/agent/trajectory.db`)是事件日志之上的可重建查询投影。`catch_up()`(单写者,按 `seq` 幂等 `INSERT OR IGNORE`)把 `agent.step` 与运行生命周期事件折叠进 `steps` 与 `runs` 表,游标存于 `meta`。`raw_rounds` 表(`PRIMARY KEY (run_id, round)`)按轮存完整请求/响应 JSON,仅会话型实例经 `master.sessions.set_raw_fn` 写入。原始行按 `RAW_LOG_RETENTION_DAYS = 7` 天清理。每条 `agent.step` 事件在循环线程内联催促 `catch_up()`(`runtime/wire.py`)。gateway 的 `GET /api/chat/trajectory` 与 `GET /api/chat/rawllm` 读取该存储。
+`trajectory.py` — `TrajectoryStore`(`data/runtime/agent/trajectory.db`)是事件日志之上的可重建查询投影。`catch_up()`(单写者,按 `seq` 幂等 `INSERT OR IGNORE`)把 `agent.step` 与运行生命周期事件折叠进 `steps` 与 `runs` 表,游标存于 `meta`。`raw_rounds` 表(`PRIMARY KEY (run_id, round)`)按轮存完整请求/响应 JSON,另有 `wire_request`(出站 wire 请求体原文)与 `seq_round`(会话级连续显示轮号,按 `ts` 排序在单事务内回填;读取按它排序),仅会话型实例经 `master.sessions.set_raw_fn` 写入。原始行按 `RAW_LOG_RETENTION_DAYS = 7` 天清理。每条 `agent.step` 事件在循环线程内联催促 `catch_up()`(`runtime/wire.py`)。gateway 的 `GET /api/chat/trajectory` 与 `GET /api/chat/rawllm` 读取该存储。
 
 ## 会话索引
 

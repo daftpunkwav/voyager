@@ -28,11 +28,13 @@ Tools travel in a neutral format (`[{"name", "description", "schema"}]`) and are
 
 ## Storage
 
-`store.py` — `ProviderStore` (SQLite `llm.db`): `providers` (base_url, api_format, models, enabled, custom) and `usage` (ts, provider_id, model, caller, input/output/cached tokens, ok). API keys are never stored here — they go to `SecretStore` (`platform_secrets`). `catalog.py` holds `BUILTIN_PROVIDERS` presets (e.g. `openai`, `openai-responses`, `anthropic`, `deepseek`, `moonshot`).
+`store.py` — `ProviderStore` (SQLite `llm.db`): `providers` (base_url, api_format, models, enabled, custom) and `usage` (ts, provider_id, model, caller, input/output/cached/reasoning/cache-write tokens, ok). API keys are never stored here — they go to `SecretStore` (`platform_secrets`). `catalog.py` holds `BUILTIN_PROVIDERS` presets (e.g. `openai`, `openai-responses`, `anthropic`, `deepseek`, `moonshot`).
 
 ## Usage and pricing
 
 `complete` meters every call, including failures (`ok=0`). `get_usage_stats` aggregates from the `usage` table. `pricing.py` converts tokens to cost read-side only, from the `llm.pricing` setting (`{"<model or prefix>": {"input", "output"}}` in USD per 1M tokens, longest-prefix match); unpriced models produce no cost. `configured_reasoning_effort()` hot-reads `llm.reasoning_effort` (`low`/`medium`/`high`/empty).
+
+Both inference capabilities return normalized response metadata on top of the answer text: `finish_reason` (per wire format — chat `finish_reason`, anthropic `stop_reason`, responses `status`), `request_id` (from `x-request-id` / `request-id` / `anthropic-request-id` / `cf-ray`), `response_id` (responses format), `service_tier`, `stop_sequence`, and `created`; usage is refined with `reasoning_tokens` and `cache_write_tokens` per format. Provider rejections carry the `request_id` and a dump path of the exact rejected request. On the anthropic wire the streaming parser treats `message_delta.usage` as the authoritative cumulative usage (non-zero fields override the `message_start` snapshot — the current contract also followed by compatible endpoints that report 0 placeholders in `message_start`). `complete`'s `max_tokens` input uses `0` as "auto": the cap then comes from `llm.max_output_tokens`.
 
 ## Settings
 
