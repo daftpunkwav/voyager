@@ -107,7 +107,9 @@ def metered_llm(
 
     class _MeteredStreaming(_MeteredBase):
         def complete_stream(self, messages, tools=None, response_format=None, max_tokens=None):
-            return self._stream(messages, tools, response_format=response_format, max_tokens=max_tokens)
+            return self._stream(
+                messages, tools, response_format=response_format, max_tokens=max_tokens
+            )
 
         async def _stream(self, messages, tools=None, response_format=None, max_tokens=None):
             degraded = _quota_degraded()
