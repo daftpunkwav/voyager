@@ -6,6 +6,14 @@
 
 /* L1 code graph — mirrors L0: fullscreen stage + floating glass info bars */
 .code-graph-page {
+  /* Legacy aliases used throughout this file, mapped onto the design-system
+     palette (they had no definition before, so colors silently inherited). */
+  --text-primary: var(--text-900);
+  --text-secondary: var(--text-500);
+  --text-muted: var(--text-400);
+  --bg-elevated: var(--bg-50);
+  --brand-primary: var(--brand-500, #007aff);
+  --border-subtle: rgba(127, 127, 127, 0.25);
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -119,6 +127,9 @@
   font-size: 0.68rem;
   font-variant-numeric: tabular-nums;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--brand-600);
+}
+[data-theme='dark'] .code-graph-display-menu__slider-value {
   color: #67e8f9;
 }
 .code-graph-display-menu__slider input[type='range'] {
@@ -416,6 +427,9 @@
   border-radius: var(--radius-sm, 6px);
   cursor: pointer;
   text-align: left;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease);
 }
 .code-graph-filter-list button.is-on,
 .code-graph-filter-list button:hover {
@@ -546,6 +560,13 @@
   border-radius: 999px;
   cursor: pointer;
   min-width: 0;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease),
+    transform 160ms var(--ease);
+}
+.code-graph-layout-switch button:active {
+  transform: scale(0.96);
 }
 .code-graph-layout-switch button.is-active {
   background: var(--brand-primary, #007aff);

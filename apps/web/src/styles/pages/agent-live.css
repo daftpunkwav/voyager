@@ -31,6 +31,9 @@
 .agent-avatar:hover {
   transform: translateY(-1px);
 }
+.agent-avatar:active {
+  transform: scale(0.95);
+}
 .agent-avatar.active {
   box-shadow:
     0 0 0 2px var(--bg-50),
@@ -165,6 +168,9 @@
   transform: translateY(-1px);
   box-shadow: 0 6px 18px rgba(0, 122, 255, 0.36);
 }
+.embed-send-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
 .embed-send-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -258,12 +264,22 @@
   margin: 0;
   padding: 8px 12px;
   border: 0;
+  border-radius: 8px;
   background: transparent;
   cursor: pointer;
   font: inherit;
   font-weight: 650;
   color: var(--text-700);
   text-align: left;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease),
+    transform 160ms var(--ease);
+}
+.stream-renderer__thinking-toggle:hover {
+  background: rgba(127, 127, 127, 0.08);
+}
+.stream-renderer__thinking-toggle:active {
+  transform: scale(0.98);
 }
 .stream-renderer__thinking-title {
   letter-spacing: 0.01em;
