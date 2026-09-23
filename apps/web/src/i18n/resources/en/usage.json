@@ -16,6 +16,7 @@
   "dashboard.lastDays": "Last {{days}} days",
   "dashboard.refresh": "Refresh",
   "recent.title": "Recent calls",
+  "recent.reasoning": "Thinking {{n}}",
   "recent.tokens": "Cached {{cached}} · Uncached {{uncached}} · Out {{completion}}",
   "bars.title": "Daily token trend",
   "bars.modeIo": "Cached/uncached/output",

@@ -182,6 +182,12 @@ export function LlmUsageDashboard() {
                           uncached: formatTokenCount(call.prompt_uncached_tokens),
                           completion: formatTokenCount(call.completion_tokens),
                         })}
+                        {typeof call.reasoning_tokens === 'number' && call.reasoning_tokens > 0
+                          ? ' · ' +
+                            t('usage:recent.reasoning', {
+                              n: formatTokenCount(call.reasoning_tokens),
+                            })
+                          : ''}
                       </span>
                     </li>
                   ))}

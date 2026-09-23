@@ -52,7 +52,9 @@ const TRAIL_STEPS = [
     inputTokens: 33600,
     outputTokens: 1100,
     ttftMs: 350,
-    text: '完整的思考内容:先读文件,再判断格式,最后落笔。',
+    // Round OUTPUT (the lead-in text; not the reasoning — see chatStore TurnStep).
+    text: '回答输出:先读文件,再判断格式,最后落笔。',
+    // Model thinking on its own channel.
     reasoning: '模型内心戏:先定位文件结构再动手。',
   },
   {
@@ -131,9 +133,11 @@ describe('TrajectoryView', () => {
     // toolbar stats
     expect(screen.getByText('轮次 1')).toBeTruthy();
     expect(screen.getByText('调用 1')).toBeTruthy();
-    // event rows: user prompt, reasoning block, tool row, assistant reply
+    // event rows: user prompt, think row (reasoning preview), tool row,
+    // assistant reply — the think row previews reasoning, never s.text
+    // (that would duplicate the assistant row below)
     expect(screen.getByText('读这个文件')).toBeTruthy();
-    expect(screen.getByText(/完整的思考内容/)).toBeTruthy();
+    expect(screen.getByText(/模型内心戏/)).toBeTruthy();
     // expand the tool row: arguments and latency become visible
     fireEvent.click(screen.getByText('读文件 ok'));
     expect(screen.getByText('{"path":"a.txt"}')).toBeTruthy();
@@ -181,7 +185,7 @@ describe('live trace detail', () => {
     render(<LiveTurnTrace />);
     expect(screen.queryByText('轮 1')).toBeNull(); // round chrome removed
     // round output renders directly (never folded); thinking is a fold
-    expect(screen.getByText(/完整的思考内容/)).toBeTruthy();
+    expect(screen.getByText(/回答输出/)).toBeTruthy();
     expect(screen.queryByText(/模型内心戏/)).toBeNull();
     fireEvent.click(screen.getByText('思考过程'));
     expect(screen.getByText(/模型内心戏/)).toBeTruthy();

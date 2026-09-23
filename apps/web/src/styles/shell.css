@@ -910,6 +910,24 @@
 .chat-trace__body .chat-trace__list {
   margin: 0;
 }
+/* Dialing-phase waiting row: keeps the expanded body non-empty between the
+   send and the first stream frame (muted text, no chrome). */
+.chat-trace__waiting {
+  padding: 6px 8px;
+  color: var(--text-500);
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chat-trace__waiting::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-500);
+  animation: tracePulse 1.4s ease-in-out infinite;
+}
 .chat-trace__row {
   display: flex;
   flex-direction: column;
@@ -2786,6 +2804,18 @@ a.chat-card:hover {
   font-size: 13px;
   line-height: 1.65;
   color: var(--text-800);
+}
+/* Output-cap truncation badge: warning-toned inline chip ahead of the cut
+   answer, so an incomplete round is visible without expanding anything */
+.chat-trace__cutbadge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  vertical-align: 2px;
+  color: var(--warning, #d97706);
+  border: 1px solid currentColor;
 }
 .chat-round__out.is-live .chat-trace__pulse {
   position: absolute;

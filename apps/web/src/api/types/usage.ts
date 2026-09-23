@@ -18,6 +18,9 @@ export interface LlmUsageSummary {
     prompt_cached_tokens: number;
     prompt_uncached_tokens: number;
     completion_tokens: number;
+    /** Output tokens the model spent on reasoning (thinking models only;
+     *  absent when the provider does not report the split). */
+    reasoning_tokens?: number;
     calls: number;
     cost?: number;
   };
@@ -34,6 +37,8 @@ export interface LlmUsageSummary {
     input: number;
     output: number;
     total_tokens: number;
+    /** Output tokens spent on reasoning (thinking models only). */
+    reasoning_tokens?: number;
     calls: number;
     cost?: number;
   }>;
@@ -53,6 +58,8 @@ export interface LlmUsageSummary {
     prompt_cached_tokens: number;
     prompt_uncached_tokens: number;
     completion_tokens: number;
+    /** Output tokens spent on reasoning (thinking models only). */
+    reasoning_tokens?: number;
     calls: number;
     cost?: number;
     by_model?: Array<{
@@ -74,6 +81,8 @@ export interface LlmUsageSummary {
     prompt_cached_tokens: number;
     prompt_uncached_tokens: number;
     completion_tokens: number;
+    /** Output tokens spent on reasoning (thinking models only). */
+    reasoning_tokens?: number;
     ok: boolean;
   }>;
 }

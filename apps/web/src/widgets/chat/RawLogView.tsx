@@ -31,17 +31,20 @@ function RoundCard({ round }: { round: RawLlmRound }) {
   // Collapsed by default: the log tab is a scanning surface; bodies render
   // only for the round being inspected (large <pre>s add up fast).
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<'request' | 'response'>('request');
+  const hasWire = !!round.wire_request;
+  const [tab, setTab] = useState<'request' | 'response' | 'wire'>(hasWire ? 'wire' : 'request');
   const time = new Date(round.ts * 1000).toLocaleTimeString();
   // Memoized: the raw bodies can be large, and re-parsing them on every
   // parent-driven re-render of the card is wasted work.
-  const body = useMemo(
-    () => (open ? pretty(tab === 'request' ? round.request : round.response) : ''),
-    [open, tab, round.request, round.response]
-  );
+  const body = useMemo(() => {
+    if (!open) return '';
+    if (tab === 'request') return pretty(round.request);
+    if (tab === 'response') return pretty(round.response);
+    return round.wire_request ? pretty(round.wire_request) : '';
+  }, [open, tab, round.request, round.response, round.wire_request]);
   // A tab click on a collapsed card expands it into that tab; on an open card
   // it just switches panes (collapsing is the header toggle's job).
-  const pickTab = (next: 'request' | 'response') => {
+  const pickTab = (next: 'request' | 'response' | 'wire') => {
     setTab(next);
     setOpen(true);
   };
@@ -63,6 +66,17 @@ function RoundCard({ round }: { round: RawLlmRound }) {
           </span>
         </button>
         <div className="chat-log__tabs" role="tablist">
+          {hasWire ? (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'wire'}
+              className={`chat-log__tab${tab === 'wire' ? ' is-active' : ''}`}
+              onClick={() => pickTab('wire')}
+            >
+              {t('chat:rawlog.wire')}
+            </button>
+          ) : null}
           <button
             type="button"
             role="tab"

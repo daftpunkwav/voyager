@@ -340,6 +340,8 @@ interface RoundBlock {
   /** Model thinking on its own channel (never merged into text). */
   reasoning: string;
   reasoningTruncated: boolean;
+  /** The provider cut this round off at the output cap (finish_reason). */
+  truncated: boolean;
   /** Lead-in text identical to the closing message: hidden, not repeated. */
   dup: boolean;
   /** The turn still streaming this round: shows the live pulse. */
@@ -355,6 +357,7 @@ function emptyBlock(partial: Partial<RoundBlock> & { key: string }): RoundBlock 
     text: '',
     reasoning: '',
     reasoningTruncated: false,
+    truncated: false,
     dup: false,
     live: false,
     ops: [],
@@ -394,6 +397,9 @@ function buildBlocks(
         text,
         reasoning: s.reasoning ?? '',
         reasoningTruncated: s.reasoningTruncated ?? false,
+        // Backend sets `truncated` when the provider's finish_reason was
+        // length/max_tokens (output-cap cut), so the UI flags the round.
+        truncated: s.truncated === true,
         dup: !!finalText && !!persisted && persisted === finalText,
         // Ops emitted before this round's marker (backend compaction runs at
         // the round boundary, i.e. BEFORE round 1's llm step) attach to the
@@ -475,6 +481,9 @@ function RoundBlockView({ block }: { block: RoundBlock }) {
         // Round output is the answer-in-progress: always visible, never folded.
         <div className={`chat-round__out chat-md${block.live ? ' is-live' : ''}`}>
           {block.live ? <span className="chat-trace__pulse" aria-hidden /> : null}
+          {block.truncated ? (
+            <span className="chat-trace__cutbadge">{t('chat:trace.cut')}</span>
+          ) : null}
           <ChatMarkdown content={bodyText} runCode={false} />
           {block.live ? (
             <span className="chat-caret" aria-hidden>
@@ -510,7 +519,10 @@ export function LiveTurnTrace() {
   const open = manual ?? true;
   // First-round streaming has no steps yet: the live round block must still
   // render, otherwise the opening text would be invisible until a step lands.
-  const showBody = open && (hasSteps || !!streaming?.text);
+  // Before the first delta/thinking frame arrives (model dialing in) an
+  // explicit waiting row renders, so expanding the trace right after sending
+  // visibly opens the body instead of appearing dead.
+  const showBody = open && (hasSteps || !!streaming?.text || thinking);
 
   // Reset the manual pin when the turn ends so the next turn starts fresh.
   useEffect(() => {
@@ -554,6 +566,12 @@ export function LiveTurnTrace() {
       </button>
       {showBody ? (
         <div className="chat-trace__body" ref={bodyRef}>
+          {blocks.length === 0 ? (
+            // Dialing phase: the request is out but the first stream frame has
+            // not arrived yet; a waiting row makes the expanded body non-empty
+            // (and the collapse toggle visibly responsive) from the first ms.
+            <div className="chat-trace__waiting">{t('chat:trace.waiting')}</div>
+          ) : null}
           {blocks.map((b) => (
             <RoundBlockView key={b.key} block={b} />
           ))}

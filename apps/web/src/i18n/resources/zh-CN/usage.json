@@ -16,6 +16,7 @@
   "dashboard.lastDays": "最近 {{days}} 天",
   "dashboard.refresh": "刷新",
   "recent.title": "最近调用",
+  "recent.reasoning": "思考 {{n}}",
   "recent.tokens": "命中 {{cached}} · 未命中 {{uncached}} · 出 {{completion}}",
   "bars.title": "按天 Token 趋势",
   "bars.modeIo": "命中/未命中/输出",

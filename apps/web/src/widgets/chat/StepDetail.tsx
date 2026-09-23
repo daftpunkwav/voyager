@@ -20,6 +20,26 @@ function Row({ k, v }: { k: string; v: string }) {
   );
 }
 
+/** Provider response metadata keys -> i18n suffix (traj.meta.<key>); keys the
+ *  provider invents beyond this set fall back to the raw key name. */
+const META_KEYS = new Set([
+  'finish_reason',
+  'request_id',
+  'response_id',
+  'service_tier',
+  'stop_sequence',
+  'created',
+]);
+
+/** Format one meta value: unix seconds (created) render as local date-time,
+ *  everything else as-is. */
+function metaValue(key: string, value: string | number): string {
+  if (key === 'created' && typeof value === 'number' && value > 0) {
+    return new Date(value * 1000).toLocaleString();
+  }
+  return String(value);
+}
+
 export function StepDetail({ step }: { step: TurnStep }) {
   const { t, i18n } = useTranslation('chat');
   const isTool = step.kind === 'tool';
@@ -64,12 +84,14 @@ export function StepDetail({ step }: { step: TurnStep }) {
           ) : null}
           {step.text ? (
             <div className="chat-stepdetail__thinkwrap">
-              <span className="chat-stepdetail__key muted">{t('chat:traj.thinking')}</span>
+              <span className="chat-stepdetail__key muted">{t('chat:traj.output')}</span>
               <div className="chat-stepdetail__think chat-md">
                 <ChatMarkdown content={step.text} runCode={false} />
               </div>
               {step.textTruncated ? (
-                <div className="chat-stepdetail__note muted">{t('chat:traj.thinkTruncated')}</div>
+                <div className="chat-stepdetail__note muted">
+                  {t('chat:traj.outputTruncatedNote')}
+                </div>
               ) : null}
             </div>
           ) : null}
@@ -104,6 +126,18 @@ export function StepDetail({ step }: { step: TurnStep }) {
           {typeof step.ttftMs === 'number' ? (
             <Row k={t('chat:traj.ttft')} v={`${step.ttftMs}ms`} />
           ) : null}
+          {step.truncated ? (
+            <div className="chat-stepdetail__note muted">{t('chat:traj.outputTruncated')}</div>
+          ) : null}
+          {step.meta
+            ? Object.entries(step.meta).map(([k, v]) => (
+                <Row
+                  key={k}
+                  k={META_KEYS.has(k) ? t(`chat:traj.meta.${k}`) : k}
+                  v={metaValue(k, v)}
+                />
+              ))
+            : null}
         </>
       )}
       {step.subagent ? <Row k={t('chat:traj.subagent')} v={step.subagent} /> : null}

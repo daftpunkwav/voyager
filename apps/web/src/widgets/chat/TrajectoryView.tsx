@@ -66,7 +66,10 @@ function buildRows(
           kind: 'think',
           turn,
           label: t('chat:proc.think'),
-          text: s.text || s.summary,
+          // The round's THINKING goes here (reasoning channel); the answer
+          // text is the assistant row's business — previewing s.text would
+          // just duplicate the closing message below.
+          text: s.reasoning || s.text || s.summary,
           step: s,
           ts: s.ts,
         });

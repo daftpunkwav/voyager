@@ -126,6 +126,9 @@ export interface TurnStep {
   reasoningTruncated?: boolean;
   /** LLM round steps: the adapter-resolved model for that round. */
   model?: string;
+  /** LLM round steps: provider response metadata (finish_reason / request id /
+   *  service tier), only for keys the provider actually reported. */
+  meta?: Record<string, string | number>;
 }
 
 /** Streaming typing for agent.delta: holds only the current delta of the main
@@ -257,6 +260,14 @@ export function toTurnStep(ev: ChatEvent): TurnStep {
     reasoning: str(detail.reasoning),
     reasoningTruncated: detail.reasoning_truncated === true ? true : undefined,
     model: str(detail.model),
+    meta:
+      detail.meta && typeof detail.meta === 'object'
+        ? Object.fromEntries(
+            Object.entries(detail.meta as Record<string, unknown>)
+              .filter(([, v]) => typeof v === 'string' || typeof v === 'number')
+              .map(([k, v]) => [k, v as string | number])
+          )
+        : undefined,
   };
 }
 

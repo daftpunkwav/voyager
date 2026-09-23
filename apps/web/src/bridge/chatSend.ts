@@ -122,6 +122,10 @@ export interface RawLlmRound {
   ts: number;
   request: string;
   response: string;
+  /** The exact provider request body as sent on the wire (stream flags,
+   *  temperature, reasoning fields, tools); empty for rounds recorded
+   *  before the field existed or by clients that do not report it. */
+  wire_request?: string;
 }
 
 /** The newest recorded raw LLM rounds of one session (the chat page's log
