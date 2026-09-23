@@ -46,6 +46,12 @@ export function ModalOverlay({ open, onClose, className, children }: ModalOverla
   // selection that starts inside the dialog and ends on the scrim targets its
   // click at the common ancestor (the overlay root) and must not close.
   const scrimPressed = useRef(false);
+  // This open spell's stack id. Registration is keyed on `open` only: callers
+  // pass inline onClose closures, so keying registration on it too would
+  // re-register on every parent re-render (streaming updates are constant
+  // while dialogs sit open) — the fresh, larger id would steal topmost from a
+  // modal opened above this one and Escape would close the wrong layer.
+  const stackIdRef = useRef(0);
 
   if (open) seenOpen.current = true;
 
@@ -69,22 +75,31 @@ export function ModalOverlay({ open, onClose, className, children }: ModalOverla
   useEffect(() => {
     if (!open) return;
     const id = ++modalSeq;
+    stackIdRef.current = id;
     openModalIds.add(id);
     useUIStore.getState().pushModal();
+    return () => {
+      openModalIds.delete(id);
+      useUIStore.getState().popModal();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       // Inner Escape consumers (e.g. a rename input cancelling itself) mark
       // the event handled via preventDefault; the modal must not double-close.
       // Layered modals: only the topmost one answers Escape.
-      if (e.key === 'Escape' && !e.defaultPrevented && Math.max(...openModalIds) === id) {
+      if (
+        e.key === 'Escape' &&
+        !e.defaultPrevented &&
+        Math.max(...openModalIds) === stackIdRef.current
+      ) {
         onClose();
       }
     };
     window.addEventListener('keydown', onKey);
-    return () => {
-      openModalIds.delete(id);
-      useUIStore.getState().popModal();
-      window.removeEventListener('keydown', onKey);
-    };
+    return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
   if (!open && !leaving) return null;
