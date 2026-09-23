@@ -27,15 +27,23 @@ const LIGHTBOX_EXIT_MS = 160;
 export function Lightbox({ src, alt, onClose }: LightboxProps) {
   const { t } = useTranslation('common');
   // `seenSrc` + `leaving` keep the lightbox mounted through its exit animation
-  // after the parent clears src (same lifecycle as ModalOverlay).
+  // after the parent clears src (same lifecycle as ModalOverlay). seenSrc
+  // deliberately keeps the last src while closed: the leaving render below
+  // draws from it, and the next open overwrites it.
   const seenSrc = useRef<string | null>(null);
   const [leaving, setLeaving] = useState(false);
   if (src) seenSrc.current = src;
   const visible = Boolean(src) || leaving;
 
   useEffect(() => {
-    if (!src && seenSrc.current) {
-      seenSrc.current = null;
+    if (src) {
+      // Re-open (or switch image) during the exit window: the deps change
+      // already cleared the pending timer via cleanup, but `leaving` would
+      // stay true and pin the lightbox on is-leaving forever.
+      setLeaving(false);
+      return;
+    }
+    if (seenSrc.current) {
       setLeaving(true);
       const timer = window.setTimeout(() => setLeaving(false), LIGHTBOX_EXIT_MS);
       return () => window.clearTimeout(timer);

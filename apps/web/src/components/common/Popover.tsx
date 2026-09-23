@@ -56,7 +56,14 @@ export function Popover({
   if (open) seenOpen.current = true;
 
   useEffect(() => {
-    if (!open && seenOpen.current) {
+    if (open) {
+      // Re-open during the exit window (fast toggle): the deps change already
+      // cleared the pending timer via cleanup, but `leaving` would stay true
+      // and pin the panel on is-leaving (the exit animation's final frame).
+      setLeaving(false);
+      return;
+    }
+    if (seenOpen.current) {
       seenOpen.current = false;
       setLeaving(true);
       const timer = window.setTimeout(() => setLeaving(false), POPOVER_EXIT_MS);

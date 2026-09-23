@@ -50,7 +50,15 @@ export function ModalOverlay({ open, onClose, className, children }: ModalOverla
   if (open) seenOpen.current = true;
 
   useEffect(() => {
-    if (!open && seenOpen.current) {
+    if (open) {
+      // Re-open during the exit window (confirm supersede, fast toggle): the
+      // deps change already cleared the pending timer via cleanup, but
+      // `leaving` would stay true and pin the overlay on is-leaving (the exit
+      // animation's final, faded-out frame) forever.
+      setLeaving(false);
+      return;
+    }
+    if (seenOpen.current) {
       seenOpen.current = false;
       setLeaving(true);
       const timer = window.setTimeout(() => setLeaving(false), MODAL_EXIT_MS);
