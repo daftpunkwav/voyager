@@ -115,8 +115,8 @@ class LLMReply:
     structured: Any = None
     #: The exact provider request body as sent on the wire (stream flags,
     #: temperature, thinking fields, tools). Attached by the llm domain's
-    # complete_stream final chunk; None when the client did not report it
-    # (non-streaming path, FakeLLM, older adapters). Feeds the raw round log.
+    #: complete_stream final chunk; None when the client did not report it
+    #: (non-streaming path, FakeLLM, older adapters). Feeds the raw round log.
     request_body: dict[str, Any] | None = None
     #: Provider response metadata, normalized across wire formats:
     #: finish_reason (truncation visibility!), request_id, service_tier,
