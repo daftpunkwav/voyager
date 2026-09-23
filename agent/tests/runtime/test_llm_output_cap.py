@@ -107,14 +107,16 @@ async def test_stream_cap_injected_and_explicit_wins() -> None:
     # LLMClient's static type omits the streaming tier on purpose: probe the
     # attribute like production callers do (a missing attribute fails the
     # test, which is exactly the exposure contract under test).
-    stream_call = getattr(llm, "complete_stream")
+    stream_call = getattr(llm, "complete_stream", None)
+    assert callable(stream_call)
     chunks = [ev async for ev in stream_call([{"role": "user", "content": "hi"}])]
     assert inner.stream_seen == [64_000]
     assert [c.text_delta or (c.final.text if c.final else "") for c in chunks] == ["ok", "ok"]
 
     inner2 = _RecordingLLM()
     llm2 = output_capped_llm(inner2, _chat_settings())  # type: ignore[arg-type]
-    stream_call2 = getattr(llm2, "complete_stream")
+    stream_call2 = getattr(llm2, "complete_stream", None)
+    assert callable(stream_call2)
     _ = [ev async for ev in stream_call2([{"role": "user", "content": "hi"}], max_tokens=42)]
     assert inner2.stream_seen == [42]
 
