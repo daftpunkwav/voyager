@@ -14,7 +14,6 @@
 @import './project-detail.css';
 @import './usage.css';
 @import './sources-stream.css';
-@import './chat-sessions.css';
 
 /* Unified overlays. Modal dialogs (.modal-overlay, ask/question/graph modals)
    dim to focus per the Apple material guidance: the scrim + blur is owned by
@@ -32,7 +31,6 @@
 .modal,
 .ask-dialog,
 .import-agent-modal,
-.question-modal,
 .graph-index-modal,
 .graph-index-modal.glass-card,
 .edit-project-modal {
@@ -47,7 +45,6 @@
 [data-theme='dark'] .modal,
 [data-theme='dark'] .ask-dialog,
 [data-theme='dark'] .import-agent-modal,
-[data-theme='dark'] .question-modal,
 [data-theme='dark'] .graph-index-modal,
 [data-theme='dark'] .graph-index-modal.glass-card,
 [data-theme='dark'] .edit-project-modal {

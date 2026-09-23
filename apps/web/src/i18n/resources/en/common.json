@@ -28,5 +28,6 @@
   "markdown.truncated": "Output was too long and has been truncated",
   "markdown.closeOutput": "Close output",
   "app.pageExportMissing": "Missing page export: {{key}}",
-  "app.loadingPage": "Loading page…"
+  "app.loadingPage": "Loading page…",
+  "dialog.title": "Confirm action"
 }

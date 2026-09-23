@@ -44,6 +44,9 @@
 .kind-tab:hover {
   color: var(--text-800);
 }
+.kind-tab:active {
+  transform: scale(0.96);
+}
 
 .kind-tab.is-active {
   background: var(--bg-50);
@@ -79,6 +82,9 @@
     transform: translateY(-2px);
     box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.14);
   }
+}
+.source-card:active {
+  transform: scale(0.985);
 }
 
 .source-card__top {
@@ -168,7 +174,11 @@
 /* ---------- Import center ---------- */
 
 .import-center {
+  /* .modal pins width to 440px: restate the intended 560px here */
+  width: min(560px, 100%);
   max-width: 560px;
+  /* Head/body carry their own padding: cancel the .modal shell padding */
+  padding: 0;
 }
 
 .import-center__head {
@@ -181,6 +191,8 @@
 .import-center__head h2 {
   margin: 0;
   font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .import-center__tabs {
@@ -200,6 +212,9 @@
   padding: 5px 14px;
   border-radius: 999px;
   cursor: pointer;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease);
 }
 
 .import-center__tab.is-active {
@@ -409,6 +424,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease);
+}
+.doc-reader__outline-item:active {
+  transform: scale(0.98);
 }
 
 .doc-reader__outline-item:hover {

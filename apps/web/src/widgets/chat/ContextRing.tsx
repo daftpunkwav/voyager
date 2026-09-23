@@ -13,6 +13,7 @@ import type { CSSProperties } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { type ContextStatus, getContextStatus } from '@/api/agent';
+import { Popover } from '@/components/common/Popover';
 import { useChatStore } from '@/stores/chatStore';
 import { formatCompactCount } from '@/utils/trajectory';
 
@@ -46,15 +47,6 @@ export function ContextRing() {
       clearInterval(timer);
     };
   }, [sessionId]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [open]);
 
   const pct = status ? Math.min(100, Math.max(0, status.used_pct)) : 0;
   // Neutral until data exists; brand below the compact threshold, warning
@@ -147,39 +139,45 @@ export function ContextRing() {
           ) : null}
         </svg>
       </button>
-      {open ? (
-        <div className="ctx-ring__pop glass-card glass-card--dialog" role="dialog">
-          <div className="ctx-ring__head">
-            <strong>{t('chat:ctx.title')}</strong>
-            <span className="muted">{t('chat:ctx.pct', { pct: Math.round(pct) })}</span>
-          </div>
-          {status ? (
-            <>
-              <ul className="ctx-ring__list">
-                {rows.map((r) => (
-                  <li key={r.k}>
-                    <span className="ctx-ring__key">{r.k}</span>
-                    <span className="ctx-ring__val">{r.v}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="ctx-ring__bar">
-                <div
-                  className="ctx-ring__fill"
-                  style={{ '--fill': pct / 100, background: tone } as CSSProperties}
-                />
-                <div
-                  className="ctx-ring__mark"
-                  style={{ left: `${status.auto_compact_at_pct}%` }}
-                  aria-hidden
-                />
-              </div>
-            </>
-          ) : (
-            <p className="ctx-ring__empty small muted">{t('chat:ctx.empty')}</p>
-          )}
+      <Popover
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorRef={wrapRef}
+        direction="up"
+        role="dialog"
+        ariaLabel={t('chat:ctx.title')}
+        className="ctx-ring__pop glass-card glass-card--dialog"
+      >
+        <div className="ctx-ring__head">
+          <strong>{t('chat:ctx.title')}</strong>
+          <span className="muted">{t('chat:ctx.pct', { pct: Math.round(pct) })}</span>
         </div>
-      ) : null}
+        {status ? (
+          <>
+            <ul className="ctx-ring__list">
+              {rows.map((r) => (
+                <li key={r.k}>
+                  <span className="ctx-ring__key">{r.k}</span>
+                  <span className="ctx-ring__val">{r.v}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="ctx-ring__bar">
+              <div
+                className="ctx-ring__fill"
+                style={{ '--fill': pct / 100, background: tone } as CSSProperties}
+              />
+              <div
+                className="ctx-ring__mark"
+                style={{ left: `${status.auto_compact_at_pct}%` }}
+                aria-hidden
+              />
+            </div>
+          </>
+        ) : (
+          <p className="ctx-ring__empty small muted">{t('chat:ctx.empty')}</p>
+        )}
+      </Popover>
     </div>
   );
 }

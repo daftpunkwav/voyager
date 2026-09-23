@@ -22,6 +22,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Sidebar, type SidebarPageKey } from '@/shell/Sidebar';
 import { ToastContainer } from '@/components/common/ToastContainer';
+import { ConfirmDialogHost } from '@/components/common/ConfirmDialogHost';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { EmptyState } from '@/components/common/EmptyState';
 import { PageProbe } from '@/widgets/PageProbe';
@@ -99,6 +100,7 @@ export function AppShell({ bridges }: AppShellProps) {
         </main>
       </div>
       <ToastContainer />
+      <ConfirmDialogHost />
       <PageProbe />
       {onChat ? null : <FloatingChat />}
       {bridges}

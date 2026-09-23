@@ -151,6 +151,9 @@
   cursor: pointer;
   font: inherit;
   color: inherit;
+  transition:
+    border-color var(--dur-fast, 150ms) var(--ease),
+    background var(--dur-fast, 150ms) var(--ease);
 }
 .graph-legend--under-view .legend-item.is-active {
   border-color: color-mix(in srgb, var(--brand-500) 40%, transparent);
@@ -256,6 +259,9 @@
 .zoom-btn:hover {
   background: var(--bg-200);
   color: var(--text-800);
+}
+.zoom-btn:active {
+  transform: scale(0.94);
 }
 .zoom-label {
   width: 56px;
@@ -1742,17 +1748,10 @@
   background: #ef4444;
 }
 
-.graph-index-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 240; /* above Atlas (70) and the toolbar filter layer; portal to body */
-  /* Dim to focus, same scrim as .modal-overlay in global.css */
-  background: rgba(15, 23, 42, 0.32);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  display: grid;
-  place-items: center;
-  padding: 24px;
+/* The shared ModalOverlay renders the scrim; only the z-index needs a raise
+   here to sit above Atlas (70) and the toolbar filter layer. */
+.graph-index-overlay {
+  z-index: 240;
 }
 .graph-index-modal {
   width: min(560px, 100%);
@@ -1760,6 +1759,11 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Same panel motion as .modal (this shell does not carry the .modal class) */
+  animation: sheetIn var(--dur-base, 200ms) var(--ease-apple) both;
+}
+.graph-index-overlay.is-leaving .graph-index-modal {
+  animation: sheetOut var(--modal-out, 160ms) ease both;
 }
 .graph-index-modal__head {
   display: flex;
@@ -1769,8 +1773,9 @@
 }
 .graph-index-modal__head h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 .graph-index-modal__close {
   width: 32px;
@@ -1782,6 +1787,17 @@
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease),
+    transform 160ms var(--ease);
+}
+.graph-index-modal__close:hover {
+  background: var(--bg-200);
+  color: var(--text-800);
+}
+.graph-index-modal__close:active {
+  transform: scale(0.92);
 }
 .graph-index-modal__tabs {
   display: grid;
@@ -1802,6 +1818,10 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease),
+    border-color var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease);
 }
 .graph-index-modal__tab.is-active {
   border-color: color-mix(in srgb, var(--brand-500) 35%, var(--bg-300));
@@ -1854,7 +1874,7 @@
   justify-content: space-between;
   padding: 10px 12px;
   border-radius: 10px;
-  background: var(--bg-100);
+  background: var(--bg-50);
   border: 1px solid var(--bg-300);
 }
 .graph-index-modal__row.is-failed {
@@ -1919,6 +1939,16 @@
   cursor: pointer;
   padding: 4px 6px;
   white-space: nowrap;
+  border-radius: 6px;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease),
+    transform 160ms var(--ease);
+}
+.graph-index-modal__actions button:hover {
+  background: rgba(127, 127, 127, 0.1);
+}
+.graph-index-modal__actions button:active {
+  transform: scale(0.96);
 }
 .graph-index-modal__actions button:disabled {
   opacity: 0.45;

@@ -44,46 +44,44 @@ export function ImportCenter({ open, initialTab = 'files', onClose }: ImportCent
   }, [open, initialTab]);
   return (
     <ModalOverlay open={open} onClose={onClose}>
-      {open && (
-        <div
-          className="modal import-center glass-card glass-card--dialog"
-          role="dialog"
-          aria-modal="true"
-          aria-label={t('sources:import.title')}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <header className="import-center__head">
-            <h2>{t('sources:import.title')}</h2>
-            <nav className="import-center__tabs" role="tablist">
-              {TABS.map((tabItem) => (
-                <button
-                  key={tabItem.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === tabItem.key}
-                  className={`import-center__tab ${tab === tabItem.key ? 'is-active' : ''}`}
-                  onClick={() => setTab(tabItem.key)}
-                >
-                  {t(tabItem.labelKey)}
-                </button>
-              ))}
-            </nav>
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label={t('sources:closeAria')}
-              onClick={onClose}
-            >
-              ✕
-            </button>
-          </header>
-          <div className="import-center__body">
-            {tab === 'files' && <FilesPane onDone={onClose} />}
-            {tab === 'web' && <WebPane onDone={onClose} />}
-            {tab === 'github' && <GithubPane onDone={onClose} />}
-          </div>
+      <div
+        className="modal import-center glass-card glass-card--dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('sources:import.title')}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="import-center__head">
+          <h2>{t('sources:import.title')}</h2>
+          <nav className="import-center__tabs" role="tablist">
+            {TABS.map((tabItem) => (
+              <button
+                key={tabItem.key}
+                type="button"
+                role="tab"
+                aria-selected={tab === tabItem.key}
+                className={`import-center__tab ${tab === tabItem.key ? 'is-active' : ''}`}
+                onClick={() => setTab(tabItem.key)}
+              >
+                {t(tabItem.labelKey)}
+              </button>
+            ))}
+          </nav>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={t('sources:closeAria')}
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </header>
+        <div className="import-center__body">
+          {tab === 'files' && <FilesPane onDone={onClose} />}
+          {tab === 'web' && <WebPane onDone={onClose} />}
+          {tab === 'github' && <GithubPane onDone={onClose} />}
         </div>
-      )}
+      </div>
     </ModalOverlay>
   );
 }

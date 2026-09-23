@@ -25,7 +25,7 @@ import {
   useSetDocumentMeta,
 } from '@/hooks/useSources';
 import { docFileUrl } from '@/api/sources';
-import { useUIStore } from '@/stores/uiStore';
+import { confirmDialog, useUIStore } from '@/stores/uiStore';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
 import { MarkdownRenderer } from '@/components/common/MarkdownRenderer';
@@ -158,8 +158,14 @@ export function DocReader() {
             type="button"
             className="icon-btn"
             aria-label={t('sources:doc.deleteAria')}
-            onClick={() => {
-              if (!window.confirm(t('sources:doc.deleteConfirm', { title: doc.title }))) return;
+            onClick={async () => {
+              if (
+                !(await confirmDialog({
+                  message: t('sources:doc.deleteConfirm', { title: doc.title }),
+                  danger: true,
+                }))
+              )
+                return;
               removeDoc.mutate(doc.id, {
                 onSuccess: () => {
                   addToast({ type: 'success', message: t('sources:doc.deleted') });

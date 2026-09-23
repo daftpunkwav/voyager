@@ -399,6 +399,33 @@ a {
   }
 }
 
+/* -- Anchored popovers (common/Popover.tsx): enter grows from the edge facing
+   the trigger; exit retracts faster than enter. -- */
+.popover-pop {
+  --popover-out: 120ms;
+  --popover-exit-y: 4px;
+  transform-origin: bottom;
+  animation: popIn var(--dur-fast, 150ms) var(--ease-apple) both;
+}
+.popover-pop--down {
+  transform-origin: top;
+  --popover-exit-y: -4px;
+}
+.popover-pop.is-leaving {
+  animation: popOut var(--popover-out) ease both;
+  pointer-events: none;
+}
+@keyframes popOut {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(var(--popover-exit-y, 4px)) scale(0.98);
+  }
+}
+
 /* -- Team blocks (personas / definitions, shared by the team page and the
    settings agent tab): responsive card grid; without it the cards stack
    full-width and stretch absurdly on wide screens -- */

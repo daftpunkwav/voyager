@@ -2672,7 +2672,8 @@ textarea.field {
   animation: toast-in 0.25s var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) both;
 }
 .toast.toast--leaving {
-  animation: toast-out 0.28s var(--ease-out, cubic-bezier(0.32, 0.72, 0, 1)) forwards;
+  /* Exit faster than enter (180ms vs 250ms), per the motion craft bar */
+  animation: toast-out 0.18s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)) forwards;
   pointer-events: none;
 }
 .toast--error {

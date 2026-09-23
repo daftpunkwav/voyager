@@ -15,7 +15,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { abandonResumableCheckpoint, listResumableCheckpoints, resumeRun } from '@/api/agent';
-import { useUIStore } from '@/stores/uiStore';
+import { confirmDialog, useUIStore } from '@/stores/uiStore';
 import { GlassCard } from '@/components/common/GlassCard';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
@@ -93,7 +93,12 @@ export function ResumableList() {
   };
 
   const abandon = async (item: ResumableCheckpoint) => {
-    if (!window.confirm(t('team:resumable.confirm.abandon', { name: item.instance_name }))) {
+    if (
+      !(await confirmDialog({
+        message: t('team:resumable.confirm.abandon', { name: item.instance_name }),
+        danger: true,
+      }))
+    ) {
       return;
     }
     setBusyRunId(item.run_id);

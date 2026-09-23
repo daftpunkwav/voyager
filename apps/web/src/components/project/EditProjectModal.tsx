@@ -110,7 +110,7 @@ export function EditProjectModal({
           </div>
           <button
             type="button"
-            className="chat-icon-btn"
+            className="icon-btn"
             onClick={onClose}
             aria-label={t('sources:closeAria')}
           >
@@ -165,7 +165,7 @@ export function EditProjectModal({
               />
               <button
                 type="button"
-                className="btn btn-sm"
+                className="btn btn-ghost btn-sm"
                 disabled={!newTag.trim()}
                 onClick={() => handleAddTag()}
               >
@@ -176,7 +176,7 @@ export function EditProjectModal({
         </div>
 
         <footer className="edit-project-modal__foot">
-          <button type="button" className="btn" onClick={onClose} disabled={pending}>
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={pending}>
             {t('sources:cancel')}
           </button>
           <button

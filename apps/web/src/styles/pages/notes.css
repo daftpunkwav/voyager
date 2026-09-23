@@ -19,7 +19,7 @@
      one change, short enough to keep the per-frame reflow cheap */
   --notes-tr-slow: 240ms;
   --notes-ease: var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1));
-  --notes-bulk-ms: 420ms;
+  --notes-bulk-ms: 240ms;
   --notes-card-h: 212px;
 }
 .notes-index.is-compact {
@@ -298,14 +298,12 @@
   display: grid;
   grid-template-columns: 0fr;
   min-width: 0;
-  transition: grid-template-columns 0.42s var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1));
+  transition: grid-template-columns 0.24s var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1));
 }
 .notes-rail-allslot.is-open {
   grid-template-columns: 1fr;
 }
-.notes-rail-allslot:not(.is-open) {
-  transition-delay: 0.06s;
-}
+
 .notes-rail-allslot__inner {
   min-width: 0;
   overflow: hidden;
@@ -538,13 +536,13 @@
   overflow: hidden;
   opacity: 1;
   transform: translateY(0);
-  animation: notes-bulk-in var(--notes-bulk-ms, 420ms) var(--notes-ease) both;
+  animation: notes-bulk-in var(--notes-bulk-ms, 240ms) var(--notes-ease) both;
   transition:
-    max-height var(--notes-bulk-ms, 420ms) var(--notes-ease),
-    opacity var(--notes-bulk-ms, 420ms) var(--notes-ease),
-    transform var(--notes-bulk-ms, 420ms) var(--notes-ease),
-    margin var(--notes-bulk-ms, 420ms) var(--notes-ease),
-    padding var(--notes-bulk-ms, 420ms) var(--notes-ease);
+    max-height var(--notes-bulk-ms, 240ms) var(--notes-ease),
+    opacity var(--notes-bulk-ms, 240ms) var(--notes-ease),
+    transform var(--notes-bulk-ms, 240ms) var(--notes-ease),
+    margin var(--notes-bulk-ms, 240ms) var(--notes-ease),
+    padding var(--notes-bulk-ms, 240ms) var(--notes-ease);
 }
 .notes-bulk.is-exit {
   animation: none;
@@ -2431,6 +2429,15 @@
   backdrop-filter: blur(8px);
   animation: overlayIn var(--dur-fast, 150ms) var(--ease-apple) both;
   cursor: zoom-out;
+  /* Exit faster than enter; retracts the image the same way it entered */
+  --modal-out: 160ms;
+}
+.lightbox.is-leaving {
+  animation: overlayOut var(--modal-out) ease both;
+  pointer-events: none;
+}
+.lightbox.is-leaving .lightbox__img {
+  animation: sheetOut var(--modal-out) ease both;
 }
 
 .lightbox__img {
@@ -2515,7 +2522,9 @@
 
 .notes-dialog__head h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .notes-dialog__list {

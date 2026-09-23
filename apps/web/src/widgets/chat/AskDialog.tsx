@@ -200,7 +200,7 @@ export function AskDialog() {
             </button>
             <button
               type="button"
-              className="btn"
+              className="btn btn-ghost"
               disabled={busy}
               onClick={() => void submit(false)}
             >
@@ -214,7 +214,7 @@ export function AskDialog() {
             is the always-available custom answer. */}
         <div className="ask-custom">
           <input
-            className="setting-input"
+            className="field input"
             value={text}
             autoFocus={question.kind === 'text' || allOptions.length === 0}
             placeholder={t('chat:ask.customPlaceholder')}
@@ -235,7 +235,7 @@ export function AskDialog() {
           {isMulti ? (
             <button
               type="button"
-              className="btn btn-sm"
+              className="btn btn-ghost btn-sm"
               disabled={busy || !text.trim()}
               onClick={addCustomOption}
             >
@@ -245,7 +245,7 @@ export function AskDialog() {
           {question.kind !== 'text' && !isMulti ? (
             <button
               type="button"
-              className="btn btn-sm"
+              className="btn btn-ghost btn-sm"
               disabled={busy || !text.trim()}
               onClick={() =>
                 void submit(numericAnswerKind && textIsNumber ? sliderNumber : text.trim())

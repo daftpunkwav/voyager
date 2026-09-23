@@ -28,5 +28,6 @@
   "markdown.truncated": "输出过长,已截断",
   "markdown.closeOutput": "关闭输出",
   "app.pageExportMissing": "页面导出缺失: {{key}}",
-  "app.loadingPage": "载入页面…"
+  "app.loadingPage": "载入页面…",
+  "dialog.title": "确认操作"
 }

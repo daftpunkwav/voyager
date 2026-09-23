@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   git hash-object docs\web\frontend.md docs\web\frontend.zh.md
-docs/web/frontend.md: b2cafea30fa73ee94d8b0b202dbf50cadc4b6d20
-docs/web/frontend.zh.md: 7fa0fcd79ccd2471429f835b9a0295c5b3a20a90
+docs/web/frontend.md: eb3a967479e5d2af8078af778baa9b48649c1822
+docs/web/frontend.zh.md: 5310b7f33afafd83321c598107c698f98ea9a33f

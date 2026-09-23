@@ -3,49 +3,19 @@
  * @description Composer-bar workspace button: shows the current directory's
  * name; clicking opens the machine-wide directory chooser (drives/home
  * navigation) and hot-switches the agent (rebuild, no service restart)
- * through POST /api/workspace/switch, which persists agent.workspace.dir
- * itself. The chosen surface renders through a portal so fixed positioning
- * stays viewport-relative inside the filtered composer.
+ * through the shared workspaceSwitch bridge, which persists
+ * agent.workspace.dir itself. The chooser renders through the shared
+ * ModalOverlay (portaled to body) so composer backdrop-filter cannot clip it.
  */
 
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { callCapability } from '@/bridge/client';
+import { switchWorkspaceWithMarker } from '@/bridge/workspaceSwitch';
+import { ModalOverlay } from '@/components/common/ModalOverlay';
 import { useChatStore } from '@/stores/chatStore';
-import { useUIStore } from '@/stores/uiStore';
-import { type PickResult, pickDirectory, switchWorkspace, WORKDIR_KEY } from '@/api/workspace';
-
-/**
- * Shared workspace hot-switch flow: confirm first (the switch rebuilds the
- * agent and drains in-flight turns), then POST the switch. A request id is
- * stashed in chatStore before the POST: the broadcast reaches this tab too,
- * and the marker lets useChatStream tell this tab's own switch apart from
- * another tab's. Resolves to the new workspace path, or null when the user
- * dismissed the confirm; errors propagate to the caller for surface-specific
- * display.
- */
-function useWorkspaceSwitch() {
-  const { t } = useTranslation('chat');
-  const [switching, setSwitching] = useState(false);
-  const applySwitch = async (next: string): Promise<string | null> => {
-    if (!window.confirm(t('chat:workspace.switchConfirm'))) return null;
-    // Stash before the POST: the SSE echo races the HTTP response, so the
-    // marker must already be in place when the event lands. A leftover
-    // marker (request failed / event lost) is inert: only an exact match
-    // suppresses, and the next switch overwrites it.
-    const marker = crypto.randomUUID();
-    useChatStore.setState({ workspaceSwitchMarker: marker });
-    setSwitching(true);
-    try {
-      const res = await switchWorkspace(next, marker);
-      return res.workspace;
-    } finally {
-      setSwitching(false);
-    }
-  };
-  return { applySwitch, switching };
-}
+import { confirmDialog, useUIStore } from '@/stores/uiStore';
+import { type PickResult, pickDirectory, WORKDIR_KEY } from '@/api/workspace';
 
 /**
  * Workspace path button for the composer bar (bottom-left of the input):
@@ -58,7 +28,7 @@ export function WorkspacePathChip() {
   const workspaceRev = useChatStore((s) => s.workspaceRev);
   const [value, setValue] = useState('');
   const [browserOpen, setBrowserOpen] = useState(false);
-  const { applySwitch, switching } = useWorkspaceSwitch();
+  const [switching, setSwitching] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -78,14 +48,19 @@ export function WorkspacePathChip() {
 
   const pick = async (path: string) => {
     setBrowserOpen(false);
+    const ok = await confirmDialog({ message: t('chat:workspace.switchConfirm') });
+    if (!ok) return;
+    setSwitching(true);
     try {
-      const ws = await applySwitch(path);
+      const ws = await switchWorkspaceWithMarker(path);
       if (ws) setValue(ws);
     } catch (err) {
       useUIStore.getState().addToast({
         type: 'error',
         message: err instanceof Error ? err.message : t('chat:workspace.switchFailed'),
       });
+    } finally {
+      setSwitching(false);
     }
   };
 
@@ -101,20 +76,22 @@ export function WorkspacePathChip() {
       >
         {leaf}
       </button>
-      {browserOpen ? (
+      <ModalOverlay open={browserOpen} onClose={() => setBrowserOpen(false)}>
         <WorkspaceBrowser
           onPick={(path) => void pick(path)}
           onClose={() => setBrowserOpen(false)}
         />
-      ) : null}
+      </ModalOverlay>
     </>
   );
 }
 
-/** Machine-wide directory chooser: type a path or navigate from drives/home.
- *  Rendered through a portal: ancestors like the composer carry
- *  backdrop-filter, which turns fixed positioning into their local
- *  coordinate space and would clip the dialog. */
+/**
+ * Machine-wide directory chooser: type a path or navigate from drives/home.
+ * Rendered inside the shared ModalOverlay (already portaled to body):
+ * ancestors like the composer carry backdrop-filter, which would clip a
+ * locally fixed dialog.
+ */
 function WorkspaceBrowser({
   onPick,
   onClose,
@@ -148,103 +125,135 @@ function WorkspaceBrowser({
 
   const entries = (current?.entries ?? []).filter((e) => e.type === 'directory');
 
-  return createPortal(
+  const enter = (next: string) => {
+    setPathInput(next);
+    void load(next);
+  };
+
+  return (
     <div
-      className="modal-overlay"
+      className="ws-browser glass-card glass-card--dialog"
       role="dialog"
       aria-modal="true"
       aria-label={t('chat:workspace.browserTitle')}
+      onClick={(e) => e.stopPropagation()}
     >
-      <div className="llm-model-dialog glass-card glass-card--dialog">
-        <h3 className="llm-model-dialog__title">{t('chat:workspace.browserTitle')}</h3>
-        <div className="chat-ws__browserbar">
-          <input
-            className="field input"
-            value={pathInput}
-            placeholder={t('chat:workspace.pathPlaceholder')}
-            aria-label={t('chat:workspace.pathPlaceholder')}
-            onChange={(e) => setPathInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void load(pathInput);
-            }}
-          />
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => void load(pathInput)}
-          >
-            {t('chat:workspace.go')}
-          </button>
-        </div>
-        <div className="chat-ws__browserbar">
+      <h3 className="modal__title">{t('chat:workspace.browserTitle')}</h3>
+
+      <div className="ws-browser__pathrow">
+        <input
+          className="field input"
+          value={pathInput}
+          placeholder={t('chat:workspace.pathPlaceholder')}
+          aria-label={t('chat:workspace.pathPlaceholder')}
+          onChange={(e) => setPathInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void load(pathInput);
+          }}
+        />
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => void load(pathInput)}>
+          {t('chat:workspace.go')}
+        </button>
+      </div>
+
+      {current?.parent || current?.home ? (
+        <div className="ws-browser__quick">
           {current?.parent ? (
             <button
               type="button"
-              className="composer-dd__item chat-ws__up"
-              onClick={() => {
-                const parent = current.parent as string;
-                setPathInput(parent);
-                void load(parent);
-              }}
+              className="ws-browser__chip"
+              onClick={() => enter(current.parent as string)}
             >
-              ↑ {t('chat:workspace.up')}
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                aria-hidden
+              >
+                <path d="M12 19V5M5 12l7-7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              {t('chat:workspace.up')}
             </button>
           ) : null}
           {current?.home ? (
-            <button
-              type="button"
-              className="composer-dd__item chat-ws__up"
-              onClick={() => {
-                setPathInput(current.home);
-                void load(current.home);
-              }}
-            >
+            <button type="button" className="ws-browser__chip" onClick={() => enter(current.home)}>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                aria-hidden
+              >
+                <path d="M3 10.5L12 3l9 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M5 9.5V21h14V9.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
               {t('chat:workspace.home')}
             </button>
           ) : null}
         </div>
-        <ul className="chat-ws__listing">
-          {entries.map((e) => (
-            <li key={e.name}>
-              <button
-                type="button"
-                className="composer-dd__item"
-                onClick={() => {
-                  const next = current?.path
-                    ? `${current.path.replace(/[\\/]+$/, '')}/${e.name}`
-                    : e.name;
-                  setPathInput(next);
-                  void load(next);
-                }}
-              >
-                {e.name}
-              </button>
-            </li>
-          ))}
-          {entries.length === 0 ? (
-            <li className="small muted">{t('chat:workspace.noDirs')}</li>
-          ) : null}
-        </ul>
-        {error ? (
-          <p className="chat-ws__error small" role="alert">
-            {error}
-          </p>
-        ) : null}
-        <div className="llm-model-dialog__actions">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>
-            {t('chat:workspace.cancel')}
-          </button>
+      ) : null}
+
+      <div
+        className="ws-browser__list"
+        role="listbox"
+        aria-label={t('chat:workspace.browserTitle')}
+      >
+        {entries.map((e) => (
           <button
+            key={e.name}
             type="button"
-            className="btn btn-primary"
-            disabled={!pathInput.trim()}
-            onClick={() => onPick(pathInput.trim())}
+            role="option"
+            aria-selected={false}
+            className="ws-browser__row"
+            onClick={() => {
+              const next = current?.path
+                ? `${current.path.replace(/[\\/]+$/, '')}/${e.name}`
+                : e.name;
+              enter(next);
+            }}
           >
-            {t('chat:workspace.choose')}
+            <svg
+              className="ws-browser__row-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.9"
+              aria-hidden
+            >
+              <path
+                d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span className="ws-browser__row-name">{e.name}</span>
           </button>
-        </div>
+        ))}
+        {entries.length === 0 ? (
+          <p className="ws-browser__empty">{t('chat:workspace.noDirs')}</p>
+        ) : null}
       </div>
-    </div>,
-    document.body
+
+      {error ? (
+        <p className="ws-browser__error" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="modal__actions">
+        <button type="button" className="btn btn-ghost" onClick={onClose}>
+          {t('chat:workspace.cancel')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!pathInput.trim()}
+          onClick={() => onPick(pathInput.trim())}
+        >
+          {t('chat:workspace.choose')}
+        </button>
+      </div>
+    </div>
   );
 }

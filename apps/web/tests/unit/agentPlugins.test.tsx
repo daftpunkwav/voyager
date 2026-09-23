@@ -27,6 +27,7 @@ vi.mock('@/bridge/client', async (importOriginal) => ({
 vi.mock('@/api/client', () => ({ getApi: getApiMock }));
 
 import { PluginsBlock } from '@/components/settings/agent/PluginsBlock';
+import { stubConfirm } from './helpers/stubConfirm';
 import { useUIStore } from '@/stores/uiStore';
 
 /** list_plugins sample: unapproved, 2 skills + 1 hook + 1 MCP */
@@ -106,16 +107,15 @@ function renderBlock(impl: ReturnType<typeof backend>) {
 
 const toastTexts = () => useUIStore.getState().toasts.map((t) => t.message);
 
-let confirmMock: ReturnType<typeof vi.spyOn>;
+// Confirmations (overwrite / delete / revoke) answer through the shared
+// confirmDialog stub (defaults to confirmed)
+const confirmMock = stubConfirm(true);
 
 beforeEach(() => {
   callCapabilityMock.mockReset();
   getApiMock.mockReset();
   uploadFileMock.mockReset();
   useUIStore.setState({ toasts: [] });
-  // Revoking approval goes through window.confirm: confirmed by default, individual cases override the return value
-  confirmMock = vi.spyOn(window, 'confirm').mockReturnValue(true);
-  confirmMock.mockClear();
 });
 
 beforeAll(() => {
@@ -309,7 +309,8 @@ describe('settings page plugin revoke reclaims MCP', () => {
       expect(screen.getByRole('switch', { name: '撤销批准 example' })).toBeTruthy()
     );
     fireEvent.click(screen.getByRole('switch', { name: '撤销批准 example' }));
-    expect(String(confirmMock.mock.calls[0]?.[0])).toContain('example-search');
+    const request = confirmMock.mock.calls[0]?.[0] as { message?: string } | undefined;
+    expect(String(request?.message)).toContain('example-search');
     await waitFor(() =>
       expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'set_plugin_approval', {
         name: 'example',
@@ -320,7 +321,7 @@ describe('settings page plugin revoke reclaims MCP', () => {
   });
 
   it('cancelling the confirm sends no revoke request', async () => {
-    confirmMock.mockReturnValue(false);
+    confirmMock.mockResolvedValue(false);
     renderBlock(backend({ plugin: { approved: true, granularity: 'bundle' } }));
     await waitFor(() =>
       expect(screen.getByRole('switch', { name: '撤销批准 example' })).toBeTruthy()
@@ -483,7 +484,7 @@ describe('settings page plugin install/delete (dialog)', () => {
   });
 
   it('checking "overwrite same-name plugin" confirms before submit; cancelling sends nothing, confirming resends with overwrite:true', async () => {
-    confirmMock.mockReturnValue(false);
+    confirmMock.mockResolvedValue(false);
     renderBlock(backend());
     await waitFor(() => expect(screen.getByRole('button', { name: '安装插件' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '安装插件' }));
@@ -498,7 +499,7 @@ describe('settings page plugin install/delete (dialog)', () => {
       expect.anything()
     );
     // The dialog stays open (the confirm was declined); confirm again with overwrite allowed
-    confirmMock.mockReturnValue(true);
+    confirmMock.mockResolvedValue(true);
     dialog = screen.getByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: '安装插件' }));
     await waitFor(() =>
@@ -560,7 +561,8 @@ describe('settings page plugin install/delete (dialog)', () => {
       expect(screen.getByRole('button', { name: '删除插件 example' })).toBeTruthy()
     );
     fireEvent.click(screen.getByRole('button', { name: '删除插件 example' }));
-    expect(String(confirmMock.mock.calls[0]?.[0])).toContain('不可恢复');
+    const delRequest = confirmMock.mock.calls[0]?.[0] as { message?: string } | undefined;
+    expect(String(delRequest?.message)).toContain('不可恢复');
     await waitFor(() =>
       expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'extension', {
         kind: 'plugin',

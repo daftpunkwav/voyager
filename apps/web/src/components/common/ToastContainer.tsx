@@ -14,7 +14,8 @@ import type { Toast } from '@/stores/uiStore';
 import { useUIStore } from '@/stores/uiStore';
 import { describeError } from '@/utils/errorCodes';
 
-/** A single toast: plays the exit animation (toast-out) when its time is up, and is removed only after the animation ends */
+/** A single toast: plays the exit animation (toast-out) when its time is up or
+ * when dismissed manually, and is removed only after the animation ends */
 function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) => void }) {
   // Subscribes to languageChanged so an in-flight toast re-renders its
   // errors-namespace title/hint when the UI language switches.
@@ -52,7 +53,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
       <button
         type="button"
         className="toast__close"
-        onClick={() => onRemove(toast.id)}
+        onClick={() => setLeaving(true)}
         aria-label={t('common:action.close')}
       >
         ×

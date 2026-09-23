@@ -18,7 +18,7 @@
  * - Close on Escape only when no global modal sits above (modalDepth guard)
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { subscribe } from '@/bridge/stream';
@@ -36,17 +36,36 @@ import { AskDialog } from '@/widgets/chat/AskDialog';
 import { ChatComposer } from '@/widgets/chat/ChatComposer';
 import { NavIcons } from '@/components/icons/NavIcons';
 
+/** How long the panel exit animation plays before the dot takes over. Keep in
+ *  sync with the --float-out duration in shell.css. */
+const FLOAT_EXIT_MS = 160;
+
 export function FloatingChat() {
   const { t } = useTranslation('chat');
   const { open, unread, setOpen } = useFloatingStore();
   const navigate = useNavigate();
   const listRef = useRef<HTMLDivElement>(null);
   const firstSeqRef = useRef<number | null>(null);
+  // `seenOpen` + `leaving` keep the panel mounted through its exit animation
+  // before the collapsed dot takes over, mirroring ModalOverlay's lifecycle.
+  const seenOpen = useRef(open);
+  const [leaving, setLeaving] = useState(false);
   const messages = useChatStore((s) => s.messages);
   const connected = useChatStore((s) => s.connected);
   const thinking = useChatStore((s) => s.thinking);
   const composer = useChatSend();
   const { llmMissing } = composer;
+
+  if (open) seenOpen.current = true;
+
+  useEffect(() => {
+    if (!open && seenOpen.current) {
+      seenOpen.current = false;
+      setLeaving(true);
+      const timer = window.setTimeout(() => setLeaving(false), FLOAT_EXIT_MS);
+      return () => window.clearTimeout(timer);
+    }
+  }, [open]);
 
   const onNavigate = useCallback(
     (path: string) => {
@@ -88,7 +107,7 @@ export function FloatingChat() {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, setOpen]);
 
-  if (!open) {
+  if (!open && !leaving) {
     return (
       <button
         type="button"
@@ -104,7 +123,7 @@ export function FloatingChat() {
   }
 
   return (
-    <div className="float-panel">
+    <div className={`float-panel${!open && leaving ? ' is-leaving' : ''}`}>
       <div className="float-panel__head">
         <span className="float-panel__title">{t('chat:float.title')}</span>
         <span className="small muted">

@@ -32,6 +32,17 @@ export interface Toast {
   duration?: number;
 }
 
+/** Payload for the global imperative confirm dialog (window.confirm replacement). */
+export interface ConfirmRequest {
+  /** Headline; falls back to the shared "confirm" title when omitted */
+  title?: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  /** Style the confirm action as destructive */
+  danger?: boolean;
+}
+
 interface UIState {
   theme: Theme;
   /** Locale *selection* ('system' included); the effective language is resolved
@@ -43,6 +54,9 @@ interface UIState {
   toasts: Toast[];
   /** Count of currently open global modals (lightbox etc.); when > 0, page-level Esc handling yields first (e.g. notes back to list) */
   modalDepth: number;
+  /** Active imperative confirm request (null when no dialog is up) */
+  confirmRequest: ConfirmRequest | null;
+  confirmResolve: ((ok: boolean) => void) | null;
   setTheme: (theme: Theme) => void;
   setLocale: (locale: LocaleChoice) => void;
   toggleSidebar: () => void;
@@ -51,11 +65,15 @@ interface UIState {
   removeToast: (id: string) => void;
   pushModal: () => void;
   popModal: () => void;
+  /** Raise the global confirm dialog; resolves once the user answers. A newer
+   *  request supersedes an unanswered one and settles it as cancelled. */
+  confirm: (request: ConfirmRequest) => Promise<boolean>;
+  resolveConfirm: (ok: boolean) => void;
 }
 
 export const useUIStore = create<UIState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       // The single source of truth for the theme is the backend appearance.theme; this
       // store only holds the UI selection, kept in sync by shell/themeBridge via
       // get_theme / settings.changed. The theme DOM data-theme is applied only by
@@ -69,6 +87,8 @@ export const useUIStore = create<UIState>()(
       fontScale: 1.0,
       toasts: [],
       modalDepth: 0,
+      confirmRequest: null,
+      confirmResolve: null,
 
       setTheme: (theme) => {
         set({ theme });
@@ -107,6 +127,19 @@ export const useUIStore = create<UIState>()(
       popModal: () => {
         set((state) => ({ modalDepth: Math.max(0, state.modalDepth - 1) }));
       },
+
+      confirm: (request) => {
+        // Supersede any unanswered request so its awaiter never hangs.
+        get().confirmResolve?.(false);
+        return new Promise<boolean>((resolve) => {
+          set({ confirmRequest: request, confirmResolve: resolve });
+        });
+      },
+
+      resolveConfirm: (ok) => {
+        get().confirmResolve?.(ok);
+        set({ confirmRequest: null, confirmResolve: null });
+      },
     }),
     {
       name: STORAGE.uiStore,
@@ -124,3 +157,9 @@ export const useUIStore = create<UIState>()(
     }
   )
 );
+
+/** Imperative confirm: Promise-based window.confirm replacement, rendered by
+ *  the shell-mounted ConfirmDialogHost through the shared glass dialog. */
+export function confirmDialog(request: ConfirmRequest): Promise<boolean> {
+  return useUIStore.getState().confirm(request);
+}

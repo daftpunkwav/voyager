@@ -786,31 +786,151 @@
   text-align: center;
 }
 
-/* Workspace directory chooser dialog (opened from the composer chip). */
-.chat-ws__browserbar {
+/* Workspace directory chooser dialog (opened from the composer chip).
+   Settings-LLM dialog grammar: one glass panel, hairline rows on a rounded
+   list container, uppercase-free 17px title, actions right-aligned. */
+.ws-browser {
+  width: min(640px, 94vw);
+  max-width: min(640px, 94vw);
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ws-browser__pathrow {
   display: flex;
   gap: 8px;
   align-items: center;
 }
-.chat-ws__listing {
-  list-style: none;
-  margin: 0;
-  padding: 4px;
-  max-height: 260px;
-  overflow-y: auto;
+.ws-browser__pathrow .input {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.ws-browser__quick {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ws-browser__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--bg-300);
-  border-radius: 8px;
+  background: var(--bg-100);
+  color: var(--text-600);
+  font: 500 12.5px/1.2 var(--font-sans);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast, 150ms) var(--ease),
+    background var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease),
+    transform 160ms var(--ease);
+}
+.ws-browser__chip svg {
+  width: 13px;
+  height: 13px;
+}
+.ws-browser__chip:hover {
+  background: var(--bg-200);
+  color: var(--text-800);
+}
+.ws-browser__chip:active {
+  transform: scale(0.97);
+}
+.ws-browser__list {
+  border: 1px solid var(--bg-300);
+  border-radius: var(--radius, 12px);
+  max-height: 320px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 1px;
 }
-.chat-ws__up {
-  width: auto;
-  padding: 4px 10px;
+.ws-browser__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-bottom: 1px solid var(--bg-300);
+  background: var(--bg-50);
+  color: var(--text-700);
+  font: 500 13px/1.3 var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease);
 }
-.chat-ws__error {
+.ws-browser__row:last-child {
+  border-bottom: 0;
+}
+.ws-browser__row:first-child {
+  border-top-left-radius: calc(var(--radius, 12px) - 1px);
+  border-top-right-radius: calc(var(--radius, 12px) - 1px);
+}
+.ws-browser__row:last-child {
+  border-bottom-left-radius: calc(var(--radius, 12px) - 1px);
+  border-bottom-right-radius: calc(var(--radius, 12px) - 1px);
+}
+.ws-browser__row:hover {
+  background: rgba(127, 127, 127, 0.1);
+  color: var(--text-900);
+}
+.ws-browser__row:active {
+  background: rgba(127, 127, 127, 0.16);
+}
+.ws-browser__row-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: var(--text-400);
+}
+.ws-browser__row:hover .ws-browser__row-icon {
+  color: var(--brand-600);
+}
+.ws-browser__row-name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-browser__empty {
   margin: 0;
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-500);
+}
+.ws-browser__error {
+  margin: 0;
+  font-size: 12.5px;
   color: var(--error);
+}
+[data-theme='dark'] .ws-browser__list {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+[data-theme='dark'] .ws-browser__row {
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+[data-theme='dark'] .ws-browser__row:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+[data-theme='dark'] .ws-browser__chip {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-400);
+}
+[data-theme='dark'] .ws-browser__chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-200);
 }
 
 /* Inline execution trace: collapsible round groups under (and above) the
@@ -1376,10 +1496,17 @@ a.chat-card:hover {
   font-size: 11.5px;
   color: var(--text-500);
   cursor: pointer;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease),
+    transform 160ms var(--ease);
 }
 .composer-ws:hover:not(:disabled) {
   background: var(--bg-200);
   color: var(--text-700);
+}
+.composer-ws:active:not(:disabled) {
+  transform: scale(0.97);
 }
 .composer-ws:disabled {
   opacity: 0.5;
@@ -1418,10 +1545,17 @@ a.chat-card:hover {
   font-size: 12.5px;
   font-weight: 500;
   min-width: 0;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease),
+    transform 160ms var(--ease);
 }
 .composer-dd__trigger:hover:not(:disabled) {
   background: var(--bg-200);
   color: var(--text-800);
+}
+.composer-dd__trigger:active:not(:disabled) {
+  transform: scale(0.97);
 }
 .composer-dd__trigger:disabled {
   opacity: 0.45;
@@ -1468,9 +1602,23 @@ a.chat-card:hover {
   font-size: 13px;
   color: var(--text-700);
   text-align: left;
+  /* Menu items cascade in with the shared stagger; never blocks interaction */
+  animation: menuItemIn var(--dur-fast, 150ms) ease both;
+}
+.composer-dd__item:nth-child(2) {
+  animation-delay: 16ms;
+}
+.composer-dd__item:nth-child(3) {
+  animation-delay: 32ms;
+}
+.composer-dd__item:nth-child(n + 4) {
+  animation-delay: 48ms;
 }
 .composer-dd__item:hover {
   background: var(--bg-200);
+}
+.composer-dd__item:active {
+  transform: scale(0.98);
 }
 .composer-dd__item[aria-selected='true'] {
   color: var(--text-800);
@@ -1503,9 +1651,15 @@ a.chat-card:hover {
   background: none;
   cursor: pointer;
   border-radius: 50%;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease),
+    transform 160ms var(--ease);
 }
 .ctx-ring__btn:hover {
   background: var(--bg-200);
+}
+.ctx-ring__btn:active {
+  transform: scale(0.92);
 }
 .ctx-ring__pop {
   position: absolute;
@@ -1586,8 +1740,10 @@ a.chat-card:hover {
   gap: 14px;
 }
 .ask-dialog__prompt {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
   color: var(--text-800);
 }
 .ask-options {
@@ -1604,9 +1760,16 @@ a.chat-card:hover {
   color: var(--text-800);
   font: inherit;
   font-size: 13px;
+  transition:
+    border-color var(--dur-fast, 150ms) var(--ease),
+    background var(--dur-fast, 150ms) var(--ease),
+    transform 160ms var(--ease);
 }
 .ask-option:hover {
   border-color: var(--brand-400);
+}
+.ask-option:active {
+  transform: scale(0.98);
 }
 .ask-option--selected {
   border-color: var(--brand-400);
@@ -1615,7 +1778,7 @@ a.chat-card:hover {
 }
 .ask-actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   justify-content: flex-end;
 }
 
@@ -1626,7 +1789,7 @@ a.chat-card:hover {
   gap: 6px;
   align-items: center;
 }
-.ask-custom .setting-input {
+.ask-custom .input {
   flex: 1;
   min-width: 0;
 }
@@ -1660,6 +1823,15 @@ a.chat-card:hover {
   color: var(--bg-400);
   cursor: pointer;
   padding: 0 2px;
+  transition:
+    color var(--dur-fast, 150ms) var(--ease),
+    transform 160ms var(--ease);
+}
+.ask-star:hover {
+  transform: scale(1.08);
+}
+.ask-star:active {
+  transform: scale(0.92);
 }
 .ask-star--on {
   color: var(--brand-400);
@@ -2654,6 +2826,24 @@ a.chat-card:hover {
   box-shadow: 0 4px 14px rgba(0, 100, 214, 0.35);
   cursor: pointer;
   z-index: var(--z-modal, 1000);
+  /* Enters with a gentle grow (never from scale(0)); presses compress slightly */
+  animation: floatDotIn var(--dur-base, 200ms) var(--ease-apple) both;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease),
+    transform 160ms var(--ease);
+}
+.float-dot:active {
+  transform: scale(0.94);
+}
+@keyframes floatDotIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .float-dot svg {
   width: 22px;
@@ -2691,6 +2881,34 @@ a.chat-card:hover {
   flex-direction: column;
   overflow: hidden;
   z-index: var(--z-modal, 1000);
+  /* Grows up from the dot's corner; exit retracts faster than enter */
+  --float-out: 160ms;
+  transform-origin: bottom right;
+  animation: floatPanelIn var(--dur-base, 200ms) var(--ease-apple) both;
+}
+.float-panel.is-leaving {
+  animation: floatPanelOut var(--float-out) ease both;
+  pointer-events: none;
+}
+@keyframes floatPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes floatPanelOut {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
 }
 .float-panel__head {
   display: flex;
@@ -2716,13 +2934,6 @@ a.chat-card:hover {
 .float-panel__body .chat-stream {
   flex: 1;
   overflow: visible;
-}
-.float-panel .ask-dialog {
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 10px;
-  max-width: none;
 }
 
 /* ==========================================================================
@@ -3010,10 +3221,17 @@ a.chat-card:hover {
   line-height: 1;
   padding: 4px 5px;
   border-radius: 6px;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease),
+    transform 160ms var(--ease);
 }
 .sidebar-sessions__menu-btn:hover {
   color: var(--text-1);
   background: rgba(120, 120, 128, 0.2);
+}
+.sidebar-sessions__menu-btn:active {
+  transform: scale(0.92);
 }
 .sidebar-sessions__menu {
   position: absolute;
@@ -3038,10 +3256,23 @@ a.chat-card:hover {
   padding: 6px 10px;
   border-radius: 7px;
   cursor: pointer;
+  animation: menuItemIn var(--dur-fast, 150ms) ease both;
+}
+.sidebar-sessions__menu button:nth-child(2) {
+  animation-delay: 16ms;
+}
+.sidebar-sessions__menu button:nth-child(3) {
+  animation-delay: 32ms;
+}
+.sidebar-sessions__menu button:nth-child(n + 4) {
+  animation-delay: 48ms;
 }
 .sidebar-sessions__menu button:hover {
   background: var(--bg-200);
   color: var(--text-1);
+}
+.sidebar-sessions__menu button:active {
+  transform: scale(0.98);
 }
 .sidebar-sessions__menu button.is-danger {
   color: var(--error);
@@ -3073,10 +3304,16 @@ a.chat-card:hover {
   padding: 5px 8px;
   border-radius: 7px;
   cursor: pointer;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease);
 }
 .sidebar-sessions__archtoggle:hover {
   color: var(--text-1);
   background: var(--bg-200);
+}
+.sidebar-sessions__archtoggle:active {
+  transform: scale(0.98);
 }
 .sidebar-sessions__ctx {
   display: flex;
@@ -3104,15 +3341,22 @@ a.chat-card:hover {
   max-height: min(82vh, 780px);
   display: flex;
   flex-direction: column;
-  background: var(--bg-0);
-  border: 1px solid var(--bg-300);
+  /* Same dialog glass material as .modal (light: blurred tint, dark: near-solid) */
+  background: var(--lg-dialog-tint);
+  backdrop-filter: blur(var(--lg-dialog-blur));
+  -webkit-backdrop-filter: blur(var(--lg-dialog-blur));
+  border: 1px solid var(--lg-dialog-border);
   border-radius: 14px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+  box-shadow:
+    var(--lg-dialog-shadow-outer), var(--lg-dialog-inset-top), var(--lg-dialog-inset-bottom),
+    var(--lg-dialog-inset-glow);
   overflow: hidden;
 }
 [data-theme='dark'] .chat-run-overlay .chat-run {
-  background: var(--bg-100);
-  border-color: rgba(255, 255, 255, 0.09);
+  background: var(--lg-dialog-tint);
+  border-color: var(--lg-dialog-border);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .chat-run__head {
   display: flex;

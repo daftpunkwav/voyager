@@ -26,6 +26,7 @@ import type { LlmProvider } from '@/api/types';
 import { listProviders, firstEnabledModel } from '@/api/llm';
 import { LLM_MODEL_KEY, LLM_PROVIDER_KEY, LLM_REASONING_EFFORT_KEY } from '@/api/settings';
 import type { UseChatSendReturn } from '@/hooks/useChatSend';
+import { Popover } from '@/components/common/Popover';
 import { ContextRing } from '@/widgets/chat/ContextRing';
 import { WorkspacePathChip } from '@/widgets/chat/WorkspaceChip';
 
@@ -46,8 +47,8 @@ interface ChatComposerProps {
   onManageModels?: () => void;
 }
 
-/** One dropdown in the composer bar: trigger button + popup list, closes on
- *  outside click / Escape. */
+/** One dropdown in the composer bar: trigger button + popup list. Open/close
+ *  behavior and the anchored enter/exit motion live in the shared Popover. */
 function BarDropdown({
   label,
   ariaLabel,
@@ -61,22 +62,6 @@ function BarDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
 
   return (
     <div className="composer-dd" ref={ref}>
@@ -103,11 +88,16 @@ function BarDropdown({
           <path d="M6 9l6 6 6-6" />
         </svg>
       </button>
-      {open ? (
-        <div className="composer-dd__pop glass-card glass-card--dialog" role="listbox">
-          {children(() => setOpen(false))}
-        </div>
-      ) : null}
+      <Popover
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorRef={ref}
+        direction="up"
+        role="listbox"
+        className="composer-dd__pop glass-card glass-card--dialog"
+      >
+        {() => children(() => setOpen(false))}
+      </Popover>
     </div>
   );
 }

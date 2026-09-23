@@ -37,6 +37,20 @@ Non-capability endpoints in use: `/api/chat/messages`, `/api/chat/trajectory`, `
 
 `src/i18n/` — single idempotent i18next init (`bootstrap.ts`), flat dotted keys (`keySeparator: false`, namespace separator `:`), `DEFAULT_LOCALE = 'zh-CN'`, supported `['zh-CN', 'en']` plus a `system` choice resolved against `navigator.languages`. Resources: `src/i18n/resources/{en,zh-CN}/` with 15 identical namespaces each. `apps/web/scripts/check-i18n-keys.mjs` enforces key parity (`npm run i18n:check`).
 
+## Floating layers and dialogs
+
+Non-modal anchored popovers (composer dropdowns, session menus, context ring)
+render through `components/common/Popover.tsx` — it owns the open/leaving
+lifecycle, outside-click/Escape dismissal, and the `.popover-pop` enter/exit
+motion (exit is faster than enter); callers own positioning and glass classes.
+Modals render through `components/common/ModalOverlay.tsx` (portal, scrim,
+symmetric enter/exit); it also tracks a module-level open stack so Escape only
+closes the topmost modal and raises `uiStore.modalDepth` while open. Confirm
+actions go through the imperative `confirmDialog()` (`stores/uiStore.ts`) —
+rendered by the shell-mounted `ConfirmDialogHost`; `window.confirm` is never
+used. Workspace hot-switching must go through `bridge/workspaceSwitch.ts` so
+the request marker is stashed before the POST.
+
 ## Settings page
 
 `src/pages/settings/SettingsPage.tsx` — one page, 17 sections in three nav groups: basic (`general`, `appearance`, `llm`), agent capabilities (`agents`, `agentLlm`, `subagents`, `plugins`, `mcp`, `skills`, `commands`, `tools`, `toolPerms`), data & system (`health`, `usage`, `activity`, `data`, `about`). Blocks compose from `src/components/settings/`.

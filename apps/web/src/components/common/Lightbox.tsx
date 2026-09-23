@@ -11,7 +11,7 @@
  * - Raise uiStore.modalDepth while open so page-level Escape yields to it first
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '@/stores/uiStore';
 
@@ -21,8 +21,27 @@ interface LightboxProps {
   onClose: () => void;
 }
 
+/** Keep in sync with the --modal-out duration in global.css */
+const LIGHTBOX_EXIT_MS = 160;
+
 export function Lightbox({ src, alt, onClose }: LightboxProps) {
   const { t } = useTranslation('common');
+  // `seenSrc` + `leaving` keep the lightbox mounted through its exit animation
+  // after the parent clears src (same lifecycle as ModalOverlay).
+  const seenSrc = useRef<string | null>(null);
+  const [leaving, setLeaving] = useState(false);
+  if (src) seenSrc.current = src;
+  const visible = Boolean(src) || leaving;
+
+  useEffect(() => {
+    if (!src && seenSrc.current) {
+      seenSrc.current = null;
+      setLeaving(true);
+      const timer = window.setTimeout(() => setLeaving(false), LIGHTBOX_EXIT_MS);
+      return () => window.clearTimeout(timer);
+    }
+  }, [src]);
+
   useEffect(() => {
     if (!src) return;
     useUIStore.getState().pushModal();
@@ -36,16 +55,16 @@ export function Lightbox({ src, alt, onClose }: LightboxProps) {
     };
   }, [src, onClose]);
 
-  if (!src) return null;
+  if (!visible) return null;
   return (
     <div
-      className="lightbox"
+      className={`lightbox${!src && leaving ? ' is-leaving' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label={alt ?? t('common:lightbox.preview')}
       onClick={onClose}
     >
-      <img src={src} alt={alt ?? ''} className="lightbox__img" />
+      <img src={seenSrc.current ?? src ?? ''} alt={alt ?? ''} className="lightbox__img" />
       <button
         type="button"
         className="lightbox__close"

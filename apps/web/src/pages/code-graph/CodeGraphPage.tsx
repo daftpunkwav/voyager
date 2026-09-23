@@ -38,7 +38,7 @@ import {
 import { useCodeGraphStore } from '@/stores/codeGraphStore';
 import { getProject } from '@/api/projects';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
-import { useUIStore } from '@/stores/uiStore';
+import { confirmDialog, useUIStore } from '@/stores/uiStore';
 import { rememberCodeGraphDetail } from './provider';
 import {
   loadDisplaySettings,
@@ -226,9 +226,11 @@ export function CodeGraphPage() {
       loading={statusQ.isLoading || trigger.isPending || refresh.isPending || delIndex.isPending}
       onIndex={(mode) => trigger.mutate(mode)}
       onRefresh={(mode) => refresh.mutate(mode)}
-      onDelete={() => {
+      onDelete={async () => {
         const name = projectQ.data?.name || id || t('codeGraph:delete.fallbackName');
-        if (window.confirm(t('codeGraph:delete.confirm', { name }))) {
+        if (
+          await confirmDialog({ message: t('codeGraph:delete.confirm', { name }), danger: true })
+        ) {
           delIndex.mutate();
         }
       }}

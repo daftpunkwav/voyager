@@ -12,7 +12,7 @@ import { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useRemovePage, useSetPageMeta, useWebPage } from '@/hooks/useSources';
-import { useUIStore } from '@/stores/uiStore';
+import { confirmDialog, useUIStore } from '@/stores/uiStore';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
 import { MarkdownRenderer } from '@/components/common/MarkdownRenderer';
@@ -105,8 +105,14 @@ export function PageReader() {
             type="button"
             className="icon-btn"
             aria-label={t('sources:web.deleteAria')}
-            onClick={() => {
-              if (!window.confirm(t('sources:web.deleteConfirm', { title: page.title }))) return;
+            onClick={async () => {
+              if (
+                !(await confirmDialog({
+                  message: t('sources:web.deleteConfirm', { title: page.title }),
+                  danger: true,
+                }))
+              )
+                return;
               removePage.mutate(page.id, {
                 onSuccess: () => {
                   addToast({ type: 'success', message: t('sources:web.deleted') });

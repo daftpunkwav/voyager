@@ -855,6 +855,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Head/body/foot carry their own padding: cancel the .modal shell padding */
+  padding: 0;
 }
 .edit-project-modal__head {
   display: flex;
@@ -868,6 +870,7 @@
   margin: 0;
   font-size: 17px;
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 .edit-project-modal__body {
   padding: 16px 20px;
@@ -885,6 +888,12 @@
   gap: 10px;
   padding: 12px 20px 16px;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+[data-theme='dark'] .edit-project-modal__head {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+[data-theme='dark'] .edit-project-modal__foot {
+  border-top-color: rgba(255, 255, 255, 0.08);
 }
 .edit-project-field {
   display: flex;
@@ -908,6 +917,14 @@
   font-weight: 600;
   color: var(--text-700);
   cursor: pointer;
+  transition:
+    border-color var(--dur-fast, 150ms) var(--ease),
+    background var(--dur-fast, 150ms) var(--ease),
+    color var(--dur-fast, 150ms) var(--ease),
+    transform 160ms var(--ease);
+}
+.edit-tag-chip:active {
+  transform: scale(0.97);
 }
 .edit-tag-chip.is-on {
   background: rgba(0, 122, 255, 0.12);
@@ -975,6 +992,11 @@
   overflow: hidden;
   position: relative;
   isolation: isolate;
+  /* Same panel motion as .modal (this shell does not carry the .modal class) */
+  animation: sheetIn var(--dur-base, 200ms) var(--ease-apple) both;
+}
+.modal-overlay.is-leaving .import-agent-modal {
+  animation: sheetOut var(--modal-out, 160ms) ease both;
 }
 .import-agent-modal--large {
   width: min(95vw, 1000px);
@@ -989,7 +1011,7 @@
 }
 .import-agent-modal__header h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
 }

@@ -8,7 +8,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeAll, beforeEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import { initI18n } from '@/i18n';
 
 const { callCapabilityMock, getApiMock } = vi.hoisted(() => ({
@@ -185,8 +185,18 @@ describe('network permission (phase-10)', () => {
 });
 
 describe('workspace directory (phase-10, hot-switch)', () => {
+  // Restore the real confirm action after each store override
+  const realConfirm = useUIStore.getState().confirm;
+  afterEach(() => {
+    useUIStore.setState({ confirm: realConfirm });
+  });
+
   it('saving hot-switches through the switch endpoint after confirming', async () => {
-    const confirmMock = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    // The confirm goes through the global confirmDialog (uiStore.confirm)
+    const confirmMock = vi.fn(async () => true);
+    useUIStore.setState({
+      confirm: confirmMock as unknown as Parameters<typeof useUIStore.setState>[0]['confirm'],
+    });
     const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({ workspace: 'ws2' }),
@@ -216,13 +226,15 @@ describe('workspace directory (phase-10, hot-switch)', () => {
         expect(useUIStore.getState().toasts.some((t) => t.type === 'success')).toBe(true)
       );
     } finally {
-      confirmMock.mockRestore();
       vi.unstubAllGlobals();
     }
   });
 
   it('cancelling the confirm sends no switch request', async () => {
-    const confirmMock = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const confirmMock = vi.fn(async () => false);
+    useUIStore.setState({
+      confirm: confirmMock as unknown as Parameters<typeof useUIStore.setState>[0]['confirm'],
+    });
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     try {
@@ -234,7 +246,6 @@ describe('workspace directory (phase-10, hot-switch)', () => {
       await waitFor(() => expect(confirmMock).toHaveBeenCalled());
       expect(fetchMock).not.toHaveBeenCalled();
     } finally {
-      confirmMock.mockRestore();
       vi.unstubAllGlobals();
     }
   });

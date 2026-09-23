@@ -9,8 +9,9 @@
  * - Render clamped contrast / brightness sliders over the adaptive density baseline
  * - Push changes upward through onChange; close on outside click or Escape
  */
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Popover } from '@/components/common/Popover';
 import { DEFAULT_DISPLAY_SETTINGS, DISPLAY_LIMITS, type DisplaySettings } from './density';
 
 interface DisplaySettingsMenuProps {
@@ -54,24 +55,6 @@ export function DisplaySettingsMenu({ settings, onChange }: DisplaySettingsMenuP
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
   const set = (patch: Partial<DisplaySettings>) => onChange({ ...settings, ...patch });
 
   const isDefault =
@@ -93,54 +76,54 @@ export function DisplaySettingsMenu({ settings, onChange }: DisplaySettingsMenuP
         {!isDefault && <span className="code-graph-display-menu__dot" aria-hidden />}
       </button>
 
-      {open && (
-        <div
-          role="dialog"
-          aria-label={t('codeGraph:display.dialogAria')}
-          className="code-graph-display-menu__panel glass-card glass-card--overview-inner"
-        >
-          <div className="code-graph-display-menu__header">
-            <span className="code-graph-display-menu__title">
-              {t('codeGraph:display.contrast')}
-            </span>
-            <button
-              type="button"
-              className="code-graph-display-menu__reset"
-              onClick={() => onChange({ ...DEFAULT_DISPLAY_SETTINGS })}
-              disabled={isDefault}
-            >
-              {t('codeGraph:display.reset')}
-            </button>
-          </div>
-
-          <SliderRow
-            label={t('codeGraph:display.edgeBrightness')}
-            hint={t('codeGraph:display.edgeBrightnessHint')}
-            value={settings.edgeBrightness}
-            min={DISPLAY_LIMITS.edgeBrightness.min}
-            max={DISPLAY_LIMITS.edgeBrightness.max}
-            onChange={(edgeBrightness) => set({ edgeBrightness })}
-          />
-          <SliderRow
-            label={t('codeGraph:display.nodeGlow')}
-            hint={t('codeGraph:display.nodeGlowHint')}
-            value={settings.nodeGlow}
-            min={DISPLAY_LIMITS.nodeGlow.min}
-            max={DISPLAY_LIMITS.nodeGlow.max}
-            onChange={(nodeGlow) => set({ nodeGlow })}
-          />
-          <SliderRow
-            label="Bloom"
-            hint={t('codeGraph:display.bloomHint')}
-            value={settings.bloom}
-            min={DISPLAY_LIMITS.bloom.min}
-            max={DISPLAY_LIMITS.bloom.max}
-            onChange={(bloom) => set({ bloom })}
-          />
-
-          <p className="code-graph-display-menu__footer">{t('codeGraph:display.footer')}</p>
+      <Popover
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorRef={rootRef}
+        direction="down"
+        role="dialog"
+        ariaLabel={t('codeGraph:display.dialogAria')}
+        className="code-graph-display-menu__panel glass-card glass-card--overview-inner"
+      >
+        <div className="code-graph-display-menu__header">
+          <span className="code-graph-display-menu__title">{t('codeGraph:display.contrast')}</span>
+          <button
+            type="button"
+            className="code-graph-display-menu__reset"
+            onClick={() => onChange({ ...DEFAULT_DISPLAY_SETTINGS })}
+            disabled={isDefault}
+          >
+            {t('codeGraph:display.reset')}
+          </button>
         </div>
-      )}
+
+        <SliderRow
+          label={t('codeGraph:display.edgeBrightness')}
+          hint={t('codeGraph:display.edgeBrightnessHint')}
+          value={settings.edgeBrightness}
+          min={DISPLAY_LIMITS.edgeBrightness.min}
+          max={DISPLAY_LIMITS.edgeBrightness.max}
+          onChange={(edgeBrightness) => set({ edgeBrightness })}
+        />
+        <SliderRow
+          label={t('codeGraph:display.nodeGlow')}
+          hint={t('codeGraph:display.nodeGlowHint')}
+          value={settings.nodeGlow}
+          min={DISPLAY_LIMITS.nodeGlow.min}
+          max={DISPLAY_LIMITS.nodeGlow.max}
+          onChange={(nodeGlow) => set({ nodeGlow })}
+        />
+        <SliderRow
+          label="Bloom"
+          hint={t('codeGraph:display.bloomHint')}
+          value={settings.bloom}
+          min={DISPLAY_LIMITS.bloom.min}
+          max={DISPLAY_LIMITS.bloom.max}
+          onChange={(bloom) => set({ bloom })}
+        />
+
+        <p className="code-graph-display-menu__footer">{t('codeGraph:display.footer')}</p>
+      </Popover>
     </div>
   );
 }

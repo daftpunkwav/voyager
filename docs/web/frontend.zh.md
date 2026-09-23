@@ -37,6 +37,10 @@ React 19(经根 `package.json` 的 `overrides` 精确钉版)、`react-router-dom
 
 `src/i18n/` — 单次幂等的 i18next 初始化(`bootstrap.ts`),平铺点号键(`keySeparator: false`,命名空间分隔符 `:`),`DEFAULT_LOCALE = 'zh-CN'`,支持 `['zh-CN', 'en']` 加 `system` 选项(按 `navigator.languages` 解析)。资源:`src/i18n/resources/{en,zh-CN}/`,各 15 个相同命名空间。`apps/web/scripts/check-i18n-keys.mjs` 强制键 parity(`npm run i18n:check`)。
 
+## 浮层与弹窗
+
+非模态锚定浮层(composer 下拉、会话菜单、上下文环)经 `components/common/Popover.tsx` 渲染——它持有 open/leaving 生命周期、外点/Escape 关闭与 `.popover-pop` 进出场动效(退场快于进场);调用方自持定位与玻璃材质类。模态经 `components/common/ModalOverlay.tsx`(portal、scrim、对称进出场);它还维护模块级打开栈,保证 Escape 只关最上层模态,并在打开期间抬高 `uiStore.modalDepth`。确认操作走命令式 `confirmDialog()`(`stores/uiStore.ts`)——由 shell 挂载的 `ConfirmDialogHost` 渲染;不使用 `window.confirm`。工作区热切换必须经 `bridge/workspaceSwitch.ts`,确保请求 marker 先于 POST 落入 chatStore。
+
 ## 设置页
 
 `src/pages/settings/SettingsPage.tsx` — 单页 17 节,三个导航组:基础(`general`、`appearance`、`llm`)、Agent 能力(`agents`、`agentLlm`、`subagents`、`plugins`、`mcp`、`skills`、`commands`、`tools`、`toolPerms`)、数据与系统(`health`、`usage`、`activity`、`data`、`about`)。块由 `src/components/settings/` 组合。

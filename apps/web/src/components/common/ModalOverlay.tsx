@@ -9,9 +9,13 @@
  * - Keep children mounted through the exit animation, then stop rendering
  * - Overlay click and Escape route to onClose; modals mark themselves with
  *   role="dialog" and stop propagation on their own surface
+ * - Track a module-level open stack so Escape only closes the topmost modal
+ *   (a confirm dialog layered over a browser modal closes alone), and raise
+ *   uiStore.modalDepth while open so page-level Esc handling yields
  */
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useUIStore } from '@/stores/uiStore';
 
 interface ModalOverlayProps {
   open: boolean;
@@ -24,6 +28,14 @@ interface ModalOverlayProps {
 
 /** Keep this in sync with the --modal-out duration in global.css */
 export const MODAL_EXIT_MS = 160;
+
+// Open-modal stack: ids grow with open order, so the largest open id is the
+// visually topmost modal (portals append in open order) and only it consumes
+// Escape. Ids are handed out when the modal opens, never at mount time —
+// an app-level host (ConfirmDialogHost) mounts before page modals but must
+// not pin a low id forever.
+let modalSeq = 0;
+const openModalIds = new Set<number>();
 
 export function ModalOverlay({ open, onClose, className, children }: ModalOverlayProps) {
   // `seenOpen` keeps the first enter from being treated as an exit; `leaving`
@@ -48,13 +60,23 @@ export function ModalOverlay({ open, onClose, className, children }: ModalOverla
 
   useEffect(() => {
     if (!open) return;
+    const id = ++modalSeq;
+    openModalIds.add(id);
+    useUIStore.getState().pushModal();
     const onKey = (e: KeyboardEvent) => {
       // Inner Escape consumers (e.g. a rename input cancelling itself) mark
       // the event handled via preventDefault; the modal must not double-close.
-      if (e.key === 'Escape' && !e.defaultPrevented) onClose();
+      // Layered modals: only the topmost one answers Escape.
+      if (e.key === 'Escape' && !e.defaultPrevented && Math.max(...openModalIds) === id) {
+        onClose();
+      }
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      openModalIds.delete(id);
+      useUIStore.getState().popModal();
+      window.removeEventListener('keydown', onKey);
+    };
   }, [open, onClose]);
 
   if (!open && !leaving) return null;

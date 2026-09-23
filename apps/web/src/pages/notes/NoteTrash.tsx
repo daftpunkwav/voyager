@@ -79,7 +79,7 @@ export function TrashPanel({ open, onClose }: { open: boolean; onClose: () => vo
                     <span className="trash-panel__actions">
                       <button
                         type="button"
-                        className="btn btn-sm"
+                        className="btn btn-ghost btn-sm"
                         onClick={() =>
                           restore.mutate(n.id, {
                             onSuccess: () =>

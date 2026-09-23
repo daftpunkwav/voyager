@@ -23,7 +23,7 @@ import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { SettingsToolbar } from '@/components/settings/SettingsToolbar';
 import { Switch } from '@/components/common/Switch';
-import { useUIStore } from '@/stores/uiStore';
+import { confirmDialog, useUIStore } from '@/stores/uiStore';
 import { extractErrorMessage } from '@/utils/errors';
 import type { PluginApproveResult, PluginInstallResult, PluginItem } from './types';
 
@@ -241,6 +241,7 @@ function PluginInstallDialog({
             id="plugin-zip"
             type="file"
             accept=".zip"
+            className="plugin-zip-input"
             aria-label={t('plugins.zipAria')}
             key={zipKey}
             disabled={busy}
@@ -367,7 +368,8 @@ export function PluginsBlock() {
     overwrite: boolean;
   }) => {
     if (installing || (!input.zipFile && !input.dirPath.trim())) return;
-    if (input.overwrite && !window.confirm(t('plugins.overwriteConfirm'))) return;
+    if (input.overwrite && !(await confirmDialog({ message: t('plugins.overwriteConfirm') })))
+      return;
     setInstalling(true);
     try {
       // Zips go through the existing upload transport (/api/uploads -> workspace/imports), which returns a server-side path;
@@ -396,7 +398,13 @@ export function PluginsBlock() {
   };
 
   const onDelete = async (p: PluginItem) => {
-    if (!window.confirm(t('plugins.deleteConfirm', { name: p.name, path: p.path }))) return;
+    if (
+      !(await confirmDialog({
+        message: t('plugins.deleteConfirm', { name: p.name, path: p.path }),
+        danger: true,
+      }))
+    )
+      return;
     setBusyName(p.name);
     try {
       await uninstallPlugin(p.name);
@@ -412,7 +420,7 @@ export function PluginsBlock() {
     }
   };
 
-  const onUnapprove = (p: PluginItem) => {
+  const onUnapprove = async (p: PluginItem) => {
     // Unapproving reclaims the plugin's registered external MCP servers that have no approved tools;
     // servers with approved tools or shared with other plugins are kept by the backend, with the outcome disclosed in the toast. The confirm dialog lists the reclaim candidates.
     const reclaimable = p.mcp
@@ -420,7 +428,13 @@ export function PluginsBlock() {
       .map((m) => m.id);
     const note =
       reclaimable.length > 0 ? t('plugins.revokeNote', { list: reclaimable.join('、') }) : '';
-    if (!window.confirm(t('plugins.revokeConfirm', { name: p.name, note }))) return;
+    if (
+      !(await confirmDialog({
+        message: t('plugins.revokeConfirm', { name: p.name, note }),
+        danger: true,
+      }))
+    )
+      return;
     void run('revoke', p, { granularity: 'bundle' });
   };
 

@@ -5,7 +5,8 @@
  * must stash a request marker in chatStore before the POST (the broadcast
  * races the HTTP response), or its own tab sees the misleading
  * "switched elsewhere" toast. Covers the settings WorkspaceBlock surface;
- * the composer chip's useWorkspaceSwitch follows the same protocol.
+ * the composer chip's browser follows the same protocol through the shared
+ * bridge/workspaceSwitch helper.
  */
 
 import { fireEvent, render, screen } from '@testing-library/react';
@@ -16,6 +17,7 @@ const { callCapabilityMock } = vi.hoisted(() => ({ callCapabilityMock: vi.fn() }
 vi.mock('@/bridge/client', () => ({ callCapability: callCapabilityMock }));
 
 import { WorkspaceBlock } from '@/components/settings/agent/WorkspaceBlock';
+import { stubConfirm } from './helpers/stubConfirm';
 import { useChatStore } from '@/stores/chatStore';
 import { useUIStore } from '@/stores/uiStore';
 import { initI18n } from '@/i18n';
@@ -36,7 +38,6 @@ describe('WorkspaceBlock switch stashes the marker before the POST', () => {
         return { ok: true, json: async () => ({ workspace: 'next-ws' }) } as Response;
       })
     );
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     render(<WorkspaceBlock />);
     const input = await screen.findByLabelText('工作目录');
@@ -61,7 +62,7 @@ describe('WorkspaceBlock switch stashes the marker before the POST', () => {
     callCapabilityMock.mockResolvedValue({ value: 'old-ws' });
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    confirmMock.mockResolvedValue(false);
 
     render(<WorkspaceBlock />);
     const input = await screen.findByLabelText('工作目录');
@@ -75,12 +76,14 @@ describe('WorkspaceBlock switch stashes the marker before the POST', () => {
   });
 });
 
+// The confirm answers through the shared confirmDialog stub (defaults to yes)
+const confirmMock = stubConfirm(true);
+
 beforeEach(() => {
   callCapabilityMock.mockReset();
   useChatStore.setState({ workspaceSwitchMarker: null });
   useUIStore.setState({ toasts: [] });
   vi.stubGlobal('crypto', { randomUUID: () => 'marker-settings-1' });
   vi.stubGlobal('fetch', vi.fn());
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
   initI18n();
 });

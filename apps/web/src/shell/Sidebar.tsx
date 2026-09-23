@@ -11,10 +11,11 @@
  *   usage with a compact action
  * - Keep the footer entries legible when collapsed (icon-only, centered)
  */
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { NavIcons } from '@/components/icons/NavIcons';
+import { Popover } from '@/components/common/Popover';
 import { useUIStore } from '@/stores/uiStore';
 import { useChatStore } from '@/stores/chatStore';
 import { loadChatSessions, loadSessionTimeline } from '@/bridge/chatSend';
@@ -101,6 +102,9 @@ function SidebarSessions() {
   const [confirming, setConfirming] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [ctxPct, setCtxPct] = useState<number | null>(null);
+  // Session rows register their root element here so the per-row popover menu
+  // can treat clicks inside its own row (trigger included) as "inside".
+  const rowEls = useRef(new Map<string, HTMLDivElement>());
 
   useEffect(() => {
     // Silent on failure: the store keeps its previous list (same as chatSend).
@@ -169,6 +173,13 @@ function SidebarSessions() {
     setMenuFor(null);
     setConfirming(null);
   };
+  // A ref-shaped view over the registered row element; Popover reads .current
+  // at event time, so the getter always sees the mounted row root.
+  const anchorFor = (id: string): React.RefObject<HTMLElement | null> => ({
+    get current() {
+      return rowEls.current.get(id) ?? null;
+    },
+  });
 
   const renderRow = (row: ChatSessionRow) => {
     const isActive = row.session_id === activeId;
@@ -202,7 +213,14 @@ function SidebarSessions() {
       );
     }
     return (
-      <div key={row.session_id} className="sidebar-sessions__row">
+      <div
+        key={row.session_id}
+        className="sidebar-sessions__row"
+        ref={(el) => {
+          if (el) rowEls.current.set(row.session_id, el);
+          else rowEls.current.delete(row.session_id);
+        }}
+      >
         <button
           type="button"
           className={`sidebar-sessions__item${isActive ? ' is-active' : ''}`}
@@ -230,72 +248,77 @@ function SidebarSessions() {
         >
           ⋯
         </button>
-        {menuOpen ? (
-          <div className="sidebar-sessions__menu" role="menu">
+        <Popover
+          open={menuOpen}
+          onClose={closeMenu}
+          anchorRef={anchorFor(row.session_id)}
+          direction="down"
+          role="menu"
+          className="sidebar-sessions__menu"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              closeMenu();
+              void run(async () => {
+                await pinSession(row.session_id, !row.pinned);
+                await loadChatSessions();
+              });
+            }}
+          >
+            {row.pinned ? t('session.unpin') : t('session.pin')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenuFor(null);
+              setRenameDraft(row.title || '');
+              setRenaming(row.session_id);
+            }}
+          >
+            {t('session.rename')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              closeMenu();
+              void run(async () => {
+                await archiveSession(row.session_id, !row.archived);
+                await loadChatSessions();
+              });
+            }}
+          >
+            {row.archived ? t('session.unarchive') : t('session.archive')}
+          </button>
+          {confirming === row.session_id ? (
             <button
               type="button"
               role="menuitem"
+              className="is-danger"
               onClick={() => {
                 closeMenu();
                 void run(async () => {
-                  await pinSession(row.session_id, !row.pinned);
+                  await deleteSession(row.session_id);
                   await loadChatSessions();
                 });
               }}
             >
-              {row.pinned ? t('session.unpin') : t('session.pin')}
+              {t('session.confirmDelete')}
             </button>
+          ) : (
             <button
               type="button"
               role="menuitem"
-              onClick={() => {
-                setMenuFor(null);
-                setRenameDraft(row.title || '');
-                setRenaming(row.session_id);
-              }}
+              className="is-danger"
+              onClick={() => setConfirming(row.session_id)}
             >
-              {t('session.rename')}
+              {t('session.delete')}
             </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                closeMenu();
-                void run(async () => {
-                  await archiveSession(row.session_id, !row.archived);
-                  await loadChatSessions();
-                });
-              }}
-            >
-              {row.archived ? t('session.unarchive') : t('session.archive')}
-            </button>
-            {confirming === row.session_id ? (
-              <button
-                type="button"
-                role="menuitem"
-                className="is-danger"
-                onClick={() => {
-                  closeMenu();
-                  void run(async () => {
-                    await deleteSession(row.session_id);
-                    await loadChatSessions();
-                  });
-                }}
-              >
-                {t('session.confirmDelete')}
-              </button>
-            ) : (
-              <button
-                type="button"
-                role="menuitem"
-                className="is-danger"
-                onClick={() => setConfirming(row.session_id)}
-              >
-                {t('session.delete')}
-              </button>
-            )}
-          </div>
-        ) : null}
+          )}
+        </Popover>
       </div>
     );
   };

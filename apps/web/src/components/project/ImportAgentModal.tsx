@@ -50,7 +50,7 @@ export function ImportAgentModal({
           </div>
           <button
             type="button"
-            className="chat-icon-btn"
+            className="icon-btn"
             onClick={onClose}
             aria-label={t('sources:closeAria')}
           >

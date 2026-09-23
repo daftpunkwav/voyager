@@ -17,6 +17,7 @@ vi.mock('@/bridge/client', async (importOriginal) => ({
 }));
 
 import { ResumableList } from '@/components/team/ResumableList';
+import { stubConfirm } from './helpers/stubConfirm';
 import { useUIStore } from '@/stores/uiStore';
 import { initI18n } from '@/i18n';
 
@@ -56,12 +57,14 @@ function sampleItem(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// Abandon answers through the shared confirmDialog stub (defaults to yes)
+const confirmMock = stubConfirm(true);
+
 beforeEach(() => {
   items = [];
   callCapabilityMock.mockReset();
   callCapabilityMock.mockImplementation(backend);
   useUIStore.setState({ toasts: [] });
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
 
 describe('resumable task list (phase-70 A)', () => {
@@ -104,7 +107,7 @@ describe('resumable task list (phase-70 A)', () => {
     render(<ResumableList />);
     fireEvent.click(await screen.findByRole('button', { name: '放弃' }));
 
-    expect(window.confirm).toHaveBeenCalled();
+    expect(confirmMock).toHaveBeenCalled();
     await waitFor(() =>
       expect(callCapabilityMock).toHaveBeenCalledWith('agent', 'agent_instance', {
         action: 'abandon',
@@ -145,7 +148,7 @@ describe('resumable task list (phase-70 A)', () => {
   });
 
   it('cancelling the abandon confirm dialog sends no request', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    confirmMock.mockResolvedValue(false);
     items = [sampleItem()];
     render(<ResumableList />);
     fireEvent.click(await screen.findByRole('button', { name: '放弃' }));

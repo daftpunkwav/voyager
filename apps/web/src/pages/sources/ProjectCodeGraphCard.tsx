@@ -12,7 +12,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useDeleteIndex, useIndexStatus, useTriggerIndex } from '@/hooks/useCodeGraph';
-import { useUIStore } from '@/stores/uiStore';
+import { confirmDialog, useUIStore } from '@/stores/uiStore';
 import { GLASS_INNER, GLASS_OUTER } from '@/constants/glassTokens';
 import { routes } from '@/utils/routes';
 
@@ -171,8 +171,10 @@ export function CodeGraphIndexCard({ projectId }: { projectId: string }) {
               className="btn btn-ghost btn-sm"
               disabled={isBusy || trigger.isPending || delIndex.isPending}
               style={{ height: 28, fontSize: 12, color: '#dc2626' }}
-              onClick={() => {
-                if (window.confirm(t('sources:graph.deleteConfirm'))) {
+              onClick={async () => {
+                if (
+                  await confirmDialog({ message: t('sources:graph.deleteConfirm'), danger: true })
+                ) {
                   delIndex.mutate();
                 }
               }}

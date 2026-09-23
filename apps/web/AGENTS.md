@@ -62,6 +62,18 @@ not part of the gate.
     batch action bar enters / exits by animating height + opacity.
   - Danger buttons: `.is-danger` must override the generic button `color`
     in the dark theme with `var(--error)`.
+  - Anchored popovers (dropdowns, session menus, info panels) go through
+    `components/common/Popover.tsx` (outside-click/Escape/leaving built in);
+    never hand-roll an open-state effect. Modals go through
+    `components/common/ModalOverlay.tsx` — it owns the Escape topmost-modal
+    rule, so never add a second window-level Escape listener for a dialog.
+  - Confirm actions use the imperative `confirmDialog()` from `stores/uiStore`
+    (answered by the shell-mounted `ConfirmDialogHost`, `danger: true` for
+    destructive ones); `window.confirm` is banned.
+  - Motion baseline: enter 150-250ms `--ease-apple`/`--ease-out`, exit faster
+    than enter, transitions on specific properties only, `:active` scale
+    (0.95-0.98) on pressable elements, `@media (prefers-reduced-motion)`
+    respected (the global rule shortens durations, it does not disable them).
 - Do not redefine same-name keyframes or selectors in late-loaded stylesheets;
   check `src/styles/` for an existing definition first.
 
@@ -75,3 +87,5 @@ not part of the gate.
   running.
 - TypeScript is strict; a change that weakens a type to make the compiler
   quiet is wrong.
+- Tests that need to answer the global confirm use
+  `tests/unit/helpers/stubConfirm.ts` instead of stubbing `window.confirm`.

@@ -10,8 +10,7 @@
  * - Run cancel, retry and reindex mutations with query cache invalidation
  * - List per-task details under the ready / running / failed tabs
  */
-import { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -22,6 +21,9 @@ import {
   triggerCodeGraphIndex,
 } from '@/api/codeGraph';
 import { getGraph } from '@/api/graph';
+import { ModalOverlay } from '@/components/common/ModalOverlay';
+import { Popover } from '@/components/common/Popover';
+import { confirmDialog } from '@/stores/uiStore';
 import { classifyErrorKind } from '@/components/graph/l0EdgeTypes';
 
 type IndexMode = 'fast' | 'moderate' | 'full';
@@ -78,8 +80,9 @@ function ModeMenu({
 }) {
   const { t } = useTranslation('graph');
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   return (
-    <div className="graph-index-modal__menu">
+    <div className="graph-index-modal__menu" ref={rootRef}>
       <button
         type="button"
         disabled={disabled}
@@ -88,24 +91,29 @@ function ModeMenu({
       >
         {label}
       </button>
-      {open && (
-        <div className="graph-index-modal__menu-panel" role="menu">
-          {MODE_OPTIONS.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                onPick(m.id);
-              }}
-            >
-              {t(m.label)}
-              <span className="muted">{m.id}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      <Popover
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorRef={rootRef}
+        direction="down"
+        role="menu"
+        className="graph-index-modal__menu-panel"
+      >
+        {MODE_OPTIONS.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onPick(m.id);
+            }}
+          >
+            {t(m.label)}
+            <span className="muted">{m.id}</span>
+          </button>
+        ))}
+      </Popover>
     </div>
   );
 }
@@ -233,8 +241,11 @@ export function GraphIndexProgressBar() {
 
   const busy = cancel.isPending || del.isPending || reindex.isPending;
 
-  const confirmDelete = (row: IndexRow, label: string) => {
-    const ok = window.confirm(t('graph:delete.confirm', { name: label }));
+  const confirmDelete = async (row: IndexRow, label: string) => {
+    const ok = await confirmDialog({
+      message: t('graph:delete.confirm', { name: label }),
+      danger: true,
+    });
     if (ok) del.mutate(row.project_id);
   };
 
@@ -257,23 +268,32 @@ export function GraphIndexProgressBar() {
 
   const list = tab === 'ready' ? ready : tab === 'running' ? running : failed;
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
-
-  const modal =
-    open &&
-    createPortal(
-      <div
-        className="graph-index-modal-backdrop"
-        role="presentation"
-        onClick={() => setOpen(false)}
+  return (
+    <>
+      <button
+        type="button"
+        className="graph-index-trigger"
+        onClick={() => {
+          setOpen(true);
+          /* Default to the ready tab; fall back to running/failed when nothing is ready. */
+          setTab(
+            readyCount > 0 ? 'ready' : running.length ? 'running' : failedCount ? 'failed' : 'ready'
+          );
+        }}
+        title={t('graph:index.openTitle')}
       >
+        <span className="graph-index-trigger__label">{t('graph:index.title')}</span>
+        <span className="graph-index-trigger__badge is-ok" title={t('graph:index.tab.ready')}>
+          {readyCount}
+        </span>
+        <span className="graph-index-trigger__badge is-run" title={t('graph:index.tab.running')}>
+          {running.length}
+        </span>
+        <span className="graph-index-trigger__badge is-fail" title={t('graph:index.tab.failed')}>
+          {failedCount}
+        </span>
+      </button>
+      <ModalOverlay open={open} onClose={() => setOpen(false)} className="graph-index-overlay">
         <div
           className="graph-index-modal glass-card glass-card--dialog"
           role="dialog"
@@ -379,36 +399,7 @@ export function GraphIndexProgressBar() {
             </ul>
           </div>
         </div>
-      </div>,
-      document.body
-    );
-
-  return (
-    <>
-      <button
-        type="button"
-        className="graph-index-trigger"
-        onClick={() => {
-          setOpen(true);
-          /* Default to the ready tab; fall back to running/failed when nothing is ready. */
-          setTab(
-            readyCount > 0 ? 'ready' : running.length ? 'running' : failedCount ? 'failed' : 'ready'
-          );
-        }}
-        title={t('graph:index.openTitle')}
-      >
-        <span className="graph-index-trigger__label">{t('graph:index.title')}</span>
-        <span className="graph-index-trigger__badge is-ok" title={t('graph:index.tab.ready')}>
-          {readyCount}
-        </span>
-        <span className="graph-index-trigger__badge is-run" title={t('graph:index.tab.running')}>
-          {running.length}
-        </span>
-        <span className="graph-index-trigger__badge is-fail" title={t('graph:index.tab.failed')}>
-          {failedCount}
-        </span>
-      </button>
-      {modal}
+      </ModalOverlay>
     </>
   );
 }
