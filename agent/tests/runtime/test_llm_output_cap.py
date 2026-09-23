@@ -5,7 +5,7 @@ without streaming keep the probe chain intact."""
 from typing import Any
 
 import pytest
-from agent.llm import FakeLLM, LLMReply
+from agent.llm import FakeLLM, LLMReply, StreamReply
 from agent.runtime.llm_output_cap import output_capped_llm
 
 
@@ -34,12 +34,13 @@ def _chat_settings(**overrides: Any) -> _Settings:
 
 
 class _RecordingLLM:
-    """Minimal inner client recording the max_tokens it received."""
+    """Minimal inner client recording the max_tokens it received on both the
+    complete and the complete_stream path."""
 
-    def __init__(self, *, model: str = "", with_stream: bool = True) -> None:
+    def __init__(self, *, model: str = "") -> None:
         self.model = model
         self.seen: list[int | None] = []
-        self._with_stream = with_stream
+        self.stream_seen: list[int | None] = []
 
     async def complete(
         self,
@@ -51,8 +52,16 @@ class _RecordingLLM:
         self.seen.append(max_tokens)
         return LLMReply(text="ok")
 
-    def complete_stream(self, messages: list[dict[str, Any]], tools: Any = None):
-        raise AssertionError("not used in these tests")
+    def complete_stream(
+        self, messages: list[dict[str, Any]], tools: Any = None, max_tokens: int | None = None
+    ) -> Any:
+        self.stream_seen.append(max_tokens)
+
+        async def _gen() -> Any:
+            yield StreamReply(text_delta="ok")
+            yield StreamReply(final=LLMReply(text="ok"))
+
+        return _gen()
 
 
 @pytest.mark.asyncio
@@ -86,6 +95,25 @@ async def test_explicit_max_tokens_wins() -> None:
     llm = output_capped_llm(inner, _chat_settings())  # type: ignore[arg-type]
     await llm.complete([{"role": "user", "content": "hi"}], max_tokens=555)
     assert inner.seen == [555]
+
+
+@pytest.mark.asyncio
+async def test_stream_cap_injected_and_explicit_wins() -> None:
+    """complete_stream carries the same resolution: the configured cap rides
+    the streaming call (the chat page's default path), an explicit caller
+    value wins, and the wrapper still yields the inner stream's events."""
+    inner = _RecordingLLM()
+    llm = output_capped_llm(inner, _chat_settings())  # type: ignore[arg-type]
+    chunks = [ev async for ev in llm.complete_stream([{"role": "user", "content": "hi"}])]
+    assert inner.stream_seen == [64_000]
+    assert [c.text_delta or (c.final.text if c.final else "") for c in chunks] == ["ok", "ok"]
+
+    inner2 = _RecordingLLM()
+    llm2 = output_capped_llm(inner2, _chat_settings())  # type: ignore[arg-type]
+    _ = [
+        ev async for ev in llm2.complete_stream([{"role": "user", "content": "hi"}], max_tokens=42)
+    ]
+    assert inner2.stream_seen == [42]
 
 
 @pytest.mark.asyncio
