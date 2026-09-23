@@ -104,15 +104,18 @@ async def test_stream_cap_injected_and_explicit_wins() -> None:
     value wins, and the wrapper still yields the inner stream's events."""
     inner = _RecordingLLM()
     llm = output_capped_llm(inner, _chat_settings())  # type: ignore[arg-type]
-    chunks = [ev async for ev in llm.complete_stream([{"role": "user", "content": "hi"}])]
+    # LLMClient's static type omits the streaming tier on purpose: probe the
+    # attribute like production callers do (a missing attribute fails the
+    # test, which is exactly the exposure contract under test).
+    stream_call = getattr(llm, "complete_stream")
+    chunks = [ev async for ev in stream_call([{"role": "user", "content": "hi"}])]
     assert inner.stream_seen == [64_000]
     assert [c.text_delta or (c.final.text if c.final else "") for c in chunks] == ["ok", "ok"]
 
     inner2 = _RecordingLLM()
     llm2 = output_capped_llm(inner2, _chat_settings())  # type: ignore[arg-type]
-    _ = [
-        ev async for ev in llm2.complete_stream([{"role": "user", "content": "hi"}], max_tokens=42)
-    ]
+    stream_call2 = getattr(llm2, "complete_stream")
+    _ = [ev async for ev in stream_call2([{"role": "user", "content": "hi"}], max_tokens=42)]
     assert inner2.stream_seen == [42]
 
 
