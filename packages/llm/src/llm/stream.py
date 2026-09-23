@@ -339,10 +339,13 @@ async def _anthropic_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
             )
             # Terminal frame: stop_reason ("end_turn" normal, "max_tokens"
             # truncation, "stop_sequence", "refusal"); keep the last non-empty.
-            if obj.get("delta", {}).get("stop_reason"):
-                stop_reason = str(obj["delta"]["stop_reason"])
-            if obj.get("delta", {}).get("stop_sequence"):
-                stop_sequence = str(obj["delta"]["stop_sequence"])
+            # `or {}` (not a default arg): a null delta must degrade to no
+            # terminal fields, not crash the whole stream mid-read.
+            delta = obj.get("delta") or {}
+            if delta.get("stop_reason"):
+                stop_reason = str(delta["stop_reason"])
+            if delta.get("stop_sequence"):
+                stop_sequence = str(delta["stop_sequence"])
     tool_calls = tuple(
         {"id": b["id"], "name": b["name"], "arguments": _safe_arguments(b["json"])}
         for _, b in sorted(blocks.items())
