@@ -341,6 +341,9 @@ class TestDefaultModelRetired:
                 cached_tokens=0,
                 reasoning="",
                 thinking_blocks=[],
+                reasoning_tokens=0,
+                cache_write_tokens=0,
+                meta=types.SimpleNamespace(to_dict=dict),
             )
 
         monkeypatch.setattr(complete_mod, "llm_complete", fake_complete)
@@ -1363,3 +1366,99 @@ class TestMessageTranslation:
                 messages=[{"role": "user", "content": "hi"}],
             )
         assert "2013" in str(exc.value)  # provider's real error reason is visible
+
+
+class TestMaxOutputTokensSetting:
+    """0 = caller omitted the cap: the wire max_tokens falls back to the
+    llm.max_output_tokens setting (user-configured) instead of a hardcoded
+    transport default; an explicit caller value always wins."""
+
+    @staticmethod
+    def _fake_result(model: str) -> Any:
+        import types
+
+        return types.SimpleNamespace(
+            text="pong",
+            model=model,
+            tool_calls=[],
+            input_tokens=3,
+            output_tokens=1,
+            cached_tokens=0,
+            reasoning="",
+            thinking_blocks=[],
+            reasoning_tokens=0,
+            cache_write_tokens=0,
+            meta=types.SimpleNamespace(to_dict=dict),
+        )
+
+    async def test_unset_falls_back_and_setting_wins(self, deps, monkeypatch) -> None:
+        import llm.capabilities.complete as complete_mod
+        from llm.capabilities.common import Deps, init_deps, require_deps
+
+        pid = await _add_sample()
+        await execute(registry, "set_api_key", USER_CTX, {"provider_id": pid, "api_key": "sk-x"})
+        seen: dict = {}
+
+        async def fake_complete(p, *, api_key, model, max_tokens, **kw):
+            seen["max_tokens"] = max_tokens
+            return self._fake_result(model)
+
+        monkeypatch.setattr(complete_mod, "llm_complete", fake_complete)
+
+        # No setting wired: built-in fallback (was the old hardcoded default).
+        await execute(
+            registry,
+            "complete",
+            AGENT_CTX,
+            {"provider_id": pid, "messages": [{"role": "user", "content": "hi"}]},
+        )
+        assert seen["max_tokens"] == 4096
+
+        # Setting present: the user's value is the default.
+        cur = require_deps()
+
+        class _Settings:
+            def get(self, key: str) -> int:
+                return 7777
+
+        init_deps(Deps(store=cur.store, secrets=cur.secrets, settings=_Settings()))
+        await execute(
+            registry,
+            "complete",
+            AGENT_CTX,
+            {"provider_id": pid, "messages": [{"role": "user", "content": "hi"}]},
+        )
+        assert seen["max_tokens"] == 7777
+
+        # Explicit caller value wins over the setting.
+        await execute(
+            registry,
+            "complete",
+            AGENT_CTX,
+            {
+                "provider_id": pid,
+                "messages": [{"role": "user", "content": "hi"}],
+                "max_tokens": 123,
+            },
+        )
+        assert seen["max_tokens"] == 123
+
+    async def test_dirty_setting_falls_back(self, deps, monkeypatch) -> None:
+        from llm.capabilities.common import Deps, init_deps, require_deps
+
+        class _Dirty:
+            def get(self, key: str) -> Any:
+                return "not-a-number"
+
+        cur = require_deps()
+        init_deps(Deps(store=cur.store, secrets=cur.secrets, settings=_Dirty()))
+        from llm.capabilities.common import configured_max_output_tokens
+
+        assert configured_max_output_tokens() == 4096
+
+        class _Zero:
+            def get(self, key: str) -> int:
+                return 0
+
+        init_deps(Deps(store=cur.store, secrets=cur.secrets, settings=_Zero()))
+        assert configured_max_output_tokens() == 4096

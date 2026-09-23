@@ -135,6 +135,21 @@ def parse_response_output(data: dict[str, Any]) -> dict[str, Any]:
             )
     usage = data.get("usage") or {}
     details = usage.get("input_tokens_details") or {}
+    output_details = usage.get("output_tokens_details") or {}
+    # status=incomplete means the output cap truncated the response; carry
+    # that as the finish reason so consumers can flag truncation.
+    status = str(data.get("status") or "")
+    meta: dict[str, Any] = {
+        "finish_reason": (
+            "max_output_tokens"
+            if status == "incomplete"
+            else ("stop" if status == "completed" else status)
+        )
+    }
+    if data.get("id"):
+        meta["response_id"] = str(data["id"])
+    if data.get("created_at"):
+        meta["created"] = int(data["created_at"])
     return {
         "text": "".join(text_parts),
         "reasoning": "".join(reasoning_parts),
@@ -143,8 +158,10 @@ def parse_response_output(data: dict[str, Any]) -> dict[str, Any]:
             "input_tokens": int(usage.get("input_tokens") or 0),
             "output_tokens": int(usage.get("output_tokens") or 0),
             "cached_tokens": int(details.get("cached_tokens") or 0),
+            "reasoning_tokens": int(output_details.get("reasoning_tokens") or 0),
         },
         "model": str(data.get("model") or ""),
+        "meta": meta,
     }
 
 
@@ -201,6 +218,7 @@ async def responses_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
             "tool_calls": [],
             "usage": {},
             "model": "",
+            "meta": {},
         }
     yield {"type": "final", **final}
 

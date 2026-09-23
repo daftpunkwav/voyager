@@ -142,19 +142,25 @@ def service_error_for(exc: ProviderError) -> ServiceError:
     trigger compact-and-retry), anything else (5xx/network) -> UNAVAILABLE.
     The suffix drives the HTTP status and upstream degradation semantics, so
     callers can tell "retry later" apart from "change the request".
+
+    The provider's request id and the debug dump path (when captured) are
+    appended to the message so the user-facing degraded reply names them —
+    the only way to match a failure on the provider's dashboard without log
+    access.
     """
+    detail = exc.detail_suffix()
     if isinstance(exc, RateLimitError):
-        return ServiceError(DOMAIN, ErrorSuffix.RATE_LIMITED, f"LLM call failed: {exc}")
+        return ServiceError(DOMAIN, ErrorSuffix.RATE_LIMITED, f"LLM call failed: {exc}{detail}")
     if isinstance(exc, AuthError):
-        return ServiceError(DOMAIN, ErrorSuffix.AUTH_REQUIRED, f"LLM call failed: {exc}")
+        return ServiceError(DOMAIN, ErrorSuffix.AUTH_REQUIRED, f"LLM call failed: {exc}{detail}")
     if isinstance(exc, ContextOverflowError):
         return ServiceError(
             DOMAIN,
             ErrorSuffix.INVALID_INPUT,
-            f"LLM call failed: {exc}",
+            f"LLM call failed: {exc}{detail}",
             hint=CONTEXT_OVERFLOW_HINT,
         )
-    return ServiceError(DOMAIN, ErrorSuffix.UNAVAILABLE, f"LLM call failed: {exc}")
+    return ServiceError(DOMAIN, ErrorSuffix.UNAVAILABLE, f"LLM call failed: {exc}{detail}")
 
 
 @dataclass
@@ -248,10 +254,28 @@ def validate_base_url(base_url: str, actor: ActorRef | None) -> str:
     return base_url.strip()
 
 
+def configured_max_output_tokens(fallback: int = 4096) -> int:
+    """Wire max_tokens default from the llm.max_output_tokens setting.
+
+    Callers that pass max_tokens explicitly always win; this only supplies
+    the default when the caller omits it (0/invalid settings fall back to
+    the built-in default so a dirty value can never zero out the cap).
+    """
+    deps = require_deps()
+    if deps.settings is None:
+        return fallback
+    try:
+        value = int(deps.settings.get("llm.max_output_tokens"))
+    except (TypeError, ValueError):
+        return fallback
+    return value if value > 0 else fallback
+
+
 __all__ = [
     "DOMAIN",
     "MODELS_META_ALLOWED",
     "Deps",
+    "configured_max_output_tokens",
     "effective_model",
     "find_bad_models_meta_field",
     "init_deps",

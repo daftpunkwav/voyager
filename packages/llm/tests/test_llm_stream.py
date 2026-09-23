@@ -164,7 +164,12 @@ class TestChatStream:
         final = chunks[-1]
         assert final["type"] == "final"
         assert final["text"] == "Hello world"
-        assert final["usage"] == {"input_tokens": 9, "output_tokens": 3, "cached_tokens": 0}
+        assert final["usage"] == {
+            "input_tokens": 9,
+            "output_tokens": 3,
+            "cached_tokens": 0,
+            "reasoning_tokens": 0,
+        }
         assert final["model"] == "gpt-test"
         assert final["tool_calls"] == [{"id": "call_1", "name": "t", "arguments": {"x": "1"}}]
         # Streaming body carries the stream flag and include_usage (metering
@@ -353,7 +358,12 @@ class TestAnthropicStream:
         assert texts == ["Hel", "lo"]
         final = chunks[-1]
         assert final["text"] == "Hello"
-        assert final["usage"] == {"input_tokens": 12, "output_tokens": 5, "cached_tokens": 0}
+        assert final["usage"] == {
+            "input_tokens": 12,
+            "output_tokens": 5,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+        }
         assert final["model"] == "claude-test"
         assert final["tool_calls"] == []
         assert seen["body"]["stream"] is True
@@ -529,6 +539,122 @@ class TestCapabilityStream:
 class TestStreamBoundary:
     """Edge/extreme/stress cases: SSE variants and pathological inputs."""
 
+    async def test_chat_meta_finish_reason_and_empty_dropped(self, monkeypatch) -> None:
+        """Terminal frame's finish_reason rides the final meta; unreported
+        keys (service_tier here) are dropped, not emitted as empty strings."""
+        sse = _sse(
+            {"choices": [{"delta": {"content": "hi"}}], "model": "m", "created": 1727000000},
+            {
+                "choices": [{"delta": {}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+            "[DONE]",
+        )
+        _patch(monkeypatch, lambda r: httpx.Response(200, text=sse))
+        chunks = await _collect(_CHAT)
+        meta = chunks[-1]["meta"]
+        assert meta == {"finish_reason": "stop", "created": 1727000000}
+
+    async def test_chat_meta_truncation_visible(self, monkeypatch) -> None:
+        """finish_reason=length (output-cap cut) survives to the final chunk:
+        the UI/agent flags the round instead of treating it as complete."""
+        sse = _sse(
+            {"choices": [{"delta": {"content": "par"}}]},
+            {"choices": [{"delta": {}, "finish_reason": "length"}]},
+            "[DONE]",
+        )
+        _patch(monkeypatch, lambda r: httpx.Response(200, text=sse))
+        chunks = await _collect(_CHAT)
+        assert chunks[-1]["meta"]["finish_reason"] == "length"
+
+    async def test_anthropic_stop_reason_and_service_tier(self, monkeypatch) -> None:
+        """message_delta.stop_reason -> meta.finish_reason; message_start
+        service_tier is captured; empty keys dropped."""
+        pairs = [
+            (
+                "message_start",
+                {
+                    "type": "message_start",
+                    "message": {
+                        "model": "claude-test",
+                        "service_tier": "priority",
+                        "usage": {"input_tokens": 3},
+                    },
+                },
+            ),
+            (
+                "content_block_start",
+                {
+                    "type": "content_block_start",
+                    "index": 0,
+                    "content_block": {"type": "text", "text": ""},
+                },
+            ),
+            (
+                "content_block_delta",
+                {
+                    "type": "content_block_delta",
+                    "index": 0,
+                    "delta": {"type": "text_delta", "text": "x"},
+                },
+            ),
+            (
+                "message_delta",
+                {
+                    "type": "message_delta",
+                    "delta": {"stop_reason": "max_tokens"},
+                    "usage": {"output_tokens": 2},
+                },
+            ),
+            ("message_stop", {"type": "message_stop"}),
+        ]
+        sse = "".join(f"event: {e}\ndata: {json.dumps(o)}\n\n" for e, o in pairs)
+        _patch(monkeypatch, lambda r: httpx.Response(200, text=sse))
+        chunks = await _collect(_ANTHROPIC)
+        meta = chunks[-1]["meta"]
+        assert meta == {
+            "finish_reason": "max_tokens",
+            "service_tier": "priority",
+        }
+        assert chunks[-1]["usage"]["cache_write_tokens"] == 0
+
+    async def test_anthropic_delta_usage_overrides_start_snapshot(self, monkeypatch) -> None:
+        """Current Anthropic contract: message_delta.usage is the complete
+        cumulative usage. Volcengine Ark sends 0 placeholders in message_start
+        with real input/cache values arriving in message_delta; non-zero delta
+        values must win over the start snapshot (legacy shape unaffected)."""
+        pairs = [
+            (
+                "message_start",
+                {
+                    "type": "message_start",
+                    "message": {"model": "m", "usage": {"input_tokens": 0, "output_tokens": 1}},
+                },
+            ),
+            (
+                "message_delta",
+                {
+                    "type": "message_delta",
+                    "delta": {"stop_reason": "end_turn"},
+                    "usage": {
+                        "input_tokens": 16,
+                        "output_tokens": 16,
+                        "cache_creation_input_tokens": 4,
+                        "cache_read_input_tokens": 9,
+                    },
+                },
+            ),
+            ("message_stop", {"type": "message_stop"}),
+        ]
+        sse = "".join(f"event: {e}\ndata: {json.dumps(o)}\n\n" for e, o in pairs)
+        _patch(monkeypatch, lambda r: httpx.Response(200, text=sse))
+        chunks = await _collect(_ANTHROPIC)
+        usage = chunks[-1]["usage"]
+        assert usage["input_tokens"] == 16
+        assert usage["output_tokens"] == 16
+        assert usage["cache_write_tokens"] == 4
+        assert usage["cached_tokens"] == 9
+
     async def test_crlf_line_endings(self, monkeypatch) -> None:
         """CRLF line endings (common behind Windows proxies/gateways): no
         empty-line junk and aggregation still works."""
@@ -691,7 +817,12 @@ class TestStreamBoundary:
         )
         _patch(monkeypatch, lambda r: httpx.Response(200, text=sse))
         chunks = await _collect(_CHAT)
-        assert chunks[-1]["usage"] == {"input_tokens": 0, "output_tokens": 0, "cached_tokens": 0}
+        assert chunks[-1]["usage"] == {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cached_tokens": 0,
+            "reasoning_tokens": 0,
+        }
 
     async def test_anthropic_ping_and_unknown_events(self, monkeypatch) -> None:
         """Anthropic ping/unknown event types: ignored without crashing."""

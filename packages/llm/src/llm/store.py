@@ -44,7 +44,9 @@ CREATE TABLE IF NOT EXISTS usage (
     input_tokens  INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
     cached_tokens INTEGER NOT NULL DEFAULT 0,
-    ok            INTEGER NOT NULL DEFAULT 1
+    ok            INTEGER NOT NULL DEFAULT 1,
+    reasoning_tokens  INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage(ts);
 """
@@ -64,11 +66,14 @@ _COLS = (
 )
 
 
-def _split_row(*, input: Any, output: Any, cached: Any, calls: Any, **keys: Any) -> dict[str, Any]:
+def _split_row(
+    *, input: Any, output: Any, cached: Any, calls: Any, reasoning: Any = 0, **keys: Any
+) -> dict[str, Any]:
     """One aggregate row of the usage contract: identity keys plus the token
-    split (cached is a subset of input; completion equals output)."""
+    split (cached is a subset of input; completion equals output; reasoning
+    is a subset of output reported by thinking models)."""
     inp, outp, cach = int(input), int(output), int(cached)
-    return {
+    row = {
         **keys,
         "input": inp,
         "output": outp,
@@ -78,6 +83,9 @@ def _split_row(*, input: Any, output: Any, cached: Any, calls: Any, **keys: Any)
         "completion_tokens": outp,
         "calls": int(calls),
     }
+    if int(reasoning):
+        row["reasoning_tokens"] = int(reasoning)
+    return row
 
 
 class ProviderStore:
@@ -98,6 +106,12 @@ class ProviderStore:
                 "ALTER TABLE usage ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0"
             )
             self._conn.commit()
+        for extra in ("reasoning_tokens", "cache_write_tokens"):
+            if extra not in cols:
+                self._conn.execute(
+                    f"ALTER TABLE usage ADD COLUMN {extra} INTEGER NOT NULL DEFAULT 0"
+                )
+        self._conn.commit()
         pcols = {row[1] for row in self._conn.execute("PRAGMA table_info(providers)")}
         if "models_meta" not in pcols:
             self._conn.execute(
@@ -162,13 +176,16 @@ class ProviderStore:
         output_tokens: int,
         *,
         cached_tokens: int = 0,
+        reasoning_tokens: int = 0,
+        cache_write_tokens: int = 0,
         caller: str = "",
         ok: bool = True,
     ) -> None:
         with self._lock:
             self._conn.execute(
                 "INSERT INTO usage (ts, provider_id, model, caller, input_tokens,"
-                " output_tokens, cached_tokens, ok) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                " output_tokens, cached_tokens, ok, reasoning_tokens, cache_write_tokens)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     time.time(),
                     provider_id,
@@ -178,6 +195,8 @@ class ProviderStore:
                     output_tokens,
                     cached_tokens,
                     int(ok),
+                    reasoning_tokens,
+                    cache_write_tokens,
                 ),
             )
             self._conn.commit()
@@ -205,14 +224,23 @@ class ProviderStore:
         with self._lock:
             total = self._conn.execute(
                 "SELECT COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),"
-                " COALESCE(SUM(cached_tokens),0), COUNT(*) FROM usage WHERE ts >= ?",
+                " COALESCE(SUM(cached_tokens),0), COUNT(*), COALESCE(SUM(reasoning_tokens),0),"
+                " COALESCE(SUM(cache_write_tokens),0) FROM usage WHERE ts >= ?",
                 (cutoff,),
             ).fetchone()
             by_model = [
-                _split_row(model=r[0], input=r[1], output=r[2], cached=r[3], calls=r[4])
+                _split_row(
+                    model=r[0],
+                    input=r[1],
+                    output=r[2],
+                    cached=r[3],
+                    calls=r[4],
+                    reasoning=r[5],
+                )
                 for r in self._conn.execute(
                     "SELECT model, SUM(input_tokens), SUM(output_tokens), SUM(cached_tokens),"
-                    " COUNT(*) FROM usage WHERE ts >= ? GROUP BY model ORDER BY 5 DESC",
+                    " COUNT(*), SUM(reasoning_tokens) FROM usage"
+                    " WHERE ts >= ? GROUP BY model ORDER BY 5 DESC",
                     (cutoff,),
                 )
             ]
@@ -227,27 +255,30 @@ class ProviderStore:
                 )
             ]
             day_rows = self._conn.execute(
-                "SELECT ts, model, input_tokens, output_tokens, cached_tokens FROM usage"
-                " WHERE ts >= ?",
+                "SELECT ts, model, input_tokens, output_tokens, cached_tokens,"
+                " reasoning_tokens FROM usage WHERE ts >= ?",
                 (cutoff,),
             ).fetchall()
             recent_rows = self._conn.execute(
                 "SELECT u.id, u.ts, COALESCE(NULLIF(p.display_name, ''), u.provider_id), u.model,"
-                " u.caller, u.input_tokens, u.output_tokens, u.cached_tokens, u.ok"
+                " u.caller, u.input_tokens, u.output_tokens, u.cached_tokens, u.ok,"
+                " u.reasoning_tokens"
                 " FROM usage u LEFT JOIN providers p ON p.id = u.provider_id"
                 " WHERE u.ts >= ? ORDER BY u.ts DESC, u.id DESC LIMIT ?",
                 (cutoff, recent_limit),
             ).fetchall()
 
         days_acc: dict[str, dict[str, Any]] = {}
-        for ts, model, row_input, row_output, row_cached in day_rows:
+        for ts, model, row_input, row_output, row_cached, row_reasoning in day_rows:
             day = time.strftime("%Y-%m-%d", time.localtime(ts))
             bucket = days_acc.setdefault(
-                day, {"input": 0, "output": 0, "cached": 0, "calls": 0, "models": {}}
+                day,
+                {"input": 0, "output": 0, "cached": 0, "reasoning": 0, "calls": 0, "models": {}},
             )
             bucket["input"] += int(row_input)
             bucket["output"] += int(row_output)
             bucket["cached"] += int(row_cached)
+            bucket["reasoning"] += int(row_reasoning)
             bucket["calls"] += 1
             per_model = bucket["models"].setdefault(model, {"input": 0, "output": 0, "calls": 0})
             per_model["input"] += int(row_input)
@@ -257,7 +288,12 @@ class ProviderStore:
         by_day: list[dict[str, Any]] = []
         for day, b in sorted(days_acc.items()):
             row = _split_row(
-                date=day, input=b["input"], output=b["output"], cached=b["cached"], calls=b["calls"]
+                date=day,
+                input=b["input"],
+                output=b["output"],
+                cached=b["cached"],
+                calls=b["calls"],
+                reasoning=b["reasoning"],
             )
             row["by_model"] = [
                 {
@@ -289,10 +325,13 @@ class ProviderStore:
                 "prompt_uncached_tokens": max(int(r[5]) - int(r[7]), 0),
                 "completion_tokens": int(r[6]),
                 "ok": bool(r[8]),
+                **({"reasoning_tokens": int(r[9])} if int(r[9]) else {}),
             }
             for r in recent_rows
         ]
-        totals = _split_row(input=total[0], output=total[1], cached=total[2], calls=total[3])
+        totals = _split_row(
+            input=total[0], output=total[1], cached=total[2], calls=total[3], reasoning=total[4]
+        )
         out: dict[str, Any] = {
             "days": days,
             "input_tokens": int(total[0]),

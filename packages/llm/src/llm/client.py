@@ -27,7 +27,7 @@ import logging
 import os
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -70,7 +70,11 @@ class ProviderError(Exception):
     with backoff (retriable) and which ServiceError suffix the capability
     layer maps the exception to. status is the HTTP status code (0 for
     network-level errors); retry_after is the wait time in seconds hinted by
-    a 429 Retry-After header (0 = not provided).
+    a 429 Retry-After header (0 = not provided). request_id carries the
+    provider's request id (x-request-id / request-id / anthropic-request-id
+    response header) when one was seen, so a user report can be matched
+    server-side; dump_path points at the LLM_DEBUG_DUMP_DIR file holding the
+    full rejected request/response pair.
     """
 
     def __init__(
@@ -80,11 +84,28 @@ class ProviderError(Exception):
         status: int = 0,
         retriable: bool = False,
         retry_after: float = 0.0,
+        request_id: str = "",
+        dump_path: str = "",
     ) -> None:
         super().__init__(message)
         self.status = status
         self.retriable = retriable
         self.retry_after = retry_after
+        self.request_id = request_id
+        self.dump_path = dump_path
+
+    def detail_suffix(self) -> str:
+        """User-facing diagnosis line appended to degraded replies: names the
+        provider's request id and the dump file so a failure can be traced
+        without access to logs. Empty pieces are skipped."""
+        parts: list[str] = []
+        if self.request_id:
+            parts.append(f"request id {self.request_id}")
+        if self.dump_path:
+            parts.append(f"dump {self.dump_path}")
+        if not parts:
+            return ""
+        return f" ({', '.join(parts)})"
 
 
 class RateLimitError(ProviderError):
@@ -111,11 +132,79 @@ class TransientError(ProviderError):
         status: int = 0,
         retriable: bool = True,
         retry_after: float = 0.0,
+        request_id: str = "",
+        dump_path: str = "",
     ) -> None:
-        super().__init__(message, status=status, retriable=retriable, retry_after=retry_after)
+        super().__init__(
+            message,
+            status=status,
+            retriable=retriable,
+            retry_after=retry_after,
+            request_id=request_id,
+            dump_path=dump_path,
+        )
 
 
 log = logging.getLogger("llm.client")
+
+
+@dataclass(frozen=True)
+class ResponseMeta:
+    """Provider response metadata the raw response carries beyond text and
+    tokens, normalized across the three wire formats (chat / anthropic /
+    responses). Everything here is optional: providers omit fields freely and
+    network-level failures produce none.
+
+    - finish_reason: chat `finish_reason` / anthropic `stop_reason` /
+      responses `status` (incomplete -> "max_output_tokens"). "stop" is the
+      normal completion; "length"/"max_tokens" mean the answer was cut off by
+      the output cap — consumers must surface that, not treat the text as
+      complete.
+    - request_id: provider request id from the response headers
+      (x-request-id / request-id / anthropic-request-id / cf-ray), for
+      matching a user report on the provider's dashboard.
+    - response_id: the response object's own id (responses format `id`),
+      distinct from the transport-level request_id header.
+    - service_tier: chat `service_tier` echo (e.g. "priority"); empty when
+      the provider does not report one.
+    - stop_sequence: the stop sequence that ended generation, when hit.
+    - created: chat `created` unix seconds / responses `created_at` (0 when
+      absent; anthropic does not send one).
+    """
+
+    finish_reason: str = ""
+    request_id: str = ""
+    response_id: str = ""
+    service_tier: str = ""
+    stop_sequence: str = ""
+    created: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            f: getattr(self, f)
+            for f in (
+                "finish_reason",
+                "request_id",
+                "response_id",
+                "service_tier",
+                "stop_sequence",
+                "created",
+            )
+            if getattr(self, f)
+        }
+
+
+#: Response headers that may carry the provider's request id, first match
+#: wins (case-insensitive per httpx).
+_REQUEST_ID_HEADERS = ("x-request-id", "request-id", "anthropic-request-id", "cf-ray")
+
+
+def _request_id_from(resp: httpx.Response) -> str:
+    for name in _REQUEST_ID_HEADERS:
+        value = resp.headers.get(name)
+        if value:
+            return str(value)
+    return ""
 
 
 @dataclass(frozen=True)
@@ -134,6 +223,15 @@ class CompleteResult:
     #: echo-back on later turns (extended thinking requires the exact blocks
     #: back when tool use continues the conversation). Empty for chat format.
     thinking_blocks: tuple[dict[str, Any], ...] = ()
+    #: Usage fine-split that not every provider reports: tokens spent on
+    #: reasoning (a subset of output; o-series / thinking models) and tokens
+    #: written to the prompt cache (a subset of input, billed at a premium).
+    reasoning_tokens: int = 0
+    cache_write_tokens: int = 0
+    #: Provider response metadata (finish_reason / request id / service
+    #: tier / stop sequence / created); never None so consumers need no
+    #: null-check — fields default to empty.
+    meta: ResponseMeta = field(default_factory=ResponseMeta)
 
 
 @dataclass(frozen=True)
@@ -377,33 +475,51 @@ def _looks_overflow(body: str) -> bool:
     return any(mark in low for mark in _OVERFLOW_MARKS)
 
 
-def _raise_typed(resp: httpx.Response) -> None:
+def _raise_typed(resp: httpx.Response, *, dump_path: str = "") -> None:
     """On non-2xx, classify by status code/body and raise the matching
-    ProviderError subclass."""
+    ProviderError subclass, carrying the provider's request id and the debug
+    dump path so the user-facing degraded reply can reference them."""
     if resp.status_code >= 400:
-        _raise_typed_text(resp.status_code, resp.text, retry_after=_retry_after_seconds(resp))
+        _raise_typed_text(
+            resp.status_code,
+            resp.text,
+            retry_after=_retry_after_seconds(resp),
+            request_id=_request_id_from(resp),
+            dump_path=dump_path,
+        )
 
 
-def _raise_typed_text(status: int, body: str, *, retry_after: float = 0.0) -> None:
+def _raise_typed_text(
+    status: int, body: str, *, retry_after: float = 0.0, request_id: str = "", dump_path: str = ""
+) -> None:
     """Classify by status code and body text (streaming path reuses this
     after aread).
 
     The message keeps a body summary: the provider's real error reason
     (MiniMax 2013, quota/auth wording) is needed for user-facing diagnosis.
+    request_id / dump_path ride onto every raised error so the capability
+    layer can surface them to the user.
     """
     if status < 400:
         return
     summary = body[:200]
     msg = f"HTTP {status}: {summary}"
     if status == 429:
-        raise RateLimitError(msg, status=status, retriable=True, retry_after=retry_after)
+        raise RateLimitError(
+            msg,
+            status=status,
+            retriable=True,
+            retry_after=retry_after,
+            request_id=request_id,
+            dump_path=dump_path,
+        )
     if status in (401, 403):
-        raise AuthError(msg, status=status)
+        raise AuthError(msg, status=status, request_id=request_id, dump_path=dump_path)
     if status == 400 and _looks_overflow(summary):
-        raise ContextOverflowError(msg, status=status)
+        raise ContextOverflowError(msg, status=status, request_id=request_id, dump_path=dump_path)
     if status >= 500:
-        raise TransientError(msg, status=status)
-    raise ProviderError(msg, status=status)
+        raise TransientError(msg, status=status, request_id=request_id, dump_path=dump_path)
+    raise ProviderError(msg, status=status, request_id=request_id, dump_path=dump_path)
 
 
 async def _sleep(seconds: float) -> None:
@@ -445,26 +561,30 @@ async def _post(
     except httpx.TransportError as exc:  # transient connect/DNS/timeout: retryable
         raise TransientError(f"{type(exc).__name__}: {exc}") from exc
     if resp.status_code >= 400:
-        _dump_rejected_request(url, body, resp.status_code, resp.text)
+        dump_path = _dump_rejected_request(url, body, resp.status_code, resp.text)
+        _raise_typed(resp, dump_path=dump_path)
     _raise_typed(resp)
     return resp
 
 
-def _dump_rejected_request(url: str, body: dict[str, Any], status: int, response_text: str) -> None:
+def _dump_rejected_request(url: str, body: dict[str, Any], status: int, response_text: str) -> str:
     """Write the full rejected request/response pair when LLM_DEBUG_DUMP_DIR is
     set: the only way to see what a strict provider actually disliked (its
     error body rarely names the parameter). The response text comes in from the
     caller: a streaming response has no readable .text before aread() (httpx
     raises ResponseNotRead), so the stream path reads first and passes it here.
-    Headers are never written (the api key must not land on disk)."""
+    Headers are never written (the api key must not land on disk). Returns the
+    dump file path (empty when dumping is off or the write failed) so callers
+    can reference it in user-facing error details."""
     dump_dir = os.environ.get("LLM_DEBUG_DUMP_DIR")
     if not dump_dir:
-        return
+        return ""
     try:
         path = Path(dump_dir)
         path.mkdir(parents=True, exist_ok=True)
         # time_ns: retries can hit several rejections within one millisecond
-        (path / f"llm-{time.time_ns()}.json").write_text(
+        dump_path = path / f"llm-{time.time_ns()}.json"
+        dump_path.write_text(
             json.dumps(
                 {
                     "url": url,
@@ -477,8 +597,10 @@ def _dump_rejected_request(url: str, body: dict[str, Any], status: int, response
             ),
             encoding="utf-8",
         )
+        return str(dump_path)
     except Exception as exc:  # noqa: BLE001 - diagnostics never break the call path
         log.debug("llm debug dump failed: %s", exc)
+        return ""
 
 
 #: Reasoning-effort names and their Anthropic thinking budgets (tokens).
@@ -674,8 +796,18 @@ async def complete(
                 # degraded-reply path instead of returning an empty answer.
                 error = data.get("error") or {}
                 error_message = str(error.get("message") if isinstance(error, dict) else error)
-                raise ProviderError(f"responses call failed: {error_message}", status=200)
+                raise ProviderError(
+                    f"responses call failed: {error_message}",
+                    status=200,
+                    request_id=_request_id_from(resp),
+                )
             out = parse_response_output(data)
+            usage = data.get("usage") or {}
+            output_details = usage.get("output_tokens_details") or {}
+            # meta comes straight from parse_response_output (status ->
+            # finish_reason mapping + response_id + created_at): one mapping,
+            # shared with the streaming path, so the two cannot drift.
+            out_meta = out.get("meta") or {}
             return CompleteResult(
                 text=out["text"],
                 input_tokens=out["usage"]["input_tokens"],
@@ -684,6 +816,13 @@ async def complete(
                 model=out["model"],
                 tool_calls=tuple(out["tool_calls"]),
                 reasoning=out["reasoning"],
+                reasoning_tokens=int(output_details.get("reasoning_tokens") or 0),
+                meta=ResponseMeta(
+                    finish_reason=str(out_meta.get("finish_reason") or ""),
+                    request_id=_request_id_from(resp),
+                    response_id=str(out_meta.get("response_id") or ""),
+                    created=int(out_meta.get("created") or 0),
+                ),
             )
         if fmt == "anthropic":
             resp = await _send_with_retry(lambda: _post(client, url, headers=headers, body=body))
@@ -717,6 +856,13 @@ async def complete(
                 tool_calls=tool_calls,
                 reasoning=reasoning,
                 thinking_blocks=thinking_blocks,
+                cache_write_tokens=int(usage.get("cache_creation_input_tokens") or 0),
+                meta=ResponseMeta(
+                    finish_reason=str(data.get("stop_reason") or ""),
+                    stop_sequence=str(data.get("stop_sequence") or ""),
+                    service_tier=str(data.get("service_tier") or ""),
+                    request_id=_request_id_from(resp),
+                ),
             )
         resp = await _send_with_retry(lambda: _post(client, url, headers=headers, body=body))
         data = resp.json()
@@ -725,11 +871,13 @@ async def complete(
         message = choice.get("message") or {}
         answer, inline_reasoning, tool_blocks = split_inline(str(message.get("content") or ""))
         api_tool_calls = _parse_tool_calls(message.get("tool_calls"))
+        prompt_details = usage.get("prompt_tokens_details") or {}
+        completion_details = usage.get("completion_tokens_details") or {}
         return CompleteResult(
             text=answer,
             input_tokens=int(usage.get("prompt_tokens") or 0),
             output_tokens=int(usage.get("completion_tokens") or 0),
-            cached_tokens=int((usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0),
+            cached_tokens=int(prompt_details.get("cached_tokens") or 0),
             model=data.get("model", model),
             # Inline <tool_call> markup converts only when the wire field
             # stayed empty (MiniMax echoes the markup alongside the parsed
@@ -737,6 +885,13 @@ async def complete(
             tool_calls=api_tool_calls or tuple(parse_tool_blocks(tool_blocks)),
             # Inline <think> reasoning joins the reasoning_content channel
             reasoning=str(message.get("reasoning_content") or "") + inline_reasoning,
+            reasoning_tokens=int(completion_details.get("reasoning_tokens") or 0),
+            meta=ResponseMeta(
+                finish_reason=str(choice.get("finish_reason") or ""),
+                request_id=_request_id_from(resp),
+                service_tier=str(data.get("service_tier") or ""),
+                created=int(data.get("created") or 0),
+            ),
         )
 
 

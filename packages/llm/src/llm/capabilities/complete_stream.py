@@ -9,6 +9,7 @@ from platform_contracts import ActorRef, ErrorSuffix, ServiceError
 
 from llm.capabilities.common import (
     DOMAIN,
+    configured_max_output_tokens,
     effective_model,
     read_api_key,
     registry,
@@ -37,7 +38,8 @@ async def complete_stream(
     provider_id: str,
     messages: list[dict],
     model: str = "",
-    max_tokens: int = 4096,
+    # Same contract as complete: 0 = fall back to llm.max_output_tokens.
+    max_tokens: int = 0,
     temperature: float = 0.7,
     tools: list[dict] | None = None,
     _actor: ActorRef | None = None,
@@ -56,6 +58,7 @@ async def complete_stream(
     if not key:
         raise ServiceError(DOMAIN, ErrorSuffix.INVALID_INPUT, "api key not configured")
     use_model = effective_model(p, model)
+    wire_max_tokens = max_tokens if max_tokens > 0 else configured_max_output_tokens()
 
     async def _gen() -> AsyncIterator[dict]:
         ok = False
@@ -67,7 +70,7 @@ async def complete_stream(
                 api_key=key,
                 model=use_model,
                 messages=messages,
-                max_tokens=max_tokens,
+                max_tokens=wire_max_tokens,
                 temperature=temperature,
                 tools=tools,
                 reasoning_effort=configured_reasoning_effort(),
@@ -90,6 +93,8 @@ async def complete_stream(
                 int(usage.get("input_tokens") or 0),
                 int(usage.get("output_tokens") or 0),
                 cached_tokens=int(usage.get("cached_tokens") or 0),
+                reasoning_tokens=int(usage.get("reasoning_tokens") or 0),
+                cache_write_tokens=int(usage.get("cache_write_tokens") or 0),
                 caller=_actor.id if _actor else "",
                 ok=ok,
             )

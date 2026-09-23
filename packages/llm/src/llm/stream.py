@@ -36,6 +36,7 @@ from .client import (
     _dump_rejected_request,
     _parse_tool_calls,
     _raise_typed_text,
+    _request_id_from,
     _wire_request,
 )
 from .inline_split import InlineTagSplitter, parse_tool_blocks
@@ -115,6 +116,12 @@ async def complete_stream(
                 _raise_typed_text(resp.status_code, text)
             in_body = True
             async for chunk in parser(resp):
+                if chunk.get("type") == "final":
+                    # Attach the exact wire body to the final chunk: the raw
+                    # round log can then show the complete request as sent
+                    # (stream / stream_options / temperature / thinking fields
+                    # included), not just the neutral messages transcript.
+                    chunk = {**chunk, "request_body": body}
                 yield chunk
     except httpx.TransportError as exc:
         # Mid-stream disconnect: deltas were already consumed and a retry
@@ -136,6 +143,10 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
     splitter = InlineTagSplitter()
     usage: dict[str, Any] = {}
     model = ""
+    finish_reason = ""
+    service_tier = ""
+    created = 0
+    request_id = _request_id_from(resp)
     async for line in resp.aiter_lines():
         if not line.startswith("data:"):
             continue
@@ -152,9 +163,16 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
             # here would silently truncate the answer into a final chunk.
             raise _midstream_error(obj["error"])
         model = str(obj.get("model") or model)
+        created = int(obj.get("created") or created)
+        service_tier = str(obj.get("service_tier") or service_tier)
         if obj.get("usage"):
             usage = obj["usage"]
         for choice in obj.get("choices") or []:
+            # The terminal frame carries the finish reason ("stop" normal,
+            # "length" output-cap truncation, "content_filter"); keep the
+            # last non-empty one.
+            if choice.get("finish_reason"):
+                finish_reason = str(choice["finish_reason"])
             delta = choice.get("delta") or {}
             content = delta.get("content")
             if content:
@@ -201,6 +219,8 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
         # stayed empty; when both arrive the parsed field wins (no echo
         # double-execution).
         tool_calls = tuple(parse_tool_blocks(splitter.tool_blocks))
+    prompt_details = usage.get("prompt_tokens_details") or {}
+    completion_details = usage.get("completion_tokens_details") or {}
     yield {
         "type": "final",
         "text": "".join(text_parts),
@@ -209,11 +229,22 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
         "usage": {
             "input_tokens": int(usage.get("prompt_tokens") or 0),
             "output_tokens": int(usage.get("completion_tokens") or 0),
-            "cached_tokens": int(
-                (usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0
-            ),
+            "cached_tokens": int(prompt_details.get("cached_tokens") or 0),
+            "reasoning_tokens": int(completion_details.get("reasoning_tokens") or 0),
         },
         "model": model,
+        # Only reported keys ride along (empty values dropped), matching
+        # ResponseMeta.to_dict()'s shape so consumers need no dual handling.
+        "meta": {
+            k: v
+            for k, v in {
+                "finish_reason": finish_reason,
+                "request_id": request_id,
+                "service_tier": service_tier,
+                "created": created,
+            }.items()
+            if v
+        },
     }
 
 
@@ -230,7 +261,12 @@ async def _anthropic_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
     input_tokens = 0
     output_tokens = 0
     cached_tokens = 0
+    cache_write_tokens = 0
     model = ""
+    stop_reason = ""
+    stop_sequence = ""
+    service_tier = ""
+    request_id = _request_id_from(resp)
     async for line in resp.aiter_lines():
         if not line.startswith("data:"):
             continue
@@ -250,9 +286,11 @@ async def _anthropic_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
         if kind == "message_start":
             message = obj.get("message") or {}
             model = str(message.get("model") or model)
+            service_tier = str(message.get("service_tier") or service_tier)
             start_usage = message.get("usage") or {}
             input_tokens = int(start_usage.get("input_tokens") or 0)
             cached_tokens = int(start_usage.get("cache_read_input_tokens") or 0)
+            cache_write_tokens = int(start_usage.get("cache_creation_input_tokens") or 0)
         elif kind == "content_block_start":
             index = int(obj.get("index") or 0)
             block = obj.get("content_block") or {}
@@ -283,7 +321,26 @@ async def _anthropic_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
                 slot = thinking.setdefault(idx, {"thinking": "", "signature": ""})
                 slot["signature"] = str(delta["signature"])
         elif kind == "message_delta":
-            output_tokens = int((obj.get("usage") or {}).get("output_tokens") or output_tokens)
+            # Per the current Anthropic streaming contract the message_delta
+            # usage carries the complete cumulative usage (official docs show
+            # input_tokens and cache fields there; message_start holds only an
+            # initial snapshot). Volcengine Ark and other compatible
+            # endpoints rely on this — message_start reports 0 placeholders
+            # with the real values arriving here. Non-zero values override;
+            # absent/zero keeps the message_start snapshot (legacy shape).
+            delta_usage = obj.get("usage") or {}
+            output_tokens = int(delta_usage.get("output_tokens") or output_tokens)
+            input_tokens = int(delta_usage.get("input_tokens") or input_tokens)
+            cached_tokens = int(delta_usage.get("cache_read_input_tokens") or cached_tokens)
+            cache_write_tokens = int(
+                delta_usage.get("cache_creation_input_tokens") or cache_write_tokens
+            )
+            # Terminal frame: stop_reason ("end_turn" normal, "max_tokens"
+            # truncation, "stop_sequence", "refusal"); keep the last non-empty.
+            if obj.get("delta", {}).get("stop_reason"):
+                stop_reason = str(obj["delta"]["stop_reason"])
+            if obj.get("delta", {}).get("stop_sequence"):
+                stop_sequence = str(obj["delta"]["stop_sequence"])
     tool_calls = tuple(
         {"id": b["id"], "name": b["name"], "arguments": _safe_arguments(b["json"])}
         for _, b in sorted(blocks.items())
@@ -303,8 +360,21 @@ async def _anthropic_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "cached_tokens": cached_tokens,
+            "cache_write_tokens": cache_write_tokens,
         },
         "model": model,
+        # Only reported keys ride along (empty values dropped), matching
+        # ResponseMeta.to_dict()'s shape so consumers need no dual handling.
+        "meta": {
+            k: v
+            for k, v in {
+                "finish_reason": stop_reason,
+                "request_id": request_id,
+                "service_tier": service_tier,
+                "stop_sequence": stop_sequence,
+            }.items()
+            if v
+        },
     }
 
 

@@ -249,3 +249,28 @@ class TestServiceErrorFor:
         ]
         for exc, suffix in cases:
             assert caps.service_error_for(exc).body.code == f"LLM.{suffix.value}"
+
+    def test_detail_suffix_appended_to_message(self) -> None:
+        """request_id / dump_path captured by the client ride into the
+        ServiceError message — the user-facing degraded reply names them."""
+        exc = ProviderError("HTTP 400: bad", status=400, request_id="req-1", dump_path="/d/x.json")
+        body = caps.service_error_for(exc).body
+        assert body.message.endswith("(request id req-1, dump /d/x.json)")
+        # empty pieces are skipped entirely
+        assert caps.service_error_for(ProviderError("x")).body.message == "LLM call failed: x"
+        assert caps.service_error_for(ProviderError("x", request_id="r")).body.message.endswith(
+            "(request id r)"
+        )
+
+    def test_detail_suffix_via_raise_path(self, monkeypatch) -> None:
+        """_raise_typed carries the x-request-id response header into the
+        raised error's request_id (the _post error path)."""
+        import httpx as _httpx
+        from llm import client as client_mod
+
+        resp = _httpx.Response(429, text="rate limited", headers={"x-request-id": "rid-9"})
+        monkeypatch.setattr(client_mod, "_retry_after_seconds", lambda r: 0.0, raising=False)
+        with pytest.raises(RateLimitError) as exc_info:
+            client_mod._raise_typed(resp)
+        assert exc_info.value.request_id == "rid-9"
+        assert "request id rid-9" in exc_info.value.detail_suffix()

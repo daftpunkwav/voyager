@@ -7,6 +7,7 @@ from platform_contracts import ActorRef, ErrorSuffix, ServiceError
 
 from llm.capabilities.common import (
     DOMAIN,
+    configured_max_output_tokens,
     effective_model,
     read_api_key,
     registry,
@@ -36,14 +37,19 @@ def configured_reasoning_effort() -> str:
 @capability(
     registry,
     name="complete",
-    description="LLM chat completion (usage metered directly; agents consume via this)",
+    description=(
+        "LLM chat completion (usage metered directly; agents consume via this). "
+        "max_tokens 0 = auto: the llm.max_output_tokens setting supplies the cap"
+    ),
     cost=10,
 )
 async def complete(
     provider_id: str,
     messages: list[dict],
     model: str = "",
-    max_tokens: int = 4096,
+    # 0 = caller omitted the cap: fall back to the llm.max_output_tokens
+    # setting (users configure it per deployment); a positive value wins.
+    max_tokens: int = 0,
     temperature: float = 0.7,
     tools: list[dict] | None = None,
     _actor: ActorRef | None = None,
@@ -54,13 +60,14 @@ async def complete(
     if not key:
         raise ServiceError(DOMAIN, ErrorSuffix.INVALID_INPUT, "api key not configured")
     use_model = effective_model(p, model)
+    wire_max_tokens = max_tokens if max_tokens > 0 else configured_max_output_tokens()
     try:
         result = await llm_complete(
             p,
             api_key=key,
             model=use_model,
             messages=messages,
-            max_tokens=max_tokens,
+            max_tokens=wire_max_tokens,
             temperature=temperature,
             tools=tools,
             reasoning_effort=configured_reasoning_effort(),
@@ -81,13 +88,23 @@ async def complete(
         result.input_tokens,
         result.output_tokens,
         cached_tokens=result.cached_tokens,
+        reasoning_tokens=result.reasoning_tokens,
+        cache_write_tokens=result.cache_write_tokens,
         caller=_actor.id if _actor else "",
     )
     return {
         "text": result.text,
         "model": result.model,
         "tool_calls": [dict(tc) for tc in result.tool_calls],
-        "usage": {"input_tokens": result.input_tokens, "output_tokens": result.output_tokens},
+        "usage": {
+            "input_tokens": result.input_tokens,
+            "output_tokens": result.output_tokens,
+            "reasoning_tokens": result.reasoning_tokens,
+            "cache_write_tokens": result.cache_write_tokens,
+        },
         "reasoning": result.reasoning,
         "thinking_blocks": [dict(b) for b in result.thinking_blocks],
+        # Provider response metadata (finish_reason / request id / service
+        # tier / stop sequence / created); omitted keys were not reported.
+        "meta": result.meta.to_dict(),
     }
