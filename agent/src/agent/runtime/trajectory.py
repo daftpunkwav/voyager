@@ -113,19 +113,33 @@ class TrajectoryStore:
         # after the session's max. Done in Python with an explicit ORDER BY:
         # a single UPDATE with correlated subqueries would see its own partial
         # writes (live-state semantics), making the numbering depend on the
-        # row scan order instead of the ts order promised here.
+        # row scan order instead of the ts order promised here. The per-row
+        # MAX is hoisted into one GROUP BY up front and the updates go out as
+        # one executemany: this runs on the startup path, and on a large
+        # legacy DB (six-figure rows) 2n statements measure in minutes while
+        # n+1 measure in seconds.
         with self._conn:
-            for session, run_id, round_no in self._conn.execute(
+            pending = self._conn.execute(
                 "SELECT session, run_id, round FROM raw_rounds WHERE seq_round = 0"
                 " ORDER BY session, ts, round, run_id"
-            ).fetchall():
-                base = self._conn.execute(
-                    "SELECT COALESCE(MAX(seq_round), 0) FROM raw_rounds WHERE session = ?",
-                    (session,),
-                ).fetchone()[0]
-                self._conn.execute(
-                    "UPDATE raw_rounds SET seq_round = ? WHERE run_id = ? AND round = ?",
-                    (int(base) + 1, run_id, round_no),
+            ).fetchall()
+            if pending:
+                maxes = dict(
+                    self._conn.execute(
+                        "SELECT session, MAX(seq_round) FROM raw_rounds GROUP BY session"
+                    ).fetchall()
+                )
+                updates: list[tuple[int, str, int]] = []
+                current: str | None = None
+                base = 0
+                for session, run_id, round_no in pending:
+                    if session != current:
+                        current = session
+                        base = int(maxes.get(session, 0))
+                    base += 1
+                    updates.append((base, run_id, round_no))
+                self._conn.executemany(
+                    "UPDATE raw_rounds SET seq_round = ? WHERE run_id = ? AND round = ?", updates
                 )
         self._conn.commit()
         self._lock = threading.Lock()

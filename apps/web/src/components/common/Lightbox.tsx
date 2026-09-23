@@ -11,9 +11,10 @@
  * - Raise uiStore.modalDepth while open so page-level Escape yields to it first
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '@/stores/uiStore';
+import { useLeaving } from '@/hooks/useLeaving';
 
 interface LightboxProps {
   src: string | null;
@@ -26,29 +27,13 @@ const LIGHTBOX_EXIT_MS = 160;
 
 export function Lightbox({ src, alt, onClose }: LightboxProps) {
   const { t } = useTranslation('common');
-  // `seenSrc` + `leaving` keep the lightbox mounted through its exit animation
-  // after the parent clears src (same lifecycle as ModalOverlay). seenSrc
-  // deliberately keeps the last src while closed: the leaving render below
-  // draws from it, and the next open overwrites it.
+  // `seenSrc` keeps the last src while closed: the leaving render below draws
+  // from it, and the next open overwrites it. The mount-through-exit lifecycle
+  // (leaving flag + reopen recovery) is the shared useLeaving hook.
   const seenSrc = useRef<string | null>(null);
-  const [leaving, setLeaving] = useState(false);
   if (src) seenSrc.current = src;
+  const leaving = useLeaving(Boolean(src), LIGHTBOX_EXIT_MS);
   const visible = Boolean(src) || leaving;
-
-  useEffect(() => {
-    if (src) {
-      // Re-open (or switch image) during the exit window: the deps change
-      // already cleared the pending timer via cleanup, but `leaving` would
-      // stay true and pin the lightbox on is-leaving forever.
-      setLeaving(false);
-      return;
-    }
-    if (seenSrc.current) {
-      setLeaving(true);
-      const timer = window.setTimeout(() => setLeaving(false), LIGHTBOX_EXIT_MS);
-      return () => window.clearTimeout(timer);
-    }
-  }, [src]);
 
   useEffect(() => {
     if (!src) return;

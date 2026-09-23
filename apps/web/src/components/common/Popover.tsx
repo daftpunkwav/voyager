@@ -12,7 +12,8 @@
  * and the motion classes.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
+import { useLeaving } from '@/hooks/useLeaving';
 
 interface PopoverProps {
   open: boolean;
@@ -48,28 +49,9 @@ export function Popover({
   ariaLabel,
   children,
 }: PopoverProps) {
-  // `seenOpen` keeps the first mount from playing the exit; `leaving` holds
-  // the panel mounted through the exit animation before it unmounts.
-  const seenOpen = useRef(open);
-  const [leaving, setLeaving] = useState(false);
-
-  if (open) seenOpen.current = true;
-
-  useEffect(() => {
-    if (open) {
-      // Re-open during the exit window (fast toggle): the deps change already
-      // cleared the pending timer via cleanup, but `leaving` would stay true
-      // and pin the panel on is-leaving (the exit animation's final frame).
-      setLeaving(false);
-      return;
-    }
-    if (seenOpen.current) {
-      seenOpen.current = false;
-      setLeaving(true);
-      const timer = window.setTimeout(() => setLeaving(false), POPOVER_EXIT_MS);
-      return () => window.clearTimeout(timer);
-    }
-  }, [open]);
+  // `leaving` holds the panel mounted through the exit animation before it
+  // unmounts (shared lifecycle in useLeaving).
+  const leaving = useLeaving(open, POPOVER_EXIT_MS);
 
   const active = open || leaving;
 

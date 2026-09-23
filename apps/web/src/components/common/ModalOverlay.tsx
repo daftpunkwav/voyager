@@ -13,9 +13,10 @@
  *   (a confirm dialog layered over a browser modal closes alone), and raise
  *   uiStore.modalDepth while open so page-level Esc handling yields
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useUIStore } from '@/stores/uiStore';
+import { useLeaving } from '@/hooks/useLeaving';
 
 interface ModalOverlayProps {
   open: boolean;
@@ -38,10 +39,9 @@ let modalSeq = 0;
 const openModalIds = new Set<number>();
 
 export function ModalOverlay({ open, onClose, className, children }: ModalOverlayProps) {
-  // `seenOpen` keeps the first enter from being treated as an exit; `leaving`
-  // holds the overlay mounted for the exit animation before it unmounts.
-  const seenOpen = useRef(open);
-  const [leaving, setLeaving] = useState(false);
+  // `leaving` holds the overlay mounted for the exit animation before it
+  // unmounts (shared lifecycle in useLeaving).
+  const leaving = useLeaving(open, MODAL_EXIT_MS);
   // Scrim-click close requires press AND release on the scrim itself: a text
   // selection that starts inside the dialog and ends on the scrim targets its
   // click at the common ancestor (the overlay root) and must not close.
@@ -52,25 +52,6 @@ export function ModalOverlay({ open, onClose, className, children }: ModalOverla
   // while dialogs sit open) — the fresh, larger id would steal topmost from a
   // modal opened above this one and Escape would close the wrong layer.
   const stackIdRef = useRef(0);
-
-  if (open) seenOpen.current = true;
-
-  useEffect(() => {
-    if (open) {
-      // Re-open during the exit window (confirm supersede, fast toggle): the
-      // deps change already cleared the pending timer via cleanup, but
-      // `leaving` would stay true and pin the overlay on is-leaving (the exit
-      // animation's final, faded-out frame) forever.
-      setLeaving(false);
-      return;
-    }
-    if (seenOpen.current) {
-      seenOpen.current = false;
-      setLeaving(true);
-      const timer = window.setTimeout(() => setLeaving(false), MODAL_EXIT_MS);
-      return () => window.clearTimeout(timer);
-    }
-  }, [open]);
 
   useEffect(() => {
     if (!open) return;

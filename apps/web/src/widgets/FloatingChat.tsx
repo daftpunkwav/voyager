@@ -18,7 +18,7 @@
  * - Close on Escape only when no global modal sits above (modalDepth guard)
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { subscribe } from '@/bridge/stream';
@@ -28,6 +28,7 @@ import { useChatStore } from '@/stores/chatStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useChatStream } from '@/hooks/useChatStream';
 import { useChatSend } from '@/hooks/useChatSend';
+import { useLeaving } from '@/hooks/useLeaving';
 import { interruptInstance } from '@/bridge/chatSend';
 import { MessageList } from '@/widgets/chat/MessageList';
 import { TaskCards } from '@/widgets/chat/TaskCards';
@@ -46,33 +47,14 @@ export function FloatingChat() {
   const navigate = useNavigate();
   const listRef = useRef<HTMLDivElement>(null);
   const firstSeqRef = useRef<number | null>(null);
-  // `seenOpen` + `leaving` keep the panel mounted through its exit animation
-  // before the collapsed dot takes over, mirroring ModalOverlay's lifecycle.
-  const seenOpen = useRef(open);
-  const [leaving, setLeaving] = useState(false);
+  // `leaving` keeps the panel mounted through its exit animation before the
+  // collapsed dot takes over (shared lifecycle in useLeaving).
+  const leaving = useLeaving(open, FLOAT_EXIT_MS);
   const messages = useChatStore((s) => s.messages);
   const connected = useChatStore((s) => s.connected);
   const thinking = useChatStore((s) => s.thinking);
   const composer = useChatSend();
   const { llmMissing } = composer;
-
-  if (open) seenOpen.current = true;
-
-  useEffect(() => {
-    if (open) {
-      // Re-open during the exit window (fast toggle): the deps change already
-      // cleared the pending timer via cleanup, but `leaving` would stay true
-      // and pin the panel on is-leaving (the exit animation's final frame).
-      setLeaving(false);
-      return;
-    }
-    if (seenOpen.current) {
-      seenOpen.current = false;
-      setLeaving(true);
-      const timer = window.setTimeout(() => setLeaving(false), FLOAT_EXIT_MS);
-      return () => window.clearTimeout(timer);
-    }
-  }, [open]);
 
   const onNavigate = useCallback(
     (path: string) => {
