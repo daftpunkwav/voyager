@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, Any
 from platform_contracts import DomainEvent, Event, ServiceError
 from platform_eventbus import EventBus
 
-from agent.contracts import SettingsReader
+from agent.contracts import DeliveryRun, SettingsReader
 from agent.llm import LLMClient, content_to_text
 
 if TYPE_CHECKING:
@@ -245,7 +245,7 @@ class Master:
 
     async def announce_delivery(
         self,
-        inst: SubagentInstance,
+        inst: DeliveryRun,
         *,
         ok: bool,
         result: str,
@@ -256,7 +256,8 @@ class Master:
         structured delivery card (agent.delivery), and wake the host so
         Lucien tells the user — the standing member reports to the speaker,
         who relays. Event-driven, not a sleep loop: this runs on the
-        dispatch's own completion path."""
+        dispatch's own completion path. (Typed as the minimal DeliveryRun
+        surface, so it also accepts any structurally matching run handle.)"""
         board_task_id = getattr(inst.task, "board_task_id", "") or ""
         if board_task_id and self._task_board is not None:
             with suppress(Exception):
@@ -264,10 +265,18 @@ class Master:
         member = inst.persona or inst.name
         started = inst.state.started_ts or 0.0
         elapsed = max(0, int(time.time() - started)) if started else 0
+        # The card's title is the board row's task title: the run's goal is
+        # the board BRIEF (what the member executes), so reading the goal
+        # would render the brief as the card's title chip. Board-less runs
+        # keep the goal text, and an evicted/missing row falls back too.
+        title = (inst.task.goal or "")[:120]
+        if board_task_id and self._task_board is not None:
+            with suppress(Exception):
+                title = str(self._task_board.get(board_task_id).get("title") or "")[:120] or title
         payload: dict[str, Any] = {
             "member": member,
             "name": inst.name,
-            "title": (inst.task.goal or "")[:120],
+            "title": title,
             "status": "done" if ok else "failed",
             "session": inst.task.session,
             "run_id": inst.state.run_id,

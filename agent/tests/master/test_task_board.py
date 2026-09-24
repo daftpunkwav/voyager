@@ -245,6 +245,26 @@ class TestTaskboardCapability:
         assert board.get(tid)["status"] == "open"
         assert board.get(tid)["claimant"] is None
 
+    def test_confirm_with_deferred_dispatch_leaves_row_assigned(self) -> None:
+        """A dispatch held back by pending dependencies returns a handle with
+        no run state: the row stays assigned (still reopen-able) and the
+        caller sees an empty run_id instead of a fabricated one."""
+        board = TaskBoard()
+        tid = board.publish(title="t", brief="b", session="s1", publisher="orchestrator")["id"]
+        board.claim(tid, claimant="explainer")
+
+        class _Deferred:  # DeferredDispatch duck-type: no state attribute
+            waiting_on = ("dep",)
+
+        async def _deferred(goal, **kw):
+            return _Deferred()
+
+        deps = _deps_with_board(board, dispatch=_deferred)
+        out = asyncio.run(taskboard_action(deps, action="confirm", task_id=tid))
+        result = out if isinstance(out, dict) else {}
+        assert result["run_id"] == ""
+        assert result["task"]["status"] == "assigned"
+
     def test_list_scopes_to_current_session(self) -> None:
         board = TaskBoard()
         board.publish(title="a", brief="b", session="here", publisher="orchestrator")
@@ -282,12 +302,14 @@ class TestDeliveryAnnouncement:
         from agent.tools import Toolbelt
 
         inst = SubagentInstance(
-            task=TaskBook(goal="讲 real-mock", session=session, board_task_id=task_id),
+            # The run's goal is the board BRIEF (what the member executes);
+            # the card's title must come from the board row's title, not here.
+            task=TaskBook(goal="三句话", session=session, board_task_id=task_id),
             toolbelt=Toolbelt({}, PolicyEngine()),
             llm=app.master._llm,
             system_prompt="x",
             events=RuntimeEvents(app.bus),
-            state=RunState("讲 real-mock"),
+            state=RunState("三句话"),
             persona="explainer",
             name="explainer-run",
         )
@@ -315,6 +337,9 @@ class TestDeliveryAnnouncement:
             assert deliveries and deliveries[-1]["status"] == "done"
             assert deliveries[-1]["member"] == "explainer"
             assert "RealMock" in deliveries[-1]["content"]
+            # the card is titled with the board row's task title, not the run
+            # goal (which carries the board brief)
+            assert deliveries[-1]["title"] == "讲 real-mock"
             # the board row reached its terminal state
             row = app.master._task_board.get(deliveries[-1]["board_task_id"])
             assert row["status"] == "done"

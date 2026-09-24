@@ -148,8 +148,11 @@ async def taskboard_action(
             with suppress(ServiceError):
                 board.reopen(task_id)
             raise
-        run_id = getattr(getattr(inst, "state", None), "run_id", "")
-        if run_id and not hasattr(inst, "waiting_on"):  # DeferredDispatch has no state
+        # A deferred dispatch (deps still pending) returns a handle without a
+        # state, so the run_id lookup falls back to "": nothing was spawned
+        # and the row waits in assigned (reopen-able) until re-confirmed.
+        run_id = str(getattr(getattr(inst, "state", None), "run_id", "") or "")
+        if run_id:
             with suppress(ServiceError):
                 board.mark_running(task_id, run_id=run_id)
         return {"task": board.get(task_id), "assigned_to": claimant_key, "run_id": run_id}

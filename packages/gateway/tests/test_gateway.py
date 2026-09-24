@@ -744,3 +744,32 @@ class TestChatSessions:
         )
         body = client.get("/api/chat/trajectory", params={"session": "s1"}).json()
         assert [s["payload"]["name"] for s in body["steps"]] == ["s1step"]
+
+
+class TestStreamVocabulary:
+    """The chat channel's type sets must be built from the contracts
+    vocabulary (DomainEvent constants, never literals): a typo'd or renamed
+    literal would silently detach the SSE stream or a history page from its
+    publishers. The documented exception is the "task.*" subscription glob,
+    which is a pattern, not a concrete type."""
+
+    @staticmethod
+    def _vocabulary() -> set[str]:
+        return {
+            value
+            for key, value in vars(DomainEvent).items()
+            if not key.startswith("_") and isinstance(value, str)
+        }
+
+    def test_stream_and_history_types_are_vocabulary_members(self) -> None:
+        from gateway.chat import _HISTORY_TYPES, _STREAM_TYPES, _TRAJECTORY_TYPES
+
+        vocabulary = self._vocabulary()
+        for members in (_STREAM_TYPES, _HISTORY_TYPES, _TRAJECTORY_TYPES):
+            for member in members:
+                if "*" in member:  # subscription glob ("task.*"), not a type
+                    continue
+                assert member in vocabulary, (
+                    f"{member!r} is not a DomainEvent vocabulary member; use the"
+                    " platform_contracts.DomainEvent constant"
+                )

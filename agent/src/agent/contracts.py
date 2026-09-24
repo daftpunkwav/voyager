@@ -122,6 +122,52 @@ class ToolSource(Protocol):
     def tools(self) -> dict[str, Any]: ...
 
 
+class BoardDeliveryTask(Protocol):
+    """Task-book fields the delivery announcement reads (TaskBook matched
+    structurally: goal drives the card title fallback, session routes the
+    card, board_task_id marks board-backed runs)."""
+
+    @property
+    def goal(self) -> str: ...
+
+    @property
+    def session(self) -> str: ...
+
+    @property
+    def board_task_id(self) -> str: ...
+
+
+class DeliveryRunState(Protocol):
+    """Run-state fields the delivery announcement reads."""
+
+    @property
+    def run_id(self) -> str: ...
+
+    @property
+    def started_ts(self) -> float: ...
+
+
+class DeliveryRun(Protocol):
+    """Minimal instance surface announce_delivery reads (implemented by
+    subagent.instance.SubagentInstance, matched structurally — the subagent
+    package already depends on this module transitively, so no import is
+    needed and no cycle appears). Members are read-only properties: PEP 544
+    checks settable protocol attributes invariantly, which no concrete task/
+    run class would satisfy, while read-only members accept subtypes."""
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def persona(self) -> str: ...
+
+    @property
+    def task(self) -> BoardDeliveryTask: ...
+
+    @property
+    def state(self) -> DeliveryRunState: ...
+
+
 class DispatchMaster(Protocol):
     """The Master surface dispatch_task depends on.
 
@@ -150,7 +196,7 @@ class DispatchMaster(Protocol):
 
     async def announce_delivery(
         self,
-        inst: Any,
+        inst: DeliveryRun,
         *,
         ok: bool,
         result: str,
@@ -158,7 +204,10 @@ class DispatchMaster(Protocol):
         trace_id: str = "",
     ) -> None:
         """Stamp the task board, publish the delivery card, and wake the
-        host to relay the report (board-backed runs only)."""
+        host to relay the report (board-backed runs only). The instance is
+        typed as the minimal DeliveryRun surface instead of Any: structural
+        matching keeps the protocol strict without importing the subagent
+        package here."""
 
     def finish_task(self, name: str, *, ok: bool) -> None: ...
 

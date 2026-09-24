@@ -72,3 +72,35 @@ class TestDto:
     def test_health_report(self) -> None:
         rep = HealthReport(service="graph", status=HealthStatus.DOWN, detail="connection refused")
         assert rep.to_dict()["status"] == "down"
+
+
+class TestFrontendEventMirror:
+    """The web app mirrors this package's event vocabulary by hand in
+    apps/web/src/bridge/events.ts (EventType) — two languages, no shared
+    artifact, so this test is the sync mechanism: a vocabulary rename or
+    addition that skips the mirror fails here instead of silently detaching
+    a frontend subscriber (chatStore dispatches on exact type strings)."""
+
+    @staticmethod
+    def _read_mirror() -> dict[str, str]:
+        import re
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[4]  # tests -> contracts -> platform -> packages -> repo
+        ts = (root / "apps" / "web" / "src" / "bridge" / "events.ts").read_text(encoding="utf-8")
+        block = re.search(r"export const EventType = \{(.*?)\} as const", ts, re.DOTALL)
+        assert block is not None, "EventType constant not found in events.ts"
+        mirror = dict(re.findall(r"([A-Z_]+): '([a-z_.]+)'", block.group(1)))
+        assert mirror, "EventType parse produced no members (file shape changed?)"
+        return mirror
+
+    @staticmethod
+    def _vocabulary() -> dict[str, str]:
+        return {
+            key: value
+            for key, value in vars(DomainEvent).items()
+            if not key.startswith("_") and isinstance(value, str)
+        }
+
+    def test_event_type_matches_vocabulary_exactly(self) -> None:
+        assert self._read_mirror() == self._vocabulary()
