@@ -306,7 +306,10 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
             " unregister (name), wait (id_or_name,timeout_s — blocks for the"
             " result), send (id_or_name,message — reserved continuation"
             " channel: the user's chat instances are refused and task"
-            " instances are not continued in place, so prefer spawn)"
+            " instances are not continued in place, so prefer spawn),"
+            " handoff (persona,message — give a resident teammate the floor:"
+            " they run one turn in this session and speak under their own"
+            " name; resident teammates: iris/elio/miyai/atlas)"
         ),
     )
     async def subagent(
