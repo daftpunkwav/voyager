@@ -8,7 +8,7 @@
 
 ## 实例与任务书
 
-`instance.py` — `SubagentInstance` 是一次运行的状态机:`task: TaskBook`、工具带、LLM、`state: RunState`、历史、`UsageTracker`、人格、`parent_run_id`(取消级联)、期限、预算、`prefix_watch`。`TaskBook`(frozen dataclass)声明一次运行:`goal`、`constraints`、`done_when`、`mode`、`allowed_tools`(None = 不裁剪,`()` = 无工具)、`readonly`、`limits`、`conversational`、`session`、`depends_on`、`board_task_id`(团队任务板行回链)。状态机(`SubStatus`):`created → running → waiting_input → completed/failed/cancelled`。
+`instance.py` — `SubagentInstance` 是一次运行的状态机:`task: TaskBook`、工具带、LLM、`state: RunState`、历史、`UsageTracker`、人格、`parent_run_id`(取消级联)、期限、预算、`prefix_watch`。`TaskBook`(frozen dataclass)声明一次运行:`goal`、`constraints`、`done_when`、`mode`、`allowed_tools`(None = 不裁剪,`()` = 无工具)、`readonly`、`limits`、`conversational`、`session`、`depends_on`、`board_task_id`(团队任务板行回链)。状态机(`runtime/state.py:RunStatus`):`pending → running → waiting_input/paused → completed/failed/cancelled`。
 
 ## 常驻团队(群聊)
 

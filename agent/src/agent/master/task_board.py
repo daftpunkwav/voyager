@@ -5,8 +5,9 @@ claims it (optionally with a note — more info needed, too much on their
 plate); Lucien confirms the claim and the task flips to a dispatched run.
 Pure in-memory state, one instance per process, lifetime matching the
 dispatched instances themselves (a restart loses running tasks the same way
-it loses them). No Master dependency: the board only stores and transitions;
-wiring (what a confirm actually spawns) lives at the capability layer.
+it loses those instances). No Master dependency: the board only stores and
+transitions; wiring (what a confirm actually spawns) lives at the capability
+layer.
 """
 
 from __future__ import annotations
@@ -193,7 +194,9 @@ class TaskBoard:
 
     def cancel(self, task_id: str) -> dict[str, Any]:
         """Cancel from any live state; terminal rows (done/failed/cancelled)
-        stay as they are."""
+        stay as they are. Wired from the delivery path: a stopped board-backed
+        run announces with error="cancelled" and lands here instead of
+        finish(ok=False)."""
         with self._lock:
             task = self._require(task_id)
             if task.status in (_DONE, _FAILED, _CANCELLED):

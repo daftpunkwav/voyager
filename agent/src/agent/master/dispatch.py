@@ -29,10 +29,13 @@ from agent.subagent.surface import intersect_surface, surface_misses
 from agent.tools.core.base import Toolbelt
 
 
-def _last_round_degraded(inst) -> bool:
+def _turn_degraded(inst) -> bool:
     """Whether the run's final LLM round was harness degradation text (quota /
     provider failure placeholder) rather than model output — such a delivery
-    is a failure, not a fake completion. Read back from the step trail."""
+    is a failure, not a fake completion. Read back from the step trail.
+
+    Same check as subagent.turn._turn_degraded (this copy is duck-typed so a
+    fake instance without a steps trail reads as not degraded)."""
     for step in reversed(getattr(inst.state, "steps", ())):
         if step.kind == "llm":
             return bool((step.detail or {}).get("degraded"))
@@ -276,7 +279,7 @@ async def dispatch_task(
                 # host relays the report to the user (event-driven wakeup,
                 # not a sleep loop). A degraded turn's text is harness
                 # placeholder, not a real answer — announce it as a failure.
-                ok = inst.status is RunStatus.COMPLETED and not _last_round_degraded(inst)
+                ok = inst.status is RunStatus.COMPLETED and not _turn_degraded(inst)
                 await master.announce_delivery(
                     inst, ok=ok, result=result if ok else "", error="" if ok else result[:500]
                 )

@@ -1,7 +1,7 @@
 """Subagent instance: the state machine for one run.
 
 Responsibilities:
-- Own one run's SubStatus machine and its bounded cross-turn history
+- Own one run's RunStatus machine and its bounded cross-turn history
   (budget.history_max, dropped in pairs)
 - run_turn(): execute one mode via modes.run_mode with that turn's toolbelt view
 - Emit step/stream events through RuntimeEvents; persist checkpoints at turn and
@@ -69,6 +69,9 @@ def _paired_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 class SubStatus(str, Enum):
+    """Kept importable for older external readers; the live state machine is
+    runtime.state.RunStatus — no runtime code branches on this enum."""
+
     CREATED = "created"
     RUNNING = "running"
     WAITING_INPUT = "waiting_input"

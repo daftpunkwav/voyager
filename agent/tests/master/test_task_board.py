@@ -169,7 +169,6 @@ class TestTaskboardCapability:
         board = TaskBoard()
         tid = board.publish(title="t", brief="b", session="s1", publisher="orchestrator")["id"]
         board.claim(tid, claimant="explainer")
-        deps = _deps_with_board(board)
 
         class _State:
             run_id = "run-2"
@@ -279,6 +278,43 @@ class TestTaskboardCapability:
         assert [t["title"] for t in listed.get("tasks", [])] == ["a"]
 
 
+def _publish_board_task(app, session: str = "s-delivery"):
+    """Open one board row for the delivery tests (the app's own board)."""
+    assert app.master._task_board is not None
+    return app.master._task_board.publish(
+        title="讲 real-mock", brief="三句话", session=session, publisher="orchestrator"
+    )
+
+
+def _delivery_inst(app, session: str, task_id: str):
+    """A minimal board-backed run instance for announce_delivery tests."""
+    from agent.policy import PolicyEngine
+    from agent.runtime.events import RuntimeEvents
+    from agent.runtime.state import RunState
+    from agent.subagent import TaskBook
+    from agent.subagent.instance import SubagentInstance
+    from agent.tools import Toolbelt
+
+    return SubagentInstance(
+        # The run's goal is the board BRIEF (what the member executes); the
+        # card's title must come from the board row's title, not here.
+        task=TaskBook(goal="三句话", session=session, board_task_id=task_id),
+        toolbelt=Toolbelt({}, PolicyEngine()),
+        llm=app.master._llm,
+        system_prompt="x",
+        events=RuntimeEvents(app.bus),
+        state=RunState("三句话"),
+        persona="explainer",
+        name="explainer-run",
+    )
+
+
+async def _drain(app) -> None:
+    """Let the master's backgrounded turns finish before asserting."""
+    while app.master._bg:
+        await asyncio.gather(*list(app.master._bg))
+
+
 class TestDeliveryAnnouncement:
     def _app(self, tmp_path, replies):
         return build_agent(
@@ -287,48 +323,18 @@ class TestDeliveryAnnouncement:
             llm=FakeLLM([LLMReply(text=r) for r in replies]),
         )
 
-    def _board_task(self, app, session="s-delivery"):
-        assert app.master._task_board is not None
-        return app.master._task_board.publish(
-            title="讲 real-mock", brief="三句话", session=session, publisher="orchestrator"
-        )
-
-    async def _make_inst(self, app, session, task_id):
-        from agent.policy import PolicyEngine
-        from agent.runtime.events import RuntimeEvents
-        from agent.runtime.state import RunState
-        from agent.subagent import TaskBook
-        from agent.subagent.instance import SubagentInstance
-        from agent.tools import Toolbelt
-
-        inst = SubagentInstance(
-            # The run's goal is the board BRIEF (what the member executes);
-            # the card's title must come from the board row's title, not here.
-            task=TaskBook(goal="三句话", session=session, board_task_id=task_id),
-            toolbelt=Toolbelt({}, PolicyEngine()),
-            llm=app.master._llm,
-            system_prompt="x",
-            events=RuntimeEvents(app.bus),
-            state=RunState("三句话"),
-            persona="explainer",
-            name="explainer-run",
-        )
-        return inst
-
     def test_delivery_event_board_stamp_and_host_relay(self, tmp_path) -> None:
         app = self._app(tmp_path, ["收到,Elio 交卷了,讲得很清楚。"])
         try:
 
             async def _scenario() -> None:
                 await app.master.handle_user_message("开始测试", session_id="s-delivery")
-                row = self._board_task(app)
-                board_task_id = row["id"]
-                inst = await self._make_inst(app, row["session"], board_task_id)
+                row = _publish_board_task(app)
+                inst = _delivery_inst(app, row["session"], row["id"])
                 await app.master.announce_delivery(
                     inst, ok=True, result="RealMock 是一个 AI 模拟面试平台。"
                 )
-                while app.master._bg:
-                    await asyncio.gather(*list(app.master._bg))
+                await _drain(app)
 
             asyncio.run(_scenario())
             deliveries = [
@@ -354,13 +360,12 @@ class TestDeliveryAnnouncement:
         try:
 
             async def _scenario() -> None:
-                row = self._board_task(app)
-                inst = await self._make_inst(app, row["session"], row["id"])
+                row = _publish_board_task(app)
+                inst = _delivery_inst(app, row["session"], row["id"])
                 await app.master.announce_delivery(
                     inst, ok=False, result="", error="ValueError: bad input"
                 )
-                while app.master._bg:
-                    await asyncio.gather(*list(app.master._bg))
+                await _drain(app)
 
             asyncio.run(_scenario())
             deliveries = [
@@ -370,5 +375,177 @@ class TestDeliveryAnnouncement:
             assert "ValueError" in deliveries[-1]["error"]
             row = app.master._task_board.get(deliveries[-1]["board_task_id"])
             assert row["status"] == "failed"
+        finally:
+            app.close()
+
+    def test_cancelled_delivery_marks_row_cancelled(self, tmp_path) -> None:
+        """dispatch's cancel branches announce with error="cancelled": the
+        board row closes through cancel (a stopped run is not a failure)
+        while the card stays a failed card — the frontend delivery vocabulary
+        has only done/failed."""
+        app = self._app(tmp_path, ["收到,任务被停止了,我来说明。"])
+        try:
+
+            async def _scenario() -> None:
+                row = _publish_board_task(app)
+                inst = _delivery_inst(app, row["session"], row["id"])
+                await app.master.announce_delivery(inst, ok=False, result="", error="cancelled")
+                await _drain(app)
+
+            asyncio.run(_scenario())
+            deliveries = [
+                e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_DELIVERY])
+            ]
+            assert deliveries[-1]["status"] == "failed"
+            row = app.master._task_board.get(deliveries[-1]["board_task_id"])
+            assert row["status"] == "cancelled" and row["result"] == "cancelled"
+        finally:
+            app.close()
+
+
+class _ExhaustedBudget:
+    """Wake-budget probe: never allows a wakeup and counts record() calls so
+    a test can prove the degraded branch consumes no budget it did not grant."""
+
+    def __init__(self) -> None:
+        self.recorded = 0
+
+    def allow(self, session: str) -> bool:
+        return False
+
+    def record(self, session: str) -> None:
+        self.recorded += 1
+
+    def reset(self, session: str) -> None:
+        pass
+
+
+class TestDeliveryQuietReceipt:
+    """Over-budget deliveries degrade to a quiet receipt: the card still
+    lands, but no synthesis call and no notice turn are spent on a relay the
+    budget refused (and no budget is recorded for it either)."""
+
+    def test_over_budget_delivery_degrades_to_quiet_receipt(self, tmp_path) -> None:
+        fake = FakeLLM([])
+        app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=fake)
+        try:
+            budget = _ExhaustedBudget()
+            app.master._wake_budget = budget
+
+            async def _scenario() -> None:
+                # A board run always originates from a live session: create it
+                # so the relay path could actually resolve it (the over-budget
+                # branch must decline before ever needing it).
+                app.master.sessions.create(session_id="s-quiet", title="t")
+                row = _publish_board_task(app, session="s-quiet")
+                inst = _delivery_inst(app, row["session"], row["id"])
+                # A long result would cost one synthesis call on the relay path
+                await app.master.announce_delivery(inst, ok=True, result="长" * 500)
+                await _drain(app)
+
+            asyncio.run(_scenario())
+            deliveries = [
+                e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_DELIVERY])
+            ]
+            assert deliveries[-1]["status"] == "done"  # the card is unconditional
+            assert app.master._task_board is not None
+            row = app.master._task_board.get(deliveries[-1]["board_task_id"])
+            assert row["status"] == "done"
+            messages = [
+                e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_MESSAGE])
+            ]
+            receipts = [
+                p for p in messages if str(p.get("content") or "").startswith("[team-report]")
+            ]
+            assert len(receipts) == 1
+            assert receipts[0]["kind"] == "notice" and "已完成" in receipts[0]["content"]
+            # the degraded branch spends nothing: no synthesis, no relay turn
+            assert fake.calls == []
+            assert budget.recorded == 0
+        finally:
+            app.close()
+
+
+class TestTaskClaimNotice:
+    """claim -> the publisher's wake: the capability's task_claim_notify hook
+    (wired to Master.notify_task_claim at build) starts a host notice turn
+    whose user text carries the [task-claim] marker, the claimant, and the
+    confirm instruction; a wakeup that cannot start is swallowed."""
+
+    def _app(self, tmp_path, replies):
+        """(app, raw fake) — the fake before the metered client wraps it, so
+        the test can read the exact LLM calls the wake turn made."""
+        fake = FakeLLM([LLMReply(text=r) for r in replies])
+        app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=fake)
+        return app, fake
+
+    @staticmethod
+    def _member_context(member: str):
+        """ContextVar token faking a member turn: the chat instance running
+        with the speaking member's key (see TestTaskboardCapability)."""
+        from types import SimpleNamespace
+
+        from agent.runtime.current import current_instance
+
+        return current_instance, current_instance.set(
+            SimpleNamespace(persona="orchestrator", _member_persona=member)
+        )
+
+    def test_claim_wakes_publisher_with_confirm_notice(self, tmp_path) -> None:
+        app, fake = self._app(tmp_path, ["好的,Elio 适合,确认派发。"])
+        try:
+
+            async def _scenario() -> None:
+                await app.master.handle_user_message("开工", session_id="s-claim")
+                sid = app.master.sessions.active_id()
+                board = app.master._task_board
+                assert board is not None
+                row = board.publish(
+                    title="讲 real-mock", brief="三句话", session=sid, publisher="orchestrator"
+                )
+                deps = _deps_with_board(board)
+                deps.task_claim_notify = app.master.notify_task_claim
+                mod, token = self._member_context("explainer")
+                try:
+                    await taskboard_action(deps, action="claim", task_id=row["id"])
+                finally:
+                    mod.reset(token)
+                await _drain(app)
+
+            asyncio.run(_scenario())
+            # The wake turn really ran: its request transcript carries exactly
+            # one [task-claim] notice (replayed once per ReAct round, so count
+            # per request, not across calls), and the host spoke its reply.
+            claim_seen: list[str] = []
+            for call in fake.calls:
+                claim = [
+                    str(m.get("content") or "")
+                    for m in call["messages"]
+                    if str(m.get("content") or "").startswith("[task-claim]")
+                ]
+                if claim:
+                    assert len(claim) == 1
+                    claim_seen = claim
+            assert claim_seen
+            assert "explainer" in claim_seen[0] and "讲 real-mock" in claim_seen[0]
+            assert "confirm" in claim_seen[0]
+            payloads = [
+                e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_MESSAGE])
+            ]
+            assert any("确认派发" in str(p.get("content") or "") for p in payloads)
+        finally:
+            app.close()
+
+    def test_claim_notice_failure_is_swallowed(self, tmp_path) -> None:
+        """A claim wake whose session cannot resolve must not break the claim
+        path: the wakeup is dropped with a warning, nothing is raised."""
+        app, _fake = self._app(tmp_path, [])
+        try:
+            task = {"id": "t-x", "title": "t", "session": "no-such-session"}
+            asyncio.run(app.master.notify_task_claim(task, "explainer", ""))  # must not raise
+            payloads = [
+                e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_MESSAGE])
+            ]
+            assert payloads == []
         finally:
             app.close()

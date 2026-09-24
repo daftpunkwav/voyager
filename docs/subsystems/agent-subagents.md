@@ -8,7 +8,7 @@ Source: `agent/src/agent/subagent/` plus `master/` orchestration modules.
 
 ## Instances and task books
 
-`instance.py` — `SubagentInstance` is one run's state machine: `task: TaskBook`, toolbelt, LLMs, `state: RunState`, history, `UsageTracker`, persona, `parent_run_id` (cancel cascade), deadline, budget, `prefix_watch`. `TaskBook` (frozen dataclass) declares a run: `goal`, `constraints`, `done_when`, `mode`, `allowed_tools` (None = no trim, `()` = no tools), `readonly`, `limits`, `conversational`, `session`, `depends_on`, `board_task_id` (team task-board row back-link). Status machine (`SubStatus`): `created → running → waiting_input → completed/failed/cancelled`.
+`instance.py` — `SubagentInstance` is one run's state machine: `task: TaskBook`, toolbelt, LLMs, `state: RunState`, history, `UsageTracker`, persona, `parent_run_id` (cancel cascade), deadline, budget, `prefix_watch`. `TaskBook` (frozen dataclass) declares a run: `goal`, `constraints`, `done_when`, `mode`, `allowed_tools` (None = no trim, `()` = no tools), `readonly`, `limits`, `conversational`, `session`, `depends_on`, `board_task_id` (team task-board row back-link). Status machine (`runtime/state.py:RunStatus`): `pending → running → waiting_input/paused → completed/failed/cancelled`.
 
 ## The resident team (group chat)
 

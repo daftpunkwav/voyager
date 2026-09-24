@@ -259,9 +259,16 @@ class Master:
         dispatch's own completion path. (Typed as the minimal DeliveryRun
         surface, so it also accepts any structurally matching run handle.)"""
         board_task_id = getattr(inst.task, "board_task_id", "") or ""
+        # dispatch's cancel branches announce with error="cancelled": a stopped
+        # run is not a failure, the row closes out through board.cancel so the
+        # cancelled status (and not failed) is what the board view keeps.
+        cancelled = (not ok) and error == "cancelled"
         if board_task_id and self._task_board is not None:
             with suppress(Exception):
-                self._task_board.finish(board_task_id, ok=ok, result=result)
+                if cancelled:
+                    self._task_board.cancel(board_task_id)
+                else:
+                    self._task_board.finish(board_task_id, ok=ok, result=result)
         member = inst.persona or inst.name
         started = inst.state.started_ts or 0.0
         elapsed = max(0, int(time.time() - started)) if started else 0
