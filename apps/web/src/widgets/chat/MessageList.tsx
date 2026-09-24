@@ -38,6 +38,8 @@ import { ServiceError } from '@/bridge/client';
 import { forkSession, rateTurn, setActiveSession } from '@/api/agent';
 import { getNote } from '@/api/notes';
 import { extractErrorMessage } from '@/utils/errors';
+import { personaDisplayName } from '@/constants/personas';
+import { AgentCharacterHead } from '@/components/agent/avatars/AgentCharacterHead';
 import { routes } from '@/utils/routes';
 import { ChatMarkdown } from '@/widgets/chat/ChatMarkdown';
 import { ClosedTurnTrace, LiveTurnTrace } from '@/widgets/chat/TurnTrace';
@@ -247,6 +249,9 @@ export function MessageList() {
   // whole list subtree and only LiveTurnTrace re-renders per delta.
   const rows = useMemo(() => {
     let lastUser = '';
+    // null = no agent voice seen yet, so the very first answer still opens
+    // with its name header
+    let lastAgentVoice: string | null = null;
     return timeline.map((item) => {
       if (item.kind === 'artifact') {
         return <NoteArtifactCard key={`a${item.seq}`} artifact={item.artifact} />;
@@ -255,10 +260,18 @@ export function MessageList() {
       if (m.role === 'user') lastUser = m.content;
       const subject = lastUser;
       const trail = m.role === 'agent' ? trailBySeq.get(m.seq) : undefined;
+      // Group-chat attribution: the speaker header renders when the voice
+      // changes (host <-> teammate or teammate <-> teammate); consecutive
+      // messages of the same speaker keep the clean look. Absent speaker =
+      // the resident host.
+      const voice =
+        m.role === 'agent' && m.kind !== 'notice' ? (m.speaker ?? 'orchestrator') : null;
+      const showSpeaker = voice !== null && voice !== lastAgentVoice;
+      if (voice !== null) lastAgentVoice = voice;
       return (
         <Fragment key={`${m.seq ?? `local-${m.ts ?? item.seq}`}-${m.role}`}>
           {trail ? <ClosedTurnTrace steps={trail.steps} finalText={m.content} /> : null}
-          <Bubble msg={m} subject={subject} />
+          <Bubble msg={m} subject={subject} showSpeaker={showSpeaker} />
         </Fragment>
       );
     });
@@ -302,7 +315,15 @@ export function MessageList() {
   );
 }
 
-function Bubble({ msg, subject }: { msg: ChatMessage; subject: string }) {
+function Bubble({
+  msg,
+  subject,
+  showSpeaker,
+}: {
+  msg: ChatMessage;
+  subject: string;
+  showSpeaker: boolean;
+}) {
   const { t } = useTranslation('chat');
   const addToast = useUIStore((s) => s.addToast);
   const [copied, setCopied] = useState(false);
@@ -334,8 +355,21 @@ function Bubble({ msg, subject }: { msg: ChatMessage; subject: string }) {
   // The action bar lives OUTSIDE the bubble (below it), so user bubbles keep
   // their clean pill shape; rating expands in place from the bar. The wrapper
   // carries the row alignment the bubble used to own.
+  const speakerName = msg.role === 'agent' ? personaDisplayName(msg.speaker ?? 'orchestrator') : '';
   return (
     <div className={`chat-entry${msg.role === 'user' ? ' chat-entry--user' : ''}`}>
+      {msg.role === 'agent' && showSpeaker ? (
+        <div className="chat-speaker">
+          <span className="chat-speaker__avatar" aria-hidden>
+            <AgentCharacterHead
+              agentId={msg.speaker ?? 'orchestrator'}
+              look={{ x: 0, y: 0 }}
+              isFocused={false}
+            />
+          </span>
+          <span className="chat-speaker__name">{speakerName}</span>
+        </div>
+      ) : null}
       <div className={cls} role={error ? 'alert' : undefined}>
         <div className="chat-md">
           <ChatMarkdown content={msg.content} />

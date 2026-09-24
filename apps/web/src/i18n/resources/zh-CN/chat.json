@@ -139,6 +139,7 @@
   "tokens.unitYi": "亿",
   "trace.waiting": "等待模型响应…",
   "trace.thinking": "思考中",
+  "trace.memberThinking": "{{name}} 正在思考…",
   "trace.cut": "已截断",
   "trace.outputting": "正在输出",
   "trace.think": "思考 {{n}} 次",

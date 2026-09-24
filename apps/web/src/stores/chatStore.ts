@@ -52,6 +52,9 @@ export interface ChatMessage {
   /** Backend message kind: "error" renders distinctly (failures and harness
    *  degradation must not masquerade as normal answers); absent on old rows. */
   kind?: ChatMessageKind;
+  /** Speaking team member (persona key, e.g. "explainer"); absent = the
+   *  resident host Lucien, which is also how every pre-team message reads. */
+  speaker?: string;
 }
 
 export interface ProgressCard {
@@ -446,6 +449,7 @@ function toAgentMessage(ev: ChatEvent, p: Record<string, unknown>): ChatMessage 
     // Cast: the wire value is backend-controlled; unknown kinds render as
     // plain answers, which is the intended degradation.
     kind: typeof p.kind === 'string' ? (p.kind as ChatMessageKind) : undefined,
+    speaker: typeof p.speaker === 'string' && p.speaker ? p.speaker : undefined,
   };
 }
 
@@ -471,6 +475,8 @@ function historyToMessages(events: ChatEvent[]): ChatMessage[] {
       // Cast: the wire value is backend-controlled; unknown kinds render as
       // plain answers, which is the intended degradation.
       kind: typeof e.payload?.kind === 'string' ? (e.payload.kind as ChatMessageKind) : undefined,
+      speaker:
+        typeof e.payload?.speaker === 'string' && e.payload.speaker ? e.payload.speaker : undefined,
     }));
 }
 

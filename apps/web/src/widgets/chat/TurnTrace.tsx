@@ -557,7 +557,11 @@ export function LiveTurnTrace() {
       >
         <Chevron open={showBody} />
         <span className="chat-trace__headtext">
-          {hasSteps ? groupSummary(steps, t) : t('chat:trace.thinking')}
+          {hasSteps
+            ? groupSummary(steps, t)
+            : streaming?.subagent && streaming.subagent !== 'chat'
+              ? t('chat:trace.memberThinking', { name: streaming.subagent })
+              : t('chat:trace.thinking')}
         </span>
         <span className="chat-trace__livebadge">
           <span className="chat-trace__pulse" aria-hidden />

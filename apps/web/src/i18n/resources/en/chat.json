@@ -139,6 +139,7 @@
   "tokens.unitYi": "×100M",
   "trace.waiting": "Waiting for the model…",
   "trace.thinking": "Thinking",
+  "trace.memberThinking": "{{name}} is thinking…",
   "trace.cut": "Cut off",
   "trace.outputting": "Writing",
   "trace.think": "Thought {{n}}x",

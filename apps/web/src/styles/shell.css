@@ -1270,6 +1270,27 @@
   color: #fff;
   border-bottom-right-radius: 4px;
 }
+/* Group-chat attribution: a small name row above an agent bubble when the
+   voice changes (host <-> teammate). The head rides its own 18px box; the
+   48px viewBox svg scales down cleanly. */
+.chat-speaker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-600);
+}
+.chat-speaker__avatar {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+}
+.chat-speaker__avatar svg {
+  width: 100%;
+  height: 100%;
+}
 /* Agent output reads as document text on the canvas (no chrome), the
    execution trace and user bubble provide the contrast around it. */
 .chat-bubble--agent {
