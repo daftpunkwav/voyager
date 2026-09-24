@@ -293,19 +293,9 @@ class Master:
         # delivery card above is unconditional; the relay turn rides the
         # wake budget (job_notify's anti-self-excitation pattern) — over
         # budget it degrades to a quiet receipt so a burst of completions
-        # cannot feed itself. A relay failure must never break the completion
-        # path either.
-        if ok:
-            summary = await synthesize_result(self._llm, member, result)
-            body = (
-                f"[team-report] 团队成员 {member} 已完成任务,汇报如下:{summary}\n"
-                "请向用户简短播报这一结果(一两句,署成员的名),并给出下一步建议。"
-            )
-        else:
-            body = (
-                f"[team-report] 团队成员 {member} 的任务执行失败:{error or result[:300]}\n"
-                "请向用户如实说明失败情况,并给出可选的下一步(重试/换人/放弃)。"
-            )
+        # cannot feed itself (the synthesis call stays behind the gate: an
+        # over-budget burst must not spend LLM calls on discarded summaries).
+        # A relay failure must never break the completion path either.
         sid = inst.task.session
         if self._wake_budget is not None and not self._wake_budget.allow(sid):
             await self.reply(
@@ -319,6 +309,17 @@ class Master:
             return
         if self._wake_budget is not None:
             self._wake_budget.record(sid)
+        if ok:
+            summary = await synthesize_result(self._llm, member, result)
+            body = (
+                f"[team-report] 团队成员 {member} 已完成任务,汇报如下:{summary}\n"
+                "请向用户简短播报这一结果(一两句,署成员的名),并给出下一步建议。"
+            )
+        else:
+            body = (
+                f"[team-report] 团队成员 {member} 的任务执行失败:{error or result[:300]}\n"
+                "请向用户如实说明失败情况,并给出可选的下一步(重试/换人/放弃)。"
+            )
         try:
             await self.handle_notice(sid, body, trace_id=trace_id)
         except Exception:
