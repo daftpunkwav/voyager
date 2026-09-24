@@ -9,6 +9,7 @@ import asyncio
 import pytest
 from agent.llm import FakeLLM
 from agent.main import build_agent
+from agent.master.master import _Queued
 from agent.memory.session_store import SessionSnapshot
 from agent.runtime.state import RunStatus
 from platform_contracts import DomainEvent, ServiceError
@@ -55,7 +56,7 @@ class TestSessionManager:
             mgr = app.master.sessions
             created = mgr.create(title="短命会话")
             sid = created["session_id"]
-            app.master._session_inbox(sid).append(("排队消息", None))
+            app.master._session_inbox(sid).append(_Queued("排队消息"))
             mgr.delete(sid)
             assert app.master._inboxes.get(sid) is None
         finally:
