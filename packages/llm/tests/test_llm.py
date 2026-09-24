@@ -788,7 +788,9 @@ class TestCompleteWithTools:
             tools=self.TOOLS,
             reasoning_effort="low",
         )
-        assistant = seen["body"]["messages"][0]
+        # assistant-first history gains the leading user turn (see
+        # test_anthropic_assistant_first_history_leads_with_user)
+        assistant = seen["body"]["messages"][1]
         assert assistant["role"] == "assistant"
         assert assistant["content"][0] == stored  # thinking first, verbatim
         assert assistant["content"][1] == {"type": "text", "text": "calling tool"}
@@ -1228,7 +1230,8 @@ class TestMessageTranslation:
             {"role": "tool", "tool_call_id": "call_1", "content": "echo:a"},
         ]
         await client_mod.complete(self._ANTHROPIC, api_key="sk", model="m", messages=history)
-        assert seen["body"]["messages"][0]["content"] == [
+        # index 1: the assistant-first history gains the leading user turn
+        assert seen["body"]["messages"][1]["content"] == [
             {"type": "thinking", "thinking": "unsigned"},
             {"type": "redacted_thinking", "data": "opaque"},
             {"type": "tool_use", "id": "call_1", "name": "echo_tool", "input": {}},
@@ -1344,6 +1347,65 @@ class TestMessageTranslation:
             messages=[{"role": "system", "content": "only a system prompt"}],
         )
         assert seen["body"]["messages"]
+
+    async def test_anthropic_assistant_first_history_leads_with_user(self, monkeypatch) -> None:
+        """Task-mode subagents carry the goal in system, so round 2+ opens
+        with the assistant's tool_use (no user turn exists yet). Volcengine's
+        anthropic layer rejects an assistant-first history with HTTP 400
+        InvalidParameter — the wire request must lead with a user turn."""
+        seen = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "content": [{"type": "text", "text": "ok"}],
+                    "usage": {"input_tokens": 1, "output_tokens": 1},
+                    "model": "m",
+                },
+            )
+
+        self._patch(monkeypatch, handler)
+        await client_mod.complete(
+            self._ANTHROPIC,
+            api_key="sk",
+            model="m",
+            messages=[
+                {"role": "system", "content": "goal lives here"},
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {"id": "call_1", "name": "echo_tool", "arguments": {"x": "a"}},
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_1",
+                    "name": "echo_tool",
+                    "content": "echo:a",
+                },
+            ],
+        )
+        msgs = seen["body"]["messages"]
+        assert [m["role"] for m in msgs] == ["user", "assistant", "user"]
+        # The leading user turn is the same placeholder the empty-history
+        # path uses; the assistant prefill keeps its tool_use blocks intact
+        assert msgs[0]["content"] == "(no content, please continue)"
+        assert msgs[1]["content"][0]["type"] == "tool_use"
+
+        # A history that already opens with user passes through untouched
+        await client_mod.complete(
+            self._ANTHROPIC,
+            api_key="sk",
+            model="m",
+            messages=[
+                {"role": "system", "content": "s"},
+                {"role": "user", "content": "hi"},
+            ],
+        )
+        assert [m["role"] for m in seen["body"]["messages"]] == ["user"]
 
         def handler_400(request: httpx.Request) -> httpx.Response:
             return httpx.Response(

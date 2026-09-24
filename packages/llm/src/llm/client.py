@@ -689,6 +689,17 @@ def _wire_request(
         headers = {"Authorization": f"Bearer {api_key}"}
     elif fmt == "anthropic":
         system, rest = _split_system(messages)
+        encoded = _anthropic_messages(rest)
+        if encoded and encoded[0].get("role") == "assistant":
+            # Task-mode subagents carry the goal in system, so round 2+ opens
+            # with the assistant's tool_use. The official API allows that
+            # (prefill), Volcengine's anthropic layer answers it with HTTP 400
+            # InvalidParameter — lead with a user turn so the request stays
+            # portable across providers.
+            encoded = [
+                {"role": "user", "content": "(no content, please continue)"},
+                *encoded,
+            ]
         body = {
             "model": model,
             "max_tokens": max_tokens,
@@ -696,7 +707,7 @@ def _wire_request(
             "system": system,
             # rest is empty (system only): never send an empty messages
             # array or MiniMax answers 2013
-            "messages": _anthropic_messages(rest)
+            "messages": encoded
             or [
                 {"role": "user", "content": "(no content, please continue)"},
             ],
