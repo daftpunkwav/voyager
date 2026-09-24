@@ -22,6 +22,8 @@ export interface SubagentRunRef {
   id: string;
   run_id?: string;
   name: string;
+  /** Persona key of the dispatched member ('' / absent = a generic run). */
+  persona?: string;
   status: string;
   goal: string;
   started_ts: number;

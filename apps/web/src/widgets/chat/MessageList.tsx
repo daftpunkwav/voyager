@@ -32,7 +32,13 @@ import { useUIStore } from '@/stores/uiStore';
 import { flushSync } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { type ChatMessage, type NoteArtifact, useChatStore } from '@/stores/chatStore';
+import {
+  type ChatMessage,
+  type Delivery,
+  type NoteArtifact,
+  useChatStore,
+} from '@/stores/chatStore';
+import { DeliveryCard } from '@/widgets/chat/DeliveryCard';
 import { fetchChatHistoryBefore, loadChatSessions, loadSessionTimeline } from '@/bridge/chatSend';
 import { ServiceError } from '@/bridge/client';
 import { forkSession, rateTurn, setActiveSession } from '@/api/agent';
@@ -73,7 +79,8 @@ function getScrollParent(node: HTMLElement): HTMLElement | null {
  *  stacking at the stream tail. */
 type TimelineItem =
   | { kind: 'msg'; seq: number; msg: ChatMessage }
-  | { kind: 'artifact'; seq: number; artifact: NoteArtifact };
+  | { kind: 'artifact'; seq: number; artifact: NoteArtifact }
+  | { kind: 'delivery'; seq: number; delivery: Delivery };
 
 /** Note receipts are emitted while the tools run, i.e. BEFORE the reply that
  *  produced them; the reply reads better with the results under it, so an
@@ -82,7 +89,9 @@ type TimelineItem =
  *  message there (or none) means the turn never closed, and the artifact
  *  keeps its seq position instead of drifting into a later turn. */
 function reParentArtifacts(merged: TimelineItem[]): TimelineItem[] {
-  const out: TimelineItem[] = merged.filter((item) => item.kind === 'msg');
+  // Deliveries keep their own seq position (they are turns of their own);
+  // only artifacts re-parent below the reply that produced them.
+  const out: TimelineItem[] = merged.filter((item) => item.kind !== 'artifact');
   for (const item of merged) {
     if (item.kind !== 'artifact') continue;
     let at = out.length;
@@ -102,22 +111,18 @@ function reParentArtifacts(merged: TimelineItem[]): TimelineItem[] {
   return out;
 }
 
-function mergeTimeline(messages: ChatMessage[], artifacts: NoteArtifact[]): TimelineItem[] {
+function mergeTimeline(
+  messages: ChatMessage[],
+  artifacts: NoteArtifact[],
+  deliveries: Delivery[]
+): TimelineItem[] {
+  // Stable seq merge across the three sources (each ascends already).
   const items: TimelineItem[] = [
     ...messages.map((m) => ({ kind: 'msg' as const, seq: m.seq, msg: m })),
     ...artifacts.map((a) => ({ kind: 'artifact' as const, seq: a.seq, artifact: a })),
+    ...deliveries.map((d) => ({ kind: 'delivery' as const, seq: d.seq, delivery: d })),
   ];
-  // Both inputs ascend already; a merge-sort keeps that order stable.
-  const out: TimelineItem[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < messages.length && j < artifacts.length) {
-    if (messages[i].seq <= artifacts[j].seq) out.push(items[i++]);
-    else out.push(items[messages.length + j++]);
-  }
-  while (i < messages.length) out.push(items[i++]);
-  while (j < artifacts.length) out.push(items[messages.length + j++]);
-  return reParentArtifacts(out);
+  return reParentArtifacts(items.sort((a, b) => a.seq - b.seq));
 }
 
 export function MessageList() {
@@ -126,6 +131,7 @@ export function MessageList() {
   const thinking = useChatStore((s) => s.thinking);
   const streaming = useChatStore((s) => s.streaming);
   const artifacts = useChatStore((s) => s.artifacts);
+  const deliveries = useChatStore((s) => s.deliveries);
   const trails = useChatStore((s) => s.trails);
   const steps = useChatStore((s) => s.steps);
   const historyLoading = useChatStore((s) => s.historyLoading);
@@ -240,7 +246,10 @@ export function MessageList() {
   // above the answer it produced. Memoized: the timeline and the rendered rows
   // below must keep stable identities across streaming renders (see rows).
   const trailBySeq = useMemo(() => new Map(trails.map((tr) => [tr.msgSeq, tr])), [trails]);
-  const timeline = useMemo(() => mergeTimeline(messages, artifacts), [messages, artifacts]);
+  const timeline = useMemo(
+    () => mergeTimeline(messages, artifacts, deliveries),
+    [messages, artifacts, deliveries]
+  );
   // The rows element array is memoized on its data inputs only. MessageList
   // re-renders on every agent.delta / agent.step (streaming + steps are read
   // for the live trace and scroll follow), and without this each of those
@@ -255,6 +264,11 @@ export function MessageList() {
     return timeline.map((item) => {
       if (item.kind === 'artifact') {
         return <NoteArtifactCard key={`a${item.seq}`} artifact={item.artifact} />;
+      }
+      if (item.kind === 'delivery') {
+        // A teammate's structured delivery: not a conversation turn (no
+        // trace attachment, no fork anchor), rendered as a card.
+        return <DeliveryCard key={`d${item.seq}`} delivery={item.delivery} />;
       }
       const m = item.msg;
       if (m.role === 'user') lastUser = m.content;
@@ -335,7 +349,13 @@ function Bubble({
   // Background-task notifications ([done]/[failed]/...) are not conversation
   // turns: light notice styling, no action bar / rating / trace attachment.
   if (msg.role === 'agent' && msg.kind === 'notice') {
-    return <div className="chat-notice">{msg.content}</div>;
+    // Light chrome, real Markdown: control-plane notices ([paused]…, receipts)
+    // often carry structure and must not render as a raw text blob.
+    return (
+      <div className="chat-notice chat-md">
+        <ChatMarkdown content={msg.content} />
+      </div>
+    );
   }
   const cls =
     msg.role === 'user'

@@ -3060,6 +3060,151 @@ a.chat-card:hover {
 }
 /* Background-task notifications ([done]/[failed]/...): light inline notice,
    clearly not a conversation turn */
+/* Resident team strip: every teammate always on the roster, the status dot
+   lights while their persona has a live run. */
+.chat-side__team {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.chat-side__member {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 4px;
+  border: 1px solid var(--bg-300);
+  border-radius: 999px;
+  background: var(--bg-100);
+}
+.chat-side__member-avatar {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+.chat-side__member-avatar svg {
+  width: 100%;
+  height: 100%;
+}
+.chat-side__member-name {
+  font-size: 11.5px;
+  color: var(--text-600);
+}
+.chat-side__member-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-300);
+}
+.chat-side__member--busy .chat-side__member-dot {
+  background: var(--brand-500);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-500) 18%, transparent);
+}
+.chat-side__member--busy .chat-side__member-name {
+  color: var(--text-800);
+}
+.chat-side__agent-avatar {
+  display: inline-flex;
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+.chat-side__agent-avatar svg {
+  width: 100%;
+  height: 100%;
+}
+.chat-side__agent--settled {
+  opacity: 0.72;
+}
+.chat-side__agent--failed .chat-side__agent-name {
+  color: var(--error);
+}
+/* Team delivery card: a dispatched teammate's structured hand-in. */
+.delivery-card {
+  align-self: stretch;
+  margin: 10px 0 2px;
+  padding: 10px 14px;
+  border: 1px solid var(--bg-300);
+  border-left: 3px solid var(--brand-400);
+  border-radius: var(--radius-sm);
+  background: var(--bg-100);
+}
+.delivery-card--failed {
+  border-left-color: var(--error);
+  background: var(--error-surface);
+}
+.delivery-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  color: var(--text-600);
+}
+.delivery-card__avatar {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+}
+.delivery-card__avatar svg {
+  width: 100%;
+  height: 100%;
+}
+.delivery-card__name {
+  font-weight: 600;
+  color: var(--text-800);
+}
+.delivery-card__badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.delivery-card__badge--done {
+  background: color-mix(in srgb, var(--brand-500) 12%, transparent);
+  color: var(--brand-600, var(--brand-500));
+}
+.delivery-card__badge--failed {
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  color: var(--error);
+}
+.delivery-card__title {
+  overflow: hidden;
+  max-width: 40ch;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.delivery-card__elapsed {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-500);
+}
+.delivery-card__body {
+  font-size: 13.5px;
+}
+.delivery-card__error {
+  padding: 6px 0;
+  color: var(--error);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.delivery-card__actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+}
+.delivery-card__actions button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-500);
+  cursor: pointer;
+  font-size: 12px;
+}
+.delivery-card__actions button:hover {
+  color: var(--text-800);
+}
 .chat-notice {
   align-self: flex-start;
   max-width: 92%;

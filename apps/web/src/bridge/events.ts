@@ -28,6 +28,8 @@ export const EventType = {
   AGENT_STEP: 'agent.step',
   /** Streaming text delta */
   AGENT_DELTA: 'agent.delta',
+  /** A dispatched teammate's structured delivery card (full content + status) */
+  AGENT_DELIVERY: 'agent.delivery',
   /** Agent observation notice (resource ready etc.; acted = auto-dispatched) */
   AGENT_OBSERVE: 'agent.observe',
   /** L1 permission notice (deliberately not surfaced live: no toast, no

@@ -44,6 +44,49 @@ import { EventType } from '@/bridge/events';
  *  default "message", turn failures "error", task receipts "notice"). */
 export type ChatMessageKind = 'message' | 'error' | 'notice';
 
+/** agent.delivery payload -> a dispatched teammate's structured delivery:
+ *  the full answer (never truncated), status, and the run pointer for the
+ *  agents-panel drill-in. */
+export interface Delivery {
+  seq: number;
+  /** Persona key of the delivering member (explainer/...). */
+  member: string;
+  /** Instance name of the run. */
+  name: string;
+  title: string;
+  status: 'done' | 'failed';
+  /** Full delivery text (done) — render as Markdown, collapsible. */
+  content: string;
+  error?: string;
+  elapsed_s?: number;
+  run_id?: string;
+  board_task_id?: string;
+  ts?: number;
+}
+
+function toDelivery(p: Record<string, unknown>, seq: number, ts?: number): Delivery {
+  return {
+    seq,
+    member: String(p.member ?? ''),
+    name: String(p.name ?? ''),
+    title: String(p.title ?? ''),
+    status: p.status === 'failed' ? 'failed' : 'done',
+    content: String(p.content ?? ''),
+    error: p.error ? String(p.error) : undefined,
+    elapsed_s: typeof p.elapsed_s === 'number' ? p.elapsed_s : undefined,
+    run_id: p.run_id ? String(p.run_id) : undefined,
+    board_task_id: p.board_task_id ? String(p.board_task_id) : undefined,
+    ts,
+  };
+}
+
+/** History rows -> delivery cards (replay keeps the timeline complete). */
+function historyToDeliveries(events: ChatEvent[]): Delivery[] {
+  return events
+    .filter((e) => e.type === EventType.AGENT_DELIVERY)
+    .map((e) => toDelivery(e.payload ?? {}, e.seq, e.ts));
+}
+
 export interface ChatMessage {
   seq: number;
   role: 'user' | 'agent' | 'system';
@@ -180,6 +223,8 @@ interface LaneSnapshot {
   steps: TurnStep[];
   lastSteps: TurnStep[];
   artifacts: NoteArtifact[];
+  /** Team delivery cards of this lane (agent.delivery). */
+  deliveries: Delivery[];
   streaming: StreamingText | null;
   thinking: boolean;
   /** Pending ask dialog of this lane; restored when the lane reactivates. */
@@ -196,6 +241,7 @@ function emptyLane(): LaneSnapshot {
     steps: [],
     lastSteps: [],
     artifacts: [],
+    deliveries: [],
     streaming: null,
     thinking: false,
     question: null,
@@ -291,6 +337,9 @@ interface ChatState {
   cards: Record<string, ProgressCard>;
   cardOrder: string[];
   artifacts: NoteArtifact[];
+  /** Team delivery cards (agent.delivery), open lane only; lanes carry their
+   *  own list. */
+  deliveries: Delivery[];
   /** Per-run step logs (run_id -> steps), the subagent execution view's data
    *  source: hydrated from /api/chat/trajectory?run_id and appended live by
    *  the AGENT_STEP dispatch. */
@@ -534,6 +583,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   cards: {},
   cardOrder: [],
   artifacts: [],
+  deliveries: [],
   runSteps: {},
   question: null,
   connected: false,
@@ -569,6 +619,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       steps: s.steps,
       lastSteps: s.lastSteps,
       artifacts: s.artifacts,
+      deliveries: s.deliveries,
       streaming: s.streaming,
       thinking: s.thinking,
       question: s.question,
@@ -584,6 +635,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       steps: lane.steps,
       lastSteps: lane.lastSteps,
       artifacts: lane.artifacts,
+      deliveries: lane.deliveries,
       roundTexts: [],
       streaming: lane.streaming,
       thinking: lane.thinking,
@@ -657,6 +709,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
           },
         },
       });
+    } else if (ev.type === EventType.AGENT_DELIVERY) {
+      if (!Number.isFinite(ev.seq) || lane.deliveries.some((d) => d.seq === ev.seq)) return;
+      set({
+        lanes: {
+          ...get().lanes,
+          [sessionId]: {
+            ...lane,
+            deliveries: [...lane.deliveries, toDelivery(p, ev.seq, ev.ts)],
+          },
+        },
+      });
     } else if (ev.type === EventType.NOTE_CREATED) {
       const artifact = toArtifact(p, ev.seq);
       if (!artifact.noteId) return;
@@ -684,6 +747,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // with no messages yet has no window to speak of: keep everything.
     const windowStart = msgs.length ? msgs[0].seq : 0;
     const restored = historyToArtifacts(events).filter((a) => a.seq >= windowStart);
+    const restoredDeliveries = historyToDeliveries(events).filter((d) => d.seq >= windowStart);
     // While a history request is in flight, live SSE messages may already sit in the
     // timeline: the replacement only covers the history range (seq <= last history
     // seq); newer live messages and locally synthesized bubbles (seq < 0) are kept,
@@ -696,9 +760,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const restoredMap = new Map<number, NoteArtifact>();
     for (const a of restored) restoredMap.set(a.seq, a);
     for (const a of liveArtifacts) restoredMap.set(a.seq, a);
+    const liveDeliveries = get().deliveries.filter((d) => d.seq < 0 || d.seq > maxSeq);
+    const deliveryMap = new Map<number, Delivery>();
+    for (const d of restoredDeliveries) deliveryMap.set(d.seq, d);
+    for (const d of liveDeliveries) deliveryMap.set(d.seq, d);
     set({
       messages: [...msgs, ...live],
       artifacts: [...restoredMap.values()].sort((a, b) => a.seq - b.seq),
+      deliveries: [...deliveryMap.values()].sort((a, b) => a.seq - b.seq),
       hasMoreHistory: hasMore,
       activeLoaded: true,
     });
@@ -893,6 +962,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
             subagent: String(p.subagent ?? ''),
           },
         });
+        break;
+      }
+      case EventType.AGENT_DELIVERY: {
+        if (!Number.isFinite(ev.seq)) break;
+        const delivery = toDelivery(p, ev.seq, ev.ts);
+        const prev = get().deliveries;
+        if (prev.some((d) => d.seq === delivery.seq)) break;
+        set({ deliveries: [...prev, delivery] });
         break;
       }
       case EventType.TASK_PROGRESS:

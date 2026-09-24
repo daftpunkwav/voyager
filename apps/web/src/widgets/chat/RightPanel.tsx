@@ -14,7 +14,7 @@
  *   the section stays visible with an empty hint when there is nothing to show
  */
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { type TodoItem, listSubagents, listTodos } from '@/api/agent';
@@ -22,6 +22,9 @@ import { SubagentRunDialog, type SubagentRunRef } from '@/widgets/chat/SubagentR
 import { routes } from '@/utils/routes';
 import { formatDurationSec } from '@/utils/trajectory';
 import { useChatStore } from '@/stores/chatStore';
+import { AGENT_CATALOG } from '@/constants/agentCatalog';
+import { personaDisplayName } from '@/constants/personas';
+import { AgentCharacterHead } from '@/components/agent/avatars/AgentCharacterHead';
 
 /** A list_subagents.running entry (status is a RunStatus.value from agent/runtime/state.py).
  *  Extends the run dialog's SubagentRunRef contract instead of re-declaring the
@@ -133,6 +136,9 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
   const [now, setNow] = useState(() => Date.now());
   // The subagent execution view (dialog) currently open, if any.
   const [runView, setRunView] = useState<RunningInstance | null>(null);
+  // Runs that dropped out of the poll (terminal): kept briefly so a finished
+  // teammate does not vanish mid-glance; failures stay a little longer.
+  const [settled, setSettled] = useState<Array<{ row: RunningInstance; at: number }>>([]);
 
   useEffect(() => {
     let alive = true;
@@ -181,6 +187,40 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
     );
   }, [running]);
 
+  // Reconcile settled rows: a run that left the poll is parked here so a
+  // finished teammate does not vanish mid-glance. The poll cannot see the
+  // terminal status; a failed delivery card (agent.delivery) marks the row
+  // failed, everything else degrades to the neutral finished. Failures linger
+  // longer than clean endings; both are pruned past their keep window.
+  const prevRunningRef = useRef<RunningInstance[]>([]);
+  useEffect(() => {
+    const prevList = prevRunningRef.current;
+    prevRunningRef.current = running;
+    const liveIds = new Set(running.map((r) => r.id));
+    const vanished = prevList.filter((r) => !liveIds.has(r.id));
+    if (vanished.length === 0 && settled.length === 0) return;
+    const failedRuns = new Set(
+      useChatStore
+        .getState()
+        .deliveries.filter((d) => d.status === 'failed' && d.run_id)
+        .map((d) => d.run_id as string)
+    );
+    const nowMs = Date.now();
+    setSettled((prev) => {
+      const kept = prev.filter(
+        ({ row, at }) => nowMs - at < (row.status === 'failed' ? 120000 : 45000)
+      );
+      const keptIds = new Set(kept.map((k) => k.row.id));
+      const additions = vanished
+        .filter((r) => !keptIds.has(r.id))
+        .map((r) => ({
+          row: { ...r, status: failedRuns.has(r.run_id ?? '') ? 'failed' : 'finished' },
+          at: nowMs,
+        }));
+      return [...kept, ...additions].slice(-12);
+    });
+  }, [running, settled.length]);
+
   const hasDeliverables = artifacts.length > 0 || cardCount > 0;
 
   return (
@@ -206,28 +246,68 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
         title={t('chat:panel.agents')}
         meta={running.length > 0 ? running.length : undefined}
       >
+        {/* Resident team strip: every teammate is always on the roster; the
+            status dot lights up while their persona has a live run. */}
+        <div className="chat-side__team">
+          {AGENT_CATALOG.filter((a) => a.id !== 'orchestrator').map((a) => {
+            const busy = running.some(
+              (r) => (r.persona ?? '') === a.id && (!r.session || r.session === activeSessionId)
+            );
+            return (
+              <span
+                key={a.id}
+                className={`chat-side__member${busy ? ' chat-side__member--busy' : ''}`}
+                title={`${personaDisplayName(a.id)} — ${busy ? t('chat:panel.memberBusy') : t('chat:panel.memberIdle')}`}
+              >
+                <span className="chat-side__member-avatar" aria-hidden>
+                  <AgentCharacterHead agentId={a.id} look={{ x: 0, y: 0 }} isFocused={false} />
+                </span>
+                <span className="chat-side__member-name">{personaDisplayName(a.id)}</span>
+                <span className="chat-side__member-dot" aria-hidden />
+              </span>
+            );
+          })}
+        </div>
         {running.length > 0 ? (
           <ul className="chat-side__agents">
-            {running.map((r) => {
+            {[...running, ...settled.map((s) => s.row)].map((r) => {
+              const settledRow = r.status !== 'running';
               const elapsed =
                 r.started_ts > 0 ? Math.max(0, Math.round(now / 1000 - r.started_ts)) : null;
               const isMain = r.conversational === true;
+              const persona = r.persona ?? '';
               return (
-                <li key={r.id}>
+                <li key={`${r.id}-${r.status}`}>
                   <button
                     type="button"
-                    className="chat-side__agent"
+                    className={`chat-side__agent${settledRow ? ' chat-side__agent--settled' : ''}${r.status === 'failed' ? ' chat-side__agent--failed' : ''}`}
                     title={t('chat:panel.badgeTitle', { goal: r.goal, status: r.status })}
                     onClick={() => setRunView(isMain ? null : r)}
                   >
-                    <span className="chat-side__pulse" aria-hidden />
+                    {isMain ? (
+                      <span className="chat-side__pulse" aria-hidden />
+                    ) : (
+                      <span className="chat-side__agent-avatar" aria-hidden>
+                        <AgentCharacterHead
+                          agentId={persona || 'orchestrator'}
+                          look={{ x: 0, y: 0 }}
+                          isFocused={false}
+                        />
+                      </span>
+                    )}
                     <span className="chat-side__agentmain">
                       <span className="chat-side__agent-name">
-                        {isMain ? t('chat:panel.mainAgent') : r.name}
+                        {isMain
+                          ? t('chat:panel.mainAgent')
+                          : settledRow
+                            ? `${persona || r.name} · ${r.status === 'failed' ? t('chat:delivery.failed') : t('chat:panel.finished')}`
+                            : persona
+                              ? personaDisplayName(persona)
+                              : r.name}
                       </span>
                       {r.goal ? <span className="chat-side__agent-goal">{r.goal}</span> : null}
                     </span>
-                    {elapsed !== null ? (
+                    {elapsed !== null && !settledRow ? (
                       <span className="chat-side__agent-elapsed">
                         {formatDurationSec(elapsed, t)}
                       </span>
