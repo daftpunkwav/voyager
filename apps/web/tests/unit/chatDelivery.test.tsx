@@ -10,14 +10,23 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { callCapabilityMock } = vi.hoisted(() => ({ callCapabilityMock: vi.fn() }));
+const { callCapabilityMock, subscribeMock } = vi.hoisted(() => ({
+  callCapabilityMock: vi.fn(),
+  subscribeMock: vi.fn(() => () => {}),
+}));
 
 vi.mock('@/bridge/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/bridge/client')>()),
   callCapability: callCapabilityMock,
 }));
 
+vi.mock('@/bridge/stream', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/bridge/stream')>()),
+  subscribe: subscribeMock,
+}));
+
 import { MessageList } from '@/widgets/chat/MessageList';
+import { useChatStream } from '@/hooks/useChatStream';
 import { type ChatEvent, useChatStore } from '@/stores/chatStore';
 import { initI18n } from '@/i18n';
 
@@ -142,5 +151,51 @@ describe('team delivery cards (MessageList)', () => {
     renderStream();
     expect(screen.getByText(/resume_run/)).toBeTruthy(); // markdown strong/em/code path
     expect(screen.queryByText(/\*\*用 resume_run 继续\*\*/)).toBeNull();
+  });
+});
+
+describe('live delivery wiring (useChatStream)', () => {
+  /** Probe component that mounts the stream hook (onNavigate unused here). */
+  function HookProbe() {
+    useChatStream(() => {});
+    return null;
+  }
+
+  /** The event callback useChatStream registers into subscribe. */
+  function handler() {
+    return subscribeMock.mock.calls[0][1] as (ev: ChatEvent) => void;
+  }
+
+  beforeEach(() => {
+    subscribeMock.mockClear();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ messages: [], has_more: false }),
+      } as Response)
+    );
+  });
+
+  it('subscribes to agent.delivery so a live card lands without a refresh', () => {
+    render(
+      <MemoryRouter>
+        <HookProbe />
+      </MemoryRouter>
+    );
+    const patterns = subscribeMock.mock.calls[0][0] as string[];
+    expect(patterns).toContain('agent.delivery');
+  });
+
+  it('a live agent.delivery frame reaches the store, idempotent on replay', () => {
+    render(
+      <MemoryRouter>
+        <HookProbe />
+      </MemoryRouter>
+    );
+    handler()(deliveryEvent());
+    handler()(deliveryEvent()); // reconnect replay: dedup by seq keeps one card
+    expect(useChatStore.getState().deliveries).toHaveLength(1);
+    expect(useChatStore.getState().deliveries[0].title).toBe('讲 real-mock');
   });
 });

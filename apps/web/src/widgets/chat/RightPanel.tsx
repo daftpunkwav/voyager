@@ -36,6 +36,13 @@ interface RunningInstance extends SubagentRunRef {
 
 const POLL_MS = 5000;
 
+/** Settled runs park below the live ones so a finished teammate does not
+ *  vanish mid-glance: clean endings linger briefly, failures longer; the park
+ *  holds a bounded number either way. */
+const SETTLED_KEEP_MS = 45_000;
+const SETTLED_KEEP_FAILED_MS = 120_000;
+const SETTLED_MAX = 12;
+
 function Chevron({ open }: { open: boolean }) {
   return (
     <svg
@@ -208,7 +215,8 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
     const nowMs = Date.now();
     setSettled((prev) => {
       const kept = prev.filter(
-        ({ row, at }) => nowMs - at < (row.status === 'failed' ? 120000 : 45000)
+        ({ row, at }) =>
+          nowMs - at < (row.status === 'failed' ? SETTLED_KEEP_FAILED_MS : SETTLED_KEEP_MS)
       );
       const keptIds = new Set(kept.map((k) => k.row.id));
       const additions = vanished
@@ -217,7 +225,11 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
           row: { ...r, status: failedRuns.has(r.run_id ?? '') ? 'failed' : 'finished' },
           at: nowMs,
         }));
-      return [...kept, ...additions].slice(-12);
+      // Nothing added and nothing expired: keep the previous array identity so
+      // the 5s poll (which re-runs this effect via `running`) does not force a
+      // redundant render pass on every tick.
+      if (additions.length === 0 && kept.length === prev.length) return prev;
+      return [...kept, ...additions].slice(-SETTLED_MAX);
     });
   }, [running, settled.length]);
 

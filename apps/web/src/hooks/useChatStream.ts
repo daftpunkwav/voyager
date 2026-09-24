@@ -31,6 +31,10 @@ const STREAM_PATTERNS = [
   EventType.AGENT_NAVIGATE,
   EventType.AGENT_STEP,
   EventType.AGENT_DELTA,
+  // Team delivery cards: without this pattern the bridge drops live frames and
+  // a card only appears after a refresh / history replay (the store's dispatch
+  // and lane paths are seq-deduped, so a reconnect replay cannot double it).
+  EventType.AGENT_DELIVERY,
   EventType.AGENT_POLICY_NOTIFY,
   EventType.SKILL_PROPOSED,
   'task.*', // subscription glob, not a concrete type

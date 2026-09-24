@@ -289,14 +289,29 @@ class Master:
         else:
             payload["error"] = error or result[:500]
         if self._bus is not None:
-            await self._bus.publish(
-                Event(
-                    type=DomainEvent.AGENT_DELIVERY,
-                    actor=AGENT_MAIN,
-                    payload=payload,
-                    trace_id=trace_id,
+            try:
+                await self._bus.publish(
+                    Event(
+                        type=DomainEvent.AGENT_DELIVERY,
+                        actor=AGENT_MAIN,
+                        payload=payload,
+                        trace_id=trace_id,
+                    )
                 )
-            )
+            except Exception:
+                # The card is the structured surface, not the completion itself:
+                # a bus failure must not break the dispatch's completion path
+                # (in the failure branch it would mask the original error, in the
+                # cancelled branch replace the CancelledError) nor leak a
+                # never-retrieved task exception. Same posture as the suppressed
+                # board stamp above and the guarded relay below; the quiet
+                # receipt / relay turn still tells the user.
+                log.warning(
+                    "delivery card failed to publish (session %s, run %s)",
+                    inst.task.session,
+                    inst.state.run_id,
+                    exc_info=True,
+                )
         # Lucien's one-line relay: a synthesized summary drives a notice turn
         # (the host is standing by, watching for teammates' reports). The
         # delivery card above is unconditional; the relay turn rides the
@@ -307,14 +322,19 @@ class Master:
         # A relay failure must never break the completion path either.
         sid = inst.task.session
         if self._wake_budget is not None and not self._wake_budget.allow(sid):
-            await self.reply(
-                f"[team-report] {member} "
-                + ("已完成" if ok else "执行失败")
-                + ",详情见上方交付卡。",
-                trace_id=trace_id,
-                session=sid,
-                kind="notice",
-            )
+            try:
+                await self.reply(
+                    f"[team-report] {member} "
+                    + ("已完成" if ok else "执行失败")
+                    + ",详情见上方交付卡。",
+                    trace_id=trace_id,
+                    session=sid,
+                    kind="notice",
+                )
+            except Exception:
+                log.warning(
+                    "quiet delivery receipt failed to publish (session %s)", sid, exc_info=True
+                )
             return
         if self._wake_budget is not None:
             self._wake_budget.record(sid)
