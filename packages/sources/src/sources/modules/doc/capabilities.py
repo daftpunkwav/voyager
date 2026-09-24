@@ -190,6 +190,7 @@ async def add_document(
     registry,
     name="list_documents",
     description="Document list (summaries, no section bodies)",
+    write=False,
 )
 def list_documents(
     status: str = "",
@@ -208,6 +209,7 @@ def list_documents(
     registry,
     name="get_document",
     description="Single document detail (section outline included, no body)",
+    write=False,
 )
 def get_document(doc_id: str) -> dict:
     doc = _require_doc(doc_id)
@@ -220,6 +222,7 @@ def get_document(doc_id: str) -> dict:
     registry,
     name="get_doc_section",
     description="Fetch a document section's full text on demand (1-based section number)",
+    write=False,
 )
 def get_doc_section(doc_id: str, section_no: int = 1) -> dict:
     deps = require_deps()
@@ -241,6 +244,7 @@ def get_doc_section(doc_id: str, section_no: int = 1) -> dict:
     registry,
     name="search_documents",
     description="Document full-text search: hits return section number and snippet",
+    write=False,
 )
 def search_documents(query: str, limit: int = 20) -> list[dict]:
     if not query.strip():

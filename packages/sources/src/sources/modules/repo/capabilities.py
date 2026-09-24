@@ -109,24 +109,35 @@ async def import_repo(url: str, category: str = "", clone: bool = True) -> JobRe
     return JobRef(job_id=rid)
 
 
-@capability(registry, name="list_repos", description="Repo list (summaries, no README)")
+@capability(
+    registry, name="list_repos", description="Repo list (summaries, no README)", write=False
+)
 def list_repos(sort: str = "added", desc: bool = True, category: str = "") -> list[dict]:
     return require_deps().store.list(sort=sort, desc=desc, category=category)
 
 
-@capability(registry, name="sort_repos", description="Sort by field: name/stars/added/updated")
+@capability(
+    registry,
+    name="sort_repos",
+    description="Sort by field: name/stars/added/updated",
+    write=False,
+)
 def sort_repos(by: str = "name", desc: bool = False) -> list[dict]:
     """Sort projects by name -- a capability for users and agents alike."""
     return require_deps().store.list(sort=by, desc=desc)
 
 
-@capability(registry, name="get_readme", description="Fetch a repo's full README on demand")
+@capability(
+    registry, name="get_readme", description="Fetch a repo's full README on demand", write=False
+)
 def get_readme(repo_id: str) -> dict:
     repo = _require_repo(repo_id)
     return {"repo_id": repo_id, "name": repo["name"], "readme": repo["readme"]}
 
 
-@capability(registry, name="get_repo", description="Single repo detail (README included)")
+@capability(
+    registry, name="get_repo", description="Single repo detail (README included)", write=False
+)
 def get_repo(repo_id: str) -> dict:
     return _require_repo(repo_id)
 
@@ -152,7 +163,9 @@ def set_repo_meta(
     return updated
 
 
-@capability(registry, name="list_categories", description="Existing categories (distinct)")
+@capability(
+    registry, name="list_categories", description="Existing categories (distinct)", write=False
+)
 def list_categories() -> list[str]:
     return require_deps().store.categories()
 
@@ -201,13 +214,18 @@ async def remove_repo(repo_id: str) -> dict:
     name="search_remote_repos",
     description="Search GitHub repos (candidates not yet imported)",
     cost=3,
+    write=False,
 )
 async def search_remote_repos(query: str, limit: int = 10) -> list[dict]:
     return await github.search_repos(query, _token(), limit)
 
 
 @capability(
-    registry, name="list_starred_repos", description="List a GitHub account's starred repos", cost=3
+    registry,
+    name="list_starred_repos",
+    description="List a GitHub account's starred repos",
+    cost=3,
+    write=False,
 )
 async def list_starred_repos(username: str, limit: int = 100) -> list[dict]:
     return await github.list_starred(username, _token(), limit)

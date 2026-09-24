@@ -259,12 +259,15 @@ async def add_page(
     registry,
     name="list_pages",
     description="Web page list (summaries; query matches title/content, tag filter)",
+    write=False,
 )
 def list_pages(query: str = "", tag: str = "", limit: int = 50) -> list[dict]:
     return _require_deps().store.list(query=query.strip(), tag=tag.strip(), limit=limit)
 
 
-@capability(registry, name="get_page", description="Fetch a page's full text on demand")
+@capability(
+    registry, name="get_page", description="Fetch a page's full text on demand", write=False
+)
 def get_page(page_id: str) -> dict:
     item = _require_deps().store.get(page_id)
     if item is None:

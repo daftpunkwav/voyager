@@ -326,3 +326,51 @@ class TestAggregateRegistry:
 
         card = json.loads((Path(__file__).resolve().parents[1] / "service.json").read_text("utf-8"))
         assert set(card["capabilities"]) == set(registry.names())
+
+
+class TestReadOnlyMetadata:
+    def test_read_capabilities_declared_non_write(self) -> None:
+        """Read-only lookups must declare write=False: a readonly subagent
+        dispatch runs trimmed_read_only(), which drops every write tool by
+        construction — an undeclared read (the write=True default) would
+        vanish from the dispatched surface (explainer/Elio regression)."""
+        expected = {
+            # repo
+            "list_repos",
+            "sort_repos",
+            "get_readme",
+            "get_repo",
+            "list_categories",
+            "search_remote_repos",
+            "list_starred_repos",
+            # doc
+            "list_documents",
+            "get_document",
+            "get_doc_section",
+            "search_documents",
+            # web
+            "list_pages",
+            "get_page",
+        }
+        registered = set(registry.names())
+        assert expected <= registered
+        for name in sorted(expected):
+            assert registry.get(name).write is False, name
+
+    def test_mutation_capabilities_stay_write(self) -> None:
+        """The write side keeps the default (or explicit) write=True: a
+        readonly dispatch must still lose these."""
+        for name in (
+            "import_repo",
+            "set_repo_meta",
+            "remove_repo",
+            "add_document",
+            "set_document_meta",
+            "remove_document",
+            "save_url",
+            "add_page",
+            "set_page_meta",
+            "remove_page",
+            "set_github_token",
+        ):
+            assert registry.get(name).write is True, name
