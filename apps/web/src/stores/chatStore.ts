@@ -785,9 +785,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ...get().artifacts,
       ...historyToArtifacts(events).filter((a) => !get().artifacts.some((x) => x.seq === a.seq)),
     ].sort((a, b) => a.seq - b.seq);
+    // Older pages also carry agent.delivery rows: without this merge a
+    // delivery just past the first page boundary would vanish whenever the
+    // user pages backward (history replay keeps the timeline complete).
+    const prevDeliveries = get().deliveries;
+    const deliveries = [
+      ...prevDeliveries,
+      ...historyToDeliveries(events).filter(
+        (d) => !prevDeliveries.some((x) => x.seq === d.seq)
+      ),
+    ].sort((a, b) => a.seq - b.seq);
     set({
       messages: [...fresh, ...existing],
       artifacts,
+      deliveries,
       hasMoreHistory: hasMore,
       historyLoading: false,
     });

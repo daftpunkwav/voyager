@@ -89,6 +89,25 @@ describe('chatStore backward paging', () => {
     useChatStore.getState().prependHistory([row(29, 'y'), row(30, 'dup')], false);
     expect(useChatStore.getState().messages.map((m) => m.seq)).toEqual([29, 30]);
   });
+
+  it('prependHistory merges agent.delivery rows from the older page (dedup by seq)', () => {
+    const delivery = (seq: number): ChatEvent => ({
+      seq,
+      type: 'agent.delivery',
+      payload: { member: 'explainer', name: 'run', title: 't', status: 'done', content: 'c' },
+    });
+    useChatStore.setState({
+      messages: [{ seq: 30, role: 'user', content: 'a' }],
+      deliveries: [{ seq: 3001, member: 'recon', name: 'r', title: 'x', status: 'failed', content: '' }],
+    });
+    useChatStore
+      .getState()
+      .prependHistory([row(28, 'x'), delivery(2001), delivery(3001)], false);
+    const s = useChatStore.getState();
+    expect(s.deliveries.map((d) => d.seq)).toEqual([2001, 3001]);
+    expect(s.deliveries[0].member).toBe('explainer');
+    expect(s.deliveries[1].member).toBe('recon');
+  });
 });
 
 describe('MessageList scroll-to-top loader', () => {

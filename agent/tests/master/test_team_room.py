@@ -101,6 +101,52 @@ class TestTranscriptView:
         assert out[0]["content"] == "【ghost】x"
 
 
+class TestSummaryWriteBack:
+    """The compaction write-back: history is rebuilt from the wire view, where
+    a teammate's speaker lives only as a 【display name】 prefix — the raw
+    text + speaker key form must be restored, not lost."""
+
+    @staticmethod
+    def _inst(llm, history):
+        from agent.policy import PolicyEngine
+        from agent.runtime.events import RuntimeEvents
+        from agent.runtime.state import RunState
+        from agent.subagent import TaskBook
+        from agent.subagent.instance import SubagentInstance
+        from agent.tools import Toolbelt
+
+        return SubagentInstance(
+            task=TaskBook(goal="g"),
+            toolbelt=Toolbelt({}, PolicyEngine()),
+            llm=llm,
+            system_prompt="sys",
+            events=RuntimeEvents(None),
+            state=RunState("g"),
+            history=history,
+        )
+
+    def test_write_back_restores_member_speaker(self) -> None:
+        llm = FakeLLM([LLMReply(text="done")])
+        history = [
+            {"role": "user", "content": "讲讲"},
+            {"role": "assistant", "content": "member words", "speaker": "explainer"},
+            {"role": "user", "content": "[历史压缩] 之前的讨论摘要"},
+        ]
+        inst = self._inst(llm, history)
+        result = asyncio.run(inst.run_turn("继续"))
+        assert result == "done"
+        assert {
+            "role": "assistant",
+            "content": "member words",
+            "speaker": "explainer",
+        } in inst.history
+        # the closing answer is the host's own words: bare, speaker-less
+        assert inst.history[-1] == {"role": "assistant", "content": "done"}
+        # history keeps raw text: no 【name】 prefix leaks back in (the view
+        # re-prefixes on the next turn, exactly once)
+        assert all("【" not in str(m.get("content", "")) for m in inst.history)
+
+
 class TestMemberTurn:
     def test_team_keys_are_resident_personas(self) -> None:
         assert TEAM_KEYS == ("orchestrator", "recon", "explainer", "organizer", "graph_guide")

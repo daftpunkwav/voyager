@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from platform_capability import current_chat_session
 from platform_contracts import DomainEvent, RuntimeEvent
 
 from agent.context.editor import SUMMARY_MARK
-from agent.personas import Persona, resolve_persona
+from agent.personas import PERSONAS, Persona, resolve_persona
 from agent.runtime.current import current_instance
 from agent.runtime.state import RunStatus
 from agent.runtime.trace import start_span
@@ -111,10 +112,12 @@ async def run_turn(
     inst.state.status = RunStatus.RUNNING
     if view is not None:
         inst._member_label = view.display_name
+        inst._member_persona = view.key
     try:
         return await _run_turn(inst, user_text, view, was_paused)
     finally:
         inst._member_label = ""
+        inst._member_persona = ""
 
 
 async def _run_turn(
@@ -322,6 +325,13 @@ async def _run_turn(
             # will not re-summarize the same span; without the write-back every
             # turn would re-condense the same history.
             rebuilt: list[dict[str, Any]] = []
+            # _transcript_view folds a teammate's speaker into a leading
+            # 【display name】 prefix and keeps the wire view key-clean, so
+            # the key never survives onto these messages: recover it here
+            # (display name -> persona key) and strip the prefix again, so
+            # history keeps its invariant "raw text + optional speaker" and
+            # the next turn's view prefixes exactly once.
+            by_display = {p.display_name: k for k, p in PERSONAS.items()}
             for m in messages[
                 1:
             ]:  # skip system; tool entries and empty tool-turn text stay out of history
@@ -332,8 +342,16 @@ async def _run_turn(
                     text = str(m.get("content", ""))
                     if text:
                         entry = {"role": "assistant", "content": text}
-                        if m.get("speaker"):
-                            entry["speaker"] = str(m["speaker"])
+                        speaker = str(m.get("speaker") or "")
+                        if not speaker:
+                            prefixed = re.match(r"^【([^】]+)】", text)
+                            if prefixed is not None:
+                                key = by_display.get(prefixed.group(1))
+                                if key is not None:
+                                    speaker = key
+                                    entry["content"] = text[prefixed.end() :].lstrip()
+                        if speaker:
+                            entry["speaker"] = speaker
                         rebuilt.append(entry)
             inst.history[:] = rebuilt
         closing: dict[str, Any] = {"role": "assistant", "content": result}

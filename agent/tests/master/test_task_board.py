@@ -55,6 +55,19 @@ class TestBoardStateMachine:
         with pytest.raises(ServiceError):
             board.reopen(tid)
 
+    def test_cancel_marks_cancelled_and_is_terminal(self) -> None:
+        board = TaskBoard()
+        tid = board.publish(title="t", brief="b", session="s", publisher="orchestrator")["id"]
+        board.claim(tid, claimant="explainer")
+        row = board.cancel(tid)
+        assert row["status"] == "cancelled" and row["result"] == "cancelled"
+        assert [r["id"] for r in board.list(status="cancelled")] == [tid]
+        # terminal rows never flip again
+        assert board.cancel(tid)["status"] == "cancelled"
+        assert board.finish(tid, ok=True, result="late")["status"] == "cancelled"
+        with pytest.raises(ServiceError):
+            board.reopen(tid)
+
     def test_unknown_task_and_session_filter(self) -> None:
         board = TaskBoard()
         with pytest.raises(ServiceError):
@@ -92,6 +105,86 @@ def _deps_with_board(board, dispatch=None):
 
 
 class TestTaskboardCapability:
+    @staticmethod
+    def _member_context(persona: str, member: str):
+        """ContextVar tokens faking a turn: the chat instance (persona stays
+        the host's) running a member turn for `member` ("" = host turn)."""
+        from types import SimpleNamespace
+
+        from agent.runtime.current import current_instance
+
+        return current_instance, current_instance.set(
+            SimpleNamespace(persona=persona, _member_persona=member)
+        )
+
+    def test_claim_attributes_to_speaking_member(self) -> None:
+        """A member turn runs ON the chat instance whose own persona stays the
+        host's: the speaking member's key wins, so a claim without an explicit
+        claimant attributes to the teammate, not to Lucien."""
+        board = TaskBoard()
+        tid = board.publish(title="t", brief="b", session="s", publisher="orchestrator")["id"]
+        deps = _deps_with_board(board)
+        mod, token = self._member_context("orchestrator", "explainer")
+        try:
+            out = asyncio.run(taskboard_action(deps, action="claim", task_id=tid))
+        finally:
+            mod.reset(token)
+        row = out if isinstance(out, dict) else {}
+        assert row["claimant"] == "explainer"
+
+    def test_member_cannot_forge_another_identity(self) -> None:
+        """A teammate passing another member's claimant — or the publisher's
+        identity to self-confirm — is rejected: explicit identity arguments
+        must match the calling persona (REST callers without a turn keep the
+        override)."""
+        board = TaskBoard()
+        tid = board.publish(title="t", brief="b", session="s1", publisher="orchestrator")["id"]
+        board.claim(tid, claimant="explainer")
+
+        class _State:
+            run_id = "run-1"
+
+        class _Inst:
+            state = _State()
+
+        async def _dispatch(goal, **kw):
+            return _Inst()
+
+        deps = _deps_with_board(board, dispatch=_dispatch)
+        mod, token = self._member_context("orchestrator", "recon")
+        try:
+            with pytest.raises(ServiceError):  # claims as a sibling member
+                asyncio.run(taskboard_action(deps, action="claim", task_id=tid, claimant="iris"))
+            with pytest.raises(ServiceError):  # confirms as the publisher
+                asyncio.run(
+                    taskboard_action(deps, action="confirm", task_id=tid, publisher="Lucien")
+                )
+            assert board.get(tid)["status"] == "claimed"  # nothing went through
+        finally:
+            mod.reset(token)
+
+    def test_rest_caller_without_turn_keeps_explicit_identity(self) -> None:
+        """No turn context (REST / human UI): the explicit publisher argument
+        stays authoritative, display names canonicalize as before."""
+        board = TaskBoard()
+        tid = board.publish(title="t", brief="b", session="s1", publisher="orchestrator")["id"]
+        board.claim(tid, claimant="explainer")
+        deps = _deps_with_board(board)
+
+        class _State:
+            run_id = "run-2"
+
+        class _Inst:
+            state = _State()
+
+        async def _dispatch(goal, **kw):
+            return _Inst()
+
+        deps = _deps_with_board(board, dispatch=_dispatch)
+        out = asyncio.run(taskboard_action(deps, action="confirm", task_id=tid, publisher="lucien"))
+        result = out if isinstance(out, dict) else {}
+        assert result["assigned_to"] == "explainer"
+
     def test_claim_rejects_non_member(self) -> None:
         board = TaskBoard()
         tid = board.publish(title="t", brief="b", session="s", publisher="orchestrator")["id"]

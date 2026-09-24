@@ -192,7 +192,16 @@ class TaskBoard:
             return task.to_dict()
 
     def cancel(self, task_id: str) -> dict[str, Any]:
-        return self.finish(task_id, ok=False, result="cancelled")
+        """Cancel from any live state; terminal rows (done/failed/cancelled)
+        stay as they are."""
+        with self._lock:
+            task = self._require(task_id)
+            if task.status in (_DONE, _FAILED, _CANCELLED):
+                return task.to_dict()
+            task.status = _CANCELLED
+            task.result = "cancelled"
+            task.updated_ts = _now()
+            return task.to_dict()
 
     def reopen(self, task_id: str) -> dict[str, Any]:
         """Drop the claim and put the task back up (failed run, negotiation

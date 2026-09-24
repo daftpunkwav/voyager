@@ -144,6 +144,11 @@ class SubagentInstance:
     # Display name of the team member speaking this turn ("" = resident host):
     # set by run_turn for member turns so step/delta events attribute to
     # "Elio" rather than the session instance's generic "chat" name
+    _member_persona: str = field(default="", init=False, repr=False)
+    # Structural persona key of the speaking member ("" = resident host),
+    # kept beside _member_label so capabilities can resolve the actor's
+    # identity during a member turn (the instance's own persona stays the
+    # host's — board claims must attribute to the real speaker).
     parent_run_id: str = ""  # dispatching instance's id (cancel cascade); "" = top-level
     build_system: Callable[[TaskBook, str, str], str] | None = None
     # (task, persona key, turn input) -> system prompt. Injected by the
