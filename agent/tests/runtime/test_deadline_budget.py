@@ -80,6 +80,19 @@ class TestDeadline:
         assert outcome.ok is False and outcome.metadata["timeout"] is True
         assert "[超时]" in outcome.text and "slow_tool" in outcome.text
 
+    async def test_self_bounded_tools_exempt_from_tool_cap(self) -> None:
+        """ask_user / subagent-wait carry their own wait caps: the tool
+        deadline must not amputate the block mid-wait and report a forced
+        interruption that never happened (the subagent keeps running)."""
+        d = Deadline(tool_s=0.05, round_s=0)
+
+        async def slow_wait():
+            await asyncio.sleep(0.2)
+            return "completed"
+
+        assert await d.run_tool(slow_wait, tool="subagent") == "completed"
+        assert await d.run_tool(slow_wait, tool="ask_user") == "completed"
+
     async def test_round_timeout_returns_degraded_reply(self) -> None:
         d = Deadline(tool_s=0, round_s=0.05)
 

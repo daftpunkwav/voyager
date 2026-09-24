@@ -26,11 +26,13 @@ ROUND_DEADLINE_KEY = "agent.execution.round_deadline_s"
 _DEFAULT_TOOL_S = 90.0
 _DEFAULT_ROUND_S = 240.0
 
-#: Interactive tools are exempt from the tool deadline: their own question
-#: timeout (question_broker) bounds the wait, and the round deadline still
-#: backstops the turn. A 90s tool cap on a user-facing question just kills
-#: the conversation before anyone can answer.
-_INTERACTIVE_TOOLS = frozenset({"ask_user"})
+#: Self-bounded tools are exempt from the tool deadline: they carry their own
+#: wait cap (ask_user: question_broker timeout; subagent wait: timeout_s with a
+#: 600s ceiling), so the 90s tool cap would only amputate the wait mid-block
+#: and report a forced interruption that never happened — the waited-on
+#: subagent keeps running and completes after the fake cancel. The round
+#: deadline still backstops the turn.
+_INTERACTIVE_TOOLS = frozenset({"ask_user", "subagent"})
 
 
 @dataclass(frozen=True)
