@@ -60,7 +60,11 @@ async def taskboard_action(
                 "publish needs title and brief (the task book: goal, constraints,"
                 " expected deliverable)",
             )
-        pub = publisher or _current_persona() or "orchestrator"
+        # The LLM passes display names ("Lucien"); identity is the structural
+        # key ("orchestrator") — canonicalize whatever arrives, agent or REST.
+        pub = (
+            canonical_persona_key(publisher) if publisher else _current_persona() or "orchestrator"
+        )
         sess = session or _current_session()
         if not sess:
             raise ServiceError(
@@ -80,13 +84,20 @@ async def taskboard_action(
                 f"claimant must be a resident teammate, not {who!r}",
                 hint="resident teammates: iris/elio/miyai/atlas",
             )
-        return board.claim(task_id, claimant=canonical_persona_key(who), note=str(note or ""))
+        row = board.claim(task_id, claimant=canonical_persona_key(who), note=str(note or ""))
+        if deps.task_claim_notify is not None:
+            await deps.task_claim_notify(row, canonical_persona_key(who), str(note or ""))
+        return row
     if action == "confirm":
         if not task_id:
             raise ServiceError("agent", ErrorSuffix.INVALID_INPUT, "confirm needs task_id")
         if deps.dispatch is None:
             raise ServiceError("agent", ErrorSuffix.UNAVAILABLE, "no dispatch wired for confirm")
-        pub = publisher or _current_persona() or "orchestrator"
+        # The LLM passes display names ("Lucien"); identity is the structural
+        # key ("orchestrator") — canonicalize whatever arrives, agent or REST.
+        pub = (
+            canonical_persona_key(publisher) if publisher else _current_persona() or "orchestrator"
+        )
         locked = board.confirm(task_id, publisher=pub)
         claimant_key = str(locked.get("claimant") or "")
         brief_text = str(locked.get("brief") or "")

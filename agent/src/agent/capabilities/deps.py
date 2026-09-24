@@ -44,6 +44,7 @@ class CapabilityDeps:
     dispatch: Any = None  # master.dispatch_task (subagent spawn action)
     team_handoff: Any = None  # master.queue_member_turn (subagent handoff action)
     task_board: Any = None  # master.task_board.TaskBoard (teamboard capability)
+    task_claim_notify: Any = None  # master.notify_task_claim (claim wakes the publisher)
     session_index: Any = None  # runtime.session_index.SessionIndex (session search action)
     log: Any = None  # platform_eventbus.EventLog (session read action pages the history)
     job_reorder: Any = None  # async (job_id, priority) -> dict, host-routed to the source domain

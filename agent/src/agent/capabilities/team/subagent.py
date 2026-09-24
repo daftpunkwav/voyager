@@ -88,6 +88,7 @@ def _list_subagents(registry: SubagentRegistry, spawner: Spawner) -> dict:
                 "id": i.id,
                 "run_id": i.state.run_id,
                 "name": i.name,
+                "persona": i.persona,
                 "status": i.status.value,
                 "goal": i.task.goal,
                 "started_ts": i.state.started_ts,

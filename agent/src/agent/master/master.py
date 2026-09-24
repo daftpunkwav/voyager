@@ -309,6 +309,28 @@ class Master:
                 exc_info=True,
             )
 
+    async def notify_task_claim(self, task: dict, claimant: str, note: str) -> None:
+        """A teammate claimed a board task: wake the publisher (Lucien) to
+        either confirm the dispatch or answer the negotiation note — the
+        standing speaker adjudicates, the teammate never dispatches itself."""
+        session = str(task.get("session") or "")
+        title = str(task.get("title") or "")
+        task_id = str(task.get("id") or "")
+        body = (
+            f"[task-claim] 团队成员 {claimant} 认领了任务「{title}」({task_id})"
+            + (f",留言:{note}" if note else "")
+            + "\n请审阅:没问题就 taskboard(action=confirm, task_id) 拍板转入后台执行;"
+            "成员有商议(要更多信息/容量不够)就先回应再定。"
+        )
+        try:
+            await self.handle_notice(session, body)
+        except Exception:
+            log.warning(
+                "task-claim relay could not start a notice turn (session %s)",
+                session,
+                exc_info=True,
+            )
+
     # -- message flow -----------------------------------------------------------
 
     async def handle_user_message(
@@ -644,6 +666,7 @@ class Master:
         name: str = "",
         constraints: str = "",
         depends_on: tuple[str, ...] | None = None,
+        board_task_id: str = "",
     ) -> SubagentInstance | DeferredDispatch:
         """Thin dispatch wrapper: implementation lives in dispatch.py, keeping
         Master the single external entry point. A task whose dependencies are
@@ -665,6 +688,7 @@ class Master:
             name=name,
             constraints=constraints,
             depends_on=depends_on,
+            board_task_id=board_task_id,
         )
 
     # -- compat surface --------------------------------------------------------

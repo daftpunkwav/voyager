@@ -712,6 +712,7 @@ def build_agent(
             job_reorder=job_reorder,  # host-routed to the source domain's reorder capability
             blackboard=blackboard,  # task-scoped shared notes (read/write tools below)
             task_board=task_board,  # team task board (taskboard capability + tool)
+            task_claim_notify=master.notify_task_claim,  # claim wakes the publisher
             plan_gates=plan_gates,  # human-side review-phase toggle
             dispatch=master.dispatch_task,  # subagent spawn action
             team_handoff=master.queue_member_turn,  # subagent handoff action
