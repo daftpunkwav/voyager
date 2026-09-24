@@ -99,6 +99,9 @@ class TaskBook:
     #: Task names that must complete before this one starts (parent-child
     #: tree only — no DAG engine). Empty = start immediately.
     depends_on: tuple[str, ...] = ()
+    #: Team task-board row this run executes ("" = a plain dispatch): the
+    #: completion path stamps the board and announces the delivery.
+    board_task_id: str = ""
 
 
 @dataclass

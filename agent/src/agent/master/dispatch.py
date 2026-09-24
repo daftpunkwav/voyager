@@ -28,6 +28,17 @@ from agent.subagent.registry import SubagentDef, SubagentRegistry
 from agent.subagent.surface import intersect_surface, surface_misses
 from agent.tools.core.base import Toolbelt
 
+
+def _last_round_degraded(inst) -> bool:
+    """Whether the run's final LLM round was harness degradation text (quota /
+    provider failure placeholder) rather than model output — such a delivery
+    is a failure, not a fake completion. Read back from the step trail."""
+    for step in reversed(getattr(inst.state, "steps", ())):
+        if step.kind == "llm":
+            return bool((step.detail or {}).get("degraded"))
+    return False
+
+
 log = logging.getLogger("agent.dispatch")
 
 
@@ -47,6 +58,7 @@ async def dispatch_task(
     name: str = "",
     constraints: str = "",
     depends_on: tuple[str, ...] | None = None,
+    board_task_id: str = "",
 ) -> SubagentInstance | DeferredDispatch:
     """Dispatch implementation.
 
@@ -176,6 +188,7 @@ async def dispatch_task(
         goal=goal,
         constraints=constraints,
         depends_on=tuple(depends_on or ()),
+        board_task_id=board_task_id,
         mode=plan_mode,
         allowed_tools=allowed_tools,
         readonly=readonly,
@@ -227,11 +240,18 @@ async def dispatch_task(
             raise
         except Exception as exc:  # run_turn already recorded the state; notify + server-side log
             log.exception("background dispatch failed: %s", inst.name)
-            await master.reply(
-                f"[failed] {inst.name}: {type(exc).__name__}: {exc}",
-                session=inst.task.session,
-                kind="notice",
-            )
+            # A board-backed run announces a failure card + the host's relay;
+            # plain dispatches keep the lightweight [failed] notice
+            if getattr(inst.task, "board_task_id", ""):
+                await master.announce_delivery(
+                    inst, ok=False, result="", error=f"{type(exc).__name__}: {exc}"
+                )
+            else:
+                await master.reply(
+                    f"[failed] {inst.name}: {type(exc).__name__}: {exc}",
+                    session=inst.task.session,
+                    kind="notice",
+                )
         else:
             if inst.status is RunStatus.CANCELLED:
                 # reachable when the instance was cancelled while still queued
@@ -241,6 +261,15 @@ async def dispatch_task(
             elif inst.status.value == "paused":
                 await master.reply(
                     f"[paused] {inst.name}", session=inst.task.session, kind="notice"
+                )
+            elif getattr(inst.task, "board_task_id", ""):
+                # Team task-board delivery: structured card + the standing
+                # host relays the report to the user (event-driven wakeup,
+                # not a sleep loop). A degraded turn's text is harness
+                # placeholder, not a real answer — announce it as a failure.
+                ok = inst.status is RunStatus.COMPLETED and not _last_round_degraded(inst)
+                await master.announce_delivery(
+                    inst, ok=ok, result=result if ok else "", error="" if ok else result[:500]
                 )
             else:
                 # Long results get one synthesis call so the notice carries the

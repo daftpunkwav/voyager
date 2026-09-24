@@ -19,8 +19,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 from collections import deque
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -35,6 +37,8 @@ if TYPE_CHECKING:
 from agent.master.arbiter import Arbiter, ArbiterMode
 from agent.master.digest import DigestStore
 from agent.master.sessions import CHAT_GOAL, SessionManager
+from agent.master.synthesize import synthesize_result
+from agent.master.task_board import TaskBoard
 from agent.personas import PERSONAS, canonical_persona_key
 from agent.policy import PolicyEngine
 from agent.runtime.deadline import Deadline
@@ -144,6 +148,7 @@ class Master:
         organizer=None,  # skills.SkillOrganizer: repeated tool flows -> skill proposals
         task_graph=None,  # master.task_graph.TaskGraph: dependency edges between named tasks
         blackboard=None,  # master.blackboard.Blackboard: task-scoped shared notes
+        task_board=None,  # master.task_board.TaskBoard: team publish/claim/confirm board
     ) -> None:
         self._llm = llm
         self._bus = bus
@@ -164,6 +169,7 @@ class Master:
         # post-construction via build.py is honored)
         self.task_graph = task_graph
         self.blackboard = blackboard
+        self._task_board: TaskBoard | None = task_board
         # Strong references to background dispatch tasks: prevent the GC from
         # collecting a Task before completion, silently dropping its notifications
         self._bg: set[asyncio.Task] = set()
@@ -231,6 +237,77 @@ class Master:
         """Public reply outlet: modules split out of this file (dispatch etc.)
         route messages back through here instead of calling the private _reply."""
         await self._reply(text, trace_id=trace_id, session=session, kind=kind, speaker=speaker)
+
+    # -- team delivery announcements --------------------------------------------
+
+    async def announce_delivery(
+        self,
+        inst: SubagentInstance,
+        *,
+        ok: bool,
+        result: str,
+        error: str = "",
+        trace_id: str = "",
+    ) -> None:
+        """One dispatched teammate finished: stamp the task board, publish the
+        structured delivery card (agent.delivery), and wake the host so
+        Lucien tells the user — the standing member reports to the speaker,
+        who relays. Event-driven, not a sleep loop: this runs on the
+        dispatch's own completion path."""
+        board_task_id = getattr(inst.task, "board_task_id", "") or ""
+        if board_task_id and self._task_board is not None:
+            with suppress(Exception):
+                self._task_board.finish(board_task_id, ok=ok, result=result)
+        member = inst.persona or inst.name
+        started = inst.state.started_ts or 0.0
+        elapsed = max(0, int(time.time() - started)) if started else 0
+        payload: dict[str, Any] = {
+            "member": member,
+            "name": inst.name,
+            "title": (inst.task.goal or "")[:120],
+            "status": "done" if ok else "failed",
+            "session": inst.task.session,
+            "run_id": inst.state.run_id,
+            "board_task_id": board_task_id,
+        }
+        if elapsed:
+            payload["elapsed_s"] = elapsed
+        if ok:
+            payload["content"] = result
+        else:
+            payload["error"] = error or result[:500]
+        if self._bus is not None:
+            await self._bus.publish(
+                Event(
+                    type=DomainEvent.AGENT_DELIVERY,
+                    actor=AGENT_MAIN,
+                    payload=payload,
+                    trace_id=trace_id,
+                )
+            )
+        # Lucien's one-line relay: a synthesized summary drives a notice turn
+        # (the host is standing by, watching for teammates' reports). A relay
+        # failure must never break the completion path: the delivery card is
+        # already on the timeline, the notice turn is the add-on.
+        if ok:
+            summary = await synthesize_result(self._llm, member, result)
+            body = (
+                f"[team-report] 团队成员 {member} 已完成任务,汇报如下:{summary}\n"
+                "请向用户简短播报这一结果(一两句,署成员的名),并给出下一步建议。"
+            )
+        else:
+            body = (
+                f"[team-report] 团队成员 {member} 的任务执行失败:{error or result[:300]}\n"
+                "请向用户如实说明失败情况,并给出可选的下一步(重试/换人/放弃)。"
+            )
+        try:
+            await self.handle_notice(inst.task.session, body, trace_id=trace_id)
+        except Exception:
+            log.warning(
+                "team-report relay could not start a notice turn (session %s)",
+                inst.task.session,
+                exc_info=True,
+            )
 
     # -- message flow -----------------------------------------------------------
 

@@ -148,6 +148,18 @@ class DispatchMaster(Protocol):
     @property
     def llm(self) -> LLMClient: ...
 
+    async def announce_delivery(
+        self,
+        inst: Any,
+        *,
+        ok: bool,
+        result: str,
+        error: str = "",
+        trace_id: str = "",
+    ) -> None:
+        """Stamp the task board, publish the delivery card, and wake the
+        host to relay the report (board-backed runs only)."""
+
     def finish_task(self, name: str, *, ok: bool) -> None: ...
 
     def track_background(self, task: Any) -> None: ...
