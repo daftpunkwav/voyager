@@ -8,7 +8,16 @@
 
 ## 实例与任务书
 
-`instance.py` — `SubagentInstance` 是一次运行的状态机:`task: TaskBook`、工具带、LLM、`state: RunState`、历史、`UsageTracker`、人格、`parent_run_id`(取消级联)、期限、预算、`prefix_watch`。`TaskBook`(frozen dataclass)声明一次运行:`goal`、`constraints`、`done_when`、`mode`、`allowed_tools`(None = 不裁剪,`()` = 无工具)、`readonly`、`limits`、`conversational`、`session`、`depends_on`。状态机(`SubStatus`):`created → running → waiting_input → completed/failed/cancelled`。
+`instance.py` — `SubagentInstance` 是一次运行的状态机:`task: TaskBook`、工具带、LLM、`state: RunState`、历史、`UsageTracker`、人格、`parent_run_id`(取消级联)、期限、预算、`prefix_watch`。`TaskBook`(frozen dataclass)声明一次运行:`goal`、`constraints`、`done_when`、`mode`、`allowed_tools`(None = 不裁剪,`()` = 无工具)、`readonly`、`limits`、`conversational`、`session`、`depends_on`、`board_task_id`(团队任务板行回链)。状态机(`SubStatus`):`created → running → waiting_input → completed/failed/cancelled`。
+
+## 常驻团队(群聊)
+
+一个会话就是常驻团队的群聊:五个内置人格(`personas/TEAM_KEYS` —— orchestrator/Lucien、recon/Iris、explainer/Elio、organizer/Miyai、graph_guide/Atlas)。成员共享会话时间线;每条 agent 回复都带 `speaker`(人格键,持久化在历史条目与 `agent.message` payload 上;缺省 = 常驻主持 Lucien,旧消息同样如此读回)。
+
+- **成员 turn** — `subagent/turn.py:run_turn(inst, text, member=人格键)` 以该人格运行 turn(经 `build_system` 注入其 system 层、工具面 `trimmed(tool_allow)`、其 `default_mode` —— explainer 在会话内跑 cot),共享同一份时间线;请求构建时把其他成员的历史发言渲染为 `【名字】` 前缀,并合并连续 assistant 条目(部分 provider 拒收相邻 assistant 轮次)。成员标签走 `inst._member_label`,step/delta 事件归属到「Elio」而非会话实例的通用名。
+- **发言权路由** — `master/master.py:_parse_mention` 把行首 `@名字`(显示名与别名)直接路由给该成员;`subagent(action=handoff, persona, message)` 经会话 inbox 排队成员 turn(当前 turn 结束后 drain,同一把会话锁——一次只有一人说话)。
+- **任务板** — `master/task_board.py:TaskBoard` 是发布/认领/确认状态机(`open → claimed → assigned → running → done/failed`,内存态,与被派实例同生命周期)。`taskboard` 能力(与同名工具)向人与 agent 同权暴露 `publish/claim/confirm/list`:Lucien 与用户敲定方案后发布,成员带商议留言认领,发布者 confirm 后由能力层转后台派单(`TaskBook.board_task_id` 关联行)。认领会唤醒发布者(`Master.notify_task_claim`)去拍板或回应商议。
+- **交付** — 板上运行的完成走 `Master.announce_delivery`:盖章板行、发结构化 `agent.delivery` 事件(完整内容/状态/耗时/`run_id`,前端渲染为交付卡),并经唤醒 turn(`handle_notice`,受 `WakeBudget` 门控——超限降级为静默收据;认领始终唤醒)让主持向用户转述摘要。
 
 ## 派生
 
@@ -28,7 +37,7 @@
 
 ## 模式
 
-`modes/registry.py` 在七种模式间分发 `run_mode()`,一模式一文件:`react`、`plan_execute`、`cot`、`tot`、`got`、`reflexion`、`direct`。orchestrator 人格被强制 ReAct(`master/dispatch.py`)。对子代理的 `wait` 是 `subagent` 能力的 `wait` 动作:0.5 秒轮询,默认超时 120 秒,上限 600 秒。
+`modes/registry.py` 在七种模式间分发 `run_mode()`,一模式一文件:`react`、`plan_execute`、`cot`、`tot`、`got`、`reflexion`、`direct`。派单走人格的 `default_mode`;主持的会话 turn 保持 ReAct,而成员 turn(@点名 / handoff / 板上运行)用成员人格的 `default_mode`(explainer 跑 cot)。对子代理的 `wait` 是 `subagent` 能力的 `wait` 动作:0.5 秒轮询,默认超时 120 秒,上限 600 秒。
 
 ## 编排(`master/`)
 

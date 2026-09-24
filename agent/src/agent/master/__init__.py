@@ -1,5 +1,5 @@
-"""Master agent components: orchestration (master), arbitration (arbiter),
-digests (digest).
+"""Master agent components: orchestration and the team room (master),
+arbitration (arbiter), digests (digest), the task board (task_board).
 """
 
 from agent.contracts import SettingsReader

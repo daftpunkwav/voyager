@@ -1,4 +1,4 @@
-"""Master agent: orchestration, arbitration, and dispatch.
+"""Master agent: orchestration, arbitration, dispatch, and the team room.
 
 - Multi-session: every chat session gets its own conversational instance,
   lock, and inbox (SessionManager owns identity + lifecycle); messages target
@@ -7,11 +7,14 @@
   (default) / merged / redirected per agent.arbiter.mode;
 - Direct-chat mode (agent.direct_chat, off by default): simple Q/A is
   answered by the orchestrator directly, no session spawn;
-- The orchestrator persona is forced to ReAct; persona default modes apply
-  only to dispatches.
+- The resident host chat turn stays ReAct; persona default modes apply to
+  dispatches and to member turns (@-mention / handoff — run_turn(member=));
 
-This file keeps the user conversation turn, arbitration, and public methods;
-dispatch implementation lives in dispatch.py, session identity in sessions.py.
+This file keeps the user conversation turn, member-turn routing (@-mention,
+inbox entries carrying a speaker), the task-board delivery/claim relays
+(announce_delivery / notify_task_claim), arbitration, and public methods;
+dispatch implementation lives in dispatch.py, session identity in sessions.py,
+the board state machine in task_board.py.
 """
 
 from __future__ import annotations

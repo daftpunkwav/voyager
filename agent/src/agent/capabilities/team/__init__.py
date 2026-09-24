@@ -1,5 +1,5 @@
-"""Team capability group (subagents, run control, board, durable goals).
-Zero-logic aggregation: import each capability file and register it."""
+"""Team capability group (subagents, run control, board, taskboard, durable
+goals). Zero-logic aggregation: import each capability file and register it."""
 
 from __future__ import annotations
 

@@ -25,6 +25,8 @@ agent 引擎是事件驱动的:它不拥有请求处理器。总线事件启动�
 3. 否则解析或创建聊天会话(`SessionManager`);若实例已在 RUNNING,应用 `Arbiter`(按 `agent.arbiter.mode` 合并 / 排队 / 入队通知;auto 与 guide 模式用一次短 LLM 判断,失败回退排队)。
 4. `_start_turn` 在会话锁(`sessions.lock_for`)下把 `Master._turn` 放入 asyncio 任务,随后排空会话收件箱,再 `goal_driver.maybe_schedule(session)`。
 
+行首的 `@名字`(`_parse_mention`)把消息路由给该常驻成员作为成员 turn(`run_turn(member=...)` —— 该人格自己的 system 层、工具面与默认模式,共享同一时间线);turn 运行中时 @消息排入同一收件箱。收件箱条目携带说话人(`_Queued.member`),排空时成员 turn 把发言权交给被点名的成员。团队完成经 `Master.announce_delivery` → 结构化 `agent.delivery` 事件加一个转述汇报的唤醒 turn(受 `WakeBudget` 门控);任务板认领以同样方式唤醒发布者。
+
 `Master._turn` 重新应用设置中的限额,设置实例期限,然后 `Spawner.start(inst, text)` → `SubagentInstance.run_turn`(`subagent/turn.py`)→ `run_mode(Mode.REACT, ...)` → `modes/react.py:run_react`。
 
 ## ReAct 轮
