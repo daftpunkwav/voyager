@@ -131,7 +131,8 @@ class TestTaskboardCapability:
             current_chat_session.reset(token)
         assert dispatched[0]["persona"] == "explainer"
         assert dispatched[0]["board_task_id"] == tid
-        assert out["task"]["status"] == "running" and out["task"]["run_id"] == "run-9"
+        result = out if isinstance(out, dict) else {}
+        assert result["task"]["status"] == "running" and result["task"]["run_id"] == "run-9"
 
     def test_list_scopes_to_current_session(self) -> None:
         board = TaskBoard()
@@ -143,7 +144,8 @@ class TestTaskboardCapability:
             out = asyncio.run(taskboard_action(deps, action="list"))
         finally:
             current_chat_session.reset(token)
-        assert [t["title"] for t in out["tasks"]] == ["a"]
+        listed = out if isinstance(out, dict) else {}
+        assert [t["title"] for t in listed.get("tasks", [])] == ["a"]
 
 
 class TestDeliveryAnnouncement:
