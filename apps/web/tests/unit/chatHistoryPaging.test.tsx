@@ -98,11 +98,11 @@ describe('chatStore backward paging', () => {
     });
     useChatStore.setState({
       messages: [{ seq: 30, role: 'user', content: 'a' }],
-      deliveries: [{ seq: 3001, member: 'recon', name: 'r', title: 'x', status: 'failed', content: '' }],
+      deliveries: [
+        { seq: 3001, member: 'recon', name: 'r', title: 'x', status: 'failed', content: '' },
+      ],
     });
-    useChatStore
-      .getState()
-      .prependHistory([row(28, 'x'), delivery(2001), delivery(3001)], false);
+    useChatStore.getState().prependHistory([row(28, 'x'), delivery(2001), delivery(3001)], false);
     const s = useChatStore.getState();
     expect(s.deliveries.map((d) => d.seq)).toEqual([2001, 3001]);
     expect(s.deliveries[0].member).toBe('explainer');

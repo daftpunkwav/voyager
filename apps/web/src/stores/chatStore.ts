@@ -791,9 +791,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const prevDeliveries = get().deliveries;
     const deliveries = [
       ...prevDeliveries,
-      ...historyToDeliveries(events).filter(
-        (d) => !prevDeliveries.some((x) => x.seq === d.seq)
-      ),
+      ...historyToDeliveries(events).filter((d) => !prevDeliveries.some((x) => x.seq === d.seq)),
     ].sort((a, b) => a.seq - b.seq);
     set({
       messages: [...fresh, ...existing],
