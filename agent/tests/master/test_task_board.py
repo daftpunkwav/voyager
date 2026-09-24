@@ -451,9 +451,7 @@ class TestDeliveryQuietReceipt:
             assert app.master._task_board is not None
             row = app.master._task_board.get(deliveries[-1]["board_task_id"])
             assert row["status"] == "done"
-            messages = [
-                e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_MESSAGE])
-            ]
+            messages = [e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_MESSAGE])]
             receipts = [
                 p for p in messages if str(p.get("content") or "").startswith("[team-report]")
             ]
@@ -529,9 +527,7 @@ class TestTaskClaimNotice:
             assert claim_seen
             assert "explainer" in claim_seen[0] and "讲 real-mock" in claim_seen[0]
             assert "confirm" in claim_seen[0]
-            payloads = [
-                e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_MESSAGE])
-            ]
+            payloads = [e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_MESSAGE])]
             assert any("确认派发" in str(p.get("content") or "") for p in payloads)
         finally:
             app.close()
@@ -543,9 +539,7 @@ class TestTaskClaimNotice:
         try:
             task = {"id": "t-x", "title": "t", "session": "no-such-session"}
             asyncio.run(app.master.notify_task_claim(task, "explainer", ""))  # must not raise
-            payloads = [
-                e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_MESSAGE])
-            ]
+            payloads = [e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_MESSAGE])]
             assert payloads == []
         finally:
             app.close()

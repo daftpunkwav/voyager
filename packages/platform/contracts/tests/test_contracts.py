@@ -86,7 +86,9 @@ class TestFrontendEventMirror:
         import re
         from pathlib import Path
 
-        root = Path(__file__).resolve().parents[4]  # tests -> contracts -> platform -> packages -> repo
+        root = (
+            Path(__file__).resolve().parents[4]
+        )  # tests -> contracts -> platform -> packages -> repo
         ts = (root / "apps" / "web" / "src" / "bridge" / "events.ts").read_text(encoding="utf-8")
         block = re.search(r"export const EventType = \{(.*?)\} as const", ts, re.DOTALL)
         assert block is not None, "EventType constant not found in events.ts"
