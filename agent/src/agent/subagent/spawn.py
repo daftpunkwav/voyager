@@ -128,9 +128,14 @@ class Spawner:
         self.instances[instance.id] = instance
         return instance
 
-    async def start(self, instance: SubagentInstance, user_text: str | None = None) -> str:
+    async def start(
+        self, instance: SubagentInstance, user_text: str | None = None, *, member: str = ""
+    ) -> str:
         """Start the instance within the scheduler's concurrency cap; persist a
         turn-boundary snapshot when the turn ends.
+
+        `member` names a resident teammate speaking this turn (@-mention /
+        handoff): the turn runs under that persona over the shared transcript.
 
         Incremental mid-ReAct persistence is handled by instance._on_step;
         the finally here persists the turn-terminal (done/failed/cancelled)
@@ -142,7 +147,9 @@ class Spawner:
         if instance.state.status is RunStatus.CANCELLED:
             return "[cancelled] 已在开始执行前被取消,未执行任何步骤。"
         try:
-            return await self._scheduler.run(instance.id, instance.run_turn(user_text))
+            return await self._scheduler.run(
+                instance.id, instance.run_turn(user_text, member=member)
+            )
         finally:
             if self._checkpoints is not None:
                 instance.state.resume = instance.build_resume_snapshot().to_dict()

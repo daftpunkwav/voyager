@@ -710,6 +710,7 @@ def build_agent(
             blackboard=blackboard,  # task-scoped shared notes (read/write tools below)
             plan_gates=plan_gates,  # human-side review-phase toggle
             dispatch=master.dispatch_task,  # subagent spawn action
+            team_handoff=master.queue_member_turn,  # subagent handoff action
             goal_manager=goal_manager,  # durable session goals
             skills_dir=skills_dir,  # skill propose writes here
             session_index=session_index,  # session search action

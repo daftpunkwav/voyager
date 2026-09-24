@@ -23,10 +23,11 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from platform_capability import Registry, capability
+from platform_capability import Registry, capability, current_chat_session
 from platform_contracts import ActorKind, ActorRef, ErrorSuffix, ServiceError
 
 from agent.capabilities.deps import CapabilityDeps
+from agent.personas import TEAM_KEYS, canonical_persona_key
 from agent.runtime.current import current_instance as _current_instance
 from agent.runtime.state import RunStatus
 from agent.subagent.registry import SubagentDef, SubagentRegistry
@@ -254,11 +255,43 @@ async def subagent_action(
         _send_tasks.add(task)
         task.add_done_callback(_release_send_task)
         return {"sent": inst.id, "name": inst.name, "status": inst.status.value}
+    if action == "handoff":
+        # Team-room delegation: hand the floor to a resident teammate. The
+        # member speaks a full turn once the current one ends, and its reply
+        # lands in the shared timeline under their own name — no anonymous
+        # spawned instance, no wait round-trip.
+        if deps.team_handoff is None:
+            raise ServiceError("agent", ErrorSuffix.UNAVAILABLE, "no team handoff wired")
+        key = canonical_persona_key(persona.strip().lower())
+        if key not in TEAM_KEYS or key == "orchestrator":
+            raise ServiceError(
+                "agent",
+                ErrorSuffix.INVALID_INPUT,
+                f"handoff targets a resident teammate, not {persona!r}",
+                hint="resident teammates: iris (recon), elio (explainer), miyai (organizer), atlas (graph_guide)",
+            )
+        text = str(message or "").strip()
+        if not text:
+            raise ServiceError(
+                "agent", ErrorSuffix.INVALID_INPUT, "message (the task brief) must not be empty"
+            )
+        try:
+            session = str(current_chat_session.get() or "")
+        except LookupError:  # background dispatch: no session bound
+            session = ""
+        if not session:
+            raise ServiceError(
+                "agent",
+                ErrorSuffix.INVALID_INPUT,
+                "handoff needs the current chat session (call it from a conversation turn)",
+            )
+        out = await deps.team_handoff(session, key, text)
+        return {**out, "action": "handoff"}
     raise ServiceError(
         "agent",
         ErrorSuffix.INVALID_INPUT,
         f"unknown action: {action!r}",
-        hint="valid actions: spawn/list/register/unregister/wait/send",
+        hint="valid actions: spawn/list/register/unregister/wait/send/handoff",
     )
 
 

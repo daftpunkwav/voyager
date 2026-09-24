@@ -66,6 +66,18 @@ ATLAS = GRAPH_GUIDE
 
 PERSONAS: dict[str, Persona] = dict(_PERSONAS)
 
+#: Resident team: personas that share every chat session as group-chat members.
+#: The orchestrator is the designated speaker (default addressee of user
+#: messages); the others answer @-mentions and handoffs and speak under their
+#: own name in the shared transcript.
+TEAM_KEYS: tuple[str, ...] = (
+    "orchestrator",
+    "recon",
+    "explainer",
+    "organizer",
+    "graph_guide",
+)
+
 #: Legacy structural IDs / frontend seven-role names -> responsibility IDs
 ALIASES: dict[str, str] = {
     "lucien": "orchestrator",
@@ -109,6 +121,7 @@ __all__ = [
     "ORGANIZER",
     "PERSONAS",
     "RECON",
+    "TEAM_KEYS",
     "Persona",
     "canonical_persona_key",
     "resolve_persona",

@@ -111,8 +111,10 @@ class SubagentInstance:
     state: RunState
     #: Per-turn reply outlet: (text, kind) with kind "message" (default) or
     #: "error" (failures and harness degradation text); sinks render errors
-    #: distinctly instead of masquerading as normal answers.
-    reply_sink: Callable[[str, str], Awaitable[None]] | None = None
+    #: distinctly instead of masquerading as normal answers. Member turns pass
+    #: a third argument, speaker (persona key), so the timeline attributes the
+    #: reply to the speaking teammate.
+    reply_sink: Callable[..., Awaitable[None]] | None = None
     #: Raw round recorder: (run_id, round, request messages, LLMReply). Wired
     #: for conversational instances; writes the raw LLM round log in the
     #: trajectory store. None = no raw log (subagents, tests).
@@ -135,6 +137,10 @@ class SubagentInstance:
         None  # tool activation set for conversational instances (kept across turns)
     )
     persona: str = ""  # persona key captured at spawn; needed for per-turn system rebuild
+    _member_label: str = field(default="", init=False, repr=False)
+    # Display name of the team member speaking this turn ("" = resident host):
+    # set by run_turn for member turns so step/delta events attribute to
+    # "Elio" rather than the session instance's generic "chat" name
     parent_run_id: str = ""  # dispatching instance's id (cancel cascade); "" = top-level
     build_system: Callable[[TaskBook, str, str], str] | None = None
     # (task, persona key, turn input) -> system prompt. Injected by the
@@ -230,19 +236,21 @@ class SubagentInstance:
             in_turn=in_turn,
         )
 
-    async def run_turn(self, user_text: str | None = None) -> str:
+    async def run_turn(self, user_text: str | None = None, *, member: str = "") -> str:
         """Run one turn; the machinery lives in subagent.turn (one file, one
-        responsibility)."""
-        return await turn.run_turn(self, user_text)
+        responsibility). `member` hands the floor to a resident teammate."""
+        return await turn.run_turn(self, user_text, member=member)
 
-    def _system_message(self) -> dict[str, Any]:
+    def _system_message(self, system_prompt: str = "") -> dict[str, Any]:
         """System entry: persona layers plus the per-turn context status line.
 
         The status travels inside the one system message (a second system row
         would be pruned like ordinary content by the compressor), rebuilt each
         turn so the model always sees current window facts and can compact
-        proactively before heavy work.
+        proactively before heavy work. An explicit prompt (member turn) wins
+        over the resident one.
         """
+        base = system_prompt or self.system_prompt
         status = usage_status(
             ContextWindow(
                 window_tokens=self.budget.window_tokens,
@@ -253,7 +261,7 @@ class SubagentInstance:
             auto_compact_at=self.budget.auto_compact_at,
         )
         line = render_status_line(status, session=self.session)
-        return {"role": "system", "content": f"{self.system_prompt}\n\n{line}"}
+        return {"role": "system", "content": f"{base}\n\n{line}"}
 
     def context_view(self) -> list[dict[str, Any]]:
         """The live transcript: in-turn messages while running, else the

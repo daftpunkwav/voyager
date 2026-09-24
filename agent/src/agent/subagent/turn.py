@@ -17,6 +17,7 @@ from platform_capability import current_chat_session
 from platform_contracts import DomainEvent, RuntimeEvent
 
 from agent.context.editor import SUMMARY_MARK
+from agent.personas import Persona, resolve_persona
 from agent.runtime.current import current_instance
 from agent.runtime.state import RunStatus
 from agent.runtime.trace import start_span
@@ -27,6 +28,57 @@ if TYPE_CHECKING:
     from agent.subagent.instance import SubagentInstance
 
 log = logging.getLogger("agent.runtime")
+
+
+def _member_view(member: str) -> Persona | None:
+    """Resolve an @-mention / handoff target into a team-member persona.
+
+    Empty (the resident host speaks), "orchestrator", and unknown keys all
+    return None — those ride the ordinary host view. A known teammate returns
+    its Persona: the member turn speaks under that identity, with the
+    persona's own system layers, tool surface, and default mode.
+    """
+    key = member.strip()
+    if not key or key == "orchestrator":
+        return None
+    preset = resolve_persona(key)
+    if preset is None or preset.key == "orchestrator":
+        return None
+    return preset
+
+
+def _speaker_label(inst: SubagentInstance) -> str:
+    """Event attribution: the speaking member's display name during a member
+    turn, else the instance name (session instances are named "chat")."""
+    return inst._member_label or inst.name or inst.id
+
+
+def _transcript_view(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Shared group-chat transcript -> LLM message list.
+
+    Assistant entries carrying a speaker (a teammate's turn) render their
+    display name into the text as a 【name】 prefix, so every model sees who
+    said what; entries without one are the host's own words and stay bare.
+    Consecutive assistant messages merge into one entry: several providers
+    reject or misbehave on adjacent assistant turns, and a merged block is
+    exactly how a chat transcript reads anyway.
+    """
+    out: list[dict[str, Any]] = []
+    for m in history:
+        role = m.get("role")
+        text = str(m.get("content") or "")
+        if role == "assistant":
+            speaker = str(m.get("speaker") or "")
+            if speaker:
+                preset = resolve_persona(speaker)
+                name = preset.display_name if preset is not None else speaker
+                text = f"【{name}】{text}"
+            prev = out[-1] if out else None
+            if prev is not None and prev.get("role") == "assistant":
+                prev["content"] = f"{prev['content']}\n\n{text}"
+                continue
+        out.append({"role": role, "content": text})
+    return out
 
 
 class PauseRequested(Exception):
@@ -44,20 +96,46 @@ def _turn_degraded(inst: SubagentInstance) -> bool:
     return False
 
 
-async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
-    """Run one turn (conversational = one Q/A round; task = run to completion)."""
+async def run_turn(
+    inst: SubagentInstance, user_text: str | None = None, *, member: str = ""
+) -> str:
+    """Run one turn (conversational = one Q/A round; task = run to completion).
+
+    `member` names a resident teammate answering an @-mention or handoff: the
+    turn speaks under that persona (its own system layers, tool surface and
+    default mode) over the shared session transcript, and its reply lands in
+    the group timeline attributed to it. Empty = the resident host (Lucien).
+    """
+    view = _member_view(member)
     was_paused = inst.state.status is RunStatus.PAUSED
     inst.state.status = RunStatus.RUNNING
+    if view is not None:
+        inst._member_label = view.display_name
+    try:
+        return await _run_turn(inst, user_text, view, was_paused)
+    finally:
+        inst._member_label = ""
+
+
+async def _run_turn(
+    inst: SubagentInstance, user_text: str | None, view: Persona | None, was_paused: bool
+) -> str:
     if was_paused:
         await inst.events.emit(
-            RuntimeEvent.AGENT_RESUMED, run_id=inst.state.run_id, subagent=inst.id
+            RuntimeEvent.AGENT_RESUMED, run_id=inst.state.run_id, subagent=_speaker_label(inst)
         )
-    if inst.build_system is not None:
+    member_prompt = ""
+    if view is not None and inst.build_system is not None:
+        # The member's own persona layers over the shared session context;
+        # rebuilt every turn like the host prompt so style/profile changes
+        # never go stale
+        member_prompt = inst.build_system(inst.task, view.key, user_text or "")
+    elif inst.build_system is not None:
         # Rebuild the system prompt every turn so style/profile/page/digest
         # changes never go stale across turns; the turn's input rides along
         # as the memory read policy's recall query (resident relevance layer)
         inst.system_prompt = inst.build_system(inst.task, inst.persona, user_text or "")
-    if inst.resume_messages:
+    if inst.resume_messages and view is None:
         # Mid-turn resume: pending_messages already contains system /
         # history / this turn's tool entries, so skip history rebuild and
         # continue from the next complete after the crash point; the system
@@ -71,10 +149,17 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
     else:
         if user_text:
             inst.history.append({"role": "user", "content": user_text})
-        messages = [inst._system_message(), *inst.history]
+        messages = [
+            inst._system_message(member_prompt),
+            *_transcript_view(inst.history),
+        ]
     inst._turn_messages = messages  # live reference for mid-turn snapshots (on_step)
     belt = inst.toolbelt
-    if inst.task.allowed_tools is None and inst.toolbelt.names():
+    if view is not None and view.tool_allow is not None:
+        # Member turn: the teammate works on its own curated surface (trimmed
+        # view, never written back — the resident host keeps its full table)
+        belt = inst.toolbelt.trimmed(view.tool_allow)
+    elif view is None and inst.task.allowed_tools is None and inst.toolbelt.names():
         # Conversational instances (allowed_tools=None): the full tool table
         # is selectable, but each complete only receives activated schemas
         # (domain activation); the activation set lives on the instance and
@@ -100,10 +185,12 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
         system=str(messages[0].get("content") or "") if messages else "",
         tools=belt.names(),
     )
-    await inst.events.emit(RuntimeEvent.RUN_STARTED, run_id=inst.state.run_id, subagent=inst.id)
+    await inst.events.emit(
+        RuntimeEvent.RUN_STARTED, run_id=inst.state.run_id, subagent=_speaker_label(inst)
+    )
     turn_span = start_span(
         "agent:turn",
-        subagent=inst.name or inst.id,
+        subagent=_speaker_label(inst),
         session=inst.session,
         run_id=inst.state.run_id,
         conversational=inst.task.conversational,
@@ -118,8 +205,12 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
             # read this to stamp their events with the session, so history
             # pages and SSE routing attribute them to the right chat lane
             session_token = current_chat_session.set(inst.session)
+            try:
+                member_mode = Mode(view.default_mode) if view is not None else None
+            except ValueError:  # broken mode in a persona file: ride react
+                member_mode = None
             result = await run_mode(
-                inst.task.mode or Mode.REACT,
+                member_mode or inst.task.mode or Mode.REACT,
                 llm=inst.llm,
                 toolbelt=belt,
                 messages=messages,
@@ -144,7 +235,9 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
                 inst.state.status = RunStatus.CANCELLED
             try:
                 await inst.events.emit(
-                    RuntimeEvent.RUN_CANCELLED, run_id=inst.state.run_id, subagent=inst.id
+                    RuntimeEvent.RUN_CANCELLED,
+                    run_id=inst.state.run_id,
+                    subagent=_speaker_label(inst),
                 )
             except Exception:  # best effort: the event channel may be gone during shutdown
                 log.debug(
@@ -158,7 +251,9 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
                     # session history), so fork's keep_messages counting and
                     # the UI's notice styling both stay correct.
                     await inst.reply_sink(
-                        "[已中断] 本回合被中断;可重新发送或换个说法继续。", "notice"
+                        "[已中断] 本回合被中断;可重新发送或换个说法继续。",
+                        "notice",
+                        speaker=view.key if view is not None else "",
                     )
                 except Exception:  # best effort, same as the event above
                     log.debug("failed to emit cancel closure message", exc_info=True)
@@ -171,7 +266,9 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
             inst.state.status = RunStatus.PAUSED
             try:
                 await inst.events.emit(
-                    RuntimeEvent.AGENT_PAUSED, run_id=inst.state.run_id, subagent=inst.id
+                    RuntimeEvent.AGENT_PAUSED,
+                    run_id=inst.state.run_id,
+                    subagent=_speaker_label(inst),
                 )
                 if inst.checkpoint_persist is not None:
                     inst.state.resume = inst.build_resume_snapshot(
@@ -197,7 +294,11 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
             # exchange, otherwise the UI stays in the running state forever.
             if inst.task.conversational and inst.reply_sink is not None:
                 try:
-                    await inst.reply_sink(f"[回合失败] {inst.state.error}", "error")
+                    await inst.reply_sink(
+                        f"[回合失败] {inst.state.error}",
+                        "error",
+                        speaker=view.key if view is not None else "",
+                    )
                 except Exception:  # best effort: closure must not mask the failure
                     log.debug("failed to emit failure closure message", exc_info=True)
             raise
@@ -230,9 +331,16 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
                 elif role == "assistant":
                     text = str(m.get("content", ""))
                     if text:
-                        rebuilt.append({"role": "assistant", "content": text})
+                        entry = {"role": "assistant", "content": text}
+                        if m.get("speaker"):
+                            entry["speaker"] = str(m["speaker"])
+                        rebuilt.append(entry)
             inst.history[:] = rebuilt
-        inst.history.append({"role": "assistant", "content": result})
+        closing: dict[str, Any] = {"role": "assistant", "content": result}
+        if view is not None:
+            # The group transcript attributes this turn's words to the member
+            closing["speaker"] = view.key
+        inst.history.append(closing)
         inst._bound_history()
         inst.state.result = result
         if inst.task.conversational:
@@ -242,7 +350,11 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
                 # not masquerade as a normal answer: the latest llm step carries
                 # the degraded flag, so read it back instead of sniffing prefixes.
                 try:
-                    await inst.reply_sink(result, "error" if _turn_degraded(inst) else "message")
+                    await inst.reply_sink(
+                        result,
+                        "error" if _turn_degraded(inst) else "message",
+                        speaker=view.key if view is not None else "",
+                    )
                 except Exception:  # best effort: the turn result is already in
                     # history/state; a broken reply channel must not turn the
                     # finished turn into a failure (master's persist would be skipped)
@@ -264,7 +376,9 @@ async def run_turn(inst: SubagentInstance, user_text: str | None = None) -> str:
         else:
             inst.state.status = RunStatus.COMPLETED
             await inst.events.emit(
-                RuntimeEvent.AGENT_COMPLETED, run_id=inst.state.run_id, subagent=inst.id
+                RuntimeEvent.AGENT_COMPLETED,
+                run_id=inst.state.run_id,
+                subagent=_speaker_label(inst),
             )
         return result
 
@@ -284,7 +398,7 @@ async def on_delta(inst: SubagentInstance, round_n: int, text: str) -> None:
     await inst.events.emit(
         DomainEvent.AGENT_DELTA,
         run_id=inst.state.run_id,
-        subagent=inst.name or inst.id,
+        subagent=_speaker_label(inst),
         session=inst.session,
         round=round_n,
         text=text,
@@ -296,7 +410,7 @@ async def on_event(inst: SubagentInstance, type_: str, **payload: Any) -> None:
     run's identity; the step trail stays the UI contract, these feed the
     trajectory projection and tracing."""
     await inst.events.emit(
-        type_, run_id=inst.state.run_id, subagent=inst.name or inst.id, **payload
+        type_, run_id=inst.state.run_id, subagent=_speaker_label(inst), **payload
     )
 
 
@@ -330,7 +444,7 @@ async def on_step(
     await inst.events.emit(
         DomainEvent.AGENT_STEP,
         run_id=inst.state.run_id,
-        subagent=inst.name or inst.id,
+        subagent=_speaker_label(inst),
         session=inst.session,
         name=name,
         kind=kind,

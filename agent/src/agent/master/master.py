@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections import deque
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from platform_contracts import DomainEvent, Event, ServiceError
@@ -33,7 +35,7 @@ if TYPE_CHECKING:
 from agent.master.arbiter import Arbiter, ArbiterMode
 from agent.master.digest import DigestStore
 from agent.master.sessions import CHAT_GOAL, SessionManager
-from agent.personas import PERSONAS
+from agent.personas import PERSONAS, canonical_persona_key
 from agent.policy import PolicyEngine
 from agent.runtime.deadline import Deadline
 from agent.runtime.evaluation import TaskEvaluator, record_evaluation
@@ -68,6 +70,33 @@ def _eval_setting(settings: Any, key: str, default: Any) -> Any:
         log.debug("evaluation setting %s unreadable, using default %r", key, default)
         return default
     return default if value is None else value
+
+
+@dataclass
+class _Queued:
+    """One parked entry of a session inbox: a user message, a system notice,
+    or a member turn (@-mention / handoff) waiting for the current turn to
+    end. `member` names the persona that should speak this entry."""
+
+    text: str
+    guard: Callable[[], bool] | None = None
+    member: str = ""
+
+
+#: "@Elio 讲讲…" / "@elio:…" -> ("elio", "讲讲…"); no match -> ("", text)
+_MENTION_RE = re.compile(r"^@([A-Za-z][A-Za-z0-9_-]*)\s*", re.DOTALL)
+
+
+def _parse_mention(text: str) -> tuple[str, str]:
+    """Split a leading @-mention off a user message. Only resident team
+    members route: unknown names and @lucien stay with the host verbatim."""
+    m = _MENTION_RE.match(text.strip())
+    if m is None:
+        return "", text
+    key = canonical_persona_key(m.group(1).lower())
+    if key not in PERSONAS or key == "orchestrator":
+        return "", text
+    return key, text.strip()[m.end() :].strip()
 
 
 def _guard_allows(guard: Callable[[], bool], session: str) -> bool:
@@ -131,7 +160,7 @@ class Master:
         self._bg: set[asyncio.Task] = set()
         # Per-session arbitration queues (feed/queue decisions land here while
         # that session's turn is running)
-        self._inboxes: dict[str, deque[tuple[str, Callable[[], bool] | None]]] = {}
+        self._inboxes: dict[str, deque[_Queued]] = {}
         self.sessions = SessionManager(
             spawner=spawner,
             sink_fn=self._session_sink,
@@ -151,30 +180,48 @@ class Master:
     def _session_sink(self, session_id: str):
         """Per-session reply sink for conversational instances."""
 
-        async def _sink(text: str, kind: str = "message") -> None:
-            await self._reply(text, session=session_id, kind=kind)
+        async def _sink(text: str, kind: str = "message", speaker: str = "") -> None:
+            await self._reply(text, session=session_id, kind=kind, speaker=speaker)
 
         return _sink
 
     async def _reply(
-        self, text: str, *, trace_id: str = "", session: str = "", kind: str = "message"
+        self,
+        text: str,
+        *,
+        trace_id: str = "",
+        session: str = "",
+        kind: str = "message",
+        speaker: str = "",
     ) -> None:
+        """Publish one timeline message. `speaker` names the team member who
+        is talking (persona key); empty = the resident host Lucien, which is
+        also how every pre-team message reads back."""
         if self._bus is not None:
+            payload: dict[str, Any] = {"content": text, "session": session, "kind": kind}
+            if speaker:
+                payload["speaker"] = speaker
             await self._bus.publish(
                 Event(
                     type=DomainEvent.AGENT_MESSAGE,
                     actor=AGENT_MAIN,
-                    payload={"content": text, "session": session, "kind": kind},
+                    payload=payload,
                     trace_id=trace_id,
                 )
             )
 
     async def reply(
-        self, text: str, *, trace_id: str = "", session: str = "", kind: str = "message"
+        self,
+        text: str,
+        *,
+        trace_id: str = "",
+        session: str = "",
+        kind: str = "message",
+        speaker: str = "",
     ) -> None:
         """Public reply outlet: modules split out of this file (dispatch etc.)
         route messages back through here instead of calling the private _reply."""
-        await self._reply(text, trace_id=trace_id, session=session, kind=kind)
+        await self._reply(text, trace_id=trace_id, session=session, kind=kind, speaker=speaker)
 
     # -- message flow -----------------------------------------------------------
 
@@ -222,6 +269,12 @@ class Master:
         sid = inst.session
         if self._wake_budget is not None:
             self._wake_budget.reset(sid)  # real user input breaks any self-excitation chain
+        member, mention_text = _parse_mention(text)
+        if member:
+            # The boss named a teammate directly: the named member takes the
+            # floor (queued behind a running turn like any other speech)
+            self._start_member_turn(inst, member, mention_text, trace_id)
+            return
         if inst.status is RunStatus.RUNNING:
             mode = ArbiterMode(self._settings.get("agent.arbiter.mode"))
             decision = await self._arbiter.decide(text, inst.task.goal, mode=mode)
@@ -241,7 +294,7 @@ class Master:
                 self._start_turn(current if current is not None else inst, text, trace_id)
                 return
         if inst.status is RunStatus.RUNNING:
-            self._session_inbox(sid).append((text, None))
+            self._session_inbox(sid).append(_Queued(text))
             if decision.action == "enqueue_notify":
                 await self._reply(f"[Queued] {decision.reason}", trace_id=trace_id, session=sid)
             return
@@ -266,11 +319,37 @@ class Master:
         instead of running a stale continuation."""
         inst = self.sessions.resolve(session)
         if inst.status is RunStatus.RUNNING:
-            self._session_inbox(inst.session).append((text, guard))
+            self._session_inbox(inst.session).append(_Queued(text, guard))
             return
         self._start_turn(inst, text, trace_id, guard=guard)
 
-    def _session_inbox(self, session_id: str) -> deque[tuple[str, Callable[[], bool] | None]]:
+    def _start_member_turn(
+        self, inst: SubagentInstance, member: str, text: str, trace_id: str
+    ) -> None:
+        """Give the floor to a named teammate (@-mention): the turn runs under
+        that persona over the shared transcript and its reply is attributed to
+        them. A running turn queues the mention behind it, like any speech."""
+        if inst.status is RunStatus.RUNNING:
+            self._session_inbox(inst.session).append(_Queued(text, None, member))
+            return
+        self._start_turn(inst, text, trace_id, member=member)
+
+    async def queue_member_turn(
+        self, session: str, member: str, brief: str, *, trace_id: str = ""
+    ) -> dict:
+        """Hand a task to a resident teammate (subagent action=handoff): the
+        member speaks a full turn once the current one ends, and the reply
+        lands in the group timeline under their own name. Validation of the
+        member key lives at the capability layer; unknown keys fail loudly."""
+        inst = self.sessions.resolve(session)
+        queued = inst.status is RunStatus.RUNNING
+        if queued:
+            self._session_inbox(inst.session).append(_Queued(brief, None, member))
+        else:
+            self._start_turn(inst, brief, trace_id, member=member)
+        return {"member": member, "session": inst.session, "queued": queued}
+
+    def _session_inbox(self, session_id: str) -> deque[_Queued]:
         box = self._inboxes.get(session_id)
         if box is None:
             box = deque()
@@ -313,12 +392,14 @@ class Master:
         trace_id: str,
         *,
         guard: Callable[[], bool] | None = None,
+        member: str = "",
     ) -> None:
         """Run the turn in the background: the entry returns immediately; the
         per-session lock guarantees only one turn writes that session at a
         time (different sessions may run concurrently within the scheduler's
         global cap). `guard` is re-evaluated once the lock is held (pre-step
-        barrier): a False result cancels the turn before any LLM work."""
+        barrier): a False result cancels the turn before any LLM work.
+        `member` hands the floor to a resident teammate for this turn."""
 
         async def _run() -> None:
             try:
@@ -334,7 +415,7 @@ class Master:
                             inst.session,
                         )
                         return
-                    await self._turn(inst, text, trace_id)
+                    await self._turn(inst, text, trace_id, member=member)
                     # Re-arm the goal continuation after every turn (primary
                     # and queued alike): an active goal keeps advancing until
                     # the agent marks it done/blocked; the driver's fence and
@@ -343,24 +424,29 @@ class Master:
                         self.goal_driver.maybe_schedule(inst.session)
                     inbox = self._session_inbox(inst.session)
                     while inbox:  # queued messages are handled in order
-                        queued, queued_guard = inbox.popleft()
+                        queued = inbox.popleft()
                         if not self._session_live(inst):
                             # Session deleted mid-drain (status flickers
                             # WAITING_INPUT between queued turns): the rest of
                             # the queue belongs to a dead session.
                             self._inboxes.pop(inst.session, None)
                             break
-                        if queued_guard is not None and not _guard_allows(
-                            queued_guard, inst.session
+                        if queued.guard is not None and not _guard_allows(
+                            queued.guard, inst.session
                         ):
                             log.info(
                                 "pre-step guard cancelled a queued notice (session %s)",
                                 inst.session,
                             )
                             continue
-                        if self._memory is not None:
-                            self._memory.working.add("user", queued)
-                        await self._turn(inst, queued, trace_id)
+                        if queued.member:
+                            # A named teammate takes the floor for this entry;
+                            # the rest of the queue keeps its order behind it
+                            await self._turn(inst, queued.text, trace_id, member=queued.member)
+                        else:
+                            if self._memory is not None:
+                                self._memory.working.add("user", queued.text)
+                            await self._turn(inst, queued.text, trace_id)
                         if self.goal_driver is not None:
                             self.goal_driver.maybe_schedule(inst.session)
             except Exception as exc:
@@ -383,12 +469,14 @@ class Master:
 
         self.track_background(asyncio.create_task(_run()))
 
-    async def _turn(self, inst: SubagentInstance, text: str, trace_id: str) -> None:
+    async def _turn(
+        self, inst: SubagentInstance, text: str, trace_id: str, *, member: str = ""
+    ) -> None:
         # Re-read round limits every turn: changes from the settings page apply
         # to the next message without restarting the conversation instance
         inst.apply_limits(limits_from_settings(self._settings))
         inst.deadline = Deadline.from_settings(self._settings)
-        await self._spawner.start(inst, text)
+        await self._spawner.start(inst, text, member=member)
         self._digests.upsert(inst)
         self.sessions.persist(inst.session)
         reply = _last_assistant_text(inst.history)
