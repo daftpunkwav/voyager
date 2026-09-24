@@ -112,7 +112,10 @@ class TestDispatchReadonly:
                     inst.toolbelt.names(), [inst.toolbelt._tools[n] for n in inst.toolbelt.names()]
                 )
             }
-            assert not any(t.write or t.irreversible for t in belt_tools.values())
+            writers = {n for n, t in belt_tools.items() if t.write or t.irreversible}
+            # taskboard is team coordination metadata (claim notes), not user
+            # data: a readonly scout may still read the board and raise a hand
+            assert writers <= {"taskboard"}
         finally:
             app.memory.close()
 

@@ -111,6 +111,7 @@ class TestAssemblyRosterParity:
                 "session",
                 "skill",
                 "subagent",
+                "taskboard",
                 "todowrite",
                 "tools",
                 "web_fetch",

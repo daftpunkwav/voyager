@@ -56,6 +56,7 @@ class TestRegistrySurface:
             "set_setting",
             "skill",
             "subagent",
+            "taskboard",
             "todowrite",
             "tools",
         ]
