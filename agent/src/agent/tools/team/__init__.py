@@ -13,6 +13,7 @@ from agent.tools.team.agent_instance import agent_instance_tool
 from agent.tools.team.board import board_tool
 from agent.tools.team.goal import goal_tool
 from agent.tools.team.subagent import subagent_tool
+from agent.tools.team.taskboard import taskboard_tool
 
 
 def team_tools(registry: Registry, audit: AuditSinks | None = None) -> dict[str, AgentTool]:
@@ -21,6 +22,7 @@ def team_tools(registry: Registry, audit: AuditSinks | None = None) -> dict[str,
         agent_instance_tool(registry, audit),
         board_tool(registry, audit),
         goal_tool(registry, audit),
+        taskboard_tool(registry, audit),
     )
     return {t.name: t for t in tools}
 

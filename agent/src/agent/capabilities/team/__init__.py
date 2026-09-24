@@ -10,6 +10,7 @@ from agent.capabilities.team.agent_instance import register as _agent_instance
 from agent.capabilities.team.board import register as _board
 from agent.capabilities.team.goal import register as _goal
 from agent.capabilities.team.subagent import register as _subagent
+from agent.capabilities.team.taskboard import register as _taskboard
 
 
 def register(reg: Registry, deps: CapabilityDeps) -> None:
@@ -17,3 +18,4 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
     _agent_instance(reg, deps)
     _board(reg, deps)
     _goal(reg, deps)
+    _taskboard(reg, deps)

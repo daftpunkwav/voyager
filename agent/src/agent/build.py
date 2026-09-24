@@ -38,6 +38,7 @@ from agent.master.goal_driver import GoalDriver
 from agent.master.job_notify import JobNotifier
 from agent.master.outreach_budget import OutreachBudget
 from agent.master.proactive import ProactiveEngine
+from agent.master.task_board import TaskBoard
 from agent.master.task_graph import TaskGraph
 from agent.memory import Memory
 from agent.memory.distill import Distiller
@@ -632,6 +633,7 @@ def build_agent(
     organizer = SkillOrganizer(memory.episodic, emit=_emit_skill_proposed, settings=settings)
     task_graph = TaskGraph()  # dependency edges between named task dispatches
     blackboard = Blackboard()  # task-scoped shared notes (read/write tools bind it)
+    task_board = TaskBoard()  # team publish/claim/confirm board (taskboard capability)
     # One anti-bombing budget shared by every assistant-initiated channel
     # (greetings/follow-ups), so the caps are global.
     outreach_budget = OutreachBudget(settings)
@@ -661,6 +663,7 @@ def build_agent(
         wake_budget=wake_budget,
         task_graph=task_graph,
         blackboard=blackboard,
+        task_board=task_board,
     )
     # Background completions report through the notifier: quiet notices and
     # budget-gated wakeups share the master's reply/notice channels
@@ -708,6 +711,7 @@ def build_agent(
             job_cancel=job_cancel,  # host-routed to the source domain's cancel capability
             job_reorder=job_reorder,  # host-routed to the source domain's reorder capability
             blackboard=blackboard,  # task-scoped shared notes (read/write tools below)
+            task_board=task_board,  # team task board (taskboard capability + tool)
             plan_gates=plan_gates,  # human-side review-phase toggle
             dispatch=master.dispatch_task,  # subagent spawn action
             team_handoff=master.queue_member_turn,  # subagent handoff action
