@@ -65,6 +65,12 @@ class TestParseMention:
         assert _parse_mention("@iris\n扫一下") == ("recon", "扫一下")
         assert _parse_mention("@miyai整理笔记") == ("organizer", "整理笔记")
 
+    def test_bare_mention_stays_with_host(self) -> None:
+        # a bare ping carries nothing to hand over: routing it would run a
+        # member turn with no user message (an LLM request with no user role)
+        assert _parse_mention("@Elio") == ("", "@Elio")
+        assert _parse_mention("@Elio ") == ("", "@Elio ")
+
     def test_non_members_stay_with_host(self) -> None:
         # the host is the default addressee: an @lucien mention is ordinary speech
         assert _parse_mention("@lucien 你好") == ("", "@lucien 你好")

@@ -83,20 +83,29 @@ class _Queued:
     member: str = ""
 
 
-#: "@Elio 讲讲…" / "@elio:…" -> ("elio", "讲讲…"); no match -> ("", text)
+#: "@Elio 讲讲…" -> ("elio", "讲讲…"); "@elio:…" keeps the colon -> ("elio", ":…");
+#: no match -> ("", text)
 _MENTION_RE = re.compile(r"^@([A-Za-z][A-Za-z0-9_-]*)\s*", re.DOTALL)
 
 
 def _parse_mention(text: str) -> tuple[str, str]:
     """Split a leading @-mention off a user message. Only resident team
-    members route: unknown names and @lucien stay with the host verbatim."""
-    m = _MENTION_RE.match(text.strip())
+    members route: unknown names, @lucien, and bare pings with nothing after
+    the name stay with the host verbatim."""
+    stripped = text.strip()
+    m = _MENTION_RE.match(stripped)
     if m is None:
         return "", text
     key = canonical_persona_key(m.group(1).lower())
     if key not in PERSONAS or key == "orchestrator":
         return "", text
-    return key, text.strip()[m.end() :].strip()
+    rest = stripped[m.end() :].strip()
+    if not rest:
+        # A bare "@Name" carries nothing to hand over: a member turn without a
+        # user message would send the LLM a request with no user role (invalid
+        # on several providers) and leave the transcript assistant-tailed.
+        return "", text
+    return key, rest
 
 
 def _guard_allows(guard: Callable[[], bool], session: str) -> bool:
