@@ -91,7 +91,15 @@ _STREAM_TYPES = (
 # via the capability invocation context), so a session-filtered history page
 # still rebuilds the deliverable receipts after a refresh — and only for the
 # conversation that created them.
-_HISTORY_TYPES = (DomainEvent.USER_MESSAGE, DomainEvent.AGENT_MESSAGE, DomainEvent.NOTE_CREATED)
+_HISTORY_TYPES = (
+    DomainEvent.USER_MESSAGE,
+    DomainEvent.AGENT_MESSAGE,
+    DomainEvent.NOTE_CREATED,
+    # agent.delivery rows carry the creating session in their payload, so a
+    # refresh / session switch replays the team's delivery cards (the store's
+    # applyHistory filters for exactly this type).
+    DomainEvent.AGENT_DELIVERY,
+)
 #: Step rows for trajectory rebuilds (execution detail, never the timeline).
 _TRAJECTORY_TYPES = (DomainEvent.AGENT_STEP,)
 #: Chunk size for session-filtered scans (multiple of any sane page size)

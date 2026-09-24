@@ -117,6 +117,35 @@ class TestChat:
             tail = client.get(f"/api/chat/messages?after_seq={last_seq}").json()
             assert tail["messages"] == [] and tail["has_more"] is False
 
+    def test_history_replays_delivery_cards(self, bus, tmp_path, echo_registry) -> None:
+        """agent.delivery rides the history types: a refresh (or a session
+        switch back to a cold lane) must rebuild the team's delivery cards
+        from the log, not lose them — the store's applyHistory filters this
+        type out of the history page."""
+        with self._history_client(bus, tmp_path, echo_registry, page_size=5) as client:
+            client.post("/api/chat/messages", json={"content": "m0", "session": "s1"})
+            asyncio.run(
+                bus.publish(
+                    Event(
+                        type=DomainEvent.AGENT_DELIVERY,
+                        actor=ActorRef(kind=ActorKind.AGENT, id="agent.main"),
+                        payload={
+                            "member": "explainer",
+                            "name": "explainer-run",
+                            "title": "t",
+                            "status": "done",
+                            "content": "the full answer",
+                            "session": "s1",
+                        },
+                    )
+                )
+            )
+            body = client.get("/api/chat/messages?session=s1").json()
+            kinds = [m["type"] for m in body["messages"]]
+            assert kinds == ["user.message", "agent.delivery"]
+            card = body["messages"][-1]["payload"]
+            assert card["member"] == "explainer" and card["status"] == "done"
+
     def test_sse_replay_then_close(self, client, bus) -> None:
         """SSE resume: connect with after_seq; backlog events in the log are
         replayed first (once mode closes after catching up)."""

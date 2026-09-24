@@ -286,9 +286,12 @@ class Master:
                 )
             )
         # Lucien's one-line relay: a synthesized summary drives a notice turn
-        # (the host is standing by, watching for teammates' reports). A relay
-        # failure must never break the completion path: the delivery card is
-        # already on the timeline, the notice turn is the add-on.
+        # (the host is standing by, watching for teammates' reports). The
+        # delivery card above is unconditional; the relay turn rides the
+        # wake budget (job_notify's anti-self-excitation pattern) — over
+        # budget it degrades to a quiet receipt so a burst of completions
+        # cannot feed itself. A relay failure must never break the completion
+        # path either.
         if ok:
             summary = await synthesize_result(self._llm, member, result)
             body = (
@@ -300,12 +303,25 @@ class Master:
                 f"[team-report] 团队成员 {member} 的任务执行失败:{error or result[:300]}\n"
                 "请向用户如实说明失败情况,并给出可选的下一步(重试/换人/放弃)。"
             )
+        sid = inst.task.session
+        if self._wake_budget is not None and not self._wake_budget.allow(sid):
+            await self.reply(
+                f"[team-report] {member} "
+                + ("已完成" if ok else "执行失败")
+                + ",详情见上方交付卡。",
+                trace_id=trace_id,
+                session=sid,
+                kind="notice",
+            )
+            return
+        if self._wake_budget is not None:
+            self._wake_budget.record(sid)
         try:
-            await self.handle_notice(inst.task.session, body, trace_id=trace_id)
+            await self.handle_notice(sid, body, trace_id=trace_id)
         except Exception:
             log.warning(
                 "team-report relay could not start a notice turn (session %s)",
-                inst.task.session,
+                sid,
                 exc_info=True,
             )
 

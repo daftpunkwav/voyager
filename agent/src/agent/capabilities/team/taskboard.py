@@ -106,12 +106,20 @@ async def taskboard_action(
             raise ServiceError(
                 "agent", ErrorSuffix.CONFLICT, f"task {task_id} lost its claim; reopened"
             )
-        inst = await deps.dispatch(
-            brief_text,
-            persona=claimant_key,
-            name=str(locked.get("title") or "")[:24],
-            board_task_id=task_id,
-        )
+        try:
+            inst = await deps.dispatch(
+                brief_text,
+                persona=claimant_key,
+                name=str(locked.get("title") or "")[:24],
+                board_task_id=task_id,
+            )
+        except Exception:
+            # A failed spawn must not strand the row in assigned (no exposed
+            # action can recover it there): put the task back up, claim note
+            # kept for context.
+            with suppress(ServiceError):
+                board.reopen(task_id)
+            raise
         run_id = getattr(getattr(inst, "state", None), "run_id", "")
         if run_id and not hasattr(inst, "waiting_on"):  # DeferredDispatch has no state
             with suppress(ServiceError):

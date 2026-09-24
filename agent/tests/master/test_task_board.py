@@ -134,6 +134,24 @@ class TestTaskboardCapability:
         result = out if isinstance(out, dict) else {}
         assert result["task"]["status"] == "running" and result["task"]["run_id"] == "run-9"
 
+    def test_confirm_dispatch_failure_reopens_task(self) -> None:
+        """A spawn that fails (depth cap, disabled persona) must not strand the
+        row in assigned: the task goes back up so the claim can be re-made."""
+        from platform_contracts import ErrorSuffix
+
+        board = TaskBoard()
+        tid = board.publish(title="t", brief="b", session="s1", publisher="orchestrator")["id"]
+        board.claim(tid, claimant="explainer")
+
+        async def _boom(goal, **kw):
+            raise ServiceError("agent", ErrorSuffix.FORBIDDEN, "delegation depth exceeded")
+
+        deps = _deps_with_board(board, dispatch=_boom)
+        with pytest.raises(ServiceError):
+            asyncio.run(taskboard_action(deps, action="confirm", task_id=tid))
+        assert board.get(tid)["status"] == "open"
+        assert board.get(tid)["claimant"] is None
+
     def test_list_scopes_to_current_session(self) -> None:
         board = TaskBoard()
         board.publish(title="a", brief="b", session="here", publisher="orchestrator")
