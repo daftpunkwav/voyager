@@ -75,6 +75,7 @@ _STREAM_TYPES = (
     "task.*",
     DomainEvent.AGENT_STEP,
     DomainEvent.AGENT_DELTA,
+    DomainEvent.AGENT_DELIVERY,
     DomainEvent.AGENT_POLICY_NOTIFY,
     DomainEvent.SKILL_PROPOSED,
     DomainEvent.NOTE_CREATED,

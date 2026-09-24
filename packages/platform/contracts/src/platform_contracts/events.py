@@ -112,6 +112,7 @@ class DomainEvent:
     AGENT_ASK = "agent.ask"
     AGENT_STEP = "agent.step"
     AGENT_DELTA = "agent.delta"
+    AGENT_DELIVERY = "agent.delivery"
     AGENT_OBSERVE = "agent.observe"
     AGENT_POLICY_NOTIFY = "agent.policy.notify"
     AGENT_NAVIGATE = "agent.navigate"
