@@ -23,6 +23,7 @@ from agent.context.compressor import COMPRESS_BUDGET
 from agent.context.governor import ContextGovernor
 from agent.contracts import ToolRunner
 from agent.llm import LLMClient
+from agent.prompts import P, render
 from agent.runtime.deadline import Deadline
 from agent.subagent.modes.base import (
     CountingToolbelt,
@@ -40,13 +41,6 @@ from agent.subagent.modes.streaming import run_phase
 
 #: Total attempts (first draft + bounded retries)
 REFLEXION_MAX_ATTEMPTS = 2
-
-_REVIEW_PROMPT = (
-    "审视上面的草稿是否已经充分完成了任务。只输出以下两种格式之一:\n"
-    "ADEQUATE:一句话说明为什么可以接受;\n"
-    "REVISE:先指出具体问题,再列出下次尝试要怎么做(逐条)。\n"
-    "不要调用工具。"
-)
 
 
 def _verdict(review: str) -> str:
@@ -110,7 +104,7 @@ async def run_reflexion(
             messages=[
                 *messages,
                 {"role": "assistant", "content": draft},
-                {"role": "user", "content": _REVIEW_PROMPT},
+                {"role": "user", "content": P.modes.reflexion.review},
             ],
             on_event=on_event,
             deadline=deadline,
@@ -131,8 +125,7 @@ async def run_reflexion(
         messages.append(
             {
                 "role": "user",
-                "content": f"【反思】上一次尝试未通过自我审视。{review.text}\n"
-                "请根据以上反思重新完成任务。",
+                "content": render(P.modes.reflexion.retry, review=review.text),
             }
         )
     return draft

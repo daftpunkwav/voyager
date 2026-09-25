@@ -23,6 +23,7 @@ from agent.context.compressor import COMPRESS_BUDGET
 from agent.context.governor import ContextGovernor
 from agent.contracts import ToolRunner
 from agent.llm import LLMClient
+from agent.prompts import P, render
 from agent.runtime.deadline import Deadline
 from agent.subagent.modes.base import (
     CountingToolbelt,
@@ -40,21 +41,10 @@ from agent.subagent.modes.react import run_step
 from agent.subagent.modes.registry import register_mode
 from agent.subagent.modes.streaming import run_phase
 
-#: Angle count and the fixed angle menu (cycled when M exceeds the menu)
+#: Angle count (cycled when it exceeds the menu) and refinement passes after
+#: aggregation (bounded; skipped once out of budget)
 GOT_ANGLES = 4
-_ANGLE_MENU = ("正确性与事实核查", "完整性与遗漏", "风险与反例", "可行性与成本")
-#: Refinement passes after aggregation (bounded; skipped once out of budget)
 GOT_REFINE_ROUNDS = 1
-
-_ANGLE_PROMPT = "从「{angle}」的角度处理该任务,输出该角度下的结论或方案要点。不要调用工具。"
-_AGGREGATE_PROMPT = (
-    "上面是同一任务从不同角度的产出。把它们聚合为一致、完整的最终解答:"
-    "冲突之处明确取舍并说明理由,互补之处合并,不要遗漏任何角度的关键信息。"
-)
-_REFINE_PROMPT = (
-    "对照上面各角度的产出检查你的聚合稿:指出丢失或被扭曲的关键内容,"
-    "并输出修订后的完整解答(不要只输出修改说明)。"
-)
 
 
 def _spent(limits: ModeLimits, budget: ModeBudget) -> bool:
@@ -80,8 +70,9 @@ async def run_got(
     belt = CountingToolbelt(toolbelt) if toolbelt is not None else None
 
     # Phase 1: M angle outputs, in parallel
-    angles = [_ANGLE_MENU[i % len(_ANGLE_MENU)] for i in range(GOT_ANGLES)]
-    angle_prompts = [[*sys_message(_ANGLE_PROMPT.format(angle=a)), *messages] for a in angles]
+    menu = P.modes.got.angle_menu.splitlines()
+    angles = [menu[i % len(menu)] for i in range(GOT_ANGLES)]
+    angle_prompts = [[*sys_message(render(P.modes.got.angle, angle=a)), *messages] for a in angles]
     outputs = await asyncio.gather(
         *(
             run_phase(llm=llm, messages=p, on_event=on_event, deadline=deadline, budget=budget)
@@ -104,7 +95,7 @@ async def run_got(
         llm=llm,
         messages=[
             *messages,
-            {"role": "user", "content": _AGGREGATE_PROMPT + "\n\n" + angle_block},
+            {"role": "user", "content": P.modes.got.aggregate + "\n\n" + angle_block},
         ],
         on_event=on_event,
         deadline=deadline,
@@ -123,9 +114,9 @@ async def run_got(
             llm=llm,
             messages=[
                 *messages,
-                {"role": "user", "content": _AGGREGATE_PROMPT + "\n\n" + angle_block},
+                {"role": "user", "content": P.modes.got.aggregate + "\n\n" + angle_block},
                 {"role": "assistant", "content": draft},
-                {"role": "user", "content": _REFINE_PROMPT},
+                {"role": "user", "content": P.modes.got.refine},
             ],
             on_event=on_event,
             deadline=deadline,
@@ -141,9 +132,7 @@ async def run_got(
     # answer (nothing user-facing is left to generate, so no streaming pass)
     if toolbelt is not None and belt is not None:
         messages.append({"role": "assistant", "content": draft})
-        messages.append(
-            {"role": "user", "content": "按上面的聚合解答执行该任务;需要外部信息就调用工具。"}
-        )
+        messages.append({"role": "user", "content": P.modes.got.execute})
         return await run_step(
             llm=llm,
             toolbelt=toolbelt,

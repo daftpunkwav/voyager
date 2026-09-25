@@ -27,6 +27,7 @@ from agent.context.compressor import COMPRESS_BUDGET, compress
 from agent.context.governor import ContextGovernor
 from agent.contracts import ToolRunner
 from agent.llm import LLMClient, TextPart, ToolCall, content_to_text
+from agent.prompts import P, render
 from agent.runtime.deadline import Deadline
 from agent.runtime.events import RuntimeEvent
 from agent.runtime.loop_advisory import LoopAdvisory
@@ -55,10 +56,6 @@ from agent.subagent.modes.streaming import complete_streaming, delta_timer, run_
 # (small talk excepted). This does not scan for polite acknowledgments -
 # those are model endings, not loop conditions.
 CONTINUE_MARK = "[react]"
-_CONTINUE_TEXT = (
-    f"{CONTINUE_MARK} Observation: 本回合尚未产生 tool call。"
-    "继续 Action:调用工具;若不需要工具,用一句话说明原因。"
-)
 CHITCHAT_RE = re.compile(
     r"^(你好|嗨|哈喽|在吗|早上好|晚上好|谢谢|感谢|嗯+|ok|okay|好)$",
     re.IGNORECASE,
@@ -258,11 +255,12 @@ async def run_react(
         round_ms = (time.perf_counter() - round_start) * 1000
         tokens_used += reply.usage.input_tokens + reply.usage.output_tokens
         if limits.max_tokens > 0 and tokens_used >= limits.max_tokens:
-            partial = f"部分结果:{reply.text}" if reply.text else "尚无最终文本产出"
-            return (
-                f"[预算] 已达 token 上限({limits.max_tokens}),本回合收尾。{partial};"
-                "可在设置提高 agent.rounds.max_tokens 后继续。"
+            partial = (
+                render(P.modes.react.partial_result, text=reply.text)
+                if reply.text
+                else P.modes.react.no_final_text
             )
+            return render(P.modes.react.token_budget, max_tokens=limits.max_tokens, partial=partial)
         await on_event(
             RuntimeEvent.LLM_COMPLETED,
             round=round_n,
@@ -274,10 +272,7 @@ async def run_react(
         )
         if reply.overflow:
             if overflow_retried:
-                return (
-                    "[中断] 上下文压缩后仍超出模型窗口;"
-                    "请缩短输入、清理会话，或检查 agent.context.window_tokens 与模型真实窗口是否一致。"
-                )
+                return P.modes.react.overflow
             overflow_retried = True
             if governor is not None:
                 # Aggressive recovery: aim for the mechanical fallback budget,
@@ -350,12 +345,7 @@ async def run_react(
             # treating it as complete (the web UI renders its own badge via
             # the step's truncated flag).
             truncated_reply = reply.truncated and text
-            user_text = (
-                f"{text}\n\n[输出被截断] 已达模型单次输出上限,回答不完整;"
-                "可在设置提高输出上限或让我分段继续。"
-                if truncated_reply
-                else text
-            )
+            user_text = f"{text}\n\n{P.modes.react.truncation}" if truncated_reply else text
             # With tool_calls this branch is unreachable - the loop is still
             # calling the API itself. Plain text = the model declared Final
             # Answer. A non-chitchat round with no Action yet does not count as
@@ -368,7 +358,12 @@ async def run_react(
                 if text:
                     pending_answer = text
                 messages.append({"role": "assistant", "content": text})
-                messages.append({"role": "user", "content": _CONTINUE_TEXT})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": render(P.modes.react.continue_idle, mark=CONTINUE_MARK),
+                    }
+                )
                 continue
             if pending_answer is not None and tool_calls_used == 0:
                 # The continuation only confirmed "no tools needed": deliver the
@@ -385,10 +380,7 @@ async def run_react(
             pending = pending[: limits.max_tool_calls - tool_calls_used]
             truncated = True
         if not pending:
-            return (
-                f"[中断] 已达工具调用上限({limits.max_tool_calls});"
-                "可在设置提高 agent.rounds.tool_max"
-            )
+            return render(P.modes.react.tool_cap, max_tool_calls=limits.max_tool_calls)
         # Loop detection runs over the batch before anything executes: the
         # calls up to (not including) the tripping one are the executable
         # prefix; the assistant entry below carries only those, so the
@@ -401,10 +393,11 @@ async def run_react(
                 break
             executable.append(call)
         if tripped is not None and not executable:
-            return (
-                f"[中断] 疑似死循环:{tripped.name} 以相同参数在最近 "
-                f"{loops.window} 次调用中重复达 {loops.threshold} 次;"
-                "已停止执行。请换参数、换工具或先向用户说明。"
+            return render(
+                P.modes.loop_abort,
+                tool=tripped.name,
+                window=loops.window,
+                threshold=loops.threshold,
             )
         # Neutral back-fill: one assistant entry carrying this round's tool_calls
         # (with ids), then one result entry per call carrying the same
@@ -476,16 +469,14 @@ async def run_react(
                     messages.append({"role": "user", "content": reminder})
                     await on_step("llm", "loop-advisory", reminder[:120], {"advisory": True})
                     continue
-                return (
-                    f"[中断] 疑似死循环:{tripped.name} 以相同参数在最近 "
-                    f"{loops.window} 次调用中重复达 {loops.threshold} 次;"
-                    "已停止执行。请换参数、换工具或先向用户说明。"
+                return render(
+                    P.modes.loop_abort,
+                    tool=tripped.name,
+                    window=loops.window,
+                    threshold=loops.threshold,
                 )
-            return (
-                f"[中断] 已达工具调用上限({limits.max_tool_calls});"
-                "可在设置提高 agent.rounds.tool_max"
-            )
-    return f"[中断] 已达 ReAct 轮数上限({limits.max_rounds});可在设置提高 agent.rounds.max"
+            return render(P.modes.react.tool_cap, max_tool_calls=limits.max_tool_calls)
+    return render(P.modes.react.rounds_cap, max_rounds=limits.max_rounds)
 
 
 async def run_step(

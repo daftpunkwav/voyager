@@ -22,6 +22,7 @@ from agent.context.compressor import COMPRESS_BUDGET
 from agent.context.governor import ContextGovernor
 from agent.contracts import ToolRunner
 from agent.llm import LLMClient
+from agent.prompts import P, render
 from agent.runtime.deadline import Deadline
 from agent.subagent.modes.base import (
     CountingToolbelt,
@@ -42,20 +43,6 @@ from agent.subagent.modes.streaming import run_phase
 #: Level-1 breadth (candidate approaches) and the expansion width
 TOT_BRANCHES = 3
 TOT_KEEP = 2
-
-_GENERATE_PROMPT = (
-    "给出解决该任务的一种候选方案(第 {i}/{n} 路):方案本体、为什么可行、"
-    "关键风险。简洁,不要调用工具。"
-)
-_JUDGE_PROMPT = (
-    "下面是同一任务的 {n} 个候选方案(以 [A]/[B]/[C] 标注)。"
-    '评估并排序,只输出一个 JSON 对象:{{"ranking": ["最佳方案字母", ...]}}。'
-)
-_EXPAND_PROMPT = "把方案 {letter} 展开为该任务的完整解答:直接给结果,不留方案框架。"
-_PICK_PROMPT = (
-    "下面是该任务的两个完整解答(以 [A]/[B] 标注)。选出更优的一个,"
-    '只输出一个 JSON 对象:{"best": "字母"}。'
-)
 
 
 def _parse_ranking(text: str, width: int) -> list[int]:
@@ -117,7 +104,7 @@ async def run_tot(
     # Level 1: candidate approaches, in parallel
     prompts = [
         [
-            *sys_message(_GENERATE_PROMPT.format(i=i + 1, n=TOT_BRANCHES)),
+            *sys_message(render(P.modes.tot.generate, i=i + 1, n=TOT_BRANCHES)),
             *messages,
         ]
         for i in range(TOT_BRANCHES)
@@ -144,7 +131,10 @@ async def run_tot(
         llm=llm,
         messages=[
             *messages,
-            {"role": "user", "content": _JUDGE_PROMPT.format(n=TOT_BRANCHES) + "\n\n" + letters},
+            {
+                "role": "user",
+                "content": render(P.modes.tot.judge, n=TOT_BRANCHES) + "\n\n" + letters,
+            },
         ],
         on_event=on_event,
         deadline=deadline,
@@ -163,7 +153,7 @@ async def run_tot(
         return _budget_report(limits, budget, best=texts[order[0]])
     expand_prompts = [
         [
-            *sys_message(_EXPAND_PROMPT.format(letter=chr(ord("A") + i))),
+            *sys_message(render(P.modes.tot.expand, letter=chr(ord("A") + i))),
             *messages,
             {"role": "assistant", "content": texts[i]},
         ]
@@ -185,7 +175,7 @@ async def run_tot(
         pair = "\n\n".join(f"[{chr(ord('A') + i)}]\n{t}" for i, t in enumerate(draft_texts))
         pick = await run_phase(
             llm=llm,
-            messages=[*messages, {"role": "user", "content": _PICK_PROMPT + "\n\n" + pair}],
+            messages=[*messages, {"role": "user", "content": P.modes.tot.pick + "\n\n" + pair}],
             on_event=on_event,
             deadline=deadline,
             budget=budget,
@@ -200,9 +190,7 @@ async def run_tot(
     # without, the winning draft is the answer - streamed when possible
     if toolbelt is not None and belt is not None:
         messages.append({"role": "assistant", "content": best})
-        messages.append(
-            {"role": "user", "content": "按上面的选定方案执行该任务;需要外部信息就调用工具。"}
-        )
+        messages.append({"role": "user", "content": P.modes.tot.execute})
         return await run_step(
             llm=llm,
             toolbelt=toolbelt,
@@ -220,7 +208,7 @@ async def run_tot(
     messages.append({"role": "assistant", "content": best})
     final = await run_phase(
         llm=llm,
-        messages=[*messages, {"role": "user", "content": "把选定方案整理为最终答案直接输出。"}],
+        messages=[*messages, {"role": "user", "content": P.modes.tot.finalize}],
         on_event=on_event,
         deadline=deadline,
         on_delta=on_delta,

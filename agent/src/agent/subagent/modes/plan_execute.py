@@ -25,6 +25,7 @@ from agent.context.compressor import COMPRESS_BUDGET
 from agent.context.governor import ContextGovernor
 from agent.contracts import ToolRunner
 from agent.llm import LLMClient
+from agent.prompts import P, render
 from agent.runtime.deadline import Deadline
 from agent.subagent.modes.base import (
     MAX_PLAN_STEPS,
@@ -48,26 +49,6 @@ from agent.subagent.modes.streaming import run_phase
 #: Replans permitted for one invocation (a revised plan after a failed step)
 PLAN_MAX_REPLANS = 1
 
-_PLAN_PROMPT = (
-    "先给出分步执行计划,不要调用工具:编号列出为完成任务要做的每一步"
-    f"(每行一步,动词开头,最多 {MAX_PLAN_STEPS} 步),最后给出完成判定。"
-)
-_REPLAN_PROMPT = (
-    "上面的步骤执行受阻。根据已发生的情况修订剩余步骤:"
-    "编号列出新的步骤(已完成的不必重做),必要时改变方法。不要调用工具。"
-)
-_REPORT_PROMPT = (
-    "任务执行结束。综合以上过程给出最终答案:直接回答任务本身,"
-    "并简要标注各步骤的完成情况(如有未完成项)。"
-)
-# Conversational turns (group chat) face the user directly: same rationale as
-# the COT chat synthesis — no workflow narration in the room.
-_CHAT_REPORT_PROMPT = (
-    "以上步骤已在后台完成。综合执行过程,直接向用户发出一条自然的聊天回复:"
-    "给出内容本身,不要汇报步骤完成情况,不要出现「最终答案」「步骤」这类字眼;"
-    "如有没做完的部分,用一句话自然带过。"
-)
-
 
 async def run_plan_execute(
     llm: LLMClient,
@@ -90,7 +71,10 @@ async def run_plan_execute(
     # Phase 1: plan
     plan_reply = await run_phase(
         llm=llm,
-        messages=[*sys_message(_PLAN_PROMPT), *messages],
+        messages=[
+            *sys_message(render(P.modes.plan_execute.plan, max_steps=MAX_PLAN_STEPS)),
+            *messages,
+        ],
         on_event=on_event,
         deadline=deadline,
         round_n=1,
@@ -117,7 +101,9 @@ async def run_plan_execute(
         messages.append(
             {
                 "role": "user",
-                "content": f"【步骤 {index + 1}/{len(steps)}】{step}\n完成本步骤;需要外部信息就调用工具。",
+                "content": render(
+                    P.modes.step_instruction, index=index + 1, total=len(steps), step=step
+                ),
             }
         )
         result = await run_step(
@@ -152,8 +138,10 @@ async def run_plan_execute(
                     *messages,
                     {
                         "role": "user",
-                        "content": _REPLAN_PROMPT
-                        + f"\n(剩余未执行步骤:{'; '.join(steps[index + 1 :])})",
+                        "content": render(
+                            P.modes.plan_execute.replan,
+                            remaining="; ".join(steps[index + 1 :]),
+                        ),
                     },
                 ],
                 on_event=on_event,
@@ -177,18 +165,27 @@ async def run_plan_execute(
     # rounds-exhausted invocation can still afford its one closing completion
     if budget.over_token_budget() and limits.max_tokens > 0:
         done = sum(1 for _, ok in outcomes if ok)
-        return (
-            f"[预算] 已达{budget_reason(limits, budget)},计划执行中途收尾:"
-            f"{done}/{len(outcomes)} 步完成。可在设置提高 agent.rounds.* 后继续。"
+        return render(
+            P.modes.plan_execute.budget,
+            reason=budget_reason(limits, budget),
+            done=done,
+            total=len(outcomes),
         )
     if skipped:
         # Skipped steps never reached the transcript: the report must be
         # told explicitly, or it would present them as silently done
-        messages.append({"role": "user", "content": "因预算限制未执行的步骤:" + "; ".join(skipped)})
+        messages.append(
+            {
+                "role": "user",
+                "content": render(P.modes.plan_execute.skipped, steps="; ".join(skipped)),
+            }
+        )
     messages.append(
         {
             "role": "user",
-            "content": _CHAT_REPORT_PROMPT if conversational else _REPORT_PROMPT,
+            "content": (
+                P.modes.plan_execute.chat_report if conversational else P.modes.plan_execute.report
+            ),
         }
     )
     final = await run_phase(
