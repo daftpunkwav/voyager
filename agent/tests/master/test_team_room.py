@@ -179,7 +179,7 @@ class TestMemberTurn:
             assert inst.history[-1]["speaker"] == "explainer"
             # the member's own persona layers drove the turn
             system = seen[-1][0]["content"]
-            assert "Elio" in system and "讲解导师" in system
+            assert "Elio" in system and "explainer-mentor" in system
             # no member label leaks past the turn
             assert inst._member_label == ""
         finally:
