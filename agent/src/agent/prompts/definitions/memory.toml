@@ -3,6 +3,8 @@
 # like {"profile": ...} and the empty-object literal {} are not placeholders.
 
 [memory]
-distill = """从下面的对话片段中提炼值得长期记住的信息,只输出一个 JSON 对象,不要输出其他文字:
-{"profile": {"<画像维度,如 name/preference/goal>": "<一句话>"}, "facts": [["<主体>", "<关系,如 prefers/is/works_on>", "<客体>", "<图谱节点 id,可选>"], ...]}
-要求:只提取明确、持久、可复用的信息;没有值得记的就输出空对象 {};若对话中出现过图谱节点 id(graph 工具返回的 node id),把它作为第 4 个元素关联到对应事实;facts 最多 {max_facts} 条;profile 最多 5 个键。"""
+# The extracted facts describe a Chinese-speaking user's library, so the
+# profile values and fact fields stay Chinese; the instruction is English.
+distill = """Distill information worth remembering long-term from the conversation excerpt below; output ONLY one JSON object, no other text:
+{"profile": {"<profile dimension, e.g. name/preference/goal>": "<one sentence, in Chinese>"}, "facts": [["<subject>", "<relation, e.g. prefers/is/works_on>", "<object>", "<graph node id, optional>"], ...]}
+Requirements: extract only explicit, durable, reusable information; output an empty object {} when nothing is worth recording; profile values and the subject/object fields are written in Chinese; if graph node ids appear in the conversation (node ids returned by graph tools), attach them as the 4th element of the matching fact; at most {max_facts} facts; at most 5 profile keys."""

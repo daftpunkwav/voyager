@@ -65,7 +65,9 @@ def test_render_leaves_json_and_empty_braces_alone():
 def test_global_rules_layer():
     rules = P.common.global_rules.splitlines()
     assert len(rules) == 9
-    assert rules[0].startswith("诚实第一")
+    assert rules[0].startswith("Honesty first")
+    # The Chinese-reply rule survives the anglicization: replies stay Chinese
+    assert "Chinese" in rules[1]
 
 
 def test_conversational_closing_carries_the_chat_discipline():
@@ -74,15 +76,15 @@ def test_conversational_closing_carries_the_chat_discipline():
     assert P.modes.cot.chat_synthesis.endswith(discipline)
     assert P.modes.plan_execute.chat_report.endswith(discipline)
     # The task-mode closings keep the workflow narration the chat ones drop
-    assert "最终答案" in P.modes.cot.synthesis
-    assert "最终答案" in P.modes.plan_execute.report
+    assert "final answer" in P.modes.cot.synthesis
+    assert "final answer" in P.modes.plan_execute.report
 
 
 def test_templates_render_to_wire_text():
-    assert "最多 12 步" in render(P.modes.cot.plan, max_steps=12)
-    assert '{"ranking": ["最佳方案字母", ...]}' in render(P.modes.tot.judge, n=3)
+    assert "at most 12 steps" in render(P.modes.cot.plan, max_steps=12)
+    assert '{"ranking": ["letter of the best option", ...]}' in render(P.modes.tot.judge, n=3)
     assert render(P.modes.step_instruction, index=1, total=3, step="查资料").startswith(
-        "【步骤 1/3】查资料"
+        "[Step 1/3] 查资料"
     )
     assert render(
         P.context.status_line.line,
@@ -90,5 +92,5 @@ def test_templates_render_to_wire_text():
         max_output_tokens=8,
         used_pct=5,
         auto_compact_at_pct=75,
-    ).startswith("【上下文状态】窗口 100 tok")
+    ).startswith("[Context status] window 100 tok")
     assert P.master.chat_goal.startswith("与用户对话")

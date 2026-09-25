@@ -68,7 +68,7 @@ def test_planner_request_replays_transcript_verbatim() -> None:
     assert planner_request[:-1] == messages  # byte-identical prefix
     tail = planner_request[-1]
     assert tail["role"] == "user"
-    assert "分段对照" in tail["content"] and "[段0] 消息 0-0" in tail["content"]
+    assert "Segment map" in tail["content"] and "[seg 0] messages 0-0" in tail["content"]
     # Tool pairing stays intact in the replayed prefix
     assert planner_request[2]["tool_calls"] == messages[2]["tool_calls"]
 
@@ -76,4 +76,4 @@ def test_planner_request_replays_transcript_verbatim() -> None:
 def test_segment_map_lists_message_ranges() -> None:
     messages = [{"role": "user", "content": "a"}, {"role": "assistant", "content": "b"}]
     m = render_segment_map(iter_segments(messages))
-    assert "[段0] 消息 0-0" in m and "[段1] 消息 1-1" in m
+    assert "[seg 0] messages 0-0" in m and "[seg 1] messages 1-1" in m

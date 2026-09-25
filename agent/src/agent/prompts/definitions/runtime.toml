@@ -1,7 +1,7 @@
-# Runtime prompts: the eval harness LLM judge (English, JSON output contract),
-# the one-shot loop advisory nudge, and the structured-output instruction
-# appended by the schema-constrained completion path. Placeholders ({name})
-# are filled at the call site via agent.prompts.render.
+# Runtime prompts: the eval harness LLM judge, the one-shot loop advisory
+# nudge, and the structured-output instruction appended by the
+# schema-constrained completion path. Placeholders ({name}) are filled at
+# the call site via agent.prompts.render.
 
 [runtime]
 evaluation_system = "You are an evaluation engine. Reply strictly in JSON."
@@ -13,7 +13,8 @@ Assistant reply: {reply}
 Evaluate if the assistant properly addressed the request. Output ONLY a JSON object with 'score' (float between 0.0 and 1.0) and 'feedback' (short explanation or advice for improvement):
 {"score": 0.9, "feedback": "Clear and complete response."}"""
 
-loop_advisory = "[advisory] 检测到你正在重复调用 {tool}(相同参数已在最近 {window} 次工具调用中出现 {threshold} 次)。换参数、换工具,或先用一句话向用户说明原因再继续;若确无必要继续,请直接给出结论。"
+# User-role nudge fed back to the model mid-turn: English.
+loop_advisory = "[advisory] You are repeating the same tool call: {tool} (identical arguments have appeared {threshold} times in the last {window} tool calls). Change the arguments or switch tools, or explain the reason to the user in one sentence first; if continuing is truly unnecessary, give your conclusion directly."
 
 # {schema} receives json.dumps(spec.schema, ensure_ascii=False, indent=2).
 schema_instruction = "\n\n[STRUCTURED OUTPUT REQUIREMENT]\nYou MUST return ONLY valid JSON matching this schema:\n```json\n{schema}\n```\nDo not output markdown explanations or conversational text outside the JSON."

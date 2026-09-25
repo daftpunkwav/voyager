@@ -108,7 +108,7 @@ async def test_timeout_keeps_gate_open_without_feedback() -> None:
 def test_section_only_while_active() -> None:
     gates = PlanGates()
     gates.set("s1", True)
-    assert "计划评审" in gates.section_for("s1")
+    assert "plan-review phase" in gates.section_for("s1")
     assert gates.section_for("other") == ""  # unrelated sessions are unaffected
     gates.set("s1", False)
     assert gates.section_for("s1") == ""

@@ -4,26 +4,28 @@
 
 [context]
 # Context editor: the planner reads the verbatim transcript plus the segment
-# map (appended at the call site) and answers with one JSON object.
-editor_plan = """【上下文编辑任务】当前对话窗口紧张。上方就是对话转录原文(未做任何改写)。分段对照见本条消息末尾。请决定如何重组以腾出空间,只输出一个 JSON 对象,不要输出其他文字:
-{"keep": [段号], "summarize": [段号], "drop": [段号], "summary": "<摘要正文>"}
-规则:
-1) keep 的段原样保留;summarize 的段合并进 summary;drop 的段直接丢弃;未提到的段默认保留。
-2) summary 是一段「密集工作状态」(不超过400字),依次覆盖:当前任务目标;已完成的关键步骤与结论;重要决策/数据/路径等关键值(原样保留);未完成事项与下一步。
-3) 最后一段必须出现在 keep 中;最近的用户要求、未完成承诺、关键事实优先原样保留。
-4) 没有信息量的寒暄、重复内容、已被取代的陈旧探索可以 drop。
-5) summarize 非空时 summary 必须是摘要正文本身。
+# map (appended at the call site, lines like "[seg 0] messages 0-3") and
+# answers with one JSON object.
+editor_plan = """【Context editing task】The conversation window is tight. Above is the verbatim transcript (unmodified). The segment map is appended at the end of this message. Decide how to reorganize it to free space; output ONLY one JSON object, no other text:
+{"keep": [segment numbers], "summarize": [segment numbers], "drop": [segment numbers], "summary": "<digest body>"}
+Rules:
+1) keep segments stay verbatim; summarize segments are merged into summary; drop segments are discarded; unmentioned segments default to keep.
+2) summary is a "dense working state" (at most 400 characters, in Chinese) covering, in order: the current task goal; key completed steps and conclusions; important decisions/data/paths and other critical values (verbatim); unfinished items and next steps.
+3) The last segment must appear in keep; recent user requests, unfulfilled promises, and key facts are preserved verbatim with priority.
+4) Small talk without informational value, repetition, and superseded stale exploration may be dropped.
+5) When summarize is non-empty, summary must be the digest body itself.
 
-分段对照:
+Segment map:
 """
 
 [context.plan_gate]
 # Review-phase section while the human-side plan gate is active; the model
-# leaves the phase only through plan(action=exit).
+# leaves the phase only through plan(action=exit). The title keeps the
+# Chinese layer-header convention (【】) used by the other system layers.
 title = "【计划模式】"
-body = "你正处于计划评审阶段:先探索、阅读与设计,产出完整计划;不要执行任何写入、删除、发送或其他有副作用的操作。完成设计后,用 plan(action=exit) 提交计划全文,等待评审人批准。"
+body = "You are in the plan-review phase: explore, read, and design first, producing a complete plan; do not execute any writes, deletions, sends, or other side effects. After the design is done, submit the full plan with plan(action=exit) and wait for the reviewer's approval."
 
 [context.status_line]
 # Cache-stable one-line context summary (usage bucketed at the call site).
-line = "【上下文状态】窗口 {window_tokens} tok(输出预留 {max_output_tokens}),已用约 {used_pct}%+,自动压缩阈值 {auto_compact_at_pct}%。规划大批量工作前,可用 context(action=compact) 主动腾出空间。"
-session_suffix = "当前会话: {session}。"
+line = "[Context status] window {window_tokens} tok (output reserved {max_output_tokens}), about {used_pct}%+ used, auto-compact threshold {auto_compact_at_pct}%. Before planning large batch work, free space proactively via context(action=compact)."
+session_suffix = "Current session: {session}."

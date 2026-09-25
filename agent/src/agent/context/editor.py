@@ -69,7 +69,7 @@ def render_segment_map(segments: list[tuple[int, int]]) -> str:
     """One line per segment: its message-index range. The planner reads the
     verbatim transcript above and this map; nothing else is re-rendered."""
     return "\n".join(
-        f"[段{idx}] 消息 {begin}-{end - 1}" for idx, (begin, end) in enumerate(segments)
+        f"[seg {idx}] messages {begin}-{end - 1}" for idx, (begin, end) in enumerate(segments)
     )
 
 

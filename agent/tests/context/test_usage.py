@@ -181,4 +181,4 @@ class TestCacheStableStatusLine:
         assert "101080" not in line  # exact used tokens stay out of the system entry
 
     def test_bucket_floor_is_rendered(self) -> None:
-        assert "已用约 70%+" in self._line(71.2)
+        assert "about 70%+ used" in self._line(71.2)

@@ -296,10 +296,10 @@ class TestOtherModes:
         assert result == "最终答案:成立"
         assert len(llm.calls) == 4  # plan + 2 steps + synthesis
         # plan request carries the reasoning hint
-        assert "逐步推理" in llm.calls[0]["messages"][0]["content"]
+        assert "step by step" in llm.calls[0]["messages"][0]["content"]
         # steps addressed on the shared transcript
-        assert any("【步骤 1/2】" in str(m.get("content")) for m in llm.calls[1]["messages"])
-        assert any("【步骤 2/2】" in str(m.get("content")) for m in llm.calls[2]["messages"])
+        assert any("[Step 1/2]" in str(m.get("content")) for m in llm.calls[1]["messages"])
+        assert any("[Step 2/2]" in str(m.get("content")) for m in llm.calls[2]["messages"])
 
     async def test_cot_unparseable_plan_degrades_to_one_step(self) -> None:
         llm = FakeLLM(
@@ -395,7 +395,9 @@ class TestOtherModes:
         )
         assert result == "按新计划完成"
         # replan request saw the abort note and the remaining steps
-        assert any("剩余未执行步骤" in str(m.get("content")) for m in llm.calls[4]["messages"])
+        assert any(
+            "Remaining unexecuted steps" in str(m.get("content")) for m in llm.calls[4]["messages"]
+        )
 
     async def test_reflexion_revise_then_accept(self) -> None:
         """REFLEXION: REVISE verdict retries with the lessons visible; the
@@ -413,7 +415,7 @@ class TestOtherModes:
         assert result == "修订版"
         assert len(llm.calls) == 3  # draft + review + retry (no second review)
         # the retry saw the reflection entry
-        assert any("【反思】" in str(m.get("content")) for m in llm.calls[2]["messages"])
+        assert any("[Reflection]" in str(m.get("content")) for m in llm.calls[2]["messages"])
 
     async def test_reflexion_adequate_verdict_keeps_draft(self) -> None:
         llm = FakeLLM([LLMReply(text="草稿"), LLMReply(text="ADEQUATE:已充分")])
@@ -454,8 +456,8 @@ class TestOtherModes:
         # judge saw the lettered candidates
         assert "[A]" in llm.calls[3]["messages"][-1]["content"]
         # expansion used the ranked order (B first, then A)
-        assert "方案 B" in llm.calls[4]["messages"][0]["content"]
-        assert "方案 A" in llm.calls[5]["messages"][0]["content"]
+        assert "option B" in llm.calls[4]["messages"][0]["content"]
+        assert "option A" in llm.calls[5]["messages"][0]["content"]
 
     async def test_tot_malformed_judge_falls_back_to_order(self) -> None:
         llm = FakeLLM(
@@ -474,7 +476,7 @@ class TestOtherModes:
             Mode.TOT, llm=llm, toolbelt=None, messages=_msgs(), limits=ModeLimits()
         )
         assert result == "最终"
-        assert "方案 A" in llm.calls[4]["messages"][0]["content"]  # A stays first
+        assert "option A" in llm.calls[4]["messages"][0]["content"]  # A stays first
 
     async def test_got_angles_aggregate_refine(self) -> None:
         """GOT: fixed angle menu in parallel, explicit aggregation, one

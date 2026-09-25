@@ -315,7 +315,7 @@ class TestReactIntegration:
         )
         assert result == "done"
         # Call 0 = planner (rendered segments), call 1 = the real completion
-        assert "段0" in str(llm.calls[0]["messages"][-1]["content"])
+        assert "seg 0" in str(llm.calls[0]["messages"][-1]["content"])
         transcript = " ".join(str(m.get("content")) for m in msgs)
         assert SUMMARY_MARK in transcript
         assert _pairs_intact(msgs)

@@ -24,7 +24,7 @@ class TestGlobalRules:
         """Locks only the count and the first rule's prefix, not the full text."""
         rules = P.common.global_rules.splitlines()
         assert len(rules) == 9
-        assert rules[0].startswith("诚实第一")
+        assert rules[0].startswith("Honesty first")
 
 
 class TestBuilder:

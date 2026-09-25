@@ -2,61 +2,65 @@
 # reflexion (direct has none). Placeholders ({name}) are filled at the call
 # site via agent.prompts.render; JSON braces like {"ranking": ...} are not
 # placeholders and stay literal.
+#
+# Language split: model-facing instructions are English; the budget/interrupt
+# reports are turn results rendered in the chat UI and stay in Chinese.
 
 [modes]
 # Shared stepwise scaffolds: the per-step instruction (cot + plan_execute) and
 # the identical loop-abort report (react raises it in two places).
-step_instruction = "【步骤 {index}/{total}】{step}\n完成本步骤;需要外部信息就调用工具。"
+step_instruction = "[Step {index}/{total}] {step}\nComplete this step; call tools if you need external information."
 loop_abort = "[中断] 疑似死循环:{tool} 以相同参数在最近 {window} 次调用中重复达 {threshold} 次;已停止执行。请换参数、换工具或先向用户说明。"
 
 [modes.cot]
-plan = "请先逐步推理,再给出结论。把完成该任务需要的推理过程拆成编号步骤(每行一步,动词开头,最多 {max_steps} 步),不要调用工具。"
-synthesis = "以上按步骤完成了任务。综合所有步骤的结果给出最终答案:直接回答任务本身,标注未完成的步骤(如有)。"
+plan = "Reason step by step before concluding. Break the reasoning needed for this task into numbered steps (one step per line, starting with a verb, at most {max_steps} steps); do not call tools."
+synthesis = "The steps above have completed the task. Synthesize the step results into the final answer: answer the task directly and note any unfinished steps (if any)."
 # Conversational closing: the task-mode synthesis narration would leak
 # workflow scaffolding into the group chat, so chat turns close with the
 # natural-reply discipline instead.
 chat_synthesis = [
-    "以上步骤已在后台完成。综合步骤结果,直接向用户发出一条自然的聊天回复:给出内容本身;如有没做完的部分,用一句话自然带过。",
+    "The steps above have finished in the background. Synthesize their results into one natural chat reply to the user: give the content itself; if anything is unfinished, mention it briefly in one sentence.",
     "@common.chat_reply_discipline",
 ]
 budget = "[预算] 已达{reason},链式推理中途收尾:{done}/{total} 步完成。可在设置提高 agent.rounds.* 后继续。"
 skipped = "因预算限制未执行的步骤:{steps}"
 
 [modes.plan_execute]
-plan = "先给出分步执行计划,不要调用工具:编号列出为完成任务要做的每一步(每行一步,动词开头,最多 {max_steps} 步),最后给出完成判定。"
-replan = "上面的步骤执行受阻。根据已发生的情况修订剩余步骤:编号列出新的步骤(已完成的不必重做),必要时改变方法。不要调用工具。\n(剩余未执行步骤:{remaining})"
-report = "任务执行结束。综合以上过程给出最终答案:直接回答任务本身,并简要标注各步骤的完成情况(如有未完成项)。"
+plan = "First produce a step-by-step execution plan, without calling tools: list the numbered steps needed to complete the task (one step per line, starting with a verb, at most {max_steps} steps), ending with the completion criteria."
+replan = "The step above got stuck. Revise the remaining steps based on what happened: list new numbered steps (completed ones need not be redone), changing approach if necessary. Do not call tools.\n(Remaining unexecuted steps: {remaining})"
+report = "The task is finished. Synthesize the process into the final answer: answer the task directly and briefly note each step's completion status (for anything unfinished)."
 chat_report = [
-    "以上步骤已在后台完成。综合执行过程,直接向用户发出一条自然的聊天回复:给出内容本身;如有没做完的部分,用一句话自然带过。",
+    "The steps above have finished in the background. Synthesize the execution into one natural chat reply to the user: give the content itself; if anything is unfinished, mention it briefly in one sentence.",
     "@common.chat_reply_discipline",
 ]
 budget = "[预算] 已达{reason},计划执行中途收尾:{done}/{total} 步完成。可在设置提高 agent.rounds.* 后继续。"
 skipped = "因预算限制未执行的步骤:{steps}"
 
 [modes.tot]
-generate = "给出解决该任务的一种候选方案(第 {i}/{n} 路):方案本体、为什么可行、关键风险。简洁,不要调用工具。"
-judge = "下面是同一任务的 {n} 个候选方案(以 [A]/[B]/[C] 标注)。评估并排序,只输出一个 JSON 对象:{\"ranking\": [\"最佳方案字母\", ...]}。"
-expand = "把方案 {letter} 展开为该任务的完整解答:直接给结果,不留方案框架。"
-pick = "下面是该任务的两个完整解答(以 [A]/[B] 标注)。选出更优的一个,只输出一个 JSON 对象:{\"best\": \"字母\"}。"
-execute = "按上面的选定方案执行该任务;需要外部信息就调用工具。"
-finalize = "把选定方案整理为最终答案直接输出。"
+generate = "Propose one candidate approach for this task (track {i}/{n}): the approach itself, why it works, and the key risks. Be concise; do not call tools."
+judge = "Below are {n} candidate approaches for the same task (labeled [A]/[B]/[C]). Evaluate and rank them; output ONLY one JSON object: {\"ranking\": [\"letter of the best option\", ...]}."
+expand = "Expand option {letter} into a complete answer for this task: give the result directly, without leaving an option skeleton."
+pick = "Below are two complete answers for this task (labeled [A]/[B]). Pick the better one; output ONLY one JSON object: {\"best\": \"letter\"}."
+execute = "Execute this task following the selected option above; call tools if you need external information."
+finalize = "Organize the selected option into the final answer and output it directly."
 
 [modes.got]
 # Fixed angle menu, cycled when the configured angle count exceeds it;
-# consumers recover the items with splitlines().
+# consumers recover the items with splitlines(). The angle names surface in
+# trace summaries shown to the user and stay in Chinese.
 angle_menu = [
     "正确性与事实核查",
     "完整性与遗漏",
     "风险与反例",
     "可行性与成本",
 ]
-angle = "从「{angle}」的角度处理该任务,输出该角度下的结论或方案要点。不要调用工具。"
-aggregate = "上面是同一任务从不同角度的产出。把它们聚合为一致、完整的最终解答:冲突之处明确取舍并说明理由,互补之处合并,不要遗漏任何角度的关键信息。"
-refine = "对照上面各角度的产出检查你的聚合稿:指出丢失或被扭曲的关键内容,并输出修订后的完整解答(不要只输出修改说明)。"
-execute = "按上面的聚合解答执行该任务;需要外部信息就调用工具。"
+angle = "Handle the task from the perspective of 「{angle}」; output the conclusion or the key points for that perspective. Do not call tools."
+aggregate = "The above are outputs for the same task from different perspectives. Aggregate them into one coherent, complete final answer: make and explain explicit trade-offs where they conflict, merge where they complement, and do not drop key information from any perspective."
+refine = "Check your aggregated draft against the per-perspective outputs above: point out key content that was lost or distorted, and output the revised complete answer (not a list of edits)."
+execute = "Execute this task following the aggregated answer above; call tools if you need external information."
 
 [modes.react]
-continue_idle = "{mark} Observation: 本回合尚未产生 tool call。继续 Action:调用工具;若不需要工具,用一句话说明原因。"
+continue_idle = "{mark} Observation: no tool call was produced this round. Continue with an Action: call a tool; if no tool is needed, state the reason in one sentence."
 token_budget = "[预算] 已达 token 上限({max_tokens}),本回合收尾。{partial};可在设置提高 agent.rounds.max_tokens 后继续。"
 partial_result = "部分结果:{text}"
 no_final_text = "尚无最终文本产出"
@@ -66,5 +70,5 @@ tool_cap = "[中断] 已达工具调用上限({max_tool_calls});可在设置提�
 rounds_cap = "[中断] 已达 ReAct 轮数上限({max_rounds});可在设置提高 agent.rounds.max"
 
 [modes.reflexion]
-review = "审视上面的草稿是否已经充分完成了任务。只输出以下两种格式之一:\nADEQUATE:一句话说明为什么可以接受;\nREVISE:先指出具体问题,再列出下次尝试要怎么做(逐条)。\n不要调用工具。"
-retry = "【反思】上一次尝试未通过自我审视。{review}\n请根据以上反思重新完成任务。"
+review = "Review whether the draft above adequately completes the task. Output exactly one of:\nADEQUATE: one sentence on why it is acceptable;\nREVISE: name the concrete problems first, then list what the next attempt should do (itemized).\nDo not call tools."
+retry = "[Reflection] The previous attempt did not pass self-review. {review}\nRedo the task according to the reflection above."
