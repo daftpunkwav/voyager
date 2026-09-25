@@ -37,7 +37,6 @@ from agent.memory import Memory
 from agent.memory.distill import Distiller
 from agent.memory.read_policy import render_relevant_recall
 from agent.memory.recorder import EpisodeRecorder
-from agent.memory.session_store import SessionStore
 from agent.orchestrator import Arbiter, DigestStore, Master
 from agent.orchestrator.blackboard import Blackboard
 from agent.orchestrator.goal import GoalManager
@@ -71,6 +70,7 @@ from agent.runtime.session_index import SessionIndex
 from agent.runtime.state import CheckpointStore, prepare_resumable_checkpoints
 from agent.runtime.trajectory import TrajectoryStore
 from agent.runtime.wire import bind_event_loop
+from agent.sessions import SessionStore
 from agent.settings import DEFS as AGENT_SETTING_DEFS
 from agent.settings import STYLE_OVERRIDES_KEY, WORKSPACE_DIR_KEY
 from agent.skills import SkillLoader

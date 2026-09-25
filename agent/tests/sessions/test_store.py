@@ -5,7 +5,7 @@ survival through the session manager (lazy restore into a fresh process).
 
 from agent.llm import FakeLLM, LLMReply
 from agent.main import build_agent
-from agent.memory.session_store import SessionSnapshot, SessionStore
+from agent.sessions.store import SessionSnapshot, SessionStore
 
 
 def _snap(session_id="chat", **kw) -> SessionSnapshot:

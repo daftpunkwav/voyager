@@ -11,6 +11,7 @@
 | context/ | context engineering: assembly, compression/pruning, on-demand loading, budgets, prefix-cache watch — see context/README.md |
 | hooks/ | hook system: loading, trigger points, user-hook reload — see hooks/README.md |
 | orchestrator/ | orchestration: arbitration, dispatch, task graph, blackboard, proactive outreach — see orchestrator/README.md |
+| sessions/ | session identity, lifecycle, and chat persistence (manager + store) |
 | memory/ | profile/episodic/semantic/working memory plus retrieval, distillation, and the recorder — see memory/README.md |
 | personas/ | persona presets loaded from `definitions/*.toml` — see personas/README.md |
 | plugins/ | plugin discovery, approval, and declarative skill/hook loading — see plugins/README.md |

@@ -42,7 +42,6 @@ from agent.engine.limits import limits_from_settings
 from agent.orchestrator.arbiter import Arbiter, ArbiterMode
 from agent.orchestrator.digest import DigestStore
 from agent.orchestrator.evaluation import TaskEvaluator, record_evaluation
-from agent.orchestrator.sessions import CHAT_GOAL, SessionManager
 from agent.orchestrator.synthesize import synthesize_result
 from agent.orchestrator.task_board import TaskBoard
 from agent.personas import PERSONAS, canonical_persona_key
@@ -51,6 +50,7 @@ from agent.prompts import P, render
 from agent.runtime.deadline import Deadline
 from agent.runtime.events import AGENT_MAIN
 from agent.runtime.state import RunStatus
+from agent.sessions import CHAT_GOAL, SessionManager
 
 log = logging.getLogger("agent.orchestrator")
 
