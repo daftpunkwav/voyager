@@ -1,6 +1,6 @@
-# explore-repo(skill 内置示例)
+# explore-repo
 
-了解一个仓库的流程:
+The workflow for getting to know a repository:
 
-1. `glob` 看顶层文件;2. `read` 读 README;3. 给出"它是谁/怎么用/核心模块"三段式小结;
-4. 用户需要深入时,建议建立图谱索引。
+1. `glob` the top-level files; 2. `read` the README; 3. give a three-part summary: what it is / how to use it / core modules;
+4. When the user wants depth, suggest building a graph index.

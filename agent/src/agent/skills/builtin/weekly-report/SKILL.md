@@ -1,9 +1,9 @@
-# weekly-report(周报生成)
+# weekly-report
 
-生成周报的流程:
+The workflow for producing a weekly report:
 
-1. 收集输入:笔记(`notes__list_notes` 按更新时间)、资料库新增(`sources` 域列表)、
-   本周图谱变更(`graph__graph_stats` 对比);
-2. 按「进展 / 数据 / 风险 / 下周」四段组织,引用具体条目 id 而不是泛泛而谈;
-3. 产出为一条笔记(`organize-notes` skill 的成文规范),向用户报告标题与 id;
-4. 用户没给时间范围时默认自然周(周一到今天),先确认再动笔。
+1. Gather inputs: notes (`notes__list_notes` by update time), library additions (`sources` domain listings),
+   this week's graph changes (`graph__graph_stats` comparison);
+2. Organize into four sections — progress / data / risks / next week — citing concrete item ids instead of generalities;
+3. Produce it as one note (following the organize-notes skill's writing conventions) and report the title and id to the user;
+4. When the user gives no time range, default to the natural week (Monday to today) and confirm before writing.

@@ -1,8 +1,8 @@
-# import-to-graph(导入建图)
+# import-to-graph
 
-把一份本地资料变成图谱节点的流程:
+The workflow for turning a local resource into graph nodes:
 
-1. `sources` 域导入(仓库用 import_repo,网页用 save_url),等 `source.ready` 事件;
-2. `graph__enqueue_index` 入队建图,`graph__list_index_jobs` 看进度;
-3. 完成后 `graph__graph_stats` 汇报节点/关系数,`graph__query_graph` 抽查关键节点;
-4. 用户要找关系时用 `graph__expand_neighbors` / `graph__find_path`,不要整图导出。
+1. Import via the `sources` domain (import_repo for repos, save_url for pages) and wait for the `source.ready` event;
+2. Enqueue graph building with `graph__enqueue_index` and track progress with `graph__list_index_jobs`;
+3. When done, report node/relation counts with `graph__graph_stats` and spot-check key nodes with `graph__query_graph`;
+4. For relation questions use `graph__expand_neighbors` / `graph__find_path`; never export the whole graph.

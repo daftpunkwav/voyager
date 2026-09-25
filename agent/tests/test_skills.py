@@ -105,7 +105,7 @@ class TestDefaultWiring:
         try:
             inst = app.spawner.spawn(TaskBook(goal="test", mode=Mode.REACT), persona="orchestrator")
             assert "【可用 skill】" in inst.system_prompt
-            assert "explore-repo: explore-repo(skill 内置示例)" in inst.system_prompt
+            assert "explore-repo: explore-repo" in inst.system_prompt
         finally:
             app.memory.close()
 

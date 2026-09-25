@@ -1,8 +1,8 @@
-# organize-notes(资料整理成笔记)
+# organize-notes
 
-把一段素材整理成笔记的流程:
+The workflow for organizing material into a note:
 
-1. 先 `todowrite`(action=set)列步骤(提取要点 → 成文 → 关联);
-2. `notes__create_note` 建笔记(标题=主题,正文分小节),要点丢失前先写完再润色;
-3. 相关笔记间用 `notes__link_note` 建链,别堆标签代替结构;
-4. 收尾 `todowrite`(action=query)核对全部条目 done,向用户报告笔记 id 与结构。
+1. List the steps with `todowrite` (action=set): extract key points → draft → link;
+2. Create the note with `notes__create_note` (title = topic, body in sections); write everything down before polishing — never lose key points;
+3. Link related notes with `notes__link_note`; do not pile up tags as a substitute for structure;
+4. Finish with `todowrite` (action=query) to confirm every item is done, then report the note id and structure to the user.

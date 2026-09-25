@@ -1,8 +1,8 @@
-# quick-research(快速调研)
+# quick-research
 
-回答一个需要外部信息的问题:
+Answer a question that needs external information:
 
-1. 先 `web_search`(whitelist 模式确认 duckduckgo.com 可用),读前 3-5 条摘要即可定向;
-2. 用 `web_fetch` 直取 1-2 个最权威来源,不要遍历搜索结果;
-3. 回答标注来源 URL 与抓取时间;两次检索仍无结论就向用户说明缺口,不要编造;
-4. 结论值得沉淀时,问用户是否存入笔记或记忆。
+1. Start with `web_search` (whitelist mode confirms duckduckgo.com is reachable); reading the top 3-5 summaries is enough to orient;
+2. Use `web_fetch` to pull 1-2 of the most authoritative sources directly; do not walk the whole result list;
+3. Cite source URLs and fetch times in the answer; if two searches still yield no conclusion, tell the user about the gap instead of inventing one;
+4. When the findings are worth keeping, ask the user whether to save them into notes or memory.
