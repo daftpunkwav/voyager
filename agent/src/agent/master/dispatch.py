@@ -15,6 +15,10 @@ from dataclasses import dataclass
 from platform_contracts import ErrorSuffix, ServiceError
 
 from agent.contracts import DispatchMaster, SettingsReader
+from agent.engine import Mode, Spawner, SubagentInstance, TaskBook
+from agent.engine.limits import limits_from_settings
+from agent.engine.registry import SubagentDef, SubagentRegistry
+from agent.engine.surface import intersect_surface, surface_misses
 from agent.master.synthesize import synthesize_result
 from agent.master.task_graph import DeferredTask  # noqa: F401  # re-exported type
 from agent.personas import resolve_persona
@@ -22,10 +26,6 @@ from agent.policy import NetworkPolicy, PolicyEngine, narrow_network
 from agent.runtime.current import current_instance
 from agent.runtime.state import RunStatus
 from agent.settings import SUBAGENTS_MAX_DEPTH_KEY
-from agent.subagent import Mode, Spawner, SubagentInstance, TaskBook
-from agent.subagent.limits import limits_from_settings
-from agent.subagent.registry import SubagentDef, SubagentRegistry
-from agent.subagent.surface import intersect_surface, surface_misses
 from agent.tools.core.base import Toolbelt
 
 

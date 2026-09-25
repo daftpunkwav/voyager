@@ -6,11 +6,11 @@ from typing import Any
 
 from platform_contracts import RuntimeEvent
 
+from agent.engine.modes.base import DeltaCb, EventCb, Mode, noop_event
+from agent.engine.modes.registry import register_mode
+from agent.engine.modes.streaming import complete_streaming, delta_timer
 from agent.llm import LLMClient
 from agent.runtime.deadline import Deadline
-from agent.subagent.modes.base import DeltaCb, EventCb, Mode, noop_event
-from agent.subagent.modes.registry import register_mode
-from agent.subagent.modes.streaming import complete_streaming, delta_timer
 
 
 async def run_direct(

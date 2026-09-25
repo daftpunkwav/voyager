@@ -17,8 +17,8 @@ from agent.context.editor import (
 )
 from agent.context.governor import ContextGovernor
 from agent.context.usage import ContextWindow, UsageTracker
+from agent.engine import Mode, ModeLimits, run_mode
 from agent.llm import FakeLLM, LLMClient, LLMReply
-from agent.subagent import Mode, ModeLimits, run_mode
 
 
 def _msgs() -> list[dict]:

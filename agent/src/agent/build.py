@@ -26,6 +26,9 @@ from agent.context import ContextBuilder, OnDemandLoader, PageContextRegistry
 from agent.context.budgets import budget_from_settings
 from agent.context.plan_gate import PlanGates
 from agent.context.scoped_rules import ScopedRules
+from agent.engine import Spawner, SubagentRegistry
+from agent.engine.triggered_spawn import make_handler as make_trigger_handler
+from agent.engine.triggered_spawn import trigger_patterns
 from agent.hooks import HookLoader, HookRegistry, UserHookReloader
 from agent.llm import FakeLLM, LLMClient
 from agent.master import Arbiter, DigestStore, Master
@@ -72,9 +75,6 @@ from agent.settings import DEFS as AGENT_SETTING_DEFS
 from agent.settings import STYLE_OVERRIDES_KEY, WORKSPACE_DIR_KEY
 from agent.skills import SkillLoader
 from agent.skills.organizer import SkillOrganizer
-from agent.subagent import Spawner, SubagentRegistry
-from agent.subagent.triggered_spawn import make_handler as make_trigger_handler
-from agent.subagent.triggered_spawn import trigger_patterns
 from agent.tools import (
     AgentTool,
     AskUser,

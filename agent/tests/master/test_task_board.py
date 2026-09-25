@@ -288,11 +288,11 @@ def _publish_board_task(app, session: str = "s-delivery"):
 
 def _delivery_inst(app, session: str, task_id: str):
     """A minimal board-backed run instance for announce_delivery tests."""
+    from agent.engine import TaskBook
+    from agent.engine.instance import SubagentInstance
     from agent.policy import PolicyEngine
     from agent.runtime.events import RuntimeEvents
     from agent.runtime.state import RunState
-    from agent.subagent import TaskBook
-    from agent.subagent.instance import SubagentInstance
     from agent.tools import Toolbelt
 
     return SubagentInstance(

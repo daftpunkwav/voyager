@@ -12,10 +12,10 @@ persona, and tool step visibility.
 
 import asyncio
 
+from agent.engine.instance import page_preactivate
 from agent.llm import FakeLLM, LLMReply, ToolCall
 from agent.main import build_agent
 from agent.personas import DEFINITIONS_DIR, resolve_persona
-from agent.subagent.instance import page_preactivate
 from agent.tools import AgentTool
 
 

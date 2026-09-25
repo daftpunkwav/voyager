@@ -11,10 +11,10 @@ import asyncio
 import json
 
 import pytest
+from agent.engine import Mode, TaskBook
 from agent.llm import FakeLLM, LLMReply, ToolCall
 from agent.main import build_agent
 from agent.runtime.state import CheckpointStore, ResumeSnapshot, RunState, RunStatus
-from agent.subagent import Mode, TaskBook
 from platform_actor import ActorContext
 from platform_capability import execute
 from platform_contracts import LOCAL_USER, ServiceError

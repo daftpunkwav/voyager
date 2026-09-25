@@ -1,4 +1,4 @@
-# agent.subagent — Subagent system
+# agent.engine — Subagent system
 
 spawn.py (dispatch: capability-surface trimming + mode grant), instance.py
 (state machine for a single run), modes/ (execution strategies for the

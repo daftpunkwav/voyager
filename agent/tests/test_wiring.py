@@ -5,9 +5,9 @@ and domain tool injection.
 import asyncio
 import json
 
+from agent.engine import Mode, TaskBook
 from agent.llm import FakeLLM, LLMReply
 from agent.main import build_agent
-from agent.subagent import Mode, TaskBook
 from agent.tools import AgentTool
 from platform_actor import ActorContext
 from platform_contracts import LOCAL_USER, ActorKind, ActorRef

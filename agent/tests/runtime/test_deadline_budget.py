@@ -5,10 +5,10 @@ from __future__ import annotations
 import asyncio
 
 from agent.build import build_agent
+from agent.engine.limits import limits_from_settings
 from agent.llm import FakeLLM, LLMReply, ToolCall, Usage
 from agent.runtime.deadline import Deadline
 from agent.runtime.loop_advisory import LoopAdvisory
-from agent.subagent.limits import limits_from_settings
 from platform_actor import ActorContext
 from platform_capability import execute
 from platform_contracts import LOCAL_USER, DomainEvent

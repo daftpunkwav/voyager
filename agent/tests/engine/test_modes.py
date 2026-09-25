@@ -6,9 +6,9 @@ import asyncio
 from typing import Any
 
 import pytest
+from agent.engine import Mode, ModeLimits, run_mode
 from agent.llm import FakeLLM, LLMReply, ToolCall, Usage
 from agent.policy import PolicyEngine
-from agent.subagent import Mode, ModeLimits, run_mode
 from agent.tools import AgentTool, Toolbelt
 
 

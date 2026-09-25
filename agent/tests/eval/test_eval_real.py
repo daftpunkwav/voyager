@@ -25,9 +25,9 @@ import os
 
 import pytest
 from agent.build import build_agent
+from agent.engine.instance import SubagentInstance
 from agent.llm_http import HttpLLM, HttpLlmConfig
 from agent.runtime.state import RunStatus
-from agent.subagent.instance import SubagentInstance
 from platform_contracts import DomainEvent
 
 _BASE_URL = os.environ.get("AGENT_EVAL_BASE_URL", "")

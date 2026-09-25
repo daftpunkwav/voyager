@@ -18,8 +18,8 @@ from agent.context.budgets import (
     ContextBudget,
     budget_from_settings,
 )
+from agent.engine import TaskBook
 from agent.memory import Memory
-from agent.subagent import TaskBook
 
 
 class _Settings:

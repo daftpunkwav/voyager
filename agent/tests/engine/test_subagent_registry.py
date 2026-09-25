@@ -5,7 +5,7 @@ listing, and deletion.
 import json
 
 import pytest
-from agent.subagent.registry import SubagentDef, SubagentRegistry
+from agent.engine.registry import SubagentDef, SubagentRegistry
 from platform_contracts import ServiceError
 
 

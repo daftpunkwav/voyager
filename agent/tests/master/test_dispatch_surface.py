@@ -5,13 +5,13 @@ checkpoint resume without regaining write tools.
 """
 
 import pytest
+from agent.engine import Mode, TaskBook
+from agent.engine.registry import SubagentDef
 from agent.llm import FakeLLM, LLMReply, ToolCall
 from agent.main import build_agent
 from agent.personas import ORCHESTRATOR, resolve_persona
 from agent.policy import FsPolicy, PolicyEngine
 from agent.runtime.state import RunStatus
-from agent.subagent import Mode, TaskBook
-from agent.subagent.registry import SubagentDef
 from agent.tools import AgentTool, Toolbelt, ensure_workdir, fs_tools
 from platform_actor import ActorContext
 from platform_contracts import LOCAL_USER

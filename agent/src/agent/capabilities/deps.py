@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from agent.context.pages import PageContextRegistry
+from agent.engine.registry import SubagentRegistry
+from agent.engine.spawn import Spawner
 from agent.memory import Memory
 from agent.skills.loader import SkillLoader
-from agent.subagent.registry import SubagentRegistry
-from agent.subagent.spawn import Spawner
 from agent.tools.interact.question_broker import AskUser
 
 

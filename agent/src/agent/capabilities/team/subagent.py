@@ -27,12 +27,12 @@ from platform_capability import Registry, capability, current_chat_session
 from platform_contracts import ActorKind, ActorRef, ErrorSuffix, ServiceError
 
 from agent.capabilities.deps import CapabilityDeps
+from agent.engine.registry import SubagentDef, SubagentRegistry
+from agent.engine.spawn import Spawner
+from agent.engine.surface import surface_misses
 from agent.personas import TEAM_KEYS, canonical_persona_key
 from agent.runtime.current import current_instance as _current_instance
 from agent.runtime.state import RunStatus
-from agent.subagent.registry import SubagentDef, SubagentRegistry
-from agent.subagent.spawn import Spawner
-from agent.subagent.surface import surface_misses
 
 log = logging.getLogger("agent.capabilities.subagent")
 

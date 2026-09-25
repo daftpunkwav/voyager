@@ -21,14 +21,14 @@ from collections.abc import Callable
 from platform_contracts import ErrorSuffix, RuntimeEvent, ServiceError
 
 from agent.context.budgets import ContextBudget
+from agent.engine.instance import Mode, ModeLimits, SubagentInstance, TaskBook
 from agent.llm import LLMClient
 from agent.runtime.events import RuntimeEvents
 from agent.runtime.scheduler import Scheduler
 from agent.runtime.state import CheckpointStore, ResumeSnapshot, RunState, RunStatus
-from agent.subagent.instance import Mode, ModeLimits, SubagentInstance, TaskBook
 from agent.tools.core.base import Toolbelt
 
-log = logging.getLogger("agent.subagent.spawn")
+log = logging.getLogger("agent.engine.spawn")
 
 # (task book, persona key, turn input) -> system prompt; the third argument
 # is the text driving the current turn ("" at spawn/resume time) and feeds

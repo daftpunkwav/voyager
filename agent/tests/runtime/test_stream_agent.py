@@ -10,13 +10,13 @@ import asyncio
 from typing import cast
 
 import pytest
+from agent.engine import Mode, ModeLimits, run_mode
+from agent.engine.instance import SubagentInstance, TaskBook
 from agent.llm import FakeLLM, LLMClient, LLMReply, StreamingLLClient, StreamReply, ToolCall
 from agent.policy import PolicyEngine
 from agent.runtime import Meter, metered_llm
 from agent.runtime.events import RuntimeEvents
 from agent.runtime.state import RunState, RunStatus
-from agent.subagent import Mode, ModeLimits, run_mode
-from agent.subagent.instance import SubagentInstance, TaskBook
 from agent.tools import AgentTool, Toolbelt
 from platform_eventbus import EventBus
 

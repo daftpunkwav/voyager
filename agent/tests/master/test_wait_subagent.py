@@ -8,8 +8,8 @@ from typing import cast
 
 import pytest
 from agent.capabilities.team.subagent import _wait_subagent as wait_subagent
+from agent.engine.spawn import Spawner
 from agent.runtime.state import RunStatus
-from agent.subagent.spawn import Spawner
 from platform_contracts import ServiceError
 
 

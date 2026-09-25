@@ -21,10 +21,7 @@ from typing import Any
 from agent.context.compressor import COMPRESS_BUDGET
 from agent.context.governor import ContextGovernor
 from agent.contracts import ToolRunner
-from agent.llm import LLMClient
-from agent.prompts import P, render
-from agent.runtime.deadline import Deadline
-from agent.subagent.modes.base import (
+from agent.engine.modes.base import (
     CountingToolbelt,
     DeltaCb,
     EventCb,
@@ -36,9 +33,12 @@ from agent.subagent.modes.base import (
     noop_event,
     sys_message,
 )
-from agent.subagent.modes.react import run_step
-from agent.subagent.modes.registry import register_mode
-from agent.subagent.modes.streaming import run_phase
+from agent.engine.modes.react import run_step
+from agent.engine.modes.registry import register_mode
+from agent.engine.modes.streaming import run_phase
+from agent.llm import LLMClient
+from agent.prompts import P, render
+from agent.runtime.deadline import Deadline
 
 #: Level-1 breadth (candidate approaches) and the expansion width
 TOT_BRANCHES = 3

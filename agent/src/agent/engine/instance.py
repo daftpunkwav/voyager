@@ -33,11 +33,11 @@ from agent.context.usage import (
     render_status_line,
     usage_status,
 )
+from agent.engine import turn
+from agent.engine.modes import Mode, ModeLimits
 from agent.llm import LLMClient
 from agent.runtime.events import RuntimeEvents
 from agent.runtime.state import ResumeSnapshot, RunState, RunStatus
-from agent.subagent import turn
-from agent.subagent.modes import Mode, ModeLimits
 from agent.tools.core.activate import (
     page_preactivate,  # noqa: F401  # compat re-export (old import path; locked by tests)
 )

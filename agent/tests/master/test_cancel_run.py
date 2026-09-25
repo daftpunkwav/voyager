@@ -5,10 +5,10 @@ to abort a run.
 import asyncio
 
 import pytest
+from agent.engine import Mode, TaskBook
 from agent.llm import FakeLLM
 from agent.main import build_agent
 from agent.runtime.state import RunStatus
-from agent.subagent import Mode, TaskBook
 from platform_actor import ActorContext
 from platform_capability import execute
 from platform_contracts import LOCAL_USER, ServiceError

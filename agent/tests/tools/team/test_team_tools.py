@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import pytest
 from agent.build import build_agent
+from agent.engine import Mode, TaskBook
 from agent.llm import FakeLLM, ToolCall
-from agent.subagent import Mode, TaskBook
 from agent.tools import Toolbelt
 from platform_contracts import ServiceError
 

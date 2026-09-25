@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from agent.subagent.modes.streaming import CANCEL_ANCHOR, complete_streaming, delta_timer
+from agent.engine.modes.streaming import CANCEL_ANCHOR, complete_streaming, delta_timer
 
 
 class _Event:

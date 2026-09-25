@@ -26,14 +26,7 @@ from typing import Any
 from agent.context.compressor import COMPRESS_BUDGET, compress
 from agent.context.governor import ContextGovernor
 from agent.contracts import ToolRunner
-from agent.llm import LLMClient, TextPart, ToolCall, content_to_text
-from agent.prompts import P, render
-from agent.runtime.deadline import Deadline
-from agent.runtime.events import RuntimeEvent
-from agent.runtime.loop_advisory import LoopAdvisory
-from agent.runtime.loop_detection import LoopDetector
-from agent.runtime.trace import start_span
-from agent.subagent.modes.base import (
+from agent.engine.modes.base import (
     STEP_ROUNDS,
     CountingToolbelt,
     DeltaCb,
@@ -49,8 +42,15 @@ from agent.subagent.modes.base import (
     round_text_detail,
     tool_detail,
 )
-from agent.subagent.modes.registry import register_mode
-from agent.subagent.modes.streaming import complete_streaming, delta_timer, run_phase
+from agent.engine.modes.registry import register_mode
+from agent.engine.modes.streaming import complete_streaming, delta_timer, run_phase
+from agent.llm import LLMClient, TextPart, ToolCall, content_to_text
+from agent.prompts import P, render
+from agent.runtime.deadline import Deadline
+from agent.runtime.events import RuntimeEvent
+from agent.runtime.loop_advisory import LoopAdvisory
+from agent.runtime.loop_detection import LoopDetector
+from agent.runtime.trace import start_span
 
 # ReAct continuation: text with zero tool_calls is not a valid ending
 # (small talk excepted). This does not scan for polite acknowledgments -

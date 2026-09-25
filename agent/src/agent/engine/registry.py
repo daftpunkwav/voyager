@@ -14,8 +14,8 @@ from pathlib import Path
 
 from platform_contracts import ErrorSuffix, ServiceError
 
+from agent.engine.modes import Mode
 from agent.policy.network import NET_ALL, NET_OFF, NET_WHITELIST
-from agent.subagent.modes import Mode
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _DOMAIN = "agent"

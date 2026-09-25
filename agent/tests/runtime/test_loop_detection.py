@@ -2,10 +2,10 @@
 detection, and the _react breaker wiring.
 """
 
+from agent.engine import Mode, ModeLimits, run_mode
 from agent.llm import FakeLLM, LLMReply, ToolCall
 from agent.policy import PolicyEngine
 from agent.runtime.loop_detection import LoopDetector
-from agent.subagent import Mode, ModeLimits, run_mode
 from agent.tools import AgentTool, Toolbelt
 
 

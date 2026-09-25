@@ -8,7 +8,7 @@ built-in defaults.
 from __future__ import annotations
 
 from agent.contracts import SettingsReader
-from agent.subagent.modes import ModeLimits
+from agent.engine.modes import ModeLimits
 
 #: Built-in defaults (the floor when settings are unconfigured)
 DEFAULT_LIMITS = ModeLimits()

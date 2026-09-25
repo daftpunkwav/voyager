@@ -12,11 +12,11 @@ from agent.context import (
     estimate_tokens,
 )
 from agent.context.compressor import _prune_span
+from agent.engine import TaskBook
 from agent.memory import Memory
 from agent.personas import LUCIEN
 from agent.prompts import P
 from agent.skills.loader import SkillLoader
-from agent.subagent import TaskBook
 
 
 class TestGlobalRules:

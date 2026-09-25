@@ -9,7 +9,7 @@ resolves the addressed session and persists afterwards. Same name, same
 engine, two drivers.
 
 The instance parameter is duck-typed on purpose: a runtime import of
-agent.subagent.instance here would create a cycle through agent.tools.__init__
+agent.engine.instance here would create a cycle through agent.tools.__init__
 (instance imports tools.core, whose package __init__ imports these tools).
 """
 
@@ -21,7 +21,7 @@ from agent.context.builder import MEMORY_CARDS_HEADER
 from agent.context.tokenizer import estimate_text
 
 if TYPE_CHECKING:
-    from agent.subagent.instance import SubagentInstance
+    from agent.engine.instance import SubagentInstance
 
 
 def _memory_cards_tokens(system: str) -> int:

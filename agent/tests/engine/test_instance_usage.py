@@ -4,11 +4,11 @@ step details anchor the tracker, and session ids ride the step/delta payloads.
 """
 
 from agent.context.budgets import ContextBudget
+from agent.engine.instance import SubagentInstance, TaskBook
 from agent.llm import FakeLLM, LLMReply, ToolCall, Usage
 from agent.policy import PolicyEngine
 from agent.runtime.events import RuntimeEvents
 from agent.runtime.state import RunState
-from agent.subagent.instance import SubagentInstance, TaskBook
 from agent.tools import AgentTool, Toolbelt
 from platform_contracts import DomainEvent
 from platform_eventbus import EventBus, EventLog

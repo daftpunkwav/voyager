@@ -27,9 +27,9 @@ from typing import Any
 from agent.context.compressor import COMPRESS_BUDGET
 from agent.context.governor import ContextGovernor
 from agent.contracts import ToolRunner
+from agent.engine.modes.registry import runner_for
 from agent.llm import LLMClient, ToolCall, Usage
 from agent.runtime.deadline import Deadline
-from agent.subagent.modes.registry import runner_for
 
 
 class Mode(str, Enum):

@@ -4,7 +4,7 @@ the shared vocabulary and the dispatcher."""
 
 from __future__ import annotations
 
-from agent.subagent.modes import (  # noqa: F401  # imported for runner registration
+from agent.engine.modes import (  # noqa: F401  # imported for runner registration
     cot,
     direct,
     got,
@@ -13,7 +13,7 @@ from agent.subagent.modes import (  # noqa: F401  # imported for runner registra
     reflexion,
     tot,
 )
-from agent.subagent.modes.base import (
+from agent.engine.modes.base import (
     DeltaCb,
     EventCb,
     Mode,

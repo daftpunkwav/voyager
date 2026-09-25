@@ -15,8 +15,8 @@ from platform_capability import Registry, capability
 from platform_contracts import DomainEvent, ErrorSuffix, ServiceError
 
 from agent.capabilities.deps import CapabilityDeps
+from agent.engine.spawn import Spawner
 from agent.runtime.state import ResumeSnapshot, RunStatus
-from agent.subagent.spawn import Spawner
 
 #: Task references for the background resume run (create_task results must be
 #: held, otherwise the GC may reclaim the Task before completion)

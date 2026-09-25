@@ -2,10 +2,10 @@
 user-defined registry.
 """
 
-from agent.subagent.instance import SubagentInstance, SubStatus, TaskBook
-from agent.subagent.modes import Mode, ModeLimits, run_mode
-from agent.subagent.registry import SubagentDef, SubagentRegistry
-from agent.subagent.spawn import Spawner
+from agent.engine.instance import SubagentInstance, SubStatus, TaskBook
+from agent.engine.modes import Mode, ModeLimits, run_mode
+from agent.engine.registry import SubagentDef, SubagentRegistry
+from agent.engine.spawn import Spawner
 
 __all__ = [
     "Mode",

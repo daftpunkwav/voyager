@@ -35,6 +35,7 @@ from platform_contracts import (
 )
 from platform_eventbus import EventBus
 
+from agent.engine import Mode, Spawner, SubagentInstance, TaskBook
 from agent.memory.session_store import (
     SessionSnapshot,
     SessionStore,
@@ -42,7 +43,6 @@ from agent.memory.session_store import (
 )
 from agent.prompts import P
 from agent.runtime.state import RunStatus
-from agent.subagent import Mode, Spawner, SubagentInstance, TaskBook
 
 log = logging.getLogger("agent.sessions")
 

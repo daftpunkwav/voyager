@@ -6,10 +6,10 @@ and a degraded task turn lands FAILED instead of a fake completion.
 import asyncio
 
 from agent.build import build_agent
+from agent.engine.instance import SubagentInstance, TaskBook
 from agent.llm import FakeLLM, LLMReply
 from agent.policy import PolicyEngine
 from agent.runtime.state import RunState, RunStatus
-from agent.subagent.instance import SubagentInstance, TaskBook
 from agent.tools import Toolbelt
 from platform_contracts import DomainEvent, RuntimeEvent
 

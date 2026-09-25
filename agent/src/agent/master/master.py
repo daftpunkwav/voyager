@@ -37,6 +37,8 @@ from agent.llm import LLMClient, content_to_text
 
 if TYPE_CHECKING:
     from agent.master.dispatch import DeferredDispatch
+from agent.engine import Spawner, SubagentInstance
+from agent.engine.limits import limits_from_settings
 from agent.master.arbiter import Arbiter, ArbiterMode
 from agent.master.digest import DigestStore
 from agent.master.sessions import CHAT_GOAL, SessionManager
@@ -49,8 +51,6 @@ from agent.runtime.deadline import Deadline
 from agent.runtime.evaluation import TaskEvaluator, record_evaluation
 from agent.runtime.events import AGENT_MAIN
 from agent.runtime.state import RunStatus
-from agent.subagent import Spawner, SubagentInstance
-from agent.subagent.limits import limits_from_settings
 
 log = logging.getLogger("agent.master")
 

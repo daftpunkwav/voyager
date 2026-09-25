@@ -24,10 +24,7 @@ from typing import Any
 from agent.context.compressor import COMPRESS_BUDGET
 from agent.context.governor import ContextGovernor
 from agent.contracts import ToolRunner
-from agent.llm import LLMClient
-from agent.prompts import P, render
-from agent.runtime.deadline import Deadline
-from agent.subagent.modes.base import (
+from agent.engine.modes.base import (
     MAX_PLAN_STEPS,
     CountingToolbelt,
     DeltaCb,
@@ -42,9 +39,12 @@ from agent.subagent.modes.base import (
     parse_steps,
     sys_message,
 )
-from agent.subagent.modes.react import run_step
-from agent.subagent.modes.registry import register_mode
-from agent.subagent.modes.streaming import run_phase
+from agent.engine.modes.react import run_step
+from agent.engine.modes.registry import register_mode
+from agent.engine.modes.streaming import run_phase
+from agent.llm import LLMClient
+from agent.prompts import P, render
+from agent.runtime.deadline import Deadline
 
 #: Replans permitted for one invocation (a revised plan after a failed step)
 PLAN_MAX_REPLANS = 1

@@ -17,7 +17,7 @@
 | policy/ | permission modes plus per-dimension gates (network / fs / app / shell) — see policy/README.md |
 | runtime/ | event loop, scheduler with durable queue, meter/quota, trace, deadlines, recovery — see runtime/README.md |
 | skills/ | skill loader (resident index, full text on demand), organizer, and the `builtin/` packs — see skills/README.md |
-| subagent/ | spawn, per-run instances, user-built registry, execution modes — see subagent/README.md |
+| engine/ | spawn, per-run instances, user-built registry, execution modes — see engine/README.md |
 | tools/ | the agent's own tools (workspace / net / interact / self-management); group details in tools/README.md |
 
 Each subpackage carries its own README; this file does not repeat their contents.

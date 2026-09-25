@@ -6,12 +6,12 @@ the same editor engine the human path uses.
 import json
 
 from agent.context.budgets import ContextBudget
+from agent.engine.instance import SubagentInstance, TaskBook
 from agent.llm import FakeLLM, LLMReply
 from agent.policy import PolicyEngine
 from agent.runtime.current import current_instance
 from agent.runtime.events import RuntimeEvents
 from agent.runtime.state import RunState
-from agent.subagent.instance import SubagentInstance, TaskBook
 from agent.tools import AgentTool, Toolbelt, context_tools
 from platform_eventbus import EventBus, EventLog
 

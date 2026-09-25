@@ -3,10 +3,10 @@ on_raw wiring (one full request transcript + response per round)."""
 
 from typing import Any, cast
 
+from agent.engine import Mode, ModeLimits, run_mode
 from agent.llm import FakeLLM, LLMReply, ToolSpec
 from agent.policy import PolicyEngine
 from agent.runtime.trajectory import TrajectoryStore
-from agent.subagent import Mode, ModeLimits, run_mode
 from agent.tools import AgentTool, Toolbelt
 from platform_eventbus import EventBus, EventLog
 
@@ -230,9 +230,9 @@ class TestCrossTurnNumbering:
         """Conversational run_ids persist across turns while react renumbers
         rounds from 1 per turn; the instance must offset the second turn past
         the first, or INSERT OR REPLACE silently drops the earlier records."""
+        from agent.engine.instance import SubagentInstance, TaskBook
         from agent.runtime.events import RuntimeEvents
         from agent.runtime.state import RunState
-        from agent.subagent.instance import SubagentInstance, TaskBook
 
         llm = FakeLLM([LLMReply(text="answer one"), LLMReply(text="answer two")])
         captured: list[int] = []
@@ -257,9 +257,9 @@ class TestCrossTurnNumbering:
     async def test_turn_stamps_the_capability_session_context(self) -> None:
         """Domain capabilities called mid-turn read the session from the
         capability invocation context; it must reset after the turn."""
+        from agent.engine.instance import SubagentInstance, TaskBook
         from agent.runtime.events import RuntimeEvents
         from agent.runtime.state import RunState
-        from agent.subagent.instance import SubagentInstance, TaskBook
         from platform_capability import current_chat_session
 
         seen: list[str] = []

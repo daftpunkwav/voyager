@@ -18,15 +18,15 @@ from platform_capability import current_chat_session
 from platform_contracts import DomainEvent, RuntimeEvent
 
 from agent.context.editor import SUMMARY_MARK
+from agent.engine.modes import Mode, ModeLimits, run_mode
 from agent.personas import PERSONAS, Persona, resolve_persona
 from agent.runtime.current import current_instance
 from agent.runtime.state import RunStatus
 from agent.runtime.trace import start_span
-from agent.subagent.modes import Mode, ModeLimits, run_mode
 from agent.tools.core.activate import graded_toolbelt, infer_domains, page_preactivate
 
 if TYPE_CHECKING:
-    from agent.subagent.instance import SubagentInstance
+    from agent.engine.instance import SubagentInstance
 
 log = logging.getLogger("agent.runtime")
 

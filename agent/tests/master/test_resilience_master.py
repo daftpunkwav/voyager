@@ -3,13 +3,13 @@ flag, and terminal-state guarantees.
 """
 
 import pytest
+from agent.engine import Mode
+from agent.engine.instance import SubagentInstance, TaskBook
 from agent.llm import FakeLLM, LLMReply
 from agent.master.arbiter import Arbiter, ArbiterMode
 from agent.policy import PolicyEngine
 from agent.runtime import Meter, is_quota_exceeded_reply, metered_llm
 from agent.runtime.state import RunState, RunStatus
-from agent.subagent import Mode
-from agent.subagent.instance import SubagentInstance, TaskBook
 from agent.tools import Toolbelt
 
 

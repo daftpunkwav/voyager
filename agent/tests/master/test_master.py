@@ -4,11 +4,11 @@ arbitration, direct-chat toggle, and dispatch notifications.
 
 import asyncio
 
+from agent.engine import Mode
+from agent.engine.limits import limits_from_settings
 from agent.llm import FakeLLM, LLMReply
 from agent.main import build_agent
 from agent.runtime.state import RunStatus
-from agent.subagent import Mode
-from agent.subagent.limits import limits_from_settings
 from platform_contracts import LOCAL_USER
 
 
@@ -226,10 +226,10 @@ class TestHistoryBound:
     async def test_history_capped_after_many_turns(self, tmp_path) -> None:
         """History hard cap: after many turns len(history) <= HISTORY_MAX, drops are pair-wise, head is still a user row."""
         from agent.context.budgets import HISTORY_MAX
+        from agent.engine.instance import SubagentInstance, TaskBook
         from agent.policy import PolicyEngine
         from agent.runtime.events import RuntimeEvents
         from agent.runtime.state import RunState
-        from agent.subagent.instance import SubagentInstance, TaskBook
         from agent.tools import AgentTool, Toolbelt
         from platform_eventbus import EventBus, EventLog
 

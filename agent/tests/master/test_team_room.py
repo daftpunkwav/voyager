@@ -12,11 +12,11 @@ import pytest
 from agent.build import build_agent
 from agent.capabilities.deps import CapabilityDeps
 from agent.capabilities.team.subagent import subagent_action
+from agent.engine.turn import _transcript_view
 from agent.llm import FakeLLM, LLMReply
 from agent.master.master import _parse_mention
 from agent.personas import TEAM_KEYS, resolve_persona
 from agent.runtime.state import RunStatus
-from agent.subagent.turn import _transcript_view
 from platform_capability import current_chat_session
 from platform_contracts import DomainEvent, ServiceError
 
@@ -108,11 +108,11 @@ class TestSummaryWriteBack:
 
     @staticmethod
     def _inst(llm, history):
+        from agent.engine import TaskBook
+        from agent.engine.instance import SubagentInstance
         from agent.policy import PolicyEngine
         from agent.runtime.events import RuntimeEvents
         from agent.runtime.state import RunState
-        from agent.subagent import TaskBook
-        from agent.subagent.instance import SubagentInstance
         from agent.tools import Toolbelt
 
         return SubagentInstance(

@@ -3,11 +3,11 @@ arguments / outcome / latency, llm steps carry round / usage / latency, and
 the transcript text stays identical to the plain-call path.
 """
 
+from agent.engine import Mode, ModeLimits
+from agent.engine.modes import run_mode
 from agent.llm import FakeLLM, LLMReply, ToolCall, Usage
 from agent.policy import FsPolicy, PolicyEngine
 from agent.runtime.state import RunState
-from agent.subagent import Mode, ModeLimits
-from agent.subagent.modes import run_mode
 from agent.tools import Toolbelt, ensure_workdir, fs_tools, search_tools
 
 

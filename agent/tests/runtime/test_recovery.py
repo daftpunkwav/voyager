@@ -20,6 +20,8 @@ from pathlib import Path
 
 import httpx
 import pytest
+from agent.engine.instance import TaskBook
+from agent.engine.spawn import TERMINAL_INSTANCE_CAP
 from agent.llm import FakeLLM, ToolCall
 from agent.main import build_agent
 from agent.memory import EpisodicMemory
@@ -33,8 +35,6 @@ from agent.runtime.state import (
     reclaim_alive,
 )
 from agent.settings import DEFS as AGENT_SETTING_DEFS
-from agent.subagent.instance import TaskBook
-from agent.subagent.spawn import TERMINAL_INSTANCE_CAP
 from agent.tools import AgentTool, Toolbelt, ensure_workdir
 from platform_contracts import LOCAL_USER, Event
 from platform_eventbus import CursorStore, EventBus, EventLog

@@ -99,7 +99,7 @@ class TestDefaultWiring:
             app.memory.close()
 
     async def test_spawned_system_contains_skill_index(self, tmp_path) -> None:
-        from agent.subagent import Mode, TaskBook
+        from agent.engine import Mode, TaskBook
 
         app = self._build(tmp_path)
         try:
