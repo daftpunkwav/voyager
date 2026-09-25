@@ -9,7 +9,7 @@ awaited cleanly without leaking a pending task.
 import asyncio
 import time
 
-from agent.clients.pool import McpClientPool
+from agent.mcp.pool import McpClientPool
 from fastapi.testclient import TestClient
 from host.assemble import build
 
