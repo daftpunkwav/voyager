@@ -13,8 +13,8 @@
 This file keeps the user conversation turn, member-turn routing (@-mention,
 inbox entries carrying a speaker), the task-board delivery/claim relays
 (announce_delivery / notify_task_claim), arbitration, and public methods;
-dispatch implementation lives in dispatch.py, session identity in sessions.py,
-the board state machine in task_board.py.
+dispatch implementation lives in dispatch.py, session identity in the sessions
+package (agent.sessions), the board state machine in task_board.py.
 """
 
 from __future__ import annotations

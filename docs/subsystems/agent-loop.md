@@ -6,7 +6,7 @@ The agent engine is event-driven: it owns no request handler. A bus event starts
 
 ## Assembly
 
-`build.py` — `build_agent(*, data_dir="data/runtime", workspace_dir=None, llm=None, ...) -> AgentApp` is the single composition root. It constructs the event log and bus, settings, memory, policy engine, meter, toolbelt, MCP pool, plugin manager, scheduler, queue, checkpoints, trajectory, session index, master, goal manager/driver, and the event loop, then binds them together. The assembled parts live on `AgentApp` (`app.py`): `bus`, `log`, `settings`, `memory`, `master`, `loop`, `skills`, `hooks`, `asker`, `spawner`, `registry`, `mcp`, `meter`, `plugins`, `session_store`, `trajectory`, `queue_store`, `scheduler`, `checkpoints`, `write_journal`, `session_index`, `dispatcher`. `app.close()` releases them; `drain()` waits for background turns.
+`build.py` — `build_agent(*, data_dir="data/runtime", workspace_dir=None, llm=None, ...) -> AgentApp` is the single composition root. It constructs the event log and bus, settings, memory, policy engine, meter, toolbelt, MCP pool, plugin manager, scheduler, queue, checkpoints, trajectory, session index, master, goal manager/driver, and the event loop, then binds them together. The assembled parts live on `AgentApp` (`app.py`): `bus`, `log`, `settings`, `memory`, `master`, `loop`, `skills`, `hooks`, `pages`, `asker`, `spawner`, `registry`, `mcp`, `meter`, `plugins`, `user_hooks`, `session_store`, `trajectory`, `queue_store`, `scheduler`, `checkpoints`, `write_journal`, `session_index`, `dispatcher`. `app.close()` releases them; `drain()` waits for background turns.
 
 When no LLM is injected (standalone run without configuration), `build_agent` degrades to `FakeLLM` with a warning.
 

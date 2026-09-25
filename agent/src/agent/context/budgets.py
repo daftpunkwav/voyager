@@ -1,6 +1,6 @@
 """Context budget assembly: settings -> ContextBudget.
 
-Same pattern as subagent.limits: built-in constants are the floor, the
+Same pattern as engine.limits: built-in constants are the floor, the
 settings keys hot-read on every use, and a dirty/unset value falls back to
 the built-in default. The budget travels with the instance so history
 bounding, transcript compaction, and resume snapshots all share one value.

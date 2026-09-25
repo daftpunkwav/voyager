@@ -6,7 +6,7 @@ agent 引擎是事件驱动的:它不拥有请求处理器。总线事件启动�
 
 ## 组装
 
-`build.py` — `build_agent(*, data_dir="data/runtime", workspace_dir=None, llm=None, ...) -> AgentApp` 是唯一组合根。它构造事件日志与总线、设置、记忆、策略引擎、计量器、工具带、MCP 池、插件管理器、调度器、队列、检查点、轨迹、会话索引、master、goal 管理器/驱动器与事件循环,然后互相绑定。组装件挂在 `AgentApp` 上(`app.py`):`bus`、`log`、`settings`、`memory`、`master`、`loop`、`skills`、`hooks`、`asker`、`spawner`、`registry`、`mcp`、`meter`、`plugins`、`session_store`、`trajectory`、`queue_store`、`scheduler`、`checkpoints`、`write_journal`、`session_index`、`dispatcher`。`app.close()` 释放它们;`drain()` 等待后台 turn。
+`build.py` — `build_agent(*, data_dir="data/runtime", workspace_dir=None, llm=None, ...) -> AgentApp` 是唯一组合根。它构造事件日志与总线、设置、记忆、策略引擎、计量器、工具带、MCP 池、插件管理器、调度器、队列、检查点、轨迹、会话索引、master、goal 管理器/驱动器与事件循环,然后互相绑定。组装件挂在 `AgentApp` 上(`app.py`):`bus`、`log`、`settings`、`memory`、`master`、`loop`、`skills`、`hooks`、`pages`、`asker`、`spawner`、`registry`、`mcp`、`meter`、`plugins`、`user_hooks`、`session_store`、`trajectory`、`queue_store`、`scheduler`、`checkpoints`、`write_journal`、`session_index`、`dispatcher`。`app.close()` 释放它们;`drain()` 等待后台 turn。
 
 未注入 LLM 时(未配置的独立运行),`build_agent` 降级为 `FakeLLM` 并告警。
 

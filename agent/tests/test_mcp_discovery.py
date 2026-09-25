@@ -1,4 +1,4 @@
-"""Tests for clients: discovering packages/*/service.json, external
+"""Tests for the mcp package: discovering packages/*/service.json, external
 MCP config validation, and the empty pool.
 """
 

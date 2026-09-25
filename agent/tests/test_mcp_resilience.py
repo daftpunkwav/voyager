@@ -1,5 +1,5 @@
-"""Client resilience tests: stdio request serialization, preview connection
-races, and shutdown logging.
+"""MCP client resilience tests: stdio request serialization, preview
+connection races, and shutdown logging.
 """
 
 import asyncio

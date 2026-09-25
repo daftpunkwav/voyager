@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   git hash-object docs/subsystems/eventbus.md docs/subsystems/eventbus.zh.md
-docs/subsystems/eventbus.md: 9e254a0df416b2a4d39d117abdc3b5b16136ea5e
-docs/subsystems/eventbus.zh.md: f28f60e3c19358cb7f7fa79bb43604291c1a16a1
+docs/subsystems/eventbus.md: f946b967630feacda8382b8b656a4789325f8bf1
+docs/subsystems/eventbus.zh.md: 68ab352b4c551ba40f8c394a65dbd285643d0f46

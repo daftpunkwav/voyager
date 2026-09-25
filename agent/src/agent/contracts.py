@@ -145,8 +145,8 @@ class SettingsReader(Protocol):
     """Settings-read protocol: master/spawner depend only on the minimal
     "read a setting" surface (decoupling).
 
-    Consolidated from master/settings_store_protocol.py: the protocol is a
-    cross-package shared surface, so it belongs in this layer.
+    The protocol is a cross-package shared surface, so it belongs in this
+    layer.
     """
 
     def get(self, key: str) -> Any: ...
@@ -253,7 +253,7 @@ class DispatchMaster(Protocol):
         """Stamp the task board, publish the delivery card, and wake the
         host to relay the report (board-backed runs only). The instance is
         typed as the minimal DeliveryRun surface instead of Any: structural
-        matching keeps the protocol strict without importing the subagent
+        matching keeps the protocol strict without importing the engine
         package here."""
 
     def finish_task(self, name: str, *, ok: bool) -> None: ...

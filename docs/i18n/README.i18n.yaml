@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   git hash-object docs\i18n\README.md docs\i18n\README.zh.md
 docs/i18n/README.md: c8e9617f2100325b8de6842ffe110f0bca5a6abb
-docs/i18n/README.zh.md: bfca7a8cd219ddcb2996550e6806bf7717a63f36
+docs/i18n/README.zh.md: d7e53c26723c6453a6562de4f380d164d2649441
