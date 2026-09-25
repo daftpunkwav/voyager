@@ -24,15 +24,14 @@ from agent.context.budgets import (
 )
 from agent.context.pages import PageContextRegistry
 from agent.context.scoped_rules import ScopedRules
-from agent.contracts import SkillIndexProvider, TaskSpec
-from agent.memory import Memory
+from agent.contracts import MemoryRecallSource, SkillIndexProvider, TaskSpec
 from agent.personas import Persona
 
 MEMORY_CARDS_HEADER = "【最近记忆】"
 _CARD_FIELD_CHARS = 60
 
 
-def render_memory_cards(memory: Memory, *, count: int, max_chars: int) -> str:
+def render_memory_cards(memory: MemoryRecallSource, *, count: int, max_chars: int) -> str:
     """Compact lines for the most recent episodic entries, newest first,
     trimmed oldest-first to the character cap; "" when nothing fits."""
     if count <= 0 or max_chars <= 0:
@@ -68,7 +67,7 @@ class ContextBuilder:
         self,
         *,
         rules: list[str] | None = None,
-        memory: Memory | None = None,
+        memory: MemoryRecallSource | None = None,
         digests: Any = None,  # DigestStore (duck-typed as render() to avoid a circular import)
         pages: PageContextRegistry | None = None,
         skills: SkillIndexProvider | None = None,

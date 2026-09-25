@@ -4,13 +4,14 @@ domain's inner circle (tools/context/skills/engine/orchestrator).
 This module depends only on the standard library and agent.llm (pure types,
 pure data, no runtime behavior). Packages in the domain depend only on the
 Protocols/aliases here instead of importing each other, keeping the static
-dependency graph acyclic - the four package-level cycles previously held
-down by TYPE_CHECKING duck typing are formally eliminated by this layer.
+dependency graph acyclic - every package-level cycle (including the
+runtime→context→memory→runtime triangle) is formally eliminated by this
+layer instead of being held down by TYPE_CHECKING duck typing.
 
 Mirrors platform_contracts (platform-level contracts, zero dependencies)
 with domain-level contracts; Protocol structural matching means implementors
-(skills.loader / subagent.instance / context.loader / tools.core.base) need no
-import of this module and no explicit inheritance.
+(skills.loader / engine.instance / memory / context.loader / tools.core.base)
+need no import of this module and no explicit inheritance.
 """
 
 from __future__ import annotations
@@ -46,6 +47,52 @@ class SkillIndexProvider(Protocol):
     skills.loader.SkillLoader)."""
 
     def index(self) -> list[dict[str, str]]: ...
+
+
+class EpisodicRecaller(Protocol):
+    """Recent-entries surface of the episodic store (implemented by
+    memory.episodic.EpisodicMemory)."""
+
+    def recent(self, limit: int) -> list: ...
+
+
+class ProfileRenderer(Protocol):
+    """User-profile render surface (implemented by memory.profile)."""
+
+    def render(self, max_chars: int) -> str: ...
+
+
+class MemoryRecallSource(Protocol):
+    """Memory recall surface for context assembly (implemented by
+    memory.Memory, matched structurally): keeps the context layer from
+    importing the memory package, so the builder takes the recall face and
+    the composition root injects the full store behind it."""
+
+    @property
+    def episodic(self) -> EpisodicRecaller: ...
+
+    @property
+    def profile(self) -> ProfileRenderer: ...
+
+
+class RunScopeState(Protocol):
+    """Run-identity fields the episode recorder reads."""
+
+    @property
+    def run_id(self) -> str: ...
+
+
+class TurnScope(Protocol):
+    """The instance whose turn is executing (implemented by
+    engine.instance.SubagentInstance, matched structurally): lets the memory
+    layer attribute episodes to a run without importing the engine package
+    or reading the runtime ContextVar directly."""
+
+    @property
+    def state(self) -> RunScopeState: ...
+
+    @property
+    def task(self) -> TaskSpec: ...
 
 
 class TaskSpec(Protocol):

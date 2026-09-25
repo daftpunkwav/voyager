@@ -35,7 +35,7 @@ class TestRecorder:
 
     def test_truncates_and_never_raises(self, tmp_path) -> None:
         episodic = EpisodicMemory(tmp_path / "e.db")
-        rec = EpisodeRecorder(episodic)
+        rec = EpisodeRecorder(episodic, lambda: None)
         rec.record_tool("write", {"path": "p" * 500, "content": "c"}, True, "x" * 5000)
         row = episodic.recent(limit=1)[0]
         assert len(row["detail"]["action"]["target"]) <= 200

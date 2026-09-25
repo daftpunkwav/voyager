@@ -64,6 +64,7 @@ from agent.runtime import (
     metered_llm,
     output_capped_llm,
 )
+from agent.runtime.current import current_instance
 from agent.runtime.jobs_view import JobsView
 from agent.runtime.queue_store import QueueStore
 from agent.runtime.session_index import SessionIndex
@@ -431,7 +432,7 @@ def build_agent(
         result_budget=_spill_result,
         # Episodic trail: every executed tool call lands in memory/episodic.db
         # (trigger / action / result summary), feeding recall and the organizer
-        recorder=EpisodeRecorder(memory.episodic).record_tool,
+        recorder=EpisodeRecorder(memory.episodic, current_instance.get).record_tool,
         # Tool permission modes (one mode + deny/allow lists, hot-read): the
         # agent-actor gate in front of every native tool call
         permissions=ToolPermissions(settings),

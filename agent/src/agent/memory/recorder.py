@@ -3,7 +3,9 @@ result summary), resolved from the executing instance.
 
 Called by the tool pipeline after post_tool; the pipeline stays a caller —
 what to record, how much to keep, and where the run/goal come from live
-here. Truncation caps every stored field so a huge tool result never bloats
+here. The executing instance arrives as an injected TurnScope provider
+(wired by the composition root), so the memory layer never imports the
+engine or runtime packages. Truncation caps every stored field so a huge tool result never bloats
 episodic.db; retention is enforced by Memory.purge (agent.memory.retention_days).
 The organizer reads these rows by `kind="tool"` and groups them per run_id,
 so `summary` is exactly the tool name.
@@ -13,10 +15,11 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from typing import Any
 
+from agent.contracts import TurnScope
 from agent.memory.episodic import EpisodicMemory
-from agent.runtime.current import current_instance
 
 log = logging.getLogger("agent.memory.recorder")
 
@@ -38,13 +41,14 @@ def _target(arguments: dict[str, Any]) -> str:
 
 
 class EpisodeRecorder:
-    def __init__(self, episodic: EpisodicMemory) -> None:
+    def __init__(self, episodic: EpisodicMemory, current: Callable[[], TurnScope | None]) -> None:
         self._episodic = episodic
+        self._current = current
 
     def record_tool(self, name: str, arguments: dict[str, Any], ok: bool, result: str) -> None:
         """Persist one tool-call episode; never raises into the pipeline (a
         memory write must not fail the tool call — the miss is logged)."""
-        inst = current_instance.get()
+        inst = self._current()
         run_id = str(getattr(getattr(inst, "state", None), "run_id", "") or "")
         goal = str(getattr(getattr(inst, "task", None), "goal", "") or "")
         detail = {
