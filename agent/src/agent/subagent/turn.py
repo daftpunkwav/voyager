@@ -226,6 +226,7 @@ async def _run_turn(
                 compress_budget=inst.budget.compress_budget,
                 governor=inst.governor(),
                 deadline=inst.deadline,
+                conversational=inst.task.conversational,
             )
         except asyncio.CancelledError:
             # Hard cancellation (stop/shutdown): record the terminal state and

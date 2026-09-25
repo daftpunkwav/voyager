@@ -44,7 +44,7 @@ import { ServiceError } from '@/bridge/client';
 import { forkSession, rateTurn, setActiveSession } from '@/api/agent';
 import { getNote } from '@/api/notes';
 import { extractErrorMessage } from '@/utils/errors';
-import { personaDisplayName } from '@/constants/personas';
+import { personaDisplayName, canonicalPersonaId } from '@/constants/personas';
 import { AgentCharacterHead } from '@/components/agent/avatars/AgentCharacterHead';
 import { routes } from '@/utils/routes';
 import { ChatMarkdown } from '@/widgets/chat/ChatMarkdown';
@@ -376,10 +376,12 @@ function Bubble({
   // their clean pill shape; rating expands in place from the bar. The wrapper
   // carries the row alignment the bubble used to own.
   const speakerName = msg.role === 'agent' ? personaDisplayName(msg.speaker ?? 'orchestrator') : '';
+  const speakerDuty =
+    msg.role === 'agent' ? canonicalPersonaId(msg.speaker ?? 'orchestrator') : '';
   return (
     <div className={`chat-entry${msg.role === 'user' ? ' chat-entry--user' : ''}`}>
       {msg.role === 'agent' && showSpeaker ? (
-        <div className="chat-speaker">
+        <div className={`chat-speaker chat-speaker--${speakerDuty}`}>
           <span className="chat-speaker__avatar" aria-hidden>
             <AgentCharacterHead
               agentId={msg.speaker ?? 'orchestrator'}

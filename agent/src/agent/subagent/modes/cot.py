@@ -55,6 +55,16 @@ _SYNTHESIS_PROMPT = (
     "以上按步骤完成了任务。综合所有步骤的结果给出最终答案:直接回答任务本身,标注未完成的步骤(如有)。"
 )
 
+# Conversational turns (group chat) face the user directly: the task-mode
+# synthesis narration ("最终答案如下"/step status recap) would leak workflow
+# scaffolding into the room, so the closing instruction asks for a natural
+# reply instead.
+_CHAT_SYNTHESIS_PROMPT = (
+    "以上步骤已在后台完成。综合步骤结果,直接向用户发出一条自然的聊天回复:"
+    "给出内容本身,不要汇报步骤完成情况,不要出现「最终答案」「步骤」这类字眼;"
+    "如有没做完的部分,用一句话自然带过。"
+)
+
 
 async def run_cot(
     llm: LLMClient,
@@ -69,6 +79,7 @@ async def run_cot(
     compress_budget: int = COMPRESS_BUDGET,
     governor: ContextGovernor | None = None,
     deadline: Deadline | None = None,
+    conversational: bool = False,
 ) -> str:
     budget = ModeBudget(limits)
     belt = CountingToolbelt(toolbelt) if toolbelt is not None else None
@@ -156,7 +167,9 @@ async def run_cot(
                 "content": "因预算限制未执行的步骤:" + "; ".join(skipped),
             }
         )
-    messages.append({"role": "user", "content": _SYNTHESIS_PROMPT})
+    messages.append(
+        {"role": "user", "content": _CHAT_SYNTHESIS_PROMPT if conversational else _SYNTHESIS_PROMPT}
+    )
     final = await run_phase(
         llm=llm,
         messages=messages,

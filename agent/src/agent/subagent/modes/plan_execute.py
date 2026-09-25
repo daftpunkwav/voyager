@@ -60,6 +60,13 @@ _REPORT_PROMPT = (
     "任务执行结束。综合以上过程给出最终答案:直接回答任务本身,"
     "并简要标注各步骤的完成情况(如有未完成项)。"
 )
+# Conversational turns (group chat) face the user directly: same rationale as
+# the COT chat synthesis — no workflow narration in the room.
+_CHAT_REPORT_PROMPT = (
+    "以上步骤已在后台完成。综合执行过程,直接向用户发出一条自然的聊天回复:"
+    "给出内容本身,不要汇报步骤完成情况,不要出现「最终答案」「步骤」这类字眼;"
+    "如有没做完的部分,用一句话自然带过。"
+)
 
 
 async def run_plan_execute(
@@ -75,6 +82,7 @@ async def run_plan_execute(
     compress_budget: int = COMPRESS_BUDGET,
     governor: ContextGovernor | None = None,
     deadline: Deadline | None = None,
+    conversational: bool = False,
 ) -> str:
     budget = ModeBudget(limits)
     belt = CountingToolbelt(toolbelt) if toolbelt is not None else None
@@ -177,7 +185,12 @@ async def run_plan_execute(
         # Skipped steps never reached the transcript: the report must be
         # told explicitly, or it would present them as silently done
         messages.append({"role": "user", "content": "因预算限制未执行的步骤:" + "; ".join(skipped)})
-    messages.append({"role": "user", "content": _REPORT_PROMPT})
+    messages.append(
+        {
+            "role": "user",
+            "content": _CHAT_REPORT_PROMPT if conversational else _REPORT_PROMPT,
+        }
+    )
     final = await run_phase(
         llm=llm,
         messages=messages,

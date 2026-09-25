@@ -288,6 +288,7 @@ async def run_mode(
     compress_budget: int = COMPRESS_BUDGET,
     governor: ContextGovernor | None = None,
     deadline: Deadline | None = None,
+    conversational: bool = False,
 ) -> str:
     """Uniform entry: each mode module registers its runner at import time
     (modes/registry.py), so this dispatcher never imports them and the
@@ -314,6 +315,11 @@ async def run_mode(
         # The raw round log is a REACT-only surface: other modes' intermediate
         # products never face the user, so recording them buys nothing.
         kwargs["on_raw"] = on_raw
+    if mode in (Mode.COT, Mode.PLAN_EXECUTE):
+        # Only the modes with a closing synthesis phase shape their final
+        # answer by it (chat reply vs task report); other runners have no
+        # finalizer to tune.
+        kwargs["conversational"] = conversational
     return await runner(**kwargs)
 
 
