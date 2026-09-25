@@ -25,7 +25,7 @@ GUARDED_MODULES = [
     "orchestrator/synthesize.py",
     "orchestrator/proactive.py",
     "orchestrator/goal_driver.py",
-    "orchestrator/sessions.py",
+    "sessions/manager.py",
     "orchestrator/master.py",
     "orchestrator/evaluation.py",
     "runtime/loop_advisory.py",
