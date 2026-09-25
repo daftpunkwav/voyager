@@ -22,7 +22,7 @@ from typing import Any
 
 from platform_contracts import DomainEvent
 
-from agent.master.outreach_budget import OutreachBudget
+from agent.orchestrator.outreach_budget import OutreachBudget
 from agent.prompts import P, render
 
 log = logging.getLogger("agent.outreach")
@@ -65,7 +65,7 @@ class ProactiveEngine:
         if not decision.allow:
             log.info("outreach suppressed: %s", decision.reason)
             return
-        text = await self._compose(P.master.proactive_greeting)
+        text = await self._compose(P.orchestrator.proactive_greeting)
         if not text:
             return
         self._budget.record(session=session)
@@ -85,7 +85,7 @@ class ProactiveEngine:
         if not decision.allow:
             log.info("follow-up suppressed: %s", decision.reason)
             return
-        text = await self._compose(render(P.master.proactive_followup, topic=topic))
+        text = await self._compose(render(P.orchestrator.proactive_followup, topic=topic))
         if not text:
             return
         self._budget.record(session=session)

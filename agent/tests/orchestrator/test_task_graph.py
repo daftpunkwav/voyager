@@ -3,7 +3,7 @@ dependency failure."""
 
 from __future__ import annotations
 
-from agent.master.task_graph import TaskGraph
+from agent.orchestrator.task_graph import TaskGraph
 
 
 class TestTaskGraph:

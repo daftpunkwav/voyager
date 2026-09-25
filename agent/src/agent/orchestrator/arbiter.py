@@ -50,7 +50,9 @@ class Arbiter:
                 [
                     {
                         "role": "system",
-                        "content": render(P.master.arbiter_judge, goal=current_goal, text=new_text),
+                        "content": render(
+                            P.orchestrator.arbiter_judge, goal=current_goal, text=new_text
+                        ),
                     }
                 ]
             )

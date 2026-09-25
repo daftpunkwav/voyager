@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
-from agent.master.blackboard import Blackboard
+from agent.orchestrator.blackboard import Blackboard
 
 
 class TestBlackboard:

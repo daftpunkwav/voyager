@@ -9,8 +9,8 @@ import asyncio
 import pytest
 from agent.llm import FakeLLM
 from agent.main import build_agent
-from agent.master.master import _Queued
 from agent.memory.session_store import SessionSnapshot
+from agent.orchestrator.master import _Queued
 from agent.runtime.state import RunStatus
 from platform_contracts import DomainEvent, ServiceError
 

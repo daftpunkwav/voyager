@@ -16,7 +16,7 @@ import logging
 from agent.llm import LLMClient
 from agent.prompts import P, render
 
-log = logging.getLogger("agent.master.synthesize")
+log = logging.getLogger("agent.orchestrator.synthesize")
 
 #: Results at or below this length go out verbatim; longer ones get condensed
 SYNTHESIZE_THRESHOLD = 400
@@ -34,7 +34,12 @@ async def synthesize_result(llm: LLMClient, name: str, result: str) -> str:
         return result
     try:
         reply = await llm.complete(
-            [{"role": "user", "content": render(P.master.synthesize_result, name=name) + result}]
+            [
+                {
+                    "role": "user",
+                    "content": render(P.orchestrator.synthesize_result, name=name) + result,
+                }
+            ]
         )
         text = (reply.text or "").strip()
         if text and not reply.degraded:

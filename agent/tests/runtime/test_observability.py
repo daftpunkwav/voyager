@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 
 from agent.llm import FakeLLM, LLMReply, Usage
 from agent.main import build_agent
-from agent.master.arbiter import ArbiterMode
+from agent.orchestrator.arbiter import ArbiterMode
 from agent.runtime import (
     Meter,
     MeterRecord,

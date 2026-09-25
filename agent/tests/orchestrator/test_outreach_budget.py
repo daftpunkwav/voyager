@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from agent.master.outreach_budget import OutreachBudget
+from agent.orchestrator.outreach_budget import OutreachBudget
 
 
 class _S:

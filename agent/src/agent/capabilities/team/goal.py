@@ -19,7 +19,7 @@ from platform_capability import Registry, capability
 from platform_contracts import ActorKind, ActorRef, ErrorSuffix, ServiceError
 
 from agent.capabilities.deps import CapabilityDeps
-from agent.master.goal import BLOCKED, DONE
+from agent.orchestrator.goal import BLOCKED, DONE
 from agent.runtime.current import current_session
 
 _SUB_STATUSES = ("pending", "doing", "done", "blocked")

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from agent.master.job_notify import JobNotifier
+from agent.orchestrator.job_notify import JobNotifier
 from agent.runtime.wake_budget import WakeBudget
 
 

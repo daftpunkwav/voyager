@@ -19,7 +19,7 @@ from typing import Any
 
 from platform_contracts import ErrorSuffix, ServiceError
 
-SessionManagerLike = Any  # agent.master.sessions.SessionManager (duck-typed)
+SessionManagerLike = Any  # agent.orchestrator.sessions.SessionManager (duck-typed)
 SessionIndexLike = Any  # agent.runtime.session_index.SessionIndex (duck-typed)
 EventLogLike = Any  # platform_eventbus.EventLog (duck-typed)
 

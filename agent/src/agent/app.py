@@ -13,9 +13,9 @@ from platform_settings import SettingsStore
 from agent.context import PageContextRegistry
 from agent.engine import Spawner
 from agent.hooks import HookRegistry, UserHookReloader
-from agent.master import Master
 from agent.mcp import McpClientPool
 from agent.memory import Memory
+from agent.orchestrator import Master
 from agent.plugins import PluginManager
 from agent.runtime import EventLoop, Meter
 from agent.skills import SkillLoader

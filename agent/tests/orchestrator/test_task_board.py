@@ -8,7 +8,7 @@ import pytest
 from agent.build import build_agent
 from agent.capabilities.team.taskboard import taskboard_action
 from agent.llm import FakeLLM, LLMReply
-from agent.master.task_board import TaskBoard
+from agent.orchestrator.task_board import TaskBoard
 from platform_capability import current_chat_session
 from platform_contracts import DomainEvent, ServiceError
 

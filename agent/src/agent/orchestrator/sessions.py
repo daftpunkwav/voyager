@@ -52,8 +52,8 @@ log = logging.getLogger("agent.sessions")
 _SESSIONS_ACTOR = ActorRef(kind=ActorKind.SYSTEM, id="agent.sessions")
 
 # The standing goal of the conversational instance (prompt data lives in
-# prompts/definitions/master.toml).
-CHAT_GOAL = P.master.chat_goal
+# prompts/definitions/orchestrator.toml).
+CHAT_GOAL = P.orchestrator.chat_goal
 
 #: Sessions shown with this label until the first user message seeds a title
 UNTITLED_LABEL = "新会话"

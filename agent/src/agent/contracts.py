@@ -1,5 +1,5 @@
 """Cross-package protocol layer: the decoupling point for the agent
-domain's inner circle (tools/context/skills/subagent/master).
+domain's inner circle (tools/context/skills/engine/orchestrator).
 
 This module depends only on the standard library and agent.llm (pure types,
 pure data, no runtime behavior). Packages in the domain depend only on the
@@ -20,9 +20,9 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    # Type-checking only: a runtime import would execute the agent.master
+    # Type-checking only: a runtime import would execute the agent.orchestrator
     # package __init__, which reads this module (import-order cycle).
-    from agent.master.digest import DigestStore
+    from agent.orchestrator.digest import DigestStore
 
 from agent.llm import LLMClient, ToolCall, ToolSpec
 
@@ -190,7 +190,7 @@ class DispatchMaster(Protocol):
     def sessions(self) -> Any: ...  # SessionManager surface: active_id()
 
     #: Chat client, reused for the completion-notice synthesis (see
-    #: agent.master.synthesize; metered like every chat path)
+    #: agent.orchestrator.synthesize; metered like every chat path)
     @property
     def llm(self) -> LLMClient: ...
 

@@ -15,7 +15,7 @@ One file per domain, one top-level table per file (the domain name):
 - `modes.toml` — subagent execution modes (react / cot / tot / got / plan_execute / reflexion)
 - `context.toml` — compaction planning, plan review gate, context status line
 - `memory.toml` — long-term distillation
-- `master.toml` — arbitration, synthesis, proactive outreach, chat goal, notice bodies
+- `orchestrator.toml` — arbitration, synthesis, proactive outreach, chat goal, notice bodies
 - `runtime.toml` — eval judge, loop advisory, structured-output instruction
 
 Personas (`agent/personas/definitions/*.toml`) and builtin skills

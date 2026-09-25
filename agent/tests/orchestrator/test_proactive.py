@@ -7,8 +7,8 @@ from __future__ import annotations
 import time
 from types import SimpleNamespace
 
-from agent.master.outreach_budget import OutreachBudget
-from agent.master.proactive import FOLLOWUP_JOB_KIND, ProactiveEngine
+from agent.orchestrator.outreach_budget import OutreachBudget
+from agent.orchestrator.proactive import FOLLOWUP_JOB_KIND, ProactiveEngine
 from platform_contracts import DomainEvent
 
 

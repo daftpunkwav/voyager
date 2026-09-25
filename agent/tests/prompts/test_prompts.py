@@ -93,4 +93,4 @@ def test_templates_render_to_wire_text():
         used_pct=5,
         auto_compact_at_pct=75,
     ).startswith("[Context status] window 100 tok")
-    assert P.master.chat_goal.startswith("与用户对话")
+    assert P.orchestrator.chat_goal.startswith("与用户对话")

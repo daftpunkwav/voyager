@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from agent.build import build_agent
 from agent.llm import FakeLLM
-from agent.master.goal import ACTIVE, PAUSED, GoalManager
+from agent.orchestrator.goal import ACTIVE, PAUSED, GoalManager
 from agent.tools.core.self_capability import agent_context
 from platform_actor import ActorContext
 from platform_capability import execute

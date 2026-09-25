@@ -16,8 +16,8 @@ import logging
 import time
 from typing import Any
 
-from agent.master.goal import ACTIVE, GoalManager
-from agent.master.outreach_budget import in_quiet_hours
+from agent.orchestrator.goal import ACTIVE, GoalManager
+from agent.orchestrator.outreach_budget import in_quiet_hours
 from agent.prompts import P, render
 from agent.settings import OUTREACH_QUIET_KEY
 
@@ -86,7 +86,7 @@ class GoalDriver:
 
         await self._master.handle_notice(
             session,
-            render(P.master.goal_resume, goal=goal.text),
+            render(P.orchestrator.goal_resume, goal=goal.text),
             guard=_still_active,
         )
 

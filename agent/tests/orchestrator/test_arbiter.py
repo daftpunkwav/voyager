@@ -3,7 +3,7 @@ merge, GUIDE queues with a notification.
 """
 
 from agent.llm import FakeLLM, LLMReply
-from agent.master.arbiter import Arbiter, ArbiterMode
+from agent.orchestrator.arbiter import Arbiter, ArbiterMode
 
 
 class TestArbiter:

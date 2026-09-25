@@ -19,8 +19,8 @@ from agent.engine import Mode, Spawner, SubagentInstance, TaskBook
 from agent.engine.limits import limits_from_settings
 from agent.engine.registry import SubagentDef, SubagentRegistry
 from agent.engine.surface import intersect_surface, surface_misses
-from agent.master.synthesize import synthesize_result
-from agent.master.task_graph import DeferredTask  # noqa: F401  # re-exported type
+from agent.orchestrator.synthesize import synthesize_result
+from agent.orchestrator.task_graph import DeferredTask  # noqa: F401  # re-exported type
 from agent.personas import resolve_persona
 from agent.policy import NetworkPolicy, PolicyEngine, narrow_network
 from agent.runtime.current import current_instance

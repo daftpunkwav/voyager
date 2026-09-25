@@ -59,7 +59,7 @@ def _capture_spawner(captured: list):
 
 
 async def test_depth_counts_from_running_parent_and_enforces_cap() -> None:
-    from agent.master.dispatch import dispatch_task
+    from agent.orchestrator.dispatch import dispatch_task
 
     captured: list = []
     parent = SimpleNamespace(state=SimpleNamespace(delegation_depth=2))
@@ -76,7 +76,7 @@ async def test_depth_counts_from_running_parent_and_enforces_cap() -> None:
 
 
 async def test_depth_within_cap_stamps_child_state() -> None:
-    from agent.master.dispatch import DeferredDispatch, dispatch_task
+    from agent.orchestrator.dispatch import DeferredDispatch, dispatch_task
 
     captured: list = []
     parent = SimpleNamespace(state=SimpleNamespace(delegation_depth=1))
@@ -90,7 +90,7 @@ async def test_depth_within_cap_stamps_child_state() -> None:
 
 
 async def test_depth_defaults_to_one_without_parent() -> None:
-    from agent.master.dispatch import DeferredDispatch, dispatch_task
+    from agent.orchestrator.dispatch import DeferredDispatch, dispatch_task
 
     captured: list = []
     token = current_instance.set(None)
@@ -103,7 +103,7 @@ async def test_depth_defaults_to_one_without_parent() -> None:
 
 
 async def test_unknown_mode_fails_loud_with_valid_list() -> None:
-    from agent.master.dispatch import dispatch_task
+    from agent.orchestrator.dispatch import dispatch_task
 
     captured: list = []
     with pytest.raises(ServiceError) as exc:

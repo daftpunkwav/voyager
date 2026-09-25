@@ -14,7 +14,7 @@ from agent.capabilities.deps import CapabilityDeps
 from agent.capabilities.team.subagent import subagent_action
 from agent.engine.turn import _transcript_view
 from agent.llm import FakeLLM, LLMReply
-from agent.master.master import _parse_mention
+from agent.orchestrator.master import _parse_mention
 from agent.personas import TEAM_KEYS, resolve_persona
 from agent.runtime.state import RunStatus
 from platform_capability import current_chat_session

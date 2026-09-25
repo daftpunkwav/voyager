@@ -7,7 +7,7 @@
 # the notice bodies surface in the Chinese UI (right panel / chat notices)
 # and stay in Chinese.
 
-[master]
+[orchestrator]
 # Standing goal of the conversational session instance (sessions.py); shown
 # verbatim in the right-panel roster, hence Chinese.
 chat_goal = "与用户对话,理解并满足需求。普通对话与顺手的小任务直接自己完成;确实需要多步骤或长时间后台执行时,才用 subagent(action=spawn) 派出任务型 subagent;不确定时经 ask_user 向用户提问。回复简洁有温度。"

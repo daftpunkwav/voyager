@@ -31,15 +31,6 @@ from agent.engine.triggered_spawn import make_handler as make_trigger_handler
 from agent.engine.triggered_spawn import trigger_patterns
 from agent.hooks import HookLoader, HookRegistry, UserHookReloader
 from agent.llm import FakeLLM, LLMClient
-from agent.master import Arbiter, DigestStore, Master
-from agent.master.blackboard import Blackboard
-from agent.master.goal import GoalManager
-from agent.master.goal_driver import GoalDriver
-from agent.master.job_notify import JobNotifier
-from agent.master.outreach_budget import OutreachBudget
-from agent.master.proactive import ProactiveEngine
-from agent.master.task_board import TaskBoard
-from agent.master.task_graph import TaskGraph
 from agent.mcp import McpClientPool
 from agent.mcp.pool import ConnectFn
 from agent.memory import Memory
@@ -47,6 +38,15 @@ from agent.memory.distill import Distiller
 from agent.memory.read_policy import render_relevant_recall
 from agent.memory.recorder import EpisodeRecorder
 from agent.memory.session_store import SessionStore
+from agent.orchestrator import Arbiter, DigestStore, Master
+from agent.orchestrator.blackboard import Blackboard
+from agent.orchestrator.goal import GoalManager
+from agent.orchestrator.goal_driver import GoalDriver
+from agent.orchestrator.job_notify import JobNotifier
+from agent.orchestrator.outreach_budget import OutreachBudget
+from agent.orchestrator.proactive import ProactiveEngine
+from agent.orchestrator.task_board import TaskBoard
+from agent.orchestrator.task_graph import TaskGraph
 from agent.personas import canonical_persona_key, resolve_persona
 from agent.plugins import PluginManager
 from agent.policy import AppPolicy, FsPolicy, NetworkPolicy, PolicyEngine

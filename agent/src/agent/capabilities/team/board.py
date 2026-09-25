@@ -18,7 +18,7 @@ from agent.capabilities.deps import CapabilityDeps
 from agent.runtime.current import current_instance
 
 if TYPE_CHECKING:
-    from agent.master.blackboard import Blackboard
+    from agent.orchestrator.blackboard import Blackboard
 
 
 def board_action(

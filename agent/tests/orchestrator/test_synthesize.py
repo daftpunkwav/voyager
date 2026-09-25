@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 from agent.llm import FakeLLM, LLMClient, LLMReply
-from agent.master.synthesize import FALLBACK_CHARS, SYNTHESIZE_THRESHOLD, synthesize_result
+from agent.orchestrator.synthesize import FALLBACK_CHARS, SYNTHESIZE_THRESHOLD, synthesize_result
 
 _LONG = "结论:迁移完成。" + "细节 " * 200  # well over the threshold
 

@@ -36,14 +36,14 @@ from agent.contracts import DeliveryRun, SettingsReader
 from agent.llm import LLMClient, content_to_text
 
 if TYPE_CHECKING:
-    from agent.master.dispatch import DeferredDispatch
+    from agent.orchestrator.dispatch import DeferredDispatch
 from agent.engine import Spawner, SubagentInstance
 from agent.engine.limits import limits_from_settings
-from agent.master.arbiter import Arbiter, ArbiterMode
-from agent.master.digest import DigestStore
-from agent.master.sessions import CHAT_GOAL, SessionManager
-from agent.master.synthesize import synthesize_result
-from agent.master.task_board import TaskBoard
+from agent.orchestrator.arbiter import Arbiter, ArbiterMode
+from agent.orchestrator.digest import DigestStore
+from agent.orchestrator.sessions import CHAT_GOAL, SessionManager
+from agent.orchestrator.synthesize import synthesize_result
+from agent.orchestrator.task_board import TaskBoard
 from agent.personas import PERSONAS, canonical_persona_key
 from agent.policy import PolicyEngine
 from agent.prompts import P, render
@@ -52,7 +52,7 @@ from agent.runtime.evaluation import TaskEvaluator, record_evaluation
 from agent.runtime.events import AGENT_MAIN
 from agent.runtime.state import RunStatus
 
-log = logging.getLogger("agent.master")
+log = logging.getLogger("agent.orchestrator")
 
 
 def _last_assistant_text(history: list[dict[str, Any]]) -> str:
@@ -348,9 +348,11 @@ class Master:
             self._wake_budget.record(sid)
         if ok:
             summary = await synthesize_result(self._llm, member, result)
-            body = render(P.master.team_report_done, member=member, summary=summary)
+            body = render(P.orchestrator.team_report_done, member=member, summary=summary)
         else:
-            body = render(P.master.team_report_failed, member=member, detail=error or result[:300])
+            body = render(
+                P.orchestrator.team_report_failed, member=member, detail=error or result[:300]
+            )
         try:
             await self.handle_notice(sid, body, trace_id=trace_id)
         except Exception:
@@ -368,11 +370,11 @@ class Master:
         title = str(task.get("title") or "")
         task_id = str(task.get("id") or "")
         body = render(
-            P.master.task_claim,
+            P.orchestrator.task_claim,
             claimant=claimant,
             title=title,
             task_id=task_id,
-            note_line=render(P.master.task_claim_note, note=note) if note else "",
+            note_line=render(P.orchestrator.task_claim_note, note=note) if note else "",
         )
         try:
             await self.handle_notice(session, body)
@@ -690,7 +692,7 @@ class Master:
                 self.track_background(asyncio.create_task(self._blocked_note(release)))
 
     async def _redispatch(self, release) -> None:
-        from agent.master.dispatch import dispatch_task
+        from agent.orchestrator.dispatch import dispatch_task
 
         await dispatch_task(
             self,
@@ -723,7 +725,7 @@ class Master:
         """Thin dispatch wrapper: implementation lives in dispatch.py, keeping
         Master the single external entry point. A task whose dependencies are
         still pending returns a DeferredDispatch instead of an instance."""
-        from agent.master.dispatch import dispatch_task
+        from agent.orchestrator.dispatch import dispatch_task
 
         return await dispatch_task(
             self,

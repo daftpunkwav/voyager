@@ -10,7 +10,7 @@
 | mcp/ | external MCP server connections: pool, tool mounting, sessions, read-only service discovery — see mcp/README.md |
 | context/ | context engineering: assembly, compression/pruning, on-demand loading, budgets, prefix-cache watch — see context/README.md |
 | hooks/ | hook system: loading, trigger points, user-hook reload — see hooks/README.md |
-| master/ | orchestration: arbitration, dispatch, task graph, blackboard, proactive outreach, sessions — see master/README.md |
+| orchestrator/ | orchestration: arbitration, dispatch, task graph, blackboard, proactive outreach — see orchestrator/README.md |
 | memory/ | profile/episodic/semantic/working memory plus retrieval, distillation, and the recorder — see memory/README.md |
 | personas/ | persona presets loaded from `definitions/*.toml` — see personas/README.md |
 | plugins/ | plugin discovery, approval, and declarative skill/hook loading — see plugins/README.md |
