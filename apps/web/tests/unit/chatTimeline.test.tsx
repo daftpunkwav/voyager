@@ -336,7 +336,9 @@ describe('RightPanel', () => {
           name: 'main',
           status: 'running',
           goal: '陪聊',
-          started_ts: nowSec,
+          // Older than a minute: the main conversational run spans the whole
+          // session, so its age must never read as a turn time on the row
+          started_ts: nowSec - 65,
           conversational: true,
         },
         {
@@ -367,6 +369,8 @@ describe('RightPanel', () => {
     expect(screen.getByText('对话中')).toBeTruthy();
     expect(screen.getByText('执行中')).toBeTruthy();
     expect(screen.getByText('搜集资料')).toBeTruthy();
+    // The chatting row carries no elapsed readout (session-age, not turn time)
+    expect(screen.queryByText(/1 分/)).toBeNull();
     expect(screen.queryByText('w1')).toBeNull();
     // The generic run lists below the divider
     expect(document.querySelector('.chat-side__divider')).toBeTruthy();
