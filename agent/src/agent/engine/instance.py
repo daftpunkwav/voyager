@@ -28,7 +28,6 @@ from agent.context.compressor import compress
 from agent.context.governor import ContextGovernor
 from agent.context.prefix_watch import PrefixWatch
 from agent.context.usage import (
-    ContextWindow,
     UsageTracker,
     render_status_line,
     usage_status,
@@ -38,6 +37,7 @@ from agent.engine.modes import Mode, ModeLimits
 from agent.llm import LLMClient
 from agent.runtime.events import RuntimeEvents
 from agent.runtime.state import ResumeSnapshot, RunState, RunStatus
+from agent.runtime.tokens import ContextWindow
 from agent.tools.core.activate import (
     page_preactivate,  # noqa: F401  # compat re-export (old import path; locked by tests)
 )

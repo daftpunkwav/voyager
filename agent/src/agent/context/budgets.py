@@ -11,12 +11,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from agent.context.compressor import COMPRESS_BUDGET
-from agent.context.usage import (
+from agent.contracts import SettingsReader
+from agent.runtime.tokens import (
     DEFAULT_MAX_OUTPUT_TOKENS,
     DEFAULT_WINDOW_TOKENS,
     resolve_window,
 )
-from agent.contracts import SettingsReader
 
 #: Hard cap on cross-turn history length (entries): long conversations must
 #: not grow without bound. History holds only user/assistant entries (tool

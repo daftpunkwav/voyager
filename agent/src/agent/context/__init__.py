@@ -7,13 +7,12 @@ from agent.context.compressor import compress, estimate_tokens
 from agent.context.loader import OnDemandLoader
 from agent.context.pages import PageContextRegistry, PageSummary
 from agent.context.usage import (
-    ContextWindow,
     UsageTracker,
     over_threshold,
     render_status_line,
-    resolve_window,
     usage_status,
 )
+from agent.runtime.tokens import ContextWindow, resolve_window
 
 __all__ = [
     "ContextBuilder",

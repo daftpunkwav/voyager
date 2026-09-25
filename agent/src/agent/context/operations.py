@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from agent.context.builder import MEMORY_CARDS_HEADER
-from agent.context.tokenizer import estimate_text
+from agent.runtime.tokenizer import estimate_text
 
 if TYPE_CHECKING:
     from agent.engine.instance import SubagentInstance

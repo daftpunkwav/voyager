@@ -16,9 +16,10 @@ from agent.context.editor import (
     validate_plan,
 )
 from agent.context.governor import ContextGovernor
-from agent.context.usage import ContextWindow, UsageTracker
+from agent.context.usage import UsageTracker
 from agent.engine import Mode, ModeLimits, run_mode
 from agent.llm import FakeLLM, LLMClient, LLMReply
+from agent.runtime.tokens import ContextWindow
 
 
 def _msgs() -> list[dict]:

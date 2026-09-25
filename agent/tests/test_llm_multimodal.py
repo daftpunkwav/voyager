@@ -7,9 +7,9 @@ from __future__ import annotations
 from typing import Any
 
 from agent.context.compressor import compress
-from agent.context.tokenizer import estimate_messages
 from agent.llm import FilePart, ImagePart, TextPart, content_to_text
 from agent.llm_http import _messages_to_wire
+from agent.runtime.tokenizer import estimate_messages
 
 
 def test_content_part_dataclasses() -> None:

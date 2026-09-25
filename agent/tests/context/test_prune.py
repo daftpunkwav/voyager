@@ -9,8 +9,9 @@ from typing import Any
 from agent.context.backoff import CompactionBackoff
 from agent.context.governor import MAX_REMAINING_RATIO, ContextGovernor
 from agent.context.prune import PRUNE_MARK, prune_tool_results
-from agent.context.usage import ContextWindow, UsageTracker
+from agent.context.usage import UsageTracker
 from agent.llm import FakeLLM, LLMReply
+from agent.runtime.tokens import ContextWindow
 
 
 def _big(content: str, chars: int) -> str:
@@ -131,7 +132,7 @@ class TestGovernorPruneWiring:
         """A plan that leaves more than MAX_REMAINING_RATIO of the transcript
         feeds the backoff as a failure, so repeated low-yield planner calls
         get suppressed and the mechanical path takes over."""
-        from agent.context.tokenizer import estimate_messages
+        from agent.runtime.tokenizer import estimate_messages
 
         plan = '{"keep": [0, 1, 3], "summarize": [], "drop": [2], "summary": ""}'
         # threshold=1: a single low-yield plan immediately opens suppression

@@ -18,12 +18,12 @@ from agent.context.backoff import CompactionBackoff
 from agent.context.editor import compact_transcript
 from agent.context.prune import prune_tool_results
 from agent.context.usage import (
-    ContextWindow,
     UsageTracker,
     over_threshold,
     usage_status,
 )
 from agent.llm import LLMClient
+from agent.runtime.tokens import ContextWindow
 
 #: A plan compaction that leaves more than this fraction of the original
 #: transcript (shrinks by less than 20%) counts as a failed attempt for the

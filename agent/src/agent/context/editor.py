@@ -24,9 +24,9 @@ import logging
 from typing import Any
 
 from agent.context.compressor import compress
-from agent.context.tokenizer import estimate_messages
 from agent.llm import LLMClient
 from agent.prompts import P
+from agent.runtime.tokenizer import estimate_messages
 
 log = logging.getLogger("agent.context.editor")
 

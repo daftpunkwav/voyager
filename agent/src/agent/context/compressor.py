@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from agent.context.tokenizer import estimate_messages as estimate_tokens
+from agent.runtime.tokenizer import estimate_messages as estimate_tokens
 
 #: Compression budget (rough token estimate); exposed as a constant, not a user-facing setting
 COMPRESS_BUDGET = 6000

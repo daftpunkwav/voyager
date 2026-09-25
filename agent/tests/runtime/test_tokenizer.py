@@ -5,7 +5,7 @@ token, per-message frame overhead.
 import json
 from typing import Any
 
-from agent.context.tokenizer import estimate_messages, estimate_text
+from agent.runtime.tokenizer import estimate_messages, estimate_text
 
 
 class TestEstimateText:

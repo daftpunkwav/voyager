@@ -4,14 +4,16 @@ reads each turn.
 """
 
 from agent.context.usage import (
-    DEFAULT_MAX_OUTPUT_TOKENS,
-    DEFAULT_WINDOW_TOKENS,
-    ContextWindow,
     UsageTracker,
     over_threshold,
     render_status_line,
-    resolve_window,
     usage_status,
+)
+from agent.runtime.tokens import (
+    DEFAULT_MAX_OUTPUT_TOKENS,
+    DEFAULT_WINDOW_TOKENS,
+    ContextWindow,
+    resolve_window,
 )
 
 

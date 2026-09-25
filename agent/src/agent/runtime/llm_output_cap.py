@@ -2,8 +2,8 @@
 into every LLM call so the wire request honors user settings instead of the
 transport's built-in default.
 
-The cap comes from agent.context resolution (agent.context.max_output_tokens
-with the agent.context.model_profiles per-model override), resolved against
+The cap comes from runtime.tokens resolution (the frozen agent.context.*
+settings keys, with the model_profiles per-model override), resolved against
 the inner client's model on each call — hot-read, so settings changes apply
 from the next call. A caller-passed max_tokens always wins; resolution
 trouble degrades to no injection (the llm domain's setting-backed default
@@ -18,8 +18,8 @@ from typing import Any
 
 from platform_contracts import ServiceError
 
-from agent.context.usage import resolve_window
 from agent.llm import LLMClient, LLMReply
+from agent.runtime.tokens import resolve_window
 
 log = logging.getLogger("agent.context")
 

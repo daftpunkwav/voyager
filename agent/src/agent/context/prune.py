@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from agent.context.tokenizer import estimate_text
+from agent.runtime.tokenizer import estimate_text
 
 #: Marker left in place of a cleared tool result (visible in the transcript
 #: so the model knows the content existed and can re-run the tool if needed)

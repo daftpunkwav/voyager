@@ -33,10 +33,10 @@ from platform_contracts import DomainEvent, Event
 from platform_eventbus import Subscription
 from platform_settings import SettingsStore
 
-from agent.context.usage import resolve_window
 from agent.llm import FakeLLM, LLMClient
 from agent.llm_http import HttpLLM, HttpLlmConfig
 from agent.main import AgentApp, build_agent
+from agent.runtime.tokens import resolve_window
 from agent.settings import DEFS as AGENT_SETTING_DEFS
 
 _HELP = """\
