@@ -12,7 +12,7 @@ agent：事件循环、master 编排、子代理、上下文/记忆、policy、�
 
 ## 扩展点
 
-新工具 = tools/<group>/ 下的一个文件；新能力 = capabilities/<group>/ 下的一个文件（同名、同引擎 —— parity）；新模式 = subagent/modes/ 下的一个文件。
+新工具 = tools/<group>/ 下的一个文件；新能力 = capabilities/<group>/ 下的一个文件（同名、同引擎 —— parity）；新模式 = engine/modes/ 下的一个文件。
 
 ## 模型体验
 

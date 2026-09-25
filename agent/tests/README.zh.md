@@ -6,17 +6,18 @@
 
 ## 布局
 
-根目录下平铺的 `test_*.py` 覆盖横切面：wiring、capabilities、clients（含 resilience）、hooks、plugins、personas、policy（含 notify）、repl（含 replay）、skills、mcp、redaction、streaming UX、LLM 客户端（http / multimodal / structured）、用户钩子重载、命名中立性（源码中的品牌字面量），以及模块 docstring 头部风格。
+根目录下平铺的 `test_*.py` 覆盖横切面：wiring、capabilities、mcp（含 discovery 与 resilience）、hooks、plugins、personas、policy（含 notify）、repl（含 replay）、skills、redaction、streaming UX、LLM 客户端（http / multimodal / structured）、用户钩子重载、命名中立性（源码中的品牌字面量），以及模块 docstring 头部风格。
 
 子目录与包结构镜像（仅列选取的主题，并非穷举）：
 
-- context/ —— 上下文工程：builder、editor、预算、剪枝、prefix cache、plan 门禁、tokenizer
-- master/ —— 仲裁、dispatch 面、任务图、goal、sessions、主动 outreach、resilience
+- context/ —— 上下文工程：builder、editor、预算、剪枝、prefix cache、plan 门禁
+- engine/ —— 模式、检查点与恢复、暂停/取消、实例用量、registry
 - memory/ —— 记忆类型、蒸馏、recorder、读取策略、向量存储（含降级）
-- runtime/ —— 事件循环、调度器与队列存储、meter、trace span、恢复、期限、预算
+- orchestrator/ —— 仲裁、dispatch 面、任务图、goal、主动 outreach、turn 评估、wake 预算、resilience
+- runtime/ —— 事件循环、调度器与队列存储、meter、trace span、恢复、期限、预算、tokenizer
 - policy/ —— 权限模式、shell policy、write-roots 确认
+- sessions/ —— 会话管理器生命周期与聊天存储
 - skills/ —— organizer
-- subagent/ —— 模式、检查点与恢复、暂停/取消、实例用量、registry
 - tools/ —— 工具面：registry、search、edit matchers、web search/fetch、AskUser、结果预算，外加按组用例（extension / memory / observe / session / team）
 - eval/ —— 行为基线：`test_eval_scenarios.py` 在 FakeLLM 脚本上回放固定任务场景，完全离线；`npm run eval` 与 `baseline.json` 比对，`npm run eval:update` 在有意的行为变更之后重新生成基线
 - granularity/ —— 文件粒度审计：`tools/<group>/` 下一个工具一个文件，`capabilities/<group>/` 下一个能力一个文件，文件名即产品名；mechanism 与聚合文件位于冻结的 allowlist 中

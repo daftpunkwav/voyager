@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Orchestration: message arbitration, dispatch, task graph joins, blackboard, proactive outreach, sessions.
+Orchestration: message arbitration, dispatch, task graph joins, blackboard, proactive outreach, turn evaluation.
 
 ## Configuration
 

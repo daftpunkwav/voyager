@@ -101,7 +101,7 @@ CONTENT: dict[str, str] = {
     "agent/README.md": {
         "purpose": "The agent (Harness layer): event loop, master orchestration, subagents, context/memory, policy, tools, skills, plugins.",
         "config": "agent.* settings keys (see settings.py groups: rounds/context/fs/network/llm/memory/skills/outreach/execution).",
-        "ext": "New tool = one file under tools/<group>/; new capability = one file under capabilities/<group>/ (same name, same engine — parity); new mode = one file under subagent/modes/.",
+        "ext": "New tool = one file under tools/<group>/; new capability = one file under capabilities/<group>/ (same name, same engine — parity); new mode = one file under engine/modes/.",
         "mx": "This IS the model experience: tool descriptions, confirm dialogs, memory, context budgets.",
         "limits": "Single-process, single-user by design.",
         "deferred": "Multi-agent supervisor beyond the current tree (phase 20 scope).",

@@ -96,7 +96,7 @@ class TurnScope(Protocol):
 
 
 class TaskSpec(Protocol):
-    """Read-only task-book surface (implemented by subagent.instance.TaskBook,
+    """Read-only task-book surface (implemented by engine.instance.TaskBook,
     a frozen dataclass matched structurally)."""
 
     @property
@@ -196,7 +196,7 @@ class DeliveryRunState(Protocol):
 
 class DeliveryRun(Protocol):
     """Minimal instance surface announce_delivery reads (implemented by
-    subagent.instance.SubagentInstance, matched structurally — the subagent
+    engine.instance.SubagentInstance, matched structurally — the engine
     package already depends on this module transitively, so no import is
     needed and no cycle appears). Members are read-only properties: PEP 544
     checks settable protocol attributes invariantly, which no concrete task/
@@ -221,9 +221,9 @@ class DispatchMaster(Protocol):
     master.py imports dispatch lazily (dispatch backs two Master methods);
     this protocol keeps that dependency type-only instead of a module cycle.
     sessions is Any for the same reason ToolSource avoids the tool layer:
-    SessionManager pulls in the subagent package, which transitively reads
-    this module. Protocol structural matching means Master needs no import
-    of this module and no explicit inheritance.
+    SessionManager (agent.sessions) pulls in the engine package, which
+    transitively reads this module. Protocol structural matching means Master
+    needs no import of this module and no explicit inheritance.
     """
 
     async def reply(

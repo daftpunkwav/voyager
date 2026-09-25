@@ -15,8 +15,8 @@ One file per domain, one top-level table per file (the domain name):
 - `modes.toml` — subagent execution modes (react / cot / tot / got / plan_execute / reflexion)
 - `context.toml` — compaction planning, plan review gate, context status line
 - `memory.toml` — long-term distillation
-- `orchestrator.toml` — arbitration, synthesis, proactive outreach, chat goal, notice bodies
-- `runtime.toml` — eval judge, loop advisory, structured-output instruction
+- `orchestrator.toml` — arbitration, synthesis, proactive outreach, chat goal, task-completion evaluation, notice bodies
+- `runtime.toml` — loop advisory, structured-output instruction
 
 Personas (`agent/personas/definitions/*.toml`) and builtin skills
 (`agent/skills/builtin/*/SKILL.md`) are separate prompt assets with their own

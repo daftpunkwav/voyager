@@ -20,13 +20,13 @@
 
 随后是稳定在先、易变在后的尾部:用户画像、近期记忆卡、任务书(goal/constraints/done_when)、相关度召回节(`read_policy.py`)、进行中子代理摘要、用户当前页面上下文、计划评审态(`plan_gate.py`)、MCP 指引。
 
-每个 turn 由 `subagent/turn.py:run_turn` 重建系统提示;历史由 `ContextBudget` 约束。
+每个 turn 由 `engine/turn.py:run_turn` 重建系统提示;历史由 `ContextBudget` 约束。
 
 ## 预算
 
 `budgets.py` — `ContextBudget` dataclass;`budget_from_settings(settings, model_name)` 解析按模型窗口档案(`agent.context.model_profiles`)与可用窗口。代表性默认值:`HISTORY_MAX=60` 跨 turn 条目(成对丢弃)、`COMPRESS_BUDGET=6000`、`auto_compact_at=75`(可用窗口百分比)、`compact_target` 未设时取 40%、记忆/召回/技能/摘要/画像/任务/页面的字符上限。全部由 `agent.context.*` 设置支撑([config-catalog.zh.md](../catalog/config-catalog.zh.md))。
 
-`tokenizer.py` — CJK 感知的 token 估算。
+`runtime/tokenizer.py` — CJK 感知的 token 估算(位于 runtime 层,由 context 与 runtime 共用)。
 
 ## 治理器
 

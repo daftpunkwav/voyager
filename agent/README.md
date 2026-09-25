@@ -12,7 +12,7 @@ The agent: event loop, master orchestration, subagents, context/memory, policy, 
 
 ## Extension Points
 
-New tool = one file under tools/<group>/; new capability = one file under capabilities/<group>/ (same name, same engine — parity); new mode = one file under subagent/modes/.
+New tool = one file under tools/<group>/; new capability = one file under capabilities/<group>/ (same name, same engine — parity); new mode = one file under engine/modes/.
 
 ## Model Experience
 

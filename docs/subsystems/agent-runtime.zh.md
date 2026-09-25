@@ -14,7 +14,7 @@
 
 ## 持久队列与调度器
 
-`queue_store.py` — `QueueStore`(`data/runtime/agent/queue.db`):支持 cron 的持久队列,至少一次投递,启动时崩溃恢复(`recover()`)。`scheduler.py` — `Scheduler`:子代理运行的并发上限、定时器与持久任务轮询循环(`app.start_queue_loop`)。`wake_budget.py` 约束排队工作唤醒 agent 的频率。
+`queue_store.py` — `QueueStore`(`data/runtime/agent/queue.db`):支持 cron 的持久队列,至少一次投递,启动时崩溃恢复(`recover()`)。`scheduler.py` — `Scheduler`:子代理运行的并发上限、定时器与持久任务轮询循环(`app.start_queue_loop`)。`orchestrator/wake_budget.py` 约束排队工作唤醒 agent 的频率。
 
 ## 计量与配额
 
@@ -30,7 +30,7 @@
 
 ## 追踪与可观测
 
-`trace.py` — trace `ContextVar` 加有界 span 缓冲(`start_span`)。`exporters.py` — `TraceDispatcher` 按 `agent.observability.exporter` 选择 OTLP 和/或 Langfuse 导出器。`evaluation.py` — `TaskEvaluator` 以启发式或评判模型为 turn 打分(`agent.evaluation.*`)。`jobs_view.py` — `JobsView`,支撑 jobs API 的只读 `task.*` 投影。`current.py` — `current_instance` 上下文变量。
+`trace.py` — trace `ContextVar` 加有界 span 缓冲(`start_span`)。`exporters.py` — `TraceDispatcher` 按 `agent.observability.exporter` 选择 OTLP 和/或 Langfuse 导出器。`orchestrator/evaluation.py` — `TaskEvaluator` 以启发式或评判模型为 turn 打分(`agent.evaluation.*`)。`jobs_view.py` — `JobsView`,支撑 jobs API 的只读 `task.*` 投影。`current.py` — `current_instance` 上下文变量。
 
 ## 写日志
 

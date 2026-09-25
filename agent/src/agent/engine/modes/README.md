@@ -1,6 +1,6 @@
 # modes — execution strategies for subagent runs
 
-One file per mode. Importing the package imports every mode module, and each registers its runner in `registry.py` at import time; `base.run_mode()` dispatches through the registry, so `base.py` never imports the mode modules and the dependency graph stays one-way. The consumer is `subagent/instance.py`: `run_turn()` executes one mode via `run_mode` with that turn's toolbelt view.
+One file per mode. Importing the package imports every mode module, and each registers its runner in `registry.py` at import time; `base.run_mode()` dispatches through the registry, so `base.py` never imports the mode modules and the dependency graph stays one-way. The consumer is `engine/instance.py`: `run_turn()` executes one mode via `run_mode` with that turn's toolbelt view.
 
 ## Files
 
@@ -17,6 +17,6 @@ One file per mode. Importing the package imports every mode module, and each reg
 
 ## Mode selection
 
-- `master/dispatch.py` resolves the mode per dispatch: the spawn argument, else the custom subagent's own mode; the orchestrator persona is forced to react; an unknown value fails with the list of valid modes.
-- Checkpoint resume accepts react only (`subagent/spawn.py`).
+- `orchestrator/dispatch.py` resolves the mode per dispatch: the spawn argument, else the custom subagent's own mode; the orchestrator persona is forced to react; an unknown value fails with the list of valid modes.
+- Checkpoint resume accepts react only (`engine/spawn.py`).
 - Persona definitions carry a `default_mode` value (`personas/definitions/*.toml`), surfaced by the `list_personas` capability.

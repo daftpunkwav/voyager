@@ -20,13 +20,13 @@ Source: `agent/src/agent/context/`
 
 Then the stable-then-volatile tail: user profile, recent memory cards, task book (goal/constraints/done_when), the relevance-recall section (`read_policy.py`), in-flight subagent digests, the user's current page context, plan review-phase state (`plan_gate.py`), and MCP instructions.
 
-Each turn, `subagent/turn.py:run_turn` rebuilds the system prompt; history is bounded by `ContextBudget`.
+Each turn, `engine/turn.py:run_turn` rebuilds the system prompt; history is bounded by `ContextBudget`.
 
 ## Budgets
 
 `budgets.py` — `ContextBudget` dataclass; `budget_from_settings(settings, model_name)` resolves per-model window profiles (`agent.context.model_profiles`) and the usable window. Notable defaults: `HISTORY_MAX=60` cross-turn entries (dropped in pairs), `COMPRESS_BUDGET=6000`, `auto_compact_at=75` (% usable window), `compact_target` = 40% when unset, memory/recall/skill/digest/profile/task/page character caps. All are settings-backed under `agent.context.*` ([config-catalog.md](../catalog/config-catalog.md)).
 
-`tokenizer.py` — CJK-aware token estimation.
+`runtime/tokenizer.py` — CJK-aware token estimation (lives in the runtime layer, shared by context and runtime).
 
 ## Governor
 

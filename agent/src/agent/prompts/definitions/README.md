@@ -17,6 +17,6 @@ design — broken prompt data is an assembly error, not a runtime surprise.
   the cache-stable context status line
 - memory.toml — long-term distillation extraction
 - orchestrator.toml — chat goal, message arbitration, background-result synthesis,
-  proactive greeting/follow-up, goal resume, team report / task claim notices
-- runtime.toml — evaluation judge (English), loop advisory nudge,
-  structured-output instruction
+  proactive greeting/follow-up, goal resume, team report / task claim notices,
+  task-completion evaluation judge
+- runtime.toml — loop advisory nudge, structured-output instruction

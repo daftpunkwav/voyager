@@ -25,7 +25,7 @@
 | `meter.db` | `runtime/meter_store.py MeterStore` | LLM/工具用量 | 90 天 |
 | `memory/profile.db`、`memory/episodic.db`、`memory/semantic.db` | `memory/` 各库 | 画像、情景轨迹、事实 | `agent.memory.retention_days`(purge 调用) |
 | `checkpoints/` | `runtime/state.py CheckpointStore` | 恢复快照 | 启动清扫 |
-| `subagents/*.json` | `subagent/registry.py SubagentRegistry` | 用户自定义子代理定义 | — |
+| `subagents/*.json` | `engine/registry.py SubagentRegistry` | 用户自定义子代理定义 | — |
 | `write_journal/` | 写日志 | 内容寻址的写入备份 | — |
 
 ## 域存储(`data/runtime/<domain>/`)

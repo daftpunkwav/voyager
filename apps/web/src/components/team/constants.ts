@@ -14,10 +14,10 @@
 
 import type { TFunction } from 'i18next';
 
-/** Same name regex as the backend SubagentDef (agent/subagent/registry.py); validated client-side first. */
+/** Same name regex as the backend SubagentDef (agent/engine/registry.py); validated client-side first. */
 export const NAME_RE = /^[a-z][a-z0-9_]*$/;
 
-/** Seven execution modes (agent/subagent/modes.py); submitted values are backend enum values. */
+/** Seven execution modes (agent/engine/modes/); submitted values are backend enum values. */
 export const MODE_OPTIONS: { value: string; labelKey: string }[] = [
   { value: 'react', labelKey: 'team:mode.react' },
   { value: 'plan_execute', labelKey: 'team:mode.plan_execute' },

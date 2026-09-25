@@ -19,7 +19,7 @@ Assistant reply: {reply}
 Evaluate if the assistant properly addressed the request. Output ONLY a JSON object with 'score' (float between 0.0 and 1.0) and 'feedback' (short explanation or advice for improvement):
 {"score": 0.9, "feedback": "Clear and complete response."}"""
 
-# Standing goal of the conversational session instance (sessions.py); shown
+# Standing goal of the conversational session instance (sessions/manager.py); shown
 # verbatim in the right-panel roster, hence Chinese.
 chat_goal = "与用户对话,理解并满足需求。普通对话与顺手的小任务直接自己完成;确实需要多步骤或长时间后台执行时,才用 subagent(action=spawn) 派出任务型 subagent;不确定时经 ask_user 向用户提问。回复简洁有温度。"
 

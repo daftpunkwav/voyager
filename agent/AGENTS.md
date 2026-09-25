@@ -43,8 +43,8 @@ conventions.
 ## Tests
 
 - Flat test files at `tests/` top level plus per-area subdirectories
-  (`context/`, `master/`, `memory/`, `policy/`, `runtime/`, `skills/`,
-  `subagent/`, `tools/`, `eval/`, `granularity/`, `docs/`). Run with the root
+  (`context/`, `engine/`, `memory/`, `orchestrator/`, `policy/`, `runtime/`,
+  `sessions/`, `skills/`, `tools/`, `eval/`, `granularity/`, `docs/`). Run with the root
   gate (`npm run test:py`); the eval suite (`tests/eval/`) runs offline via
   `npm run eval`, and its real-model cases are env-gated.
 - Settings-driven behavior is expressed through `agent.*` keys declared in

@@ -25,7 +25,7 @@ All runtime state lives under `data/`. The layout below is what the code creates
 | `meter.db` | `runtime/meter_store.py MeterStore` | LLM/tool usage | 90 days |
 | `memory/profile.db`, `memory/episodic.db`, `memory/semantic.db` | `memory/` stores | profile, episodic trail, facts | `agent.memory.retention_days` (purge call) |
 | `checkpoints/` | `runtime/state.py CheckpointStore` | resume snapshots | startup sweeps |
-| `subagents/*.json` | `subagent/registry.py SubagentRegistry` | user-defined subagent definitions | — |
+| `subagents/*.json` | `engine/registry.py SubagentRegistry` | user-defined subagent definitions | — |
 | `write_journal/` | write journal | content-addressed write backups | — |
 
 ## Domain stores (`data/runtime/<domain>/`)

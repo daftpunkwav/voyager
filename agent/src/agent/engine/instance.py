@@ -248,7 +248,7 @@ class SubagentInstance:
         )
 
     async def run_turn(self, user_text: str | None = None, *, member: str = "") -> str:
-        """Run one turn; the machinery lives in subagent.turn (one file, one
+        """Run one turn; the machinery lives in engine.turn (one file, one
         responsibility). `member` hands the floor to a resident teammate."""
         return await turn.run_turn(self, user_text, member=member)
 
@@ -333,7 +333,7 @@ class SubagentInstance:
     def cancel(self) -> None:
         self.state.status = RunStatus.CANCELLED
 
-    # -- turn machinery delegates (bodies live in subagent.turn) --------------
+    # -- turn machinery delegates (bodies live in engine.turn) --------------
 
     async def _on_delta(self, round_n: int, text: str) -> None:
         return await turn.on_delta(self, round_n, text)

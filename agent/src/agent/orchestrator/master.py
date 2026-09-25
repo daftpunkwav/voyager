@@ -147,12 +147,12 @@ class Master:
         | None = None,  # global policy engine: copied when narrowing a user-defined subagent's network
         session_store=None,  # SessionStore: chat history persistence across restarts
         distiller=None,  # memory.Distiller: background extraction of durable memories
-        wake_budget=None,  # runtime.wake_budget.WakeBudget: wakeup gate for notices
-        goal_driver=None,  # master.goal_driver.GoalDriver: schedules continuation rounds
+        wake_budget=None,  # orchestrator.wake_budget.WakeBudget: wakeup gate for notices
+        goal_driver=None,  # orchestrator.goal_driver.GoalDriver: schedules continuation rounds
         organizer=None,  # skills.SkillOrganizer: repeated tool flows -> skill proposals
-        task_graph=None,  # master.task_graph.TaskGraph: dependency edges between named tasks
-        blackboard=None,  # master.blackboard.Blackboard: task-scoped shared notes
-        task_board=None,  # master.task_board.TaskBoard: team publish/claim/confirm board
+        task_graph=None,  # orchestrator.task_graph.TaskGraph: dependency edges between named tasks
+        blackboard=None,  # orchestrator.blackboard.Blackboard: task-scoped shared notes
+        task_board=None,  # orchestrator.task_board.TaskBoard: team publish/claim/confirm board
     ) -> None:
         self._llm = llm
         self._bus = bus

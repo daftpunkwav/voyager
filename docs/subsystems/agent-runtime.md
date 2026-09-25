@@ -14,7 +14,7 @@ The resident machinery under `agent/src/agent/runtime/`, plus hooks and plugins.
 
 ## Durable queue and scheduler
 
-`queue_store.py` — `QueueStore` (`data/runtime/agent/queue.db`): durable queue with cron support, at-least-once delivery, and crash recovery (`recover()` at boot). `scheduler.py` — `Scheduler`: the concurrency cap for subagent runs, timers, and the durable-job poll loop (`app.start_queue_loop`). `wake_budget.py` gates how often queued work may wake the agent.
+`queue_store.py` — `QueueStore` (`data/runtime/agent/queue.db`): durable queue with cron support, at-least-once delivery, and crash recovery (`recover()` at boot). `scheduler.py` — `Scheduler`: the concurrency cap for subagent runs, timers, and the durable-job poll loop (`app.start_queue_loop`). `orchestrator/wake_budget.py` gates how often queued work may wake the agent.
 
 ## Metering and quota
 
@@ -30,7 +30,7 @@ The resident machinery under `agent/src/agent/runtime/`, plus hooks and plugins.
 
 ## Tracing and observability
 
-`trace.py` — trace `ContextVar` plus a bounded span buffer (`start_span`). `exporters.py` — `TraceDispatcher` selects OTLP and/or Langfuse exporters per `agent.observability.exporter`. `evaluation.py` — `TaskEvaluator` scores turns heuristically or with a judge (`agent.evaluation.*`). `jobs_view.py` — `JobsView`, a read-only `task.*` projection backing the jobs API. `current.py` — the `current_instance` context variable.
+`trace.py` — trace `ContextVar` plus a bounded span buffer (`start_span`). `exporters.py` — `TraceDispatcher` selects OTLP and/or Langfuse exporters per `agent.observability.exporter`. `orchestrator/evaluation.py` — `TaskEvaluator` scores turns heuristically or with a judge (`agent.evaluation.*`). `jobs_view.py` — `JobsView`, a read-only `task.*` projection backing the jobs API. `current.py` — the `current_instance` context variable.
 
 ## Write journal
 
