@@ -30,8 +30,8 @@ Each subpackage carries its own README; this file does not repeat their contents
 | app.py | `AgentApp`: the dataclass holding handles to every in-process component |
 | build.py | `build_agent()`: the composition root — assembly order and built-in tool registration |
 | main.py | `python -m agent.main`: builds the agent and runs the resident event loop |
-| repl.py | `python -m agent.repl`: console session routing input to `master.handle_user_message`, with local slash commands |
-| contracts.py | Protocol layer decoupling tools / context / skills / subagent / master; keeps the static import graph acyclic |
+| repl.py | `python -m agent.repl`: console session routing input to `Master.handle_user_message`, with local slash commands |
+| contracts.py | Protocol layer decoupling tools / context / skills / engine / orchestrator; keeps the static import graph acyclic |
 | llm.py | `LLMClient` protocol and `FakeLLM` for tests and the no-key degradation path |
 | llm_http.py | OpenAI-compatible chat-completions client for standalone runs; deliberately independent of `packages/llm` |
 | llm_structured.py | schema validation, JSON repair/extraction, and structured completions with error-feedback retries |
