@@ -293,7 +293,7 @@ class TestRestart:
             mcp_connect=fake_connect(sessions),
         )
         await shared.set(
-            "agent.clients.servers", [cfg], LOCAL_USER
+            "agent.mcp.servers", [cfg], LOCAL_USER
         )  # the key is already registered by build
         try:
             assert not [n for n in app.spawner._toolbelt.names() if n.startswith("mcp__")]
@@ -330,7 +330,7 @@ class TestRestart:
             mcp_connect=flaky_connect,
         )
         await shared.set(
-            "agent.clients.servers",
+            "agent.mcp.servers",
             [
                 {
                     "id": "broken",
@@ -375,7 +375,7 @@ class TestRestart:
             mcp_connect=fake_connect(sessions, fail_ids=frozenset({"broken"})),
         )
         await shared.set(
-            "agent.clients.servers",
+            "agent.mcp.servers",
             [
                 {
                     "id": "draft",
@@ -428,7 +428,7 @@ class TestRestart:
             mcp_connect=fake_connect(sessions),
         )
         await shared.set(
-            "agent.clients.servers",
+            "agent.mcp.servers",
             [
                 {
                     "id": "dirty-url",
@@ -495,7 +495,7 @@ class TestRestart:
             mcp_connect=fake_connect(sessions),
         )
         await shared.set(
-            "agent.clients.servers",
+            "agent.mcp.servers",
             [
                 {
                     "name": "no-id",

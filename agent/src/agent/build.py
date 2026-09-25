@@ -515,7 +515,7 @@ def build_agent(
     def _mcp_section() -> str:
         """Server-declared usage instructions (connected, approved servers),
         sorted by sid for stable bytes; omitted when none or disabled."""
-        if not settings.get("agent.clients.instructions"):
+        if not settings.get("agent.mcp.instructions"):
             return ""
         entries = mcp.instructions_map()
         if not entries:

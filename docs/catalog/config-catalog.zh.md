@@ -100,7 +100,7 @@
 | `agent.guidelines` | JSON | `{}` |
 | `agent.style.overrides` | JSON | `{}` |
 | `agent.workspace.dir` | STR | `data/workspace` |
-| `agent.clients.servers` | JSON | `[]` |
+| `agent.mcp.servers` | JSON | `[]` |
 | `agent.mcp.refresh_seconds` | INT | 300 |
 | `agent.mcp.instructions` | BOOL | true |
 | `agent.plugins.approved` | JSON | `[]` |

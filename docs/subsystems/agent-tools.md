@@ -37,7 +37,7 @@ Filesystem roots: `agent.fs.read_roots` / `agent.fs.write_roots` fix the jail at
 
 ## MCP tools
 
-`mcp/` mounts external MCP servers (`agent.clients.servers`, approval-gated): remote tools become `mcp__<server>__<tool>` agent tools (`mcp/mount.py`), `dimension="app"`, registered only after approval. `McpSession` (`mcp/session.py`) speaks JSON-RPC 2.0 over stdio or HTTP with a 30 s call timeout.
+`mcp/` mounts external MCP servers (`agent.mcp.servers`, approval-gated): remote tools become `mcp__<server>__<tool>` agent tools (`mcp/mount.py`), `dimension="app"`, registered only after approval. `McpSession` (`mcp/session.py`) speaks JSON-RPC 2.0 over stdio or HTTP with a 30 s call timeout.
 
 ## Domain tool bridge
 
