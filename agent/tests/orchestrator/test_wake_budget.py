@@ -3,7 +3,7 @@ resets; the cap degrades the next wakeup to a quiet notice."""
 
 from __future__ import annotations
 
-from agent.runtime.wake_budget import WakeBudget
+from agent.orchestrator.wake_budget import WakeBudget
 
 
 def test_allows_up_to_cap_then_denies() -> None:

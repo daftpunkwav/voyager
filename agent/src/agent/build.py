@@ -47,6 +47,7 @@ from agent.orchestrator.outreach_budget import OutreachBudget
 from agent.orchestrator.proactive import ProactiveEngine
 from agent.orchestrator.task_board import TaskBoard
 from agent.orchestrator.task_graph import TaskGraph
+from agent.orchestrator.wake_budget import WakeBudget
 from agent.personas import canonical_persona_key, resolve_persona
 from agent.plugins import PluginManager
 from agent.policy import AppPolicy, FsPolicy, NetworkPolicy, PolicyEngine
@@ -69,7 +70,6 @@ from agent.runtime.queue_store import QueueStore
 from agent.runtime.session_index import SessionIndex
 from agent.runtime.state import CheckpointStore, prepare_resumable_checkpoints
 from agent.runtime.trajectory import TrajectoryStore
-from agent.runtime.wake_budget import WakeBudget
 from agent.runtime.wire import bind_event_loop
 from agent.settings import DEFS as AGENT_SETTING_DEFS
 from agent.settings import STYLE_OVERRIDES_KEY, WORKSPACE_DIR_KEY

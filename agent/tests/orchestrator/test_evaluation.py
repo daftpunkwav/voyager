@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from agent.llm import FakeLLM, LLMReply
 from agent.memory import Memory
-from agent.runtime.evaluation import (
+from agent.orchestrator.evaluation import (
     EvaluationResult,
     TaskEvaluator,
     get_recent_critiques,

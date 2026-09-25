@@ -6,7 +6,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from agent.orchestrator.job_notify import JobNotifier
-from agent.runtime.wake_budget import WakeBudget
+from agent.orchestrator.wake_budget import WakeBudget
 
 
 class _FakeMaster:

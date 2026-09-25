@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from agent.runtime.wake_budget import WakeBudget
+from agent.orchestrator.wake_budget import WakeBudget
 
 log = logging.getLogger("agent.jobs.notify")
 

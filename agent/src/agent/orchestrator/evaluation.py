@@ -16,7 +16,7 @@ from agent.llm import LLMClient
 from agent.prompts import P, render
 from agent.runtime.state import Step
 
-log = logging.getLogger("agent.runtime.evaluation")
+log = logging.getLogger("agent.orchestrator.evaluation")
 
 
 @dataclass(frozen=True)
@@ -128,7 +128,7 @@ class TaskEvaluator:
                 assistant_reply if isinstance(assistant_reply, str) else str(assistant_reply or "")
             )
             judge_prompt = render(
-                P.runtime.evaluation_judge,
+                P.orchestrator.evaluation_judge,
                 subject=goal_text or prompt_text,
                 prompt=prompt_text,
                 reply=reply_text[:1500],
@@ -137,7 +137,7 @@ class TaskEvaluator:
                 [
                     {
                         "role": "system",
-                        "content": P.runtime.evaluation_system,
+                        "content": P.orchestrator.evaluation_system,
                     },
                     {"role": "user", "content": judge_prompt},
                 ]

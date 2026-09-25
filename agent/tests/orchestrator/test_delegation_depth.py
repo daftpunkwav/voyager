@@ -6,8 +6,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from agent.orchestrator.wake_budget import WakeBudget  # noqa: F401  # sibling import sanity
 from agent.runtime.current import current_instance
-from agent.runtime.wake_budget import WakeBudget  # noqa: F401  # sibling import sanity
 from platform_contracts import ServiceError
 
 

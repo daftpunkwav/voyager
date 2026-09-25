@@ -2,12 +2,6 @@
 meter / quota / trace / trajectory.
 """
 
-from agent.runtime.evaluation import (
-    EvaluationResult,
-    TaskEvaluator,
-    get_recent_critiques,
-    record_evaluation,
-)
 from agent.runtime.events import AGENT_MAIN, RuntimeEvents
 from agent.runtime.exporters import (
     InMemorySpanExporter,
@@ -38,7 +32,6 @@ __all__ = [
     "CheckpointStore",
     "CircuitBreaker",
     "CircuitOpenError",
-    "EvaluationResult",
     "EventLoop",
     "InMemorySpanExporter",
     "LangfuseSpanExporter",
@@ -53,15 +46,12 @@ __all__ = [
     "Span",
     "SpanExporter",
     "Step",
-    "TaskEvaluator",
     "TraceDispatcher",
     "current_trace_id",
-    "get_recent_critiques",
     "is_quota_exceeded_reply",
     "metered_llm",
     "output_capped_llm",
     "recent_spans",
-    "record_evaluation",
     "reset_current_trace",
     "set_current_trace",
     "start_span",
