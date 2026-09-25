@@ -18,7 +18,7 @@
 
 | 路径 | 归属 | 内容 | 保留 |
 |---|---|---|---|
-| `sessions.db` | `memory/session_store.py SessionStore` | 聊天会话、活动指针 | — |
+| `sessions.db` | `sessions/store.py SessionStore` | 聊天会话、活动指针 | — |
 | `trajectory.db` | `runtime/trajectory.py TrajectoryStore` | `steps`/`runs` 投影、`raw_rounds` | 原始轮 7 天后清理 |
 | `session_index.db` | `runtime/session_index.py SessionIndex` | 聊天消息的 FTS5 索引 | — |
 | `queue.db` | `runtime/queue_store.py QueueStore` | 持久队列(cron) | — |

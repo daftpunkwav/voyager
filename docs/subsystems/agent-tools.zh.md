@@ -37,7 +37,7 @@
 
 ## MCP 工具
 
-`clients/` 挂载外部 MCP 服务器(`agent.mcp.servers`,须批准):远端工具成为 `mcp__<server>__<tool>` 的 agent 工具(`clients/mount.py`),`dimension="app"`,仅在批准后注册。`McpSession`(`clients/session.py`)以 JSON-RPC 2.0 走 stdio 或 HTTP,调用超时 30 秒。
+`mcp/` 挂载外部 MCP 服务器(`agent.clients.servers`,须批准):远端工具成为 `mcp__<server>__<tool>` 的 agent 工具(`mcp/mount.py`),`dimension="app"`,仅在批准后注册。`McpSession`(`mcp/session.py`)以 JSON-RPC 2.0 走 stdio 或 HTTP,调用超时 30 秒。
 
 ## 域工具桥
 

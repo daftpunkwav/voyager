@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   git hash-object docs/catalog/tool-catalog.md docs/catalog/tool-catalog.zh.md
-docs/catalog/tool-catalog.md: 2e2256541b2c32da1f7acba86b3de21177493372
-docs/catalog/tool-catalog.zh.md: 416df028cc6aa65dcf80608995dc9c9dd277dfef
+docs/catalog/tool-catalog.md: ac7f6f5ad4c50437cb683103ce9d5989450a81e7
+docs/catalog/tool-catalog.zh.md: ff878b76400e81317549e41995955c1fb759394b

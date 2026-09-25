@@ -44,7 +44,7 @@ host 为已接线域注入 `<domain>__<capability>` 工具(`packages/host/src/ho
 
 ## MCP 工具
 
-外部 MCP 服务器(`agent.mcp.servers`)的工具挂载为 `mcp__<server>__<safe-name>`(`agent/src/agent/clients/mount.py`),`dimension="app"`,仅在用户批准后注册。
+外部 MCP 服务器(`agent.clients.servers`)的工具挂载为 `mcp__<server>__<safe-name>`(`agent/src/agent/mcp/mount.py`),`dimension="app"`,仅在用户批准后注册。
 
 ## 恒激活集
 

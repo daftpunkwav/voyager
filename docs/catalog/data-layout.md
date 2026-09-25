@@ -18,7 +18,7 @@ All runtime state lives under `data/`. The layout below is what the code creates
 
 | Path | Owner | Contents | Retention |
 |---|---|---|---|
-| `sessions.db` | `memory/session_store.py SessionStore` | chat sessions, active pointer | — |
+| `sessions.db` | `sessions/store.py SessionStore` | chat sessions, active pointer | — |
 | `trajectory.db` | `runtime/trajectory.py TrajectoryStore` | `steps`/`runs` projections, `raw_rounds` | raw rounds purge after 7 days |
 | `session_index.db` | `runtime/session_index.py SessionIndex` | FTS5 index over chat messages | — |
 | `queue.db` | `runtime/queue_store.py QueueStore` | durable queue (cron) | — |

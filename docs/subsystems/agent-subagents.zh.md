@@ -4,7 +4,7 @@
 
 引擎如何派生、约束与协调子代理运行。
 
-源码:`agent/src/agent/subagent/` 加 `master/` 编排模块。
+源码:`agent/src/agent/engine/` 加 `orchestrator/` 编排模块。
 
 ## 实例与任务书
 

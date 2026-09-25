@@ -25,7 +25,7 @@ Source: `agent/src/agent/memory/`, `skills/`, `personas/`.
 
 ## Chat sessions
 
-`session_store.py` — `SessionStore` (`data/runtime/agent/sessions.db`): `SessionMeta`/`SessionSnapshot`, the active-session pointer, and legacy single-row migration. `SessionManager` (`master/sessions.py`) layers identity, lifecycle, per-session locks, and the raw-round recorder hookup on top.
+`sessions/store.py` — `SessionStore` (`data/runtime/agent/sessions.db`): `SessionMeta`/`SessionSnapshot`, the active-session pointer, and legacy single-row migration. `SessionManager` (`sessions/manager.py`) layers identity, lifecycle, per-session locks, and the raw-round recorder hookup on top.
 
 ## Skills
 

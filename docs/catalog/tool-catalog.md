@@ -44,7 +44,7 @@ Host injects `<domain>__<capability>` tools for wired domains (`packages/host/sr
 
 ## MCP tools
 
-External MCP servers (`agent.mcp.servers`) mount their tools as `mcp__<server>__<safe-name>` (`agent/src/agent/clients/mount.py`), `dimension="app"`, registered only after user approval.
+External MCP servers (`agent.clients.servers`) mount their tools as `mcp__<server>__<safe-name>` (`agent/src/agent/mcp/mount.py`), `dimension="app"`, registered only after user approval.
 
 ## Always-on set
 

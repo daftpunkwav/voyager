@@ -25,7 +25,7 @@
 
 ## 聊天会话
 
-`session_store.py` — `SessionStore`(`data/runtime/agent/sessions.db`):`SessionMeta`/`SessionSnapshot`、活动会话指针、既单行迁移。`SessionManager`(`master/sessions.py`)在其上叠加身份、生命周期、会话锁与原始轮记录器接线。
+`sessions/store.py` — `SessionStore`(`data/runtime/agent/sessions.db`):`SessionMeta`/`SessionSnapshot`、活动会话指针、既单行迁移。`SessionManager`(`sessions/manager.py`)在其上叠加身份、生命周期、会话锁与原始轮记录器接线。
 
 ## 技能
 

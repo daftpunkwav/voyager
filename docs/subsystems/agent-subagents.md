@@ -4,7 +4,7 @@ English | [中文](agent-subagents.zh.md)
 
 How the engine spawns, bounds, and coordinates subagent runs.
 
-Source: `agent/src/agent/subagent/` plus `master/` orchestration modules.
+Source: `agent/src/agent/engine/` plus `orchestrator/` orchestration modules.
 
 ## Instances and task books
 
