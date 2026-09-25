@@ -27,7 +27,6 @@ from agent.clients.pool import ConnectFn
 from agent.context import ContextBuilder, OnDemandLoader, PageContextRegistry
 from agent.context.budgets import budget_from_settings
 from agent.context.plan_gate import PlanGates
-from agent.context.rules import GLOBAL_RULES
 from agent.context.scoped_rules import ScopedRules
 from agent.hooks import HookLoader, HookRegistry, UserHookReloader
 from agent.llm import FakeLLM, LLMClient
@@ -49,6 +48,7 @@ from agent.personas import canonical_persona_key, resolve_persona
 from agent.plugins import PluginManager
 from agent.policy import AppPolicy, FsPolicy, NetworkPolicy, PolicyEngine
 from agent.policy.permissions import ToolPermissions
+from agent.prompts import P
 from agent.runtime import (
     EventLoop,
     LangfuseSpanExporter,
@@ -502,8 +502,8 @@ def build_agent(
     if retention > 0:
         memory.purge(retention)
     builder = ContextBuilder(
-        # Global rules: text frozen in context/rules.py
-        rules=list(GLOBAL_RULES),
+        # Global rules: prompt data in prompts/definitions/common.toml
+        rules=P.common.global_rules.splitlines(),
         memory=memory,
         digests=digests,
         pages=pages,

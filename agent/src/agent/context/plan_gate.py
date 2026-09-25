@@ -9,12 +9,10 @@ restart naturally ends any open review phase.
 
 from __future__ import annotations
 
-PLAN_SECTION_TITLE = "【计划模式】"
-_PLAN_SECTION_BODY = (
-    "你正处于计划评审阶段:先探索、阅读与设计,产出完整计划;"
-    "不要执行任何写入、删除、发送或其他有副作用的操作。"
-    "完成设计后,用 plan(action=exit) 提交计划全文,等待评审人批准。"
-)
+from agent.prompts import P
+
+# Prompt layer text lives in prompts/definitions/context.toml ([context.plan_gate]).
+PLAN_SECTION_TITLE = P.context.plan_gate.title
 
 
 class PlanGate:
@@ -26,7 +24,7 @@ class PlanGate:
 
     def section(self) -> str:
         """The prompt layer while active; empty otherwise."""
-        return PLAN_SECTION_TITLE + _PLAN_SECTION_BODY if self.active else ""
+        return PLAN_SECTION_TITLE + P.context.plan_gate.body if self.active else ""
 
 
 class PlanGates:

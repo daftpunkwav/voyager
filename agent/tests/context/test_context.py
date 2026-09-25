@@ -12,9 +12,9 @@ from agent.context import (
     estimate_tokens,
 )
 from agent.context.compressor import _prune_span
-from agent.context.rules import GLOBAL_RULES
 from agent.memory import Memory
 from agent.personas import LUCIEN
+from agent.prompts import P
 from agent.skills.loader import SkillLoader
 from agent.subagent import TaskBook
 
@@ -22,8 +22,9 @@ from agent.subagent import TaskBook
 class TestGlobalRules:
     def test_shape_locked(self) -> None:
         """Locks only the count and the first rule's prefix, not the full text."""
-        assert len(GLOBAL_RULES) == 9
-        assert GLOBAL_RULES[0].startswith("诚实第一")
+        rules = P.common.global_rules.splitlines()
+        assert len(rules) == 9
+        assert rules[0].startswith("诚实第一")
 
 
 class TestBuilder:

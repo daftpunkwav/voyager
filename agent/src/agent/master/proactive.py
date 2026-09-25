@@ -23,6 +23,7 @@ from typing import Any
 from platform_contracts import DomainEvent
 
 from agent.master.outreach_budget import OutreachBudget
+from agent.prompts import P, render
 
 log = logging.getLogger("agent.outreach")
 
@@ -64,10 +65,7 @@ class ProactiveEngine:
         if not decision.allow:
             log.info("outreach suppressed: %s", decision.reason)
             return
-        text = await self._compose(
-            "用户刚刚上线。写一句不超过两句话的问候,自然、不打扰,"
-            "可以提及一条值得注意的后台动态(若有);没有值得一提的就只是打招呼。"
-        )
+        text = await self._compose(P.master.proactive_greeting)
         if not text:
             return
         self._budget.record(session=session)
@@ -87,10 +85,7 @@ class ProactiveEngine:
         if not decision.allow:
             log.info("follow-up suppressed: %s", decision.reason)
             return
-        text = await self._compose(
-            f"之前你未回复这条消息:「{topic}」。写一句不超过两句话的跟进,提醒但不要催促;"
-            "若该话题已无意义,输出空。"
-        )
+        text = await self._compose(render(P.master.proactive_followup, topic=topic))
         if not text:
             return
         self._budget.record(session=session)

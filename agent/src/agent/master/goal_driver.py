@@ -18,6 +18,7 @@ from typing import Any
 
 from agent.master.goal import ACTIVE, GoalManager
 from agent.master.outreach_budget import in_quiet_hours
+from agent.prompts import P, render
 from agent.settings import OUTREACH_QUIET_KEY
 
 log = logging.getLogger("agent.goal")
@@ -85,8 +86,7 @@ class GoalDriver:
 
         await self._master.handle_notice(
             session,
-            f"[目标续跑] 目标「{goal.text}」:继续推进。"
-            "若目标已完成,用 goal(action=status, status=done) 标记 done;受阻则标记 blocked 并说明原因。",
+            render(P.master.goal_resume, goal=goal.text),
             guard=_still_active,
         )
 

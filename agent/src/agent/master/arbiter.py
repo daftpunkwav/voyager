@@ -18,14 +18,9 @@ from dataclasses import dataclass
 from enum import Enum
 
 from agent.llm import LLMClient
+from agent.prompts import P, render
 
 log = logging.getLogger("agent.arbiter")
-
-_JUDGE_PROMPT = (
-    "你是消息仲裁判官。当前任务:{goal}\n用户新消息:{text}\n"
-    "若新消息与当前任务直接相关(补充信息/修正/参数),只回 merge;"
-    "若是新意图,只回 enqueue。"
-)
 
 
 class ArbiterMode(str, Enum):
@@ -55,7 +50,7 @@ class Arbiter:
                 [
                     {
                         "role": "system",
-                        "content": _JUDGE_PROMPT.format(goal=current_goal, text=new_text),
+                        "content": render(P.master.arbiter_judge, goal=current_goal, text=new_text),
                     }
                 ]
             )

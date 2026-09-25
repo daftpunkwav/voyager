@@ -44,6 +44,7 @@ from agent.master.synthesize import synthesize_result
 from agent.master.task_board import TaskBoard
 from agent.personas import PERSONAS, canonical_persona_key
 from agent.policy import PolicyEngine
+from agent.prompts import P, render
 from agent.runtime.deadline import Deadline
 from agent.runtime.evaluation import TaskEvaluator, record_evaluation
 from agent.runtime.events import AGENT_MAIN
@@ -347,15 +348,9 @@ class Master:
             self._wake_budget.record(sid)
         if ok:
             summary = await synthesize_result(self._llm, member, result)
-            body = (
-                f"[team-report] 团队成员 {member} 已完成任务,汇报如下:{summary}\n"
-                "请向用户简短播报这一结果(一两句,署成员的名),并给出下一步建议。"
-            )
+            body = render(P.master.team_report_done, member=member, summary=summary)
         else:
-            body = (
-                f"[team-report] 团队成员 {member} 的任务执行失败:{error or result[:300]}\n"
-                "请向用户如实说明失败情况,并给出可选的下一步(重试/换人/放弃)。"
-            )
+            body = render(P.master.team_report_failed, member=member, detail=error or result[:300])
         try:
             await self.handle_notice(sid, body, trace_id=trace_id)
         except Exception:
@@ -372,11 +367,12 @@ class Master:
         session = str(task.get("session") or "")
         title = str(task.get("title") or "")
         task_id = str(task.get("id") or "")
-        body = (
-            f"[task-claim] 团队成员 {claimant} 认领了任务「{title}」({task_id})"
-            + (f",留言:{note}" if note else "")
-            + "\n请审阅:没问题就 taskboard(action=confirm, task_id) 拍板转入后台执行;"
-            "成员有商议(要更多信息/容量不够)就先回应再定。"
+        body = render(
+            P.master.task_claim,
+            claimant=claimant,
+            title=title,
+            task_id=task_id,
+            note_line=render(P.master.task_claim_note, note=note) if note else "",
         )
         try:
             await self.handle_notice(session, body)

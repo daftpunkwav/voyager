@@ -26,6 +26,7 @@ from typing import Any
 from agent.context.compressor import compress
 from agent.context.tokenizer import estimate_messages
 from agent.llm import LLMClient
+from agent.prompts import P
 
 log = logging.getLogger("agent.context.editor")
 
@@ -70,22 +71,6 @@ def render_segment_map(segments: list[tuple[int, int]]) -> str:
     return "\n".join(
         f"[段{idx}] 消息 {begin}-{end - 1}" for idx, (begin, end) in enumerate(segments)
     )
-
-
-_PLAN_PROMPT = (
-    "【上下文编辑任务】当前对话窗口紧张。上方就是对话转录原文(未做任何改写)。"
-    "分段对照见本条消息末尾。请决定如何重组以腾出空间,只输出一个 JSON 对象,不要输出其他文字:\n"
-    '{"keep": [段号], "summarize": [段号], "drop": [段号], "summary": "<摘要正文>"}\n'
-    "规则:\n"
-    "1) keep 的段原样保留;summarize 的段合并进 summary;drop 的段直接丢弃;"
-    "未提到的段默认保留。\n"
-    "2) summary 是一段「密集工作状态」(不超过400字),依次覆盖:当前任务目标;"
-    "已完成的关键步骤与结论;重要决策/数据/路径等关键值(原样保留);未完成事项与下一步。\n"
-    "3) 最后一段必须出现在 keep 中;最近的用户要求、未完成承诺、关键事实优先原样保留。\n"
-    "4) 没有信息量的寒暄、重复内容、已被取代的陈旧探索可以 drop。\n"
-    "5) summarize 非空时 summary 必须是摘要正文本身。\n\n"
-    "分段对照:\n"
-)
 
 
 def parse_plan(text: str) -> dict[str, Any] | None:
@@ -243,7 +228,10 @@ async def compact_transcript(
             reply = await llm.complete(
                 [
                     *messages,
-                    {"role": "user", "content": _PLAN_PROMPT + render_segment_map(segments)},
+                    {
+                        "role": "user",
+                        "content": P.context.editor_plan + render_segment_map(segments),
+                    },
                 ]
             )
             if not reply.degraded:

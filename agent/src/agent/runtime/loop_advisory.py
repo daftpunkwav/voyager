@@ -10,10 +10,7 @@ channel as the idle-continue text — never a system rewrite.
 
 from __future__ import annotations
 
-_ADVISORY_TEMPLATE = (
-    "[advisory] 检测到你正在重复调用 {tool}(相同参数已在最近 {window} 次工具调用中出现 {threshold} 次)。"
-    "换参数、换工具,或先用一句话向用户说明原因再继续;若确无必要继续,请直接给出结论。"
-)
+from agent.prompts import P, render
 
 
 class LoopAdvisory:
@@ -26,7 +23,7 @@ class LoopAdvisory:
         if self.used:
             return None
         self.used = True
-        return _ADVISORY_TEMPLATE.format(tool=tool, threshold=threshold, window=window)
+        return render(P.runtime.loop_advisory, tool=tool, threshold=threshold, window=window)
 
 
 __all__ = ["LoopAdvisory"]

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from agent.llm import LLMClient
+from agent.prompts import P, render
 from agent.runtime.state import Step
 
 log = logging.getLogger("agent.runtime.evaluation")
@@ -126,21 +127,17 @@ class TaskEvaluator:
             reply_text = (
                 assistant_reply if isinstance(assistant_reply, str) else str(assistant_reply or "")
             )
-            judge_prompt = (
-                "You are an impartial evaluator assessing an AI assistant turn.\n"
-                f"Goal: {goal_text or prompt_text}\n"
-                f"User input: {prompt_text}\n"
-                f"Assistant reply: {reply_text[:1500]}\n\n"
-                "Evaluate if the assistant properly addressed the request. "
-                "Output ONLY a JSON object with 'score' (float between 0.0 and 1.0) and "
-                "'feedback' (short explanation or advice for improvement):\n"
-                '{"score": 0.9, "feedback": "Clear and complete response."}'
+            judge_prompt = render(
+                P.runtime.evaluation_judge,
+                subject=goal_text or prompt_text,
+                prompt=prompt_text,
+                reply=reply_text[:1500],
             )
             reply = await llm.complete(
                 [
                     {
                         "role": "system",
-                        "content": "You are an evaluation engine. Reply strictly in JSON.",
+                        "content": P.runtime.evaluation_system,
                     },
                     {"role": "user", "content": judge_prompt},
                 ]

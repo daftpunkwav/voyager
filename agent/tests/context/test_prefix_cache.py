@@ -52,7 +52,7 @@ def test_volatile_layers_stay_after_stable_prefix() -> None:
 def test_planner_request_replays_transcript_verbatim() -> None:
     """The planner sees the live transcript messages untouched, then one tail
     instruction carrying the segment map — no re-rendered copy."""
-    from agent.context.editor import _PLAN_PROMPT
+    from agent.prompts import P
 
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": "sys"},
@@ -63,7 +63,7 @@ def test_planner_request_replays_transcript_verbatim() -> None:
     segments = iter_segments(messages)
     planner_request = [
         *messages,
-        {"role": "user", "content": _PLAN_PROMPT + render_segment_map(segments)},
+        {"role": "user", "content": P.context.editor_plan + render_segment_map(segments)},
     ]
     assert planner_request[:-1] == messages  # byte-identical prefix
     tail = planner_request[-1]

@@ -25,6 +25,7 @@ from typing import Any
 from agent.contracts import SettingsReader
 from agent.llm import LLMClient
 from agent.memory import Memory
+from agent.prompts import P, render
 
 log = logging.getLogger("agent.memory.distill")
 
@@ -35,15 +36,6 @@ _WINDOW = 20
 _MIN_ENTRIES = 4
 
 _MAX_FACTS = 5
-
-_PROMPT = (
-    "从下面的对话片段中提炼值得长期记住的信息,只输出一个 JSON 对象,不要输出其他文字:\n"
-    '{"profile": {"<画像维度,如 name/preference/goal>": "<一句话>"},'
-    ' "facts": [["<主体>", "<关系,如 prefers/is/works_on>", "<客体>", "<图谱节点 id,可选>"], ...]}\n'
-    "要求:只提取明确、持久、可复用的信息;没有值得记的就输出空对象 {};"
-    "若对话中出现过图谱节点 id(graph 工具返回的 node id),把它作为第 4 个元素关联到对应事实;"
-    f"facts 最多 {_MAX_FACTS} 条;profile 最多 5 个键。"
-)
 
 
 def _render(entries: list[dict[str, Any]]) -> str:
@@ -95,7 +87,7 @@ class Distiller:
         try:
             reply = await self._llm.complete(
                 [
-                    {"role": "system", "content": _PROMPT},
+                    {"role": "system", "content": render(P.memory.distill, max_facts=_MAX_FACTS)},
                     {"role": "user", "content": _render(entries)},
                 ]
             )

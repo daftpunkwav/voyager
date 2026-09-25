@@ -27,6 +27,7 @@ from typing import Any
 
 from agent.context.tokenizer import estimate_messages
 from agent.contracts import SettingsReader
+from agent.prompts import P, render
 
 #: Defaults when neither the global keys nor a model profile say otherwise
 DEFAULT_WINDOW_TOKENS = 200_000
@@ -161,14 +162,15 @@ def render_status_line(status: dict[str, Any], *, session: str = "") -> str:
     heavy work. Deliberately cache-stable: usage is bucketed (STATUS_PCT_BUCKET)
     and exact token counts are omitted — the tool path serves exact facts."""
     bucketed = int(status["used_pct"] // STATUS_PCT_BUCKET) * STATUS_PCT_BUCKET
-    line = (
-        f"【上下文状态】窗口 {status['window_tokens']} tok(输出预留 "
-        f"{status['max_output_tokens']}),已用约 {bucketed}%+"
-        f",自动压缩阈值 {status['auto_compact_at_pct']}%。"
-        "规划大批量工作前,可用 context(action=compact) 主动腾出空间。"
+    line = render(
+        P.context.status_line.line,
+        window_tokens=status["window_tokens"],
+        max_output_tokens=status["max_output_tokens"],
+        used_pct=bucketed,
+        auto_compact_at_pct=status["auto_compact_at_pct"],
     )
     if session:
-        line += f"当前会话: {session}。"
+        line += render(P.context.status_line.session_suffix, session=session)
     return line
 
 

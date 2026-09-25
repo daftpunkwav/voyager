@@ -40,6 +40,7 @@ from agent.memory.session_store import (
     SessionStore,
     is_valid_session_id,
 )
+from agent.prompts import P
 from agent.runtime.state import RunStatus
 from agent.subagent import Mode, Spawner, SubagentInstance, TaskBook
 
@@ -50,11 +51,9 @@ log = logging.getLogger("agent.sessions")
 #: the payload's session field, not the actor).
 _SESSIONS_ACTOR = ActorRef(kind=ActorKind.SYSTEM, id="agent.sessions")
 
-CHAT_GOAL = (
-    "与用户对话,理解并满足需求。普通对话与顺手的小任务直接自己完成;"
-    "确实需要多步骤或长时间后台执行时,才用 subagent(action=spawn) 派出任务型"
-    " subagent;不确定时经 ask_user 向用户提问。回复简洁有温度。"
-)
+# The standing goal of the conversational instance (prompt data lives in
+# prompts/definitions/master.toml).
+CHAT_GOAL = P.master.chat_goal
 
 #: Sessions shown with this label until the first user message seeds a title
 UNTITLED_LABEL = "新会话"

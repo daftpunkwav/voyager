@@ -17,6 +17,7 @@ from dataclasses import dataclass, is_dataclass
 from typing import Any, Generic, TypeVar
 
 from agent.llm import LLMClient, LLMReply, ToolSpec, content_to_text
+from agent.prompts import P, render
 
 log = logging.getLogger("agent.llm_structured")
 
@@ -258,11 +259,9 @@ async def complete_structured(
     # Prepare request messages
     req_messages = list(messages)
     if inject_prompt:
-        schema_instruction = (
-            f"\n\n[STRUCTURED OUTPUT REQUIREMENT]\n"
-            f"You MUST return ONLY valid JSON matching this schema:\n"
-            f"```json\n{json.dumps(spec.schema, ensure_ascii=False, indent=2)}\n```\n"
-            f"Do not output markdown explanations or conversational text outside the JSON."
+        schema_instruction = render(
+            P.runtime.schema_instruction,
+            schema=json.dumps(spec.schema, ensure_ascii=False, indent=2),
         )
         if req_messages and req_messages[-1].get("role") in ("user", "system"):
             last = dict(req_messages[-1])

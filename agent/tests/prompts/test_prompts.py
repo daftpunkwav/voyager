@@ -7,8 +7,7 @@ on the prompts the conversational closing depends on.
 """
 
 import pytest
-
-from agent.prompts import P, _RAW, _compose, render
+from agent.prompts import _RAW, P, _compose, render
 
 
 def _leaves(raw, path=()):
@@ -85,6 +84,11 @@ def test_templates_render_to_wire_text():
     assert render(P.modes.step_instruction, index=1, total=3, step="查资料").startswith(
         "【步骤 1/3】查资料"
     )
-    assert render(P.context.status_line.line, window_tokens=100, max_output_tokens=8,
-                  used_pct=5, auto_compact_at_pct=75).startswith("【上下文状态】窗口 100 tok")
+    assert render(
+        P.context.status_line.line,
+        window_tokens=100,
+        max_output_tokens=8,
+        used_pct=5,
+        auto_compact_at_pct=75,
+    ).startswith("【上下文状态】窗口 100 tok")
     assert P.master.chat_goal.startswith("与用户对话")

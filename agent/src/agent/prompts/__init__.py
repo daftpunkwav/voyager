@@ -63,7 +63,7 @@ def _resolve_ref(item: str, common: dict[str, Any], path: str, depth: int) -> st
         node = node[part]
     composed = _compose(node, common, f"{path} -> {item}", depth + 1)
     if not isinstance(composed, str):
-        raise ValueError(f"{path}: common reference {item!r} must resolve to text")
+        raise TypeError(f"{path}: common reference {item!r} must resolve to text")
     return composed
 
 
@@ -101,7 +101,7 @@ def _build() -> tuple[PromptNode, dict[str, Any]]:
             raw[domain] = table
     common = raw.get("common")
     if not isinstance(common, dict):
-        raise ValueError("common.toml with a [common] table is required")
+        raise TypeError("common.toml with a [common] table is required")
 
     def freeze(value: Any, path: str) -> Any:
         if isinstance(value, dict):
