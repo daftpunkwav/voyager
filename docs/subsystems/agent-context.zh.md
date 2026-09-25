@@ -10,7 +10,7 @@
 
 `builder.py` — `ContextBuilder.system(...)` 以固定、字节稳定的顺序组装系统提示(对前缀缓存友好):
 
-1. `【全局规则】` — `rules.py GLOBAL_RULES`
+1. `【全局规则】` — `prompts/definitions/common.toml` (`common.global_rules`)
 2. 作用域规则 — `workspace/AGENTS.md`
 3. `【用户准则】` — 设置 `agent.conduct`
 4. 人格 system prompt

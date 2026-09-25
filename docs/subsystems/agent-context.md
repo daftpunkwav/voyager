@@ -10,7 +10,7 @@ Source: `agent/src/agent/context/`
 
 `builder.py` — `ContextBuilder.system(...)` composes the system prompt in a fixed, byte-stable order (prefix-cache friendly):
 
-1. `【全局规则】` — `rules.py GLOBAL_RULES`
+1. `【全局规则】` — `prompts/definitions/common.toml` (`common.global_rules`)
 2. Scoped rules — `workspace/AGENTS.md`
 3. `【用户准则】` — setting `agent.conduct`
 4. Persona system prompt
