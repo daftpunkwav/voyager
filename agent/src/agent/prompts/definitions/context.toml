@@ -1,0 +1,29 @@
+# Context-layer prompts: transcript compaction planning, the plan review
+# gate, and the per-turn context status line. Placeholders ({name}) are
+# filled at the call site via agent.prompts.render.
+
+[context]
+# Context editor: the planner reads the verbatim transcript plus the segment
+# map (appended at the call site) and answers with one JSON object.
+editor_plan = """【上下文编辑任务】当前对话窗口紧张。上方就是对话转录原文(未做任何改写)。分段对照见本条消息末尾。请决定如何重组以腾出空间,只输出一个 JSON 对象,不要输出其他文字:
+{"keep": [段号], "summarize": [段号], "drop": [段号], "summary": "<摘要正文>"}
+规则:
+1) keep 的段原样保留;summarize 的段合并进 summary;drop 的段直接丢弃;未提到的段默认保留。
+2) summary 是一段「密集工作状态」(不超过400字),依次覆盖:当前任务目标;已完成的关键步骤与结论;重要决策/数据/路径等关键值(原样保留);未完成事项与下一步。
+3) 最后一段必须出现在 keep 中;最近的用户要求、未完成承诺、关键事实优先原样保留。
+4) 没有信息量的寒暄、重复内容、已被取代的陈旧探索可以 drop。
+5) summarize 非空时 summary 必须是摘要正文本身。
+
+分段对照:
+"""
+
+[context.plan_gate]
+# Review-phase section while the human-side plan gate is active; the model
+# leaves the phase only through plan(action=exit).
+title = "【计划模式】"
+body = "你正处于计划评审阶段:先探索、阅读与设计,产出完整计划;不要执行任何写入、删除、发送或其他有副作用的操作。完成设计后,用 plan(action=exit) 提交计划全文,等待评审人批准。"
+
+[context.status_line]
+# Cache-stable one-line context summary (usage bucketed at the call site).
+line = "【上下文状态】窗口 {window_tokens} tok(输出预留 {max_output_tokens}),已用约 {used_pct}%+,自动压缩阈值 {auto_compact_at_pct}%。规划大批量工作前,可用 context(action=compact) 主动腾出空间。"
+session_suffix = "当前会话: {session}。"

@@ -1,0 +1,8 @@
+# Memory-layer prompts: the long-term distillation extraction. Placeholders
+# ({name}) are filled at the call site via agent.prompts.render; JSON braces
+# like {"profile": ...} and the empty-object literal {} are not placeholders.
+
+[memory]
+distill = """从下面的对话片段中提炼值得长期记住的信息,只输出一个 JSON 对象,不要输出其他文字:
+{"profile": {"<画像维度,如 name/preference/goal>": "<一句话>"}, "facts": [["<主体>", "<关系,如 prefers/is/works_on>", "<客体>", "<图谱节点 id,可选>"], ...]}
+要求:只提取明确、持久、可复用的信息;没有值得记的就输出空对象 {};若对话中出现过图谱节点 id(graph 工具返回的 node id),把它作为第 4 个元素关联到对应事实;facts 最多 {max_facts} 条;profile 最多 5 个键。"""

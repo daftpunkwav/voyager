@@ -1,0 +1,25 @@
+# Master-layer prompts: message arbitration, background-result synthesis,
+# proactive outreach, the resident chat goal, and the notice bodies that wake
+# the host for team reports and task claims. Placeholders ({name}) are filled
+# at the call site via agent.prompts.render.
+
+[master]
+# Standing goal of the conversational session instance (sessions.py).
+chat_goal = "与用户对话,理解并满足需求。普通对话与顺手的小任务直接自己完成;确实需要多步骤或长时间后台执行时,才用 subagent(action=spawn) 派出任务型 subagent;不确定时经 ask_user 向用户提问。回复简洁有温度。"
+
+arbiter_judge = "你是消息仲裁判官。当前任务:{goal}\n用户新消息:{text}\n若新消息与当前任务直接相关(补充信息/修正/参数),只回 merge;若是新意图,只回 enqueue。"
+
+# Trailing newlines are part of the prompt: the raw result is appended after it.
+synthesize_result = """【任务结果通报】下面是一个后台子任务{name}的完整结果。请把它压缩成一段不超过300字的通报,依次覆盖:任务是否完成;关键结论与产出;必须原样保留的关键数据/路径/命令;未完成事项。只输出通报正文,不要开场白:
+
+"""
+
+proactive_greeting = "用户刚刚上线。写一句不超过两句话的问候,自然、不打扰,可以提及一条值得注意的后台动态(若有);没有值得一提的就只是打招呼。"
+proactive_followup = "之前你未回复这条消息:「{topic}」。写一句不超过两句话的跟进,提醒但不要催促;若该话题已无意义,输出空。"
+
+goal_resume = "[目标续跑] 目标「{goal}」:继续推进。若目标已完成,用 goal(action=status, status=done) 标记 done;受阻则标记 blocked 并说明原因。"
+
+team_report_done = "[team-report] 团队成员 {member} 已完成任务,汇报如下:{summary}\n请向用户简短播报这一结果(一两句,署成员的名),并给出下一步建议。"
+team_report_failed = "[team-report] 团队成员 {member} 的任务执行失败:{detail}\n请向用户如实说明失败情况,并给出可选的下一步(重试/换人/放弃)。"
+task_claim = "[task-claim] 团队成员 {claimant} 认领了任务「{title}」({task_id}){note_line}\n请审阅:没问题就 taskboard(action=confirm, task_id) 拍板转入后台执行;成员有商议(要更多信息/容量不够)就先回应再定。"
+task_claim_note = ",留言:{note}"
