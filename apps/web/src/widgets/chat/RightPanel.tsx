@@ -7,8 +7,11 @@
  * - Plan: agent.todowrite (action=query) polled every 5s for the open session (the same
  *   per-session list the LLM's todo_write maintains) with a done/total counter
  * - Agents: agent.list_subagents polled every 5s (no lifecycle SSE exists),
- *   filtered to the open session; each row shows the elapsed runtime and
- *   opens the run's execution view on click (interrupt lives inside the view)
+ *   filtered to the open session. A permanent roster row per teammate (Lucien
+ *   included) carries that teammate's live status — idle / chatting / working
+ *   with elapsed time and goal — and opens the run's execution view on click;
+ *   generic unnamed runs list below the roster behind a divider (interrupt
+ *   lives inside the view)
  * - Deliverables: note artifacts from chatStore (note.created) plus the live
  *   task.* progress cards (rendered by TaskCards, passed in as children);
  *   the section stays visible with an empty hint when there is nothing to show
@@ -23,7 +26,7 @@ import { routes } from '@/utils/routes';
 import { formatDurationSec } from '@/utils/trajectory';
 import { useChatStore } from '@/stores/chatStore';
 import { AGENT_CATALOG } from '@/constants/agentCatalog';
-import { personaDisplayName } from '@/constants/personas';
+import { canonicalPersonaId, personaDisplayName } from '@/constants/personas';
 import { AgentCharacterHead } from '@/components/agent/avatars/AgentCharacterHead';
 
 /** A list_subagents.running entry (status is a RunStatus.value from agent/runtime/state.py).
@@ -42,6 +45,20 @@ const POLL_MS = 5000;
 const SETTLED_KEEP_MS = 45_000;
 const SETTLED_KEEP_FAILED_MS = 120_000;
 const SETTLED_MAX = 12;
+
+const RESIDENT_IDS = new Set(AGENT_CATALOG.map((a) => a.id));
+
+/** Which resident roster row owns a run: the main conversational run belongs
+ *  to Lucien, a run whose persona maps onto a roster agent lights that
+ *  teammate's own row; null = a generic (unnamed) run, listed below the
+ *  roster behind a divider. Unknown custom personas are not residents. */
+function residentRunRow(r: RunningInstance): string | null {
+  if (r.conversational === true) return 'orchestrator';
+  const persona = r.persona ?? '';
+  if (!persona) return null;
+  const canonical = canonicalPersonaId(persona);
+  return RESIDENT_IDS.has(canonical) ? canonical : null;
+}
 
 function Chevron({ open }: { open: boolean }) {
   return (
@@ -234,6 +251,10 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
   }, [running, settled.length]);
 
   const hasDeliverables = artifacts.length > 0 || cardCount > 0;
+  const settledRows = settled.map((s) => s.row);
+  // Generic (persona-less / non-roster) runs list under the roster divider;
+  // a resident teammate's run is reflected in that teammate's own row.
+  const genericRuns = [...running, ...settledRows].filter((r) => residentRunRow(r) === null);
 
   return (
     <aside className="chat-side" aria-label={t('chat:panel.aria')}>
@@ -258,81 +279,124 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
         title={t('chat:panel.agents')}
         meta={running.length > 0 ? running.length : undefined}
       >
-        {/* Resident team strip: every teammate is always on the roster; the
-            status dot lights up while their persona has a live run. */}
+        {/* Resident roster: every teammate (Lucien included) is always listed,
+            one per line, with a live status readout; a run owned by a resident
+            lights up that teammate's row instead of listing separately. The
+            main conversational run never parks as settled — when the turn
+            ends Lucien simply returns to idle. */}
         <div className="chat-side__team">
-          {AGENT_CATALOG.filter((a) => a.id !== 'orchestrator').map((a) => {
-            const busy = running.some(
-              (r) => (r.persona ?? '') === a.id && (!r.session || r.session === activeSessionId)
+          {AGENT_CATALOG.map((a) => {
+            const live = running.find((r) => residentRunRow(r) === a.id);
+            const parked = settledRows.find(
+              (r) => residentRunRow(r) === a.id && r.conversational !== true
             );
+            const run = live ?? parked ?? null;
+            const isMain = run?.conversational === true;
+            const busy = live !== undefined;
+            const failed = !busy && parked?.status === 'failed';
+            // Elapsed is a task-runtime readout; the main conversational run
+            // spans the whole session, so its age reads as a wrong "turn time"
+            // and stays hidden behind the plain "chatting" state.
+            const elapsed =
+              live && !isMain && live.started_ts > 0
+                ? Math.max(0, Math.round(now / 1000 - live.started_ts))
+                : null;
+            const state = busy
+              ? isMain
+                ? t('chat:panel.memberChatting')
+                : t('chat:panel.memberBusy')
+              : failed
+                ? t('chat:delivery.failed')
+                : parked
+                  ? t('chat:panel.finished')
+                  : t('chat:panel.memberIdle');
             return (
-              <span
+              <button
                 key={a.id}
-                className={`chat-side__member${busy ? ' chat-side__member--busy' : ''}`}
-                title={`${personaDisplayName(a.id)} — ${busy ? t('chat:panel.memberBusy') : t('chat:panel.memberIdle')}`}
+                type="button"
+                className={`chat-side__member${busy ? ' chat-side__member--busy' : ''}${!busy && parked ? ' chat-side__member--settled' : ''}${failed ? ' chat-side__member--failed' : ''}`}
+                disabled={!run}
+                title={run?.goal || undefined}
+                onClick={() => {
+                  if (run && !isMain) setRunView(run);
+                }}
               >
                 <span className="chat-side__member-avatar" aria-hidden>
                   <AgentCharacterHead agentId={a.id} look={{ x: 0, y: 0 }} isFocused={false} />
                 </span>
-                <span className="chat-side__member-name">{personaDisplayName(a.id)}</span>
-                <span className="chat-side__member-dot" aria-hidden />
-              </span>
+                <span className="chat-side__membermain">
+                  <span className="chat-side__member-name">{personaDisplayName(a.id)}</span>
+                  {busy && run?.goal ? (
+                    <span className="chat-side__member-goal">{run.goal}</span>
+                  ) : null}
+                </span>
+                <span className="chat-side__member-state">
+                  {elapsed !== null ? (
+                    <span className="chat-side__member-elapsed">
+                      {formatDurationSec(elapsed, t)}
+                    </span>
+                  ) : null}
+                  <span className="chat-side__member-dot" aria-hidden />
+                  <span className="chat-side__member-status">{state}</span>
+                </span>
+              </button>
             );
           })}
         </div>
-        {running.length > 0 ? (
-          <ul className="chat-side__agents">
-            {[...running, ...settled.map((s) => s.row)].map((r) => {
-              const settledRow = r.status !== 'running';
-              const elapsed =
-                r.started_ts > 0 ? Math.max(0, Math.round(now / 1000 - r.started_ts)) : null;
-              const isMain = r.conversational === true;
-              const persona = r.persona ?? '';
-              return (
-                <li key={`${r.id}-${r.status}`}>
-                  <button
-                    type="button"
-                    className={`chat-side__agent${settledRow ? ' chat-side__agent--settled' : ''}${r.status === 'failed' ? ' chat-side__agent--failed' : ''}`}
-                    title={t('chat:panel.badgeTitle', { goal: r.goal, status: r.status })}
-                    onClick={() => setRunView(isMain ? null : r)}
-                  >
-                    {isMain ? (
-                      <span className="chat-side__pulse" aria-hidden />
-                    ) : (
-                      <span className="chat-side__agent-avatar" aria-hidden>
-                        <AgentCharacterHead
-                          agentId={persona || 'orchestrator'}
-                          look={{ x: 0, y: 0 }}
-                          isFocused={false}
-                        />
+        {genericRuns.length > 0 ? (
+          <>
+            <div className="chat-side__divider" aria-hidden />
+            <ul className="chat-side__agents">
+              {genericRuns.map((r) => {
+                const settledRow = r.status !== 'running';
+                const elapsed =
+                  r.started_ts > 0 ? Math.max(0, Math.round(now / 1000 - r.started_ts)) : null;
+                const isMain = r.conversational === true;
+                const persona = r.persona ?? '';
+                return (
+                  <li key={`${r.id}-${r.status}`}>
+                    <button
+                      type="button"
+                      className={`chat-side__agent${settledRow ? ' chat-side__agent--settled' : ''}${r.status === 'failed' ? ' chat-side__agent--failed' : ''}`}
+                      title={t('chat:panel.badgeTitle', { goal: r.goal, status: r.status })}
+                      onClick={() => setRunView(isMain ? null : r)}
+                    >
+                      {isMain ? (
+                        <span className="chat-side__pulse" aria-hidden />
+                      ) : (
+                        <span className="chat-side__agent-avatar" aria-hidden>
+                          <AgentCharacterHead
+                            agentId={persona || 'orchestrator'}
+                            look={{ x: 0, y: 0 }}
+                            isFocused={false}
+                          />
+                        </span>
+                      )}
+                      <span className="chat-side__agentmain">
+                        <span className="chat-side__agent-name">
+                          {isMain
+                            ? t('chat:panel.mainAgent')
+                            : settledRow
+                              ? `${persona || r.name} · ${r.status === 'failed' ? t('chat:delivery.failed') : t('chat:panel.finished')}`
+                              : persona
+                                ? personaDisplayName(persona)
+                                : r.name}
+                        </span>
+                        {r.goal ? <span className="chat-side__agent-goal">{r.goal}</span> : null}
                       </span>
-                    )}
-                    <span className="chat-side__agentmain">
-                      <span className="chat-side__agent-name">
-                        {isMain
-                          ? t('chat:panel.mainAgent')
-                          : settledRow
-                            ? `${persona || r.name} · ${r.status === 'failed' ? t('chat:delivery.failed') : t('chat:panel.finished')}`
-                            : persona
-                              ? personaDisplayName(persona)
-                              : r.name}
-                      </span>
-                      {r.goal ? <span className="chat-side__agent-goal">{r.goal}</span> : null}
-                    </span>
-                    {elapsed !== null && !settledRow ? (
-                      <span className="chat-side__agent-elapsed">
-                        {formatDurationSec(elapsed, t)}
-                      </span>
-                    ) : null}
-                    <span className="chat-side__agent-stop">{t('chat:panel.viewRun')}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="chat-side__empty small muted">{t('chat:panel.agentsEmpty')}</p>
-        )}
+                      {elapsed !== null && !settledRow ? (
+                        <span className="chat-side__agent-elapsed">
+                          {formatDurationSec(elapsed, t)}
+                        </span>
+                      ) : null}
+                      <span className="chat-side__agent-stop">{t('chat:panel.viewRun')}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        ) : null}
       </SideSection>
       <SideSection
         title={t('chat:panel.deliverables')}

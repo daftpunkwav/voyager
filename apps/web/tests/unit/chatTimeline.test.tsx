@@ -312,14 +312,65 @@ describe('RightPanel', () => {
     expect(screen.queryByText(/没有正在运行/)).toBeNull();
   });
 
-  it('shows empty states when nothing is planned or running', async () => {
+  it('keeps the resident roster visible when nothing is planned or running', async () => {
     render(
       <MemoryRouter>
         <RightPanel taskCards={null} />
       </MemoryRouter>
     );
     await waitFor(() => expect(screen.getByText(/暂无计划/)).toBeTruthy());
-    expect(screen.getByText(/没有正在运行/)).toBeTruthy();
+    // Lucien and the teammates are permanent one-per-line rows with a status
+    // readout; no separate unnamed section renders when nothing runs
+    expect(screen.getByText('Lucien')).toBeTruthy();
+    expect(screen.getByText('Iris')).toBeTruthy();
+    expect(screen.getAllByText('空闲').length).toBe(5);
+    expect(document.querySelector('.chat-side__divider')).toBeNull();
+  });
+
+  it('maps persona runs onto roster rows and keeps generic runs below the divider', async () => {
+    const nowSec = Date.now() / 1000;
+    listSubagentsMock.mockResolvedValue({
+      running: [
+        {
+          id: 'm1',
+          name: 'main',
+          status: 'running',
+          goal: '陪聊',
+          started_ts: nowSec,
+          conversational: true,
+        },
+        {
+          id: 'r2',
+          name: 'w1',
+          persona: 'recon',
+          status: 'running',
+          goal: '搜集资料',
+          started_ts: nowSec,
+        },
+        {
+          id: 'r3',
+          name: 'worker-3',
+          status: 'running',
+          goal: '跑脚本',
+          started_ts: nowSec,
+        },
+      ],
+    });
+    render(
+      <MemoryRouter>
+        <RightPanel taskCards={null} />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText('跑脚本')).toBeTruthy());
+    // The main run reads as "chatting" on Lucien's row, the recon run lights
+    // Iris's row with its goal; neither lists separately below the divider
+    expect(screen.getByText('对话中')).toBeTruthy();
+    expect(screen.getByText('执行中')).toBeTruthy();
+    expect(screen.getByText('搜集资料')).toBeTruthy();
+    expect(screen.queryByText('w1')).toBeNull();
+    // The generic run lists below the divider
+    expect(document.querySelector('.chat-side__divider')).toBeTruthy();
+    expect(screen.getByText('worker-3')).toBeTruthy();
   });
 
   it('clicking a running agent opens the execution view instead of interrupting', async () => {
