@@ -376,8 +376,7 @@ function Bubble({
   // their clean pill shape; rating expands in place from the bar. The wrapper
   // carries the row alignment the bubble used to own.
   const speakerName = msg.role === 'agent' ? personaDisplayName(msg.speaker ?? 'orchestrator') : '';
-  const speakerDuty =
-    msg.role === 'agent' ? canonicalPersonaId(msg.speaker ?? 'orchestrator') : '';
+  const speakerDuty = msg.role === 'agent' ? canonicalPersonaId(msg.speaker ?? 'orchestrator') : '';
   return (
     <div className={`chat-entry${msg.role === 'user' ? ' chat-entry--user' : ''}`}>
       {msg.role === 'agent' && showSpeaker ? (
