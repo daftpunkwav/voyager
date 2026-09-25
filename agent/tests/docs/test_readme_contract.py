@@ -50,7 +50,7 @@ MODEL_AGNOSTIC = {
 
 #: Mechanism subpackages of the agent (model-agnostic too).
 AGENT_MECHANISM_READMES = [
-    f"agent/src/agent/{d}/README.md" for d in ("runtime", "memory", "policy", "master")
+    f"agent/src/agent/{d}/README.md" for d in ("runtime", "memory", "policy", "orchestrator")
 ]
 
 ALL = DOMAIN_READMES + sorted(MODEL_AGNOSTIC) + AGENT_MECHANISM_READMES
