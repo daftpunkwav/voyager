@@ -19,7 +19,7 @@ import json
 import logging
 from pathlib import Path
 
-log = logging.getLogger("agent.clients.discovery")
+log = logging.getLogger("agent.mcp.discovery")
 
 #: Composition / scaffold dirs that are not agent-facing service cards.
 SKIP_DIR_NAMES = frozenset({"platform", "host", "gateway"})

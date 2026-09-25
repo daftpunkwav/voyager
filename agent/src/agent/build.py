@@ -22,8 +22,6 @@ from platform_settings import SettingsStore
 
 from agent.app import AgentApp
 from agent.capabilities import CapabilityDeps, build_agent_registry
-from agent.clients import McpClientPool
-from agent.clients.pool import ConnectFn
 from agent.context import ContextBuilder, OnDemandLoader, PageContextRegistry
 from agent.context.budgets import budget_from_settings
 from agent.context.plan_gate import PlanGates
@@ -39,6 +37,8 @@ from agent.master.outreach_budget import OutreachBudget
 from agent.master.proactive import ProactiveEngine
 from agent.master.task_board import TaskBoard
 from agent.master.task_graph import TaskGraph
+from agent.mcp import McpClientPool
+from agent.mcp.pool import ConnectFn
 from agent.memory import Memory
 from agent.memory.distill import Distiller
 from agent.memory.read_policy import render_relevant_recall
@@ -514,7 +514,7 @@ def build_agent(
     def _mcp_section() -> str:
         """Server-declared usage instructions (connected, approved servers),
         sorted by sid for stable bytes; omitted when none or disabled."""
-        if not settings.get("agent.mcp.instructions"):
+        if not settings.get("agent.clients.instructions"):
             return ""
         entries = mcp.instructions_map()
         if not entries:

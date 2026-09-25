@@ -1,4 +1,4 @@
-# agent.clients — External MCP server connections
+# agent.mcp — External MCP server connections
 
 - `pool.py`: connection pool. The user adds stdio/URL configs on the settings
   page (`agent.mcp.servers`), and the pool connects and lists remote tools;

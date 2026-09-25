@@ -7,7 +7,7 @@
 | directory | role |
 | --- | --- |
 | capabilities/ | the agent's human-facing capability surface, registered into one `Registry("agent")` — see capabilities/README.md |
-| clients/ | external MCP server connections: pool, tool mounting, sessions, read-only service discovery — see clients/README.md |
+| mcp/ | external MCP server connections: pool, tool mounting, sessions, read-only service discovery — see mcp/README.md |
 | context/ | context engineering: assembly, compression/pruning, on-demand loading, budgets, prefix-cache watch — see context/README.md |
 | hooks/ | hook system: loading, trigger points, user-hook reload — see hooks/README.md |
 | master/ | orchestration: arbitration, dispatch, task graph, blackboard, proactive outreach, sessions — see master/README.md |
@@ -39,5 +39,5 @@ Each subpackage carries its own README; this file does not repeat their contents
 
 ## Notes
 
-- Import direction: the agent package must not import domain packages (enforced by import-linter; stated in the `llm_http.py` and `clients/discovery.py` docstrings).
+- Import direction: the agent package must not import domain packages (enforced by import-linter; stated in the `llm_http.py` and `mcp/discovery.py` docstrings).
 - Domain capabilities reach the agent through the host bridge under `domain__capability` names; this package stays unaware of domain implementations (see tools/README.md).

@@ -4,8 +4,8 @@ races, and shutdown logging.
 
 import asyncio
 
-from agent.clients.pool import McpClientPool
-from agent.clients.session import StdioMcpSession, UrlMcpSession
+from agent.mcp.pool import McpClientPool
+from agent.mcp.session import StdioMcpSession, UrlMcpSession
 
 
 class TestStdioSerialization:

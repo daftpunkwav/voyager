@@ -13,7 +13,7 @@ from platform_capability import Registry, capability
 from platform_contracts import ActorRef, ErrorSuffix, ServiceError
 
 from agent.capabilities.deps import CapabilityDeps
-from agent.clients.pool import validate_server_config
+from agent.mcp.pool import validate_server_config
 
 
 def register(reg: Registry, deps: CapabilityDeps) -> None:

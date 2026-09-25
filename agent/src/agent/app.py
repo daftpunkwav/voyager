@@ -10,10 +10,10 @@ from typing import Any
 from platform_eventbus import EventBus, EventLog
 from platform_settings import SettingsStore
 
-from agent.clients import McpClientPool
 from agent.context import PageContextRegistry
 from agent.hooks import HookRegistry, UserHookReloader
 from agent.master import Master
+from agent.mcp import McpClientPool
 from agent.memory import Memory
 from agent.plugins import PluginManager
 from agent.runtime import EventLoop, Meter

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-from agent.clients import McpClientPool, discover_services, validate_server_config
+from agent.mcp import McpClientPool, discover_services, validate_server_config
 
 REPO_ROOT = Path(__file__).parents[2]
 

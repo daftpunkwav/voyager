@@ -450,8 +450,10 @@ DEFS = [
             "models without a price stay in the unknown bucket"
         ),
     ),
+    # Frozen keys: persisted in the settings store, so they stay
+    # "agent.clients.*" even though the module directory is agent/mcp/.
     SettingDef(
-        key="agent.mcp.refresh_seconds",
+        key="agent.clients.refresh_seconds",
         module="agent",
         type=SettingType.INT,
         default=300,
@@ -460,7 +462,7 @@ DEFS = [
         description="Interval for hot-refreshing connected MCP servers' tool lists; 0 disables the refresh loop",
     ),
     SettingDef(
-        key="agent.mcp.instructions",
+        key="agent.clients.instructions",
         module="agent",
         type=SettingType.BOOL,
         default=True,
@@ -548,7 +550,7 @@ DEFS = [
     # details live in runtime state.
     # user_only: prompt injection cannot change the server list.
     SettingDef(
-        key="agent.mcp.servers",
+        key="agent.clients.servers",
         module="agent",
         type=SettingType.JSON,
         default=[],

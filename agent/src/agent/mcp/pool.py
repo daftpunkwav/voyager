@@ -24,12 +24,12 @@ from typing import Any
 
 from platform_contracts import ErrorSuffix, ServiceError
 
-from agent.clients.mount import remount, unmount
-from agent.clients.session import McpSession, default_connect
+from agent.mcp.mount import remount, unmount
+from agent.mcp.session import McpSession, default_connect
 from agent.tools.core.base import Toolbelt
 
 #: Settings key: external MCP config list
-MCP_KEY = "agent.mcp.servers"
+MCP_KEY = "agent.clients.servers"
 
 #: Legal shape of a config id (stable primary key, feeds tool name mcp__<id>__<tool>)
 _ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
@@ -273,7 +273,7 @@ class McpClientPool:
             interval = 300.0
             try:
                 if self._settings is not None:
-                    raw = self._settings.get("agent.mcp.refresh_seconds")
+                    raw = self._settings.get("agent.clients.refresh_seconds")
                     interval = float(raw) if raw else 300.0
             except Exception:  # noqa: BLE001  # closed store / dirty value: default interval
                 interval = 300.0

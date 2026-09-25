@@ -1,4 +1,4 @@
-"""agent.clients: service discovery (discovery) + external MCP connection
+"""agent.mcp: service discovery (discovery) + external MCP connection
 pool (pool/session).
 
 pool.py: external MCP connection pool (validation/connection);
@@ -13,9 +13,9 @@ capability bridge; never ingest packages/*/mcp_server into the tool surface
 via the MCP client.
 """
 
-from agent.clients.discovery import discover_services
-from agent.clients.pool import MCP_KEY, McpClientPool, validate_server_config
-from agent.clients.session import McpSession
+from agent.mcp.discovery import discover_services
+from agent.mcp.pool import MCP_KEY, McpClientPool, validate_server_config
+from agent.mcp.session import McpSession
 
 __all__ = [
     "MCP_KEY",

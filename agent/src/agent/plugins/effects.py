@@ -22,8 +22,8 @@ from typing import Any
 
 from platform_contracts import ActorRef, ServiceError
 
-from agent.clients.pool import validate_server_config
 from agent.hooks.reload import USER_SOURCE_PREFIX
+from agent.mcp.pool import validate_server_config
 from agent.plugins.manifest import (
     Approval,
     PluginManifest,

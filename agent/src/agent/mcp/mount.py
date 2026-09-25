@@ -14,7 +14,7 @@ import asyncio
 import re
 from typing import Any
 
-from agent.clients.session import CALL_TIMEOUT, McpSession
+from agent.mcp.session import CALL_TIMEOUT, McpSession
 from agent.tools.core.base import AgentTool, Toolbelt
 
 
