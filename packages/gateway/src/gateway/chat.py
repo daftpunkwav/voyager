@@ -38,6 +38,7 @@ message is lost.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
@@ -210,7 +211,8 @@ def build_chat_router(
         session filter scans the log in chunks (forward from after_seq, or
         backward toward the tail / before_seq) until max_rows+1 matches are
         collected or the log ends, so `has_more` and the trim direction keep
-        their original meaning.
+        their original meaning. A sparse session can scan the whole log, so
+        event-loop callers must run this via asyncio.to_thread.
         """
         if not session:
             if before_seq is not None:
@@ -279,7 +281,8 @@ def build_chat_router(
         rows (payload filter; the gateway keeps storing zero business data)."""
         sid = _session_or_400(session)
         max_rows = max(1, min(limit, _MAX_PAGE))
-        rows = _page(
+        rows = await asyncio.to_thread(
+            _page,
             _read,
             _HISTORY_TYPES,
             sid,
@@ -321,7 +324,8 @@ def build_chat_router(
                 session=sid, after_seq=after_seq, before_seq=before_seq, limit=max_rows
             )
             return {"has_more": more, "steps": steps}
-        rows = _page(
+        rows = await asyncio.to_thread(
+            _page,
             _read,
             _TRAJECTORY_TYPES,
             sid,
