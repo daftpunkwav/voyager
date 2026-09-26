@@ -104,7 +104,7 @@ class TestToolRetry:
             },
         )
         out = await belt.call(ToolCall("1", "slow", {}))
-        assert "[工具失败]" in out and "TimeoutError" in out
+        assert out.startswith("[超时] slow 在")  # friendly wording, no retry
         assert counter["calls"] == 1
 
     async def test_httpx_timeout_not_retried(self, tmp_path) -> None:

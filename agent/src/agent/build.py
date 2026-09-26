@@ -411,7 +411,12 @@ def build_agent(
         dual dimensions (chars/lines) hot-read settings, 0 disables. The
         spill directory is bounded on every call (missing dir is a no-op),
         not only when this result spilled, so old files cannot linger while
-        later results stay small."""
+        later results stay small.
+
+        The budget runs AFTER invoke_detailed's exception boundary, so a spill
+        write failure (read-only workspace, disk full) would escape as a raw
+        OSError and kill the whole turn over a bookkeeping step; it degrades to
+        a plain truncation instead."""
         limit = int(settings.get("agent.context.tool_result_max") or 0)
         max_lines = int(settings.get("agent.context.tool_result_max_lines") or 0)
         try:

@@ -14,7 +14,7 @@ import asyncio
 import re
 from typing import Any
 
-from agent.mcp.session import CALL_TIMEOUT, McpSession
+from agent.mcp.session import CALL_TIMEOUT, McpRpcError, McpSession
 from agent.tools.core.base import AgentTool, Toolbelt
 
 
@@ -24,6 +24,24 @@ def _tool_name(sid: str, remote_name: str) -> str:
     return f"mcp__{sid}__{safe}"
 
 
+async def _call_remote(session: McpSession, remote_name: str, kwargs: dict) -> str:
+    """One MCP call with the failure classes separated:
+
+    - TimeoutError (per-call wait_for) and transport failures propagate: the
+      tool pipeline puts them through retry + circuit breaker and renders the
+      typed error text ([超时] / [积木服务离线] / [工具失败]) — before this
+      split every MCP failure was swallowed into a plain string, so MCP tools
+      effectively had zero resilience machinery;
+    - McpRpcError (the server answered with a JSON-RPC error) is deterministic
+      in the arguments: it returns as text for the model to correct, never
+      retried or counted toward the breaker.
+    """
+    try:
+        return await asyncio.wait_for(session.call_tool(remote_name, kwargs), CALL_TIMEOUT)
+    except McpRpcError as exc:
+        return f"[MCP 错误] {remote_name}: {exc}"
+
+
 def _build_tool(cfg: dict, session: McpSession, remote: dict) -> AgentTool:
     """Build an AgentTool for one remote tool; remote failures come back as
     text results for the LLM instead of breaking the tool loop."""
@@ -31,10 +49,7 @@ def _build_tool(cfg: dict, session: McpSession, remote: dict) -> AgentTool:
     tool_name = _tool_name(cfg["id"], remote_name)
 
     async def handler(**kwargs: Any) -> str:
-        try:
-            return await asyncio.wait_for(session.call_tool(remote_name, kwargs), CALL_TIMEOUT)
-        except Exception as exc:  # noqa: BLE001
-            return f"[MCP failed] {tool_name}: {exc}"
+        return await _call_remote(session, remote_name, kwargs)
 
     schema = (
         remote.get("schema")
@@ -79,8 +94,9 @@ def _resource_tools(cfg: dict, session: McpSession) -> dict[str, AgentTool]:
             return f"[MCP failed] mcp__{cfg['id']}__list_resources: server has no resources"
         try:
             resources = await asyncio.wait_for(list_res(), CALL_TIMEOUT)
-        except Exception as exc:  # noqa: BLE001
-            return f"[MCP failed] mcp__{cfg['id']}__list_resources: {exc}"
+        except McpRpcError as exc:  # deterministic app error: text for the model
+            return f"[MCP 错误] mcp__{cfg['id']}__list_resources: {exc}"
+        # timeouts / transport failures propagate into retry + breaker
         if not resources:
             return "no resources"
         lines = []
@@ -97,8 +113,9 @@ def _resource_tools(cfg: dict, session: McpSession) -> dict[str, AgentTool]:
             return f"[MCP failed] mcp__{cfg['id']}__read_resource({uri}): server has no resources"
         try:
             return await asyncio.wait_for(read_res(uri), CALL_TIMEOUT)
-        except Exception as exc:  # noqa: BLE001
-            return f"[MCP failed] mcp__{cfg['id']}__read_resource({uri}): {exc}"
+        except McpRpcError as exc:  # deterministic app error: text for the model
+            return f"[MCP 错误] mcp__{cfg['id']}__read_resource({uri}): {exc}"
+        # timeouts / transport failures propagate into retry + breaker
 
     prefix = f"mcp__{cfg['id']}__"
     return {

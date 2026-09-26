@@ -66,6 +66,7 @@ partial_result = "部分结果:{text}"
 no_final_text = "尚无最终文本产出"
 overflow = "[中断] 上下文压缩后仍超出模型窗口;请缩短输入、清理会话，或检查 agent.context.window_tokens 与模型真实窗口是否一致。"
 truncation = "[输出被截断] 已达模型单次输出上限,回答不完整;可在设置提高输出上限或让我分段继续。"
+truncated_calls = "[未执行] 上一轮输出达到模型单次输出上限,以上工具调用的参数可能被截断,为避免以残缺参数执行已全部跳过;请检查后重新发起这些调用(必要时拆小参数)。"
 tool_cap = "[中断] 已达工具调用上限({max_tool_calls});可在设置提高 agent.rounds.tool_max"
 rounds_cap = "[中断] 已达 ReAct 轮数上限({max_rounds});可在设置提高 agent.rounds.max"
 

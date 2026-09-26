@@ -787,3 +787,81 @@ class TestOtherModes:
         assert "[advisory]" in messages[4]["content"]
         assert [m["tool_call_id"] for m in messages[2:4]] == ["1", "2"]
         assert len(messages[1]["tool_calls"]) == 2  # entry matches executed prefix
+
+
+class TestTruncatedToolCalls:
+    async def test_truncated_tool_calls_fail_closed_without_executing(self) -> None:
+        """Output-cap cut with tool calls (pi's fail-closed design): streamed
+        arguments are finalized by a best-effort salvage and can be silently
+        incomplete, so the calls are echoed back with [未执行] results instead
+        of being executed; the model re-issues them in the next round."""
+        llm = FakeLLM(
+            [
+                LLMReply(
+                    tool_calls=(ToolCall("1", "echo_tool", {"x": "a"}),),
+                    meta={"finish_reason": "length"},
+                ),
+                LLMReply(text="已重新发起并完成"),
+            ]
+        )
+        executed: list[str] = []
+
+        async def echo_tool(x: str = "") -> str:
+            executed.append(x)
+            return f"echo:{x}"
+
+        belt = Toolbelt(
+            {"echo_tool": AgentTool(name="echo_tool", description="测试工具", handler=echo_tool)},
+            PolicyEngine(),
+        )
+        messages = _msgs()
+        result = await run_mode(
+            Mode.REACT, llm=llm, toolbelt=belt, messages=messages, limits=ModeLimits()
+        )
+        assert result == "已重新发起并完成"
+        assert executed == []  # the truncated call never executed
+        # pairing holds: assistant carries the call, the tool row explains the skip
+        assert messages[1]["tool_calls"][0]["id"] == "1"
+        assert messages[2]["tool_call_id"] == "1"
+        assert "[未执行]" in messages[2]["content"]
+        assert len(llm.calls) == 2  # the loop continued so the model could re-issue
+
+    async def test_truncated_plain_reply_unchanged(self) -> None:
+        """No tool calls: the existing truncation marker path is untouched."""
+        llm = FakeLLM([LLMReply(text="回答前半", meta={"finish_reason": "length"})])
+        messages = _msgs()
+        result = await run_mode(
+            Mode.REACT,
+            llm=llm,
+            toolbelt=_belt(),
+            messages=messages,
+            limits=ModeLimits(max_rounds=1),
+        )
+        assert "[输出被截断]" in result
+
+
+class TestSurrenderSteps:
+    async def test_tool_cap_marks_a_surrender_step(self) -> None:
+        """Budget-exhaustion endings mark the step trail with a surrender
+        reason so turn.py can stamp state.surrender_reason and parents can
+        tell the truncated run from a completed one."""
+        llm = FakeLLM(
+            dynamic=lambda _m, _t: LLMReply(tool_calls=(ToolCall("1", "echo_tool", {"x": "a"}),))
+        )  # every round wants one more call
+        steps: list[tuple[str, str, dict]] = []
+
+        async def on_step(kind: str, name: str, summary: str, detail: dict | None = None) -> None:
+            steps.append((kind, name, dict(detail or {})))
+
+        messages = _msgs()
+        result = await run_mode(
+            Mode.REACT,
+            llm=llm,
+            toolbelt=_belt(),
+            messages=messages,
+            limits=ModeLimits(max_rounds=3, max_tool_calls=1),
+            on_step=on_step,
+        )
+        assert "已达工具调用上限" in result
+        surrenders = [d for k, n, d in steps if k == "system" and n == "surrender"]
+        assert surrenders and surrenders[-1]["reason"] == "tool_cap"

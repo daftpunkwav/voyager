@@ -24,7 +24,7 @@ async def test_timeout_fails_call_without_retries() -> None:
         retries=3,  # generous: a timeout must not be retried despite this
     )
     out = await belt.call(ToolCall("1", "slow", {}))
-    assert "[工具失败]" in out and "Timeout" in out
+    assert out.startswith("[超时] slow 在 0s 内未完成")  # actionable wording, no dangling colon
     assert len(attempts) == 1  # exactly one handler attempt: fail fast by design
 
 
@@ -46,7 +46,7 @@ async def test_timeout_error_not_retried_for_writes() -> None:
         PolicyEngine(),
     )
     out = await belt.call(ToolCall("1", "w", {}))
-    assert "Timeout" in out
+    assert out.startswith("[超时] w 在 0s 内未完成")
 
 
 async def test_no_timeout_keeps_default_behavior() -> None:

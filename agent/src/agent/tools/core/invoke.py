@@ -389,6 +389,16 @@ async def invoke_detailed(
             )
         else:
             result = f"[工具失败] {tool.name}: {type(exc).__name__}: {exc}"
+    except TimeoutError:
+        # Per-tool timeout_s / MCP per-call cap expiry (no_retry_on stops the
+        # retry loop first). Same wording family as the harness deadline's
+        # [超时] result; str(TimeoutError()) is empty, so the generic branch
+        # would render a dangling colon.
+        ok = False
+        cap = f"{tool.timeout_s:.0f}s" if tool.timeout_s else "规定时限"
+        result = (
+            f"[超时] {tool.name} 在 {cap} 内未完成,已被中断;请缩小输入范围或换一种实现方式后重试"
+        )
     except Exception as exc:  # noqa: BLE001  # tool failures go back to the LLM as text results
         ok = False
         result = f"[工具失败] {tool.name}: {type(exc).__name__}: {exc}"

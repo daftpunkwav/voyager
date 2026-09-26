@@ -23,6 +23,7 @@ import re
 import time
 from typing import Any
 
+from agent.context.builder import TURN_CONTEXT_HEADER
 from agent.context.compressor import COMPRESS_BUDGET, compress
 from agent.context.governor import ContextGovernor
 from agent.contracts import ToolRunner
@@ -107,6 +108,8 @@ def _last_user_text(messages: list[dict[str, Any]]) -> str:
         content = content_to_text(m.get("content"))
         if CONTINUE_MARK in content:
             continue
+        if content.startswith(TURN_CONTEXT_HEADER):
+            continue  # the trailing per-turn context row, not user input
         return content.strip()
     return ""
 
@@ -146,6 +149,14 @@ def _context_step(report: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     return summary, {"op": op, "mode": mode}
 
 
+async def _surrender_step(on_step: StepCb, reason: str, text: str) -> None:
+    """Mark a budget-exhaustion ending on the step trail: cap surrenders return
+    normally (the work done is real), so turn.py stamps state.surrender_reason
+    and wait/dispatch callers can tell a truncated run from a completed one
+    instead of trusting the COMPLETED status alone."""
+    await on_step("system", "surrender", text[:120], {"reason": reason})
+
+
 async def _run_tool(
     toolbelt: ToolRunner, call: ToolCall, on_event: EventCb, deadline: Deadline | None = None
 ) -> tuple[Any, float]:
@@ -166,8 +177,14 @@ async def _run_tool(
     async def _call() -> Any:
         try:
             return await toolbelt.call_detailed(call, on_progress=_on_progress)
-        except TypeError:
-            return await toolbelt.call_detailed(call)
+        except TypeError as exc:
+            # Compatibility fallback for ToolRunner adapters without the
+            # on_progress kwarg — gated on the actual TypeError wording so a
+            # TypeError raised AFTER the handler ran (metering, hooks) can
+            # never re-execute the call (double side effects).
+            if "on_progress" in str(exc):
+                return await toolbelt.call_detailed(call)
+            raise
 
     if deadline is not None:
         outcome = await deadline.run_tool(_call, tool=call.name)
@@ -260,7 +277,9 @@ async def run_react(
                 if reply.text
                 else P.modes.react.no_final_text
             )
-            return render(P.modes.react.token_budget, max_tokens=limits.max_tokens, partial=partial)
+            text = render(P.modes.react.token_budget, max_tokens=limits.max_tokens, partial=partial)
+            await _surrender_step(on_step, "token_budget", text)
+            return text
         await on_event(
             RuntimeEvent.LLM_COMPLETED,
             round=round_n,
@@ -333,6 +352,41 @@ async def run_react(
             # Raw round log: the exact request transcript plus the response,
             # stored outside the display projection (capped by the store).
             await on_raw(round_n, messages, reply)
+        if reply.truncated and reply.tool_calls:
+            # Output-cap truncation with tool calls (fail-closed, the pi
+            # agent-loop design): streamed arguments are finalized by a
+            # best-effort JSON salvage, so they can parse yet be silently
+            # incomplete — executing them risks acting on truncated args.
+            # Echo the calls back with error results so the assistant/tool
+            # pairing holds, and let the model re-issue them whole.
+            notice = P.modes.react.truncated_calls
+            truncated_entry: dict[str, Any] = {
+                "role": "assistant",
+                "content": reply.text or "",
+                "tool_calls": [
+                    {"id": call.id, "name": call.name, "arguments": call.arguments}
+                    for call in reply.tool_calls
+                ],
+            }
+            if reply.thinking_blocks:
+                truncated_entry["thinking_blocks"] = [dict(b) for b in reply.thinking_blocks]
+            messages.append(truncated_entry)
+            for call in reply.tool_calls:
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "name": call.name,
+                        "content": notice,
+                    }
+                )
+            await on_step(
+                "llm",
+                "truncated-calls",
+                notice[:120],
+                {"truncated": True, "skipped": [call.name for call in reply.tool_calls]},
+            )
+            continue
         if reply.final:
             text = reply.text or ""
             # Output-cap truncation (provider finish_reason): the answer the
@@ -380,7 +434,9 @@ async def run_react(
             pending = pending[: limits.max_tool_calls - tool_calls_used]
             truncated = True
         if not pending:
-            return render(P.modes.react.tool_cap, max_tool_calls=limits.max_tool_calls)
+            text = render(P.modes.react.tool_cap, max_tool_calls=limits.max_tool_calls)
+            await _surrender_step(on_step, "tool_cap", text)
+            return text
         # Loop detection runs over the batch before anything executes: the
         # calls up to (not including) the tripping one are the executable
         # prefix; the assistant entry below carries only those, so the
@@ -469,14 +525,20 @@ async def run_react(
                     messages.append({"role": "user", "content": reminder})
                     await on_step("llm", "loop-advisory", reminder[:120], {"advisory": True})
                     continue
-                return render(
+                text = render(
                     P.modes.loop_abort,
                     tool=tripped.name,
                     window=loops.window,
                     threshold=loops.threshold,
                 )
-            return render(P.modes.react.tool_cap, max_tool_calls=limits.max_tool_calls)
-    return render(P.modes.react.rounds_cap, max_rounds=limits.max_rounds)
+                await _surrender_step(on_step, "loop_abort", text)
+                return text
+            text = render(P.modes.react.tool_cap, max_tool_calls=limits.max_tool_calls)
+            await _surrender_step(on_step, "tool_cap", text)
+            return text
+    text = render(P.modes.react.rounds_cap, max_rounds=limits.max_rounds)
+    await _surrender_step(on_step, "rounds_cap", text)
+    return text
 
 
 async def run_step(

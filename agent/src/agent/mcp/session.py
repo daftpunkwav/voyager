@@ -26,6 +26,14 @@ PROTOCOL_VERSION = "2024-11-05"
 CALL_TIMEOUT = 30.0  # per-request cap for the HTTP client (seconds); stdio call timeouts are wrapped with wait_for at call time in mount.py
 
 
+class McpRpcError(RuntimeError):
+    """Application-level error returned BY the MCP server (a JSON-RPC error
+    response): deterministic in the call arguments, so the tool pipeline
+    returns it as text for the model to correct instead of retrying or
+    counting it toward the circuit breaker. Transport and timeout failures
+    keep their own exception types and flow into retry + breaker."""
+
+
 @runtime_checkable
 class McpSession(Protocol):
     """Session with one external MCP server; production implementations are in
@@ -189,7 +197,7 @@ class StdioMcpSession(_McpProtocol):
                 continue  # notifications / server-initiated requests (e.g. sampling) ignored for now
             if msg.get("error"):
                 err = msg["error"] or {}
-                raise RuntimeError(f"JSON-RPC {err.get('code')}: {err.get('message')}")
+                raise McpRpcError(f"JSON-RPC {err.get('code')}: {err.get('message')}")
             return msg.get("result")
 
     async def _request(self, method: str, params: dict | None) -> Any:
@@ -286,7 +294,7 @@ class UrlMcpSession(_McpProtocol):
             raise RuntimeError(f"MCP server returned no response for {method}")  # noqa: TRY004
         if msg.get("error"):
             err = msg["error"] or {}
-            raise RuntimeError(f"JSON-RPC {err.get('code')}: {err.get('message')}")
+            raise McpRpcError(f"JSON-RPC {err.get('code')}: {err.get('message')}")
         return msg.get("result")
 
     async def _notify(self, method: str, params: dict | None) -> None:
