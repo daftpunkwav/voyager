@@ -65,8 +65,10 @@ _DOMAIN = "gateway"
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 #: Event types relevant to the human timeline (chat + progress + popups +
 #: navigation commands + artifact cards + settings hot-reload + L1 permission
-#: prompts + streaming deltas + service health transitions; note.edited is
-#: excluded — autosave would be high-frequency noise).
+#: prompts + streaming deltas + service health transitions). note.* lifecycle
+#: events ride along for the notes page's cross-surface cache invalidation
+#: (notesUiBridge), matching the source.* precedent — except note.edited,
+#: excluded on purpose: editor autosave would make it high-frequency noise.
 #: Types always use the contracts vocabulary constants; "task.*" is a
 #: subscription glob pattern, not a concrete type.
 _STREAM_TYPES = (
@@ -80,6 +82,9 @@ _STREAM_TYPES = (
     DomainEvent.AGENT_POLICY_NOTIFY,
     DomainEvent.SKILL_PROPOSED,
     DomainEvent.NOTE_CREATED,
+    DomainEvent.NOTE_DELETED,
+    DomainEvent.NOTE_RESTORED,
+    DomainEvent.NOTE_PURGED,
     DomainEvent.SOURCE_ADDED,
     DomainEvent.SOURCE_READY,
     DomainEvent.SOURCE_REMOVED,

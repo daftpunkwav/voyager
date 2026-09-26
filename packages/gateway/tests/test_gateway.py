@@ -253,6 +253,40 @@ class TestChat:
         r = client.get("/api/chat/stream?after_seq=0&once=true")
         assert "task.progress" in r.text and "parsing 50%" in r.text
 
+    def test_sse_streams_note_lifecycle_except_edited(self, client, bus) -> None:
+        """note.deleted/restored/purged ride the stream for the notes page's
+        cross-surface cache invalidation (same standing as source.*); the
+        notes list must reflect agent-driven trash changes without a refocus.
+        note.edited stays excluded on purpose (autosave noise)."""
+        for note_type in (
+            DomainEvent.NOTE_DELETED,
+            DomainEvent.NOTE_RESTORED,
+            DomainEvent.NOTE_PURGED,
+        ):
+            asyncio.run(
+                bus.publish(
+                    Event(
+                        type=note_type,
+                        actor=ActorRef(kind=ActorKind.AGENT, id="agent.main"),
+                        payload={"note_id": "n1", "title": "t"},
+                    )
+                )
+            )
+        asyncio.run(
+            bus.publish(
+                Event(
+                    type=DomainEvent.NOTE_EDITED,
+                    actor=ActorRef(kind=ActorKind.AGENT, id="agent.main"),
+                    payload={"note_id": "n1", "title": "t"},
+                )
+            )
+        )
+        r = client.get("/api/chat/stream?after_seq=0&once=true")
+        assert "note.deleted" in r.text
+        assert "note.restored" in r.text
+        assert "note.purged" in r.text
+        assert "note.edited" not in r.text
+
 
 class TestSseReplay:
     def test_sse_lag_replay_skips_queue_duplicates(self, tmp_path) -> None:
