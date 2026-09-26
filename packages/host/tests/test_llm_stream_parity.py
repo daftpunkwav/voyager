@@ -216,6 +216,20 @@ async def test_fragment_reassembly_with_null_index_parity(
     assert agent == llm
 
 
+def test_retry_parameter_parity() -> None:
+    """The hand-mirrored transient-retry parameters must stay identical on
+    both sides: attempts / backoff / Retry-After cap / the post-connect
+    no-retry timeout classes. A one-sided tweak here would silently give the
+    standalone agent and the aggregate run different resilience envelopes —
+    this lock turns that drift into a test failure."""
+    from agent import llm_http
+
+    assert llm_http._RETRY_ATTEMPTS == llm_client_mod._RETRY_ATTEMPTS
+    assert llm_http._RETRY_BACKOFF == llm_client_mod._RETRY_BACKOFF
+    assert llm_http._RETRY_AFTER_CAP == llm_client_mod._RETRY_AFTER_CAP
+    assert set(llm_http._NO_RETRY_NET) == set(llm_client_mod._NO_RETRY_NET)
+
+
 async def test_midstream_error_frame_never_silent(monkeypatch: pytest.MonkeyPatch) -> None:
     """An error object inside an HTTP-200 stream must surface on both sides:
     the llm domain raises ProviderError, the standalone client folds it into
