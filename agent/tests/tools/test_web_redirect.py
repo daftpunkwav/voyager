@@ -11,6 +11,7 @@ from typing import Any
 import agent.tools.net.web_fetch as web_mod
 import httpx
 from agent.policy import NetworkPolicy, PolicyEngine
+from agent.policy.network import host_is_nonglobal
 
 
 def _client_factory(handler):
@@ -25,6 +26,19 @@ def _client_factory(handler):
 
 def _fetch(monkeypatch, handler) -> Any:
     monkeypatch.setattr(web_mod.httpx, "AsyncClient", _client_factory(handler))
+
+    async def _resolve(url: str) -> str:
+        # Hermetic DNS guard stub: public hosts resolve to a fixed IP (the
+        # request is pinned onto it); literal intranet hosts still refuse, so
+        # the redirect-to-internal test keeps its rejection semantics offline.
+        from urllib.parse import urlparse
+
+        host = urlparse(url).hostname or ""
+        if host_is_nonglobal(host):
+            raise ValueError(f"{host} resolves to a non-public address")
+        return "93.184.216.34"
+
+    monkeypatch.setattr(web_mod, "resolve_public", _resolve)
     policy = PolicyEngine(network=NetworkPolicy(mode="whitelist", domains=("github.com",)))
     return web_mod.web_fetch_tool(policy).handler
 
@@ -35,19 +49,15 @@ async def test_redirect_to_internal_is_refused(monkeypatch) -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(str(request.url))
-        if request.url.host == "github.com":
-            return httpx.Response(
-                302, headers={"location": "http://169.254.169.254/latest/meta-data"}
-            )
-        raise AssertionError(f"内网地址被实际请求: {request.url}")
+        return httpx.Response(302, headers={"location": "http://169.254.169.254/latest/meta-data"})
 
     fetch = _fetch(monkeypatch, handler)
     out = await fetch("http://github.com/redirect")
 
     assert len(calls) == 1  # only the first hop was requested
-    # The internal hop is refused by the non-global-literal rule (reason mentions loopback or internal
-    # address), while the first hop went through the whitelist; the exact rule is not pinned — either refusing means the block worked
-    assert "[已拒绝]" in out and ("allowlist" in out or "loopback" in out or "private" in out)
+    # The internal hop is refused before any request (the literal-host
+    # network rule fires first: "loopback or private addresses rejected")
+    assert "[已拒绝]" in out and "loopback or private" in out
 
 
 async def test_redirect_within_whitelist_follows(monkeypatch) -> None:

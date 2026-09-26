@@ -5,7 +5,8 @@ The search endpoint URL passes the same policy whitelist as web_fetch — in
 whitelist mode duckduckgo.com must be added to agent.network.domains.
 Redirects are followed hop by hop with the policy + DNS guard re-checked on
 every hop, switching to GET after the first redirect (the POST target must
-not be re-submitted).
+not be re-submitted). Like web_fetch, every hop connects to the validated
+IP (DNS pinning), closing the rebinding window of a second resolution.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ import re
 from urllib.parse import parse_qs, urlparse
 
 import httpx
-from platform_webguard.dns_pin import resolve_public
+from platform_webguard.dns_pin import pinned_request, resolve_public
 from platform_webguard.redirects import MAX_REDIRECTS, redirect_target
 
 from agent.context.provenance import wrap_untrusted
@@ -102,17 +103,26 @@ def web_search_tool(policy: PolicyEngine | None = None) -> AgentTool:
                     if not decision.allow:
                         return f"[已拒绝] {decision.reason}"
                 try:
-                    await resolve_public(url)
+                    chosen_ip = await resolve_public(url)
                 except ValueError as exc:
                     return f"[已拒绝] {exc}"
+                # Send to the validated IP (Host/SNI keep the hostname): same
+                # DNS-rebinding pin as web_fetch; POST only for the search
+                # endpoint itself (a redirect target must not be re-submitted)
                 if url == _SEARCH_URL:
-                    resp = await client.post(
+                    request = pinned_request(
+                        client,
                         url,
+                        chosen_ip,
+                        method="POST",
                         data={"q": query},
                         headers={"User-Agent": _SEARCH_UA},
                     )
-                else:  # switch to GET after a redirect (the POST target must not be re-submitted)
-                    resp = await client.get(url, headers={"User-Agent": _SEARCH_UA})
+                else:
+                    request = pinned_request(
+                        client, url, chosen_ip, headers={"User-Agent": _SEARCH_UA}
+                    )
+                resp = await client.send(request)
                 nxt = redirect_target(url, resp) if resp is not None else None
                 if nxt is not None:
                     url = nxt  # every hop is re-checked: policy + DNS, above

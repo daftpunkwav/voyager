@@ -8,6 +8,7 @@ the system prompt and the speaker roles are untouched.
 
 from __future__ import annotations
 
+import httpx
 from agent.context.provenance import CLOSE, OPEN, wrap_untrusted
 
 
@@ -34,16 +35,6 @@ class TestProvenance:
             async def aclose(self):
                 return None
 
-        class FakeStream:
-            def __init__(self, resp):
-                self._resp = resp
-
-            async def __aenter__(self):
-                return self._resp
-
-            async def __aexit__(self, *a):
-                return False
-
         class FakeClient:
             def __init__(self, *a, **kw):
                 pass
@@ -54,8 +45,12 @@ class TestProvenance:
             async def __aexit__(self, *a):
                 return False
 
-            def stream(self, method, url):
-                return FakeStream(FakeResp())
+            def build_request(self, method, url, **kw):
+                # Real request object: pinned_request rewrites its host header
+                return httpx.Request(method, url)
+
+            async def send(self, request, stream=False):
+                return FakeResp()
 
         monkeypatch.setattr(mod.httpx, "AsyncClient", FakeClient)
 

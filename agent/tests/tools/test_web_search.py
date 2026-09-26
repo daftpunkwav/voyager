@@ -1,16 +1,25 @@
 """Tests for web_search (DuckDuckGo backend).
 
-MockTransport throughout and the DNS guard (resolve_public) is stubbed, so no
-test touches the network or the system resolver - a polluted/intranet-resolving
-DNS answer must not flip the tool's early-reject path under a test (that made
-these tests fail on machines whose resolver returns an intranet-classified
-address for the search host). The parser is additionally tested as a pure
-function, covering uddg redirect-shell unwrapping and tag stripping.
+MockTransport throughout and the DNS guard (resolve_public) is stubbed to a
+fixed public IP, so no test touches the network or the system resolver - a
+polluted/intranet-resolving DNS answer must not flip the tool's early-reject
+path under a test (that made these tests fail on machines whose resolver
+returns an intranet-classified address for the search host). The stubbed IP
+is what requests are pinned onto, so host assertions use it. The parser is
+additionally tested as a pure function, covering uddg redirect-shell
+unwrapping and tag stripping.
 """
+
+from urllib.parse import urlparse
 
 import agent.tools.net.web_search as web_mod
 import httpx
 from agent.policy import NetworkPolicy, PolicyEngine
+from agent.policy.network import host_is_nonglobal
+
+#: Public IP the hermetic resolver stub "resolves" every public host to; the
+#: pinned requests carry exactly this host on the wire.
+_PINNED_IP = "93.184.216.34"
 
 #: A minimal sample of the endpoint's current shape (2 results: a redirect-shell link plus inline <b> tags)
 _DDG_PAGE = """
@@ -40,10 +49,15 @@ def _client_factory(handler):
 def _search(monkeypatch, handler, domains=("duckduckgo.com",)):
     monkeypatch.setattr(web_mod.httpx, "AsyncClient", _client_factory(handler))
 
-    async def _allow(_url: str) -> None:
-        return None  # DNS guard stub: hermetic tests, no system resolver
+    async def _resolve(url: str) -> str:
+        # Hermetic DNS guard stub: public hosts resolve to a fixed IP (the
+        # requests are pinned onto it); literal intranet hosts still refuse.
+        host = urlparse(url).hostname or ""
+        if host_is_nonglobal(host):
+            raise ValueError(f"{host} resolves to a non-public address")
+        return _PINNED_IP
 
-    monkeypatch.setattr(web_mod, "resolve_public", _allow)
+    monkeypatch.setattr(web_mod, "resolve_public", _resolve)
     policy = PolicyEngine(network=NetworkPolicy(mode="whitelist", domains=domains))
     return web_mod.web_search_tool(policy).handler
 
@@ -114,20 +128,21 @@ class TestSearchRedirect:
 
         def handler(request: httpx.Request) -> httpx.Response:
             calls.append((request.method, request.url.host))
-            if request.url.host == "html.duckduckgo.com":
+            if request.method == "POST":
                 return httpx.Response(302, headers={"location": "https://duckduckgo.com/html2/"})
             return httpx.Response(200, text=_DDG_PAGE)
 
         search = _search(monkeypatch, handler)
         out = await search("q")
-        assert calls == [("POST", "html.duckduckgo.com"), ("GET", "duckduckgo.com")]
+        # both hops are pinned onto the stubbed resolver IP
+        assert calls == [("POST", _PINNED_IP), ("GET", _PINNED_IP)]
         assert "Result One" in out
 
     async def test_redirect_to_off_whitelist_refused(self, monkeypatch) -> None:
         """302 -> an off-whitelist domain: that hop is refused and no request is sent."""
 
         def handler(request: httpx.Request) -> httpx.Response:
-            if request.url.host == "html.duckduckgo.com":
+            if request.method == "POST":
                 return httpx.Response(302, headers={"location": "https://evil.example.com/x"})
             raise AssertionError(f"白名单外地址被实际请求: {request.url}")
 

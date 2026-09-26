@@ -5,13 +5,18 @@ re-checked against the policy whitelist and the shared DNS guard
 (platform_webguard — one implementation with the sources domain). The body
 is read under a byte cap: a timeout bounds duration, not size, and the
 model-controlled max_chars must not be able to lift the memory bound.
+
+DNS pinning: every hop resolves once, validates all addresses as public,
+then connects to the validated IP directly (Host header / TLS SNI keep the
+original hostname). Connecting by hostname instead would let the resolver
+answer a second time — the DNS rebinding window the pin closes.
 """
 
 from __future__ import annotations
 
 import httpx
 from platform_webguard.body import read_bounded
-from platform_webguard.dns_pin import resolve_public
+from platform_webguard.dns_pin import pinned_request, resolve_public
 from platform_webguard.redirects import MAX_REDIRECTS, redirect_target
 
 from agent.context.provenance import wrap_untrusted
@@ -33,17 +38,21 @@ def web_fetch_tool(policy: PolicyEngine | None = None) -> AgentTool:
                     if not decision.allow:
                         return f"[已拒绝] {decision.reason}"
                 try:
-                    await resolve_public(url)
+                    chosen_ip = await resolve_public(url)
                 except ValueError as exc:
                     return f"[已拒绝] {exc}"
-                async with client.stream("GET", url) as resp:
-                    status = resp.status_code
-                    nxt = redirect_target(url, resp)
-                    if nxt is not None:
-                        url = nxt  # every hop is re-checked: policy + DNS, above
-                        continue
-                    raw = await read_bounded(resp, _MAX_BODY_BYTES)
-                    charset = resp.charset_encoding or "utf-8"
+                # Send to the validated IP (Host/SNI keep the hostname): the
+                # connection cannot drift to another address via a second
+                # resolution (DNS rebinding)
+                resp = await client.send(pinned_request(client, url, chosen_ip), stream=True)
+                status = resp.status_code
+                nxt = redirect_target(url, resp)
+                if nxt is not None:
+                    await resp.aclose()
+                    url = nxt  # every hop is re-checked: policy + DNS, above
+                    continue
+                raw = await read_bounded(resp, _MAX_BODY_BYTES)
+                charset = resp.charset_encoding or "utf-8"
                 text = raw.decode(charset, errors="replace")
                 break
         # Truncate the raw body first, then fence: the closing marker must

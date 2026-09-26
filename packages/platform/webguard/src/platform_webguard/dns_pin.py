@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import socket
 from collections.abc import Awaitable, Callable
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -87,13 +88,19 @@ async def resolve_public(url: str, *, resolver: ResolverFn | None = None) -> str
     return ips[0]
 
 
-def pinned_request(client: httpx.AsyncClient, url: str, chosen_ip: str) -> httpx.Request:
+def pinned_request(
+    client: httpx.AsyncClient, url: str, chosen_ip: str, *, method: str = "GET", **kwargs: Any
+) -> httpx.Request:
     """Build an httpx request rewritten onto the validated IP (full-pinning
     consumers only): original hostname stays in the Host header and, for
     https, in the sni_hostname extension so certificate verification and
-    server-side routing are unaffected by the IP rewrite."""
+    server-side routing are unaffected by the IP rewrite.
+
+    ``method`` and ``kwargs`` pass through to ``client.build_request`` (data /
+    headers for POST consumers such as the search tool), so every fetch path
+    can pin without re-implementing the rewrite."""
     parsed = urlparse(url)
-    request = client.build_request("GET", httpx.URL(url).copy_with(host=chosen_ip))
+    request = client.build_request(method, httpx.URL(url).copy_with(host=chosen_ip), **kwargs)
     request.headers["host"] = parsed.netloc
     if parsed.scheme == "https":
         request.extensions["sni_hostname"] = parsed.hostname or ""
