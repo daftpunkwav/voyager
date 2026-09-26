@@ -290,7 +290,8 @@ export interface ContextStatus {
     warm_rounds?: number;
     cold_rounds?: number;
     unexplained_misses?: number;
-    head_changes?: number;
+    /** Head-segment change counts keyed by segment (system/tools/messages), as sent by the backend's prefix watch. */
+    head_changes?: Record<string, number>;
     last_break?: number | null;
   };
 }
