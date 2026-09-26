@@ -484,9 +484,20 @@ def _like_escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+def _load_tags(raw: Any) -> builtins.list[Any]:
+    """Tags column -> list; a corrupt JSON cell (external edit / legacy write)
+    degrades to an empty list so one bad row cannot break the whole listing —
+    same tolerance stats()/all_tags() apply."""
+    try:
+        tags = json.loads(raw or "[]")
+    except ValueError:
+        return []
+    return tags if isinstance(tags, list) else []
+
+
 def _summary_row(r: tuple) -> dict[str, Any]:
     d = dict(zip(_SUMMARY_COLS, r))
-    d["tags"] = json.loads(d.get("tags") or "[]")
+    d["tags"] = _load_tags(d.get("tags"))
     d["archived"] = bool(d["archived"])
     d["pinned"] = bool(d["pinned"])
     return d
@@ -494,7 +505,7 @@ def _summary_row(r: tuple) -> dict[str, Any]:
 
 def _full_row(row: tuple) -> dict[str, Any]:
     d = dict(zip(_ALL_COLS, row))
-    d["tags"] = json.loads(d.get("tags") or "[]")
+    d["tags"] = _load_tags(d.get("tags"))
     d["archived"] = bool(d["archived"])
     d["pinned"] = bool(d["pinned"])
     return d

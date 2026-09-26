@@ -533,6 +533,25 @@ class TestRetention:
         assert store.get(a) is None and store.get(b) is not None
 
 
+class TestCorruptRows:
+    async def test_corrupt_tags_cell_degrades_not_crashes(self, deps) -> None:
+        """A corrupt tags JSON cell (external edit / legacy write) degrades to
+        an empty list in get()/list() instead of raising out of the read and
+        hiding every note behind one bad row — same tolerance the tag stats
+        paths apply."""
+        store, _ = deps
+        a = store.create({"title": "good", "content": "c", "tags": ["x"]})
+        b = store.create({"title": "bad", "content": "c"})
+        store._conn.execute("UPDATE notes SET tags='{broken' WHERE id=?", (b,))
+        store._conn.commit()
+        got = store.get(b)
+        assert got is not None and got["tags"] == [] and got["title"] == "bad"
+        rows = store.list()
+        assert {r["id"] for r in rows} == {a, b}
+        by_id = {r["id"]: r for r in rows}
+        assert by_id[a]["tags"] == ["x"] and by_id[b]["tags"] == []
+
+
 class TestRenderAndEditSupport:
     async def test_toc_extracts_headings_skip_fence(self, deps) -> None:
         note = await execute(
