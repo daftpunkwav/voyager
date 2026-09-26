@@ -242,8 +242,14 @@ class CountingToolbelt:
         self.calls += 1
         try:
             return await self._inner.call_detailed(call, *args, **kwargs)
-        except TypeError:
-            return await self._inner.call_detailed(call)
+        except TypeError as exc:
+            # Compatibility fallback for inner surfaces without the on_progress
+            # kwarg — gated on the TypeError wording so a TypeError raised
+            # AFTER the handler ran (metering, hooks) can never re-execute the
+            # call (double side effects); same gate as react's _run_tool.
+            if "on_progress" in str(exc):
+                return await self._inner.call_detailed(call)
+            raise
 
 
 def counting_step(on_step: StepCb, budget: ModeBudget) -> StepCb:
