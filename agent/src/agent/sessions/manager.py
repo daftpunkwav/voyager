@@ -471,7 +471,12 @@ class SessionManager:
             self._store.save(
                 SessionSnapshot(
                     session_id=session_id,
-                    title=(snap.title if snap is not None else "") or self._title_of(session_id),
+                    # The store is wired here (early return above), and the
+                    # previous `or self._title_of(...)` fallback re-read the
+                    # same row through the store and returned the same title
+                    # (or "") — a dead branch costing a full snapshot parse
+                    # every turn persist.
+                    title=snap.title if snap is not None else "",
                     persona=inst.persona,
                     goal=inst.task.goal,
                     history=[dict(m) for m in inst.history],
