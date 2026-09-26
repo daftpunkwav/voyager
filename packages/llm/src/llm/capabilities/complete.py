@@ -99,6 +99,11 @@ async def complete(
         "usage": {
             "input_tokens": result.input_tokens,
             "output_tokens": result.output_tokens,
+            # Prompt tokens served from the provider's prefix cache: the agent
+            # side's prefix-cache health watch reads this field off the Usage
+            # it parses here — omitting it pins cached_tokens at 0 and every
+            # round looks permanently cold.
+            "cached_tokens": result.cached_tokens,
             "reasoning_tokens": result.reasoning_tokens,
             "cache_write_tokens": result.cache_write_tokens,
         },

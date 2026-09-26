@@ -170,6 +170,11 @@ class ServiceLLM:
             usage=Usage(
                 input_tokens=int(usage.get("input_tokens") or 0),
                 output_tokens=int(usage.get("output_tokens") or 0),
+                # Prompt tokens served from the provider's prefix cache: the
+                # react step trail and the context prefix watch (warm/cold
+                # round detection) consume this — dropping it here would pin
+                # the agent-side cache health at "never warm".
+                cached_tokens=int(usage.get("cached_tokens") or 0),
             ),
             model=str(out.get("model") or ""),
             reasoning=str(out.get("reasoning") or ""),

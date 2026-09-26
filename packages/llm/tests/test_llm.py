@@ -276,6 +276,41 @@ class TestConnectionAndUsage:
         assert stats["calls"] == 1 and stats["input_tokens"] == 3
         assert stats["by_model"][0]["model"] == "gpt-4o-mini"
 
+    async def test_complete_reports_cached_tokens(self, deps, monkeypatch) -> None:
+        """The returned usage dict must carry the provider's cached prompt
+        tokens: the agent side parses it into Usage.cached_tokens and the
+        prefix-cache health watch keys warm/cold round detection off that —
+        omitting it pins the agent's cache view at "never warm"."""
+        import types
+
+        import llm.capabilities.complete as complete_mod
+
+        async def fake_complete(p, *, api_key, model, **kw):
+            return types.SimpleNamespace(
+                text="pong",
+                model=model,
+                tool_calls=[],
+                input_tokens=10,
+                output_tokens=2,
+                cached_tokens=7,
+                reasoning="",
+                thinking_blocks=[],
+                reasoning_tokens=0,
+                cache_write_tokens=0,
+                meta=types.SimpleNamespace(to_dict=dict),
+            )
+
+        monkeypatch.setattr(complete_mod, "llm_complete", fake_complete)
+        pid = await _add_sample()
+        await execute(registry, "set_api_key", USER_CTX, {"provider_id": pid, "api_key": "sk-x"})
+        out = await execute(
+            registry,
+            "complete",
+            AGENT_CTX,
+            {"provider_id": pid, "model": "m1", "messages": [{"role": "user", "content": "hi"}]},
+        )
+        assert out["usage"]["cached_tokens"] == 7
+
 
 class TestDefaultModelRetired:
     """The provider-level default_model is gone: an untagged model resolves

@@ -62,6 +62,24 @@ class TestMapping:
         reply = await llm.complete(MSGS)
         assert reply.final is True and reply.text == "ok."
 
+    async def test_usage_carries_cached_tokens(self) -> None:
+        """The capability's usage.cached_tokens must land on the agent-side
+        Usage: the react step trail and the context prefix watch (warm/cold
+        round detection) consume that field."""
+        llm = ServiceLLM(
+            _call_with_provider(
+                {
+                    "text": "ok.",
+                    "tool_calls": [],
+                    "usage": {"input_tokens": 10, "output_tokens": 2, "cached_tokens": 7},
+                },
+                [],
+            )
+        )
+        reply = await llm.complete(MSGS)
+        assert (reply.usage.input_tokens, reply.usage.output_tokens) == (10, 2)
+        assert reply.usage.cached_tokens == 7
+
     async def test_reasoning_and_thinking_blocks_mapped(self) -> None:
         llm = ServiceLLM(
             _call_with_provider(
