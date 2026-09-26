@@ -19,7 +19,7 @@ from typing import Any
 from agent.contracts import Purpose
 from agent.llm import LLMReply, StreamReply, ToolSpec
 from agent.personas import canonical_persona_key
-from agent.runtime.current import current_instance
+from agent.runtime import current_instance
 from agent.settings import OVERRIDES_KEY, ROUTING_KEY, STYLE_OVERRIDES_KEY
 from platform_contracts import ActorKind, ActorRef, DomainEvent, Event, ServiceError
 

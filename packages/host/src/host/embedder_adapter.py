@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from agent.memory.vector import EmbeddingUnavailable
+from agent.memory import EmbeddingUnavailable
 from platform_contracts import ServiceError
 
 _EMBEDDING_MODEL_KEY = "llm.embedding_model"

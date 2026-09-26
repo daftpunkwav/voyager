@@ -35,7 +35,7 @@ from agent.app import AgentApp
 from agent.build import EVENTS_RETENTION, build_agent
 from agent.contracts import Purpose
 from agent.llm import LLMClient
-from agent.runtime.jobs_view import JobsView
+from agent.runtime import JobsView
 from agent.settings import DEFS as AGENT_SETTING_DEFS
 from agent.settings import WORKSPACE_DIR_KEY
 from fastapi import FastAPI

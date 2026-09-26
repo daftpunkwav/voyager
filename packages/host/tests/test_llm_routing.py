@@ -11,7 +11,7 @@ import pytest
 from agent.build import build_agent
 from agent.contracts import Purpose
 from agent.llm import FakeLLM
-from agent.runtime.current import current_instance
+from agent.runtime import current_instance
 from agent.settings import OVERRIDES_KEY, STYLE_OVERRIDES_KEY
 from host.llm_adapter import NO_PROVIDER_TEXT
 from host.llm_routing import (

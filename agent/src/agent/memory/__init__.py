@@ -176,6 +176,7 @@ class Memory:
 
 
 __all__ = [
+    "EmbeddingUnavailable",
     "EpisodicMemory",
     "Memory",
     "ProfileMemory",

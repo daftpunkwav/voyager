@@ -4,7 +4,7 @@ invocation, and trace propagation.
 
 import asyncio
 
-from agent.runtime.trace import reset_current_trace, set_current_trace
+from agent.runtime import reset_current_trace, set_current_trace
 from gateway.mounts import MountSpec
 from host.bridge import make_domain_tools
 from platform_capability import Registry, SqliteAuditSink, capability

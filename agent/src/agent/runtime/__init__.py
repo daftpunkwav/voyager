@@ -2,6 +2,7 @@
 meter / quota / trace / trajectory.
 """
 
+from agent.runtime.current import current_instance
 from agent.runtime.events import AGENT_MAIN, RuntimeEvents
 from agent.runtime.exporters import (
     InMemorySpanExporter,
@@ -10,6 +11,7 @@ from agent.runtime.exporters import (
     SpanExporter,
     TraceDispatcher,
 )
+from agent.runtime.jobs_view import JobsView
 from agent.runtime.llm_output_cap import output_capped_llm
 from agent.runtime.llm_quota import is_quota_exceeded_reply, metered_llm
 from agent.runtime.loop import EventLoop
@@ -34,6 +36,7 @@ __all__ = [
     "CircuitOpenError",
     "EventLoop",
     "InMemorySpanExporter",
+    "JobsView",
     "LangfuseSpanExporter",
     "Meter",
     "MeterRecord",
@@ -47,6 +50,7 @@ __all__ = [
     "SpanExporter",
     "Step",
     "TraceDispatcher",
+    "current_instance",
     "current_trace_id",
     "is_quota_exceeded_reply",
     "metered_llm",

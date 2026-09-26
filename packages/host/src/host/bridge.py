@@ -18,8 +18,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any, Protocol
 
-from agent.runtime.trace import current_trace_id
-from agent.tools.core.base import AgentTool
+from agent.runtime import current_trace_id
+from agent.tools import AgentTool
 from platform_actor import ActorContext
 from platform_capability import capability_input_schema, execute
 from platform_contracts import ActorKind, ActorRef

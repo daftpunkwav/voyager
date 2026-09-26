@@ -32,7 +32,7 @@ from agent.app import AgentApp
 from agent.build import build_agent
 from agent.contracts import Purpose
 from agent.llm import LLMClient
-from agent.runtime.jobs_view import JobsView
+from agent.runtime import JobsView
 
 # Canonical settings-key constant (registry lives in agent.settings); aliased
 # to keep this module's public name stable.
