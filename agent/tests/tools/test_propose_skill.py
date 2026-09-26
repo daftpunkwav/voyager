@@ -95,3 +95,46 @@ class TestPolicyGate:
         assert out.ok is True
         assert "[需确认]" not in out.text
         assert (skills_dir / "gated-skill" / "SKILL.md").exists()
+
+
+class TestSkillToolWrapper:
+    """The skill tool's handler-side translation: ServiceError becomes
+    model-readable failure text, load misses stay readable. The loader duck
+    type is the production OnDemandLoader (skill_text + load recording)."""
+
+    def _tool(self, skills_dir: Path):
+        from agent.context.loader import OnDemandLoader
+
+        loader = OnDemandLoader(skills=SkillLoader([skills_dir]))
+        return skill_tool(loader=loader, skills_dir=skills_dir)
+
+    def test_unknown_action_gets_readable_hint(self, skills_dir: Path) -> None:
+        out = asyncio.run(self._tool(skills_dir).handler(action="delete", name="x"))
+        assert out == "[参数错误] 未知 action: delete(可选 load/propose)"
+
+    def test_load_missing_skill_gets_readable_error(self, skills_dir: Path) -> None:
+        out = asyncio.run(self._tool(skills_dir).handler(action="load", name="no-such-skill"))
+        assert out == "[参数错误] 没有 skill: no-such-skill(未批准或已删除)"
+
+    def test_load_returns_full_text(self, skills_dir: Path) -> None:
+        propose_skill(skills_dir, "loadable", "描述", "## 内容")
+        out = asyncio.run(self._tool(skills_dir).handler(action="load", name="loadable"))
+        assert "# loadable" in out and "## 内容" in out
+
+    def test_propose_service_error_becomes_readable_text(self, skills_dir: Path) -> None:
+        out = asyncio.run(
+            self._tool(skills_dir).handler(
+                action="propose", name="Bad Name", description="d", content="c"
+            )
+        )
+        assert out.startswith("[参数错误] skill(action=propose):")
+        assert "invalid skill name" in out
+        assert "lowercase words joined by hyphens" in out  # the hint rides along
+
+    def test_propose_error_without_hint_stays_readable(self, skills_dir: Path) -> None:
+        out = asyncio.run(
+            self._tool(skills_dir).handler(
+                action="propose", name="ok-name", description="", content="c"
+            )
+        )
+        assert out == "[参数错误] skill(action=propose): description must not be empty"

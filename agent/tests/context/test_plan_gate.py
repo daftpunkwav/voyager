@@ -112,3 +112,14 @@ def test_section_only_while_active() -> None:
     assert gates.section_for("other") == ""  # unrelated sessions are unaffected
     gates.set("s1", False)
     assert gates.section_for("s1") == ""
+
+
+async def test_empty_plan_submission_keeps_gate_open() -> None:
+    """An active gate plus an empty plan text is a parameter error handled in
+    the tool's own readable language: no reviewer round-trip is spent."""
+    gates, asker, handler = _tool_with([])
+    gates.set("", True)
+    out = await handler(action="exit", plan="   ")
+    assert "参数错误" in out and "不能为空" in out
+    assert asker.asked == []  # never reached the reviewer
+    assert gates.for_session("").active is True

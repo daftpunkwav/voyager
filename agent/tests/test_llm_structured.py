@@ -4,6 +4,8 @@ Pydantic model validation, and resilient completion with error-feedback retries.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from agent.llm import FakeLLM, LLMReply
 from agent.llm_structured import (
@@ -260,3 +262,205 @@ class TestCompleteStructured:
         assert res.value.age == 35
         # Verify meter recorded the tokens
         assert meter.tokens_used_today() == 25
+
+
+class TestJsonExtractionEdges:
+    def test_empty_text_raises(self) -> None:
+        with pytest.raises(ValueError, match="empty text"):
+            extract_json_from_text("   ")
+
+    def test_top_level_array_extracted(self) -> None:
+        assert extract_json_from_text('noise ["a", "b"] tail') == ["a", "b"]
+
+    def test_fenced_blocks_tried_in_order(self) -> None:
+        text = 'intro\n```json\n{bad}\n```\nmid\n```json\n{"ok": true}\n```\noutro'
+        assert extract_json_from_text(text) == {"ok": True}
+
+    def test_nothing_parseable_raises_with_snippet(self) -> None:
+        with pytest.raises(ValueError, match="could not extract"):
+            extract_json_from_text("{unclosed" * 30)
+
+
+class _LegacySchema:
+    """Pydantic v1-style shim: only .schema() and __name__."""
+
+    def schema(self) -> dict:
+        return {"type": "object", "properties": {"x": {"type": "integer"}}}
+
+
+class _LegacyModel:
+    model_json_schema = None  # not callable -> the v1 path applies
+
+    def schema(self) -> dict:
+        return {"type": "object"}
+
+
+from dataclasses import dataclass
+
+
+@dataclass
+class _Point:
+    x: int
+    y: int
+
+
+class TestSchemaNormalizationEdges:
+    def test_name_override(self) -> None:
+        spec = to_schema_spec(UserProfile, name="custom_name")
+        assert spec.name == "custom_name"
+
+    def test_legacy_schema_callable(self) -> None:
+        spec = to_schema_spec(_LegacySchema(), name="legacy")
+        assert spec.name == "legacy"
+        assert spec.schema["properties"] == {"x": {"type": "integer"}}
+
+    def test_dataclass_target_uses_type_adapter(self) -> None:
+        spec = to_schema_spec(_Point, name="point")
+        assert spec.name == "point"
+        assert "properties" in spec.schema
+
+    def test_unsupported_target_raises_type_error(self) -> None:
+        with pytest.raises(TypeError, match="unsupported schema target"):
+            to_schema_spec(42)
+
+
+class TestValidationEdges:
+    def test_schema_spec_target_validated(self) -> None:
+        spec = SchemaSpec(
+            name="s",
+            schema={"type": "object", "required": ["a"], "properties": {"a": {"type": "string"}}},
+        )
+        ok, _val, err = validate_structured_data({"a": "x"}, spec)
+        assert ok is True and err is None
+        ok, _val, err = validate_structured_data({"a": 1}, spec)
+        assert ok is False and err is not None and "expected string" in err
+
+    def test_top_level_array_type_mismatch(self) -> None:
+        ok, _val, err = validate_structured_data({}, {"type": "array"})
+        assert ok is False and err is not None and "expected JSON array" in err
+
+    def test_top_level_object_type_mismatch(self) -> None:
+        ok, _val, err = validate_structured_data([1], {"type": "object"})
+        assert ok is False and err is not None and "expected JSON object" in err
+
+    def test_boolean_is_not_an_integer(self) -> None:
+        schema = {"type": "object", "properties": {"n": {"type": "integer"}}}
+        ok, _val, err = validate_structured_data({"n": True}, schema)
+        assert ok is False and err is not None and "got boolean" in err
+
+    def test_number_accepts_float_and_int(self) -> None:
+        schema = {"type": "object", "properties": {"n": {"type": "number"}}}
+        assert validate_structured_data({"n": 1}, schema)[0] is True
+        assert validate_structured_data({"n": 1.5}, schema)[0] is True
+
+    def test_unknown_properties_pass_through(self) -> None:
+        ok, _val, err = validate_structured_data({"anything": object()}, {"type": "object"})
+        assert ok is True and err is None
+
+    def test_parse_obj_style_target(self) -> None:
+        class _V1:
+            def parse_obj(self, data):
+                if "bad" in data:
+                    raise ValueError("nope")
+                return {"parsed": data}
+
+        ok, val, err = validate_structured_data({"a": 1}, _V1())
+        assert ok is True and val == {"parsed": {"a": 1}}
+        ok, _val, err = validate_structured_data({"bad": 1}, _V1())
+        assert ok is False and err is not None and "nope" in err
+
+    def test_unknown_target_type_passes_data_through(self) -> None:
+        ok, val, err = validate_structured_data({"x": 1}, target=42)
+        assert ok is True and val == {"x": 1} and err is None
+
+
+class _NoResponseFormatLLM:
+    """A client whose complete() predates the response_format argument."""
+
+    def __init__(self, reply: LLMReply) -> None:
+        self._reply = reply
+        self.calls: list[list] = []
+
+    async def complete(self, messages, tools=None):
+        self.calls.append(messages)
+        return self._reply
+
+
+class _ExplodingLLM:
+    async def complete(self, messages, tools=None, response_format=None, max_tokens=None):
+        raise RuntimeError("provider unreachable")
+
+
+class TestCompleteStructuredEdges:
+    async def test_client_without_response_format_still_works(self) -> None:
+        llm: Any = _NoResponseFormatLLM(LLMReply(text='{"summary": "ok", "score": 1}'))
+        res: StructuredResult[dict] = await complete_structured(
+            llm,
+            [{"role": "user", "content": "go"}],
+            schema=DICT_SCHEMA,
+        )
+        assert res.ok is True and res.value == {"summary": "ok", "score": 1}
+
+    async def test_inject_prompt_disabled_keeps_messages_untouched(self) -> None:
+        fake_llm = FakeLLM([LLMReply(text='{"summary": "s", "score": 2}')])
+        messages = [{"role": "user", "content": "original"}]
+        await complete_structured(fake_llm, messages, schema=DICT_SCHEMA, inject_prompt=False)
+        sent = fake_llm.calls[0]["messages"]
+        assert sent == messages and len(sent) == 1
+
+    async def test_schema_instruction_appended_as_new_message_for_non_user_tail(
+        self,
+    ) -> None:
+        fake_llm = FakeLLM([LLMReply(text='{"summary": "s", "score": 3}')])
+        messages = [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ]
+        await complete_structured(fake_llm, messages, schema=DICT_SCHEMA)
+        sent = fake_llm.calls[0]["messages"]
+        assert sent[0] is messages[0] and sent[1] is messages[1]
+        assert sent[-1]["role"] == "user" and "json" in str(sent[-1]["content"]).lower()
+
+    async def test_llm_exception_returns_structured_error(self) -> None:
+        llm: Any = _ExplodingLLM()
+        res: StructuredResult[dict] = await complete_structured(
+            llm,
+            [{"role": "user", "content": "go"}],
+            schema=DICT_SCHEMA,
+        )
+        assert res.ok is False
+        assert "LLM call exception" in str(res.error)
+        assert res.raw_reply.degraded is True
+        assert res.retries_used == 0
+
+    async def test_json_object_mode(self) -> None:
+
+        fake_llm = FakeLLM([LLMReply(text='{"summary": "s", "score": 4}')])
+        res: StructuredResult[dict] = await complete_structured(
+            fake_llm,
+            [{"role": "user", "content": "go"}],
+            schema=DICT_SCHEMA,
+            response_format_mode="json_object",
+        )
+        assert res.ok is True
+        assert fake_llm.calls[0]["response_format"] == {"type": "json_object"}
+
+    async def test_validation_failure_retries_exhausted_reports_schema_error(
+        self,
+    ) -> None:
+        fake_llm = FakeLLM(
+            [
+                LLMReply(text='{"summary": "s"}'),  # missing score, every round
+                LLMReply(text='{"summary": "s"}'),
+            ]
+        )
+        res: StructuredResult[dict] = await complete_structured(
+            fake_llm,
+            [{"role": "user", "content": "go"}],
+            schema=DICT_SCHEMA,
+            max_retries=1,
+        )
+        assert res.ok is False
+        assert "Schema validation failed" in str(res.error)
+        assert res.retries_used == 1
+        assert res.raw_json == {"summary": "s"}

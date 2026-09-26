@@ -254,3 +254,46 @@ class TestHistoryBound:
         assert len(inst.history) <= HISTORY_MAX
         assert inst.history[0]["role"] == "user"  # pair-wise drops; the head is not a half turn
         assert inst.status == RunStatus.WAITING_INPUT
+
+
+class TestLimitsDirtyGlobalsAndTokens:
+    """Dirty global settings fall back to the defaults; the token budget only
+    tightens and 0 means unlimited."""
+
+    def test_dirty_global_values_fall_back_to_defaults(self) -> None:
+        s = _FakeSettings({"agent.rounds.max": "not-a-number", "agent.rounds.tool_max": ""})
+        limits = limits_from_settings(s)
+        assert (limits.max_rounds, limits.max_tool_calls) == (20, 40)
+
+    def test_non_positive_global_values_fall_back_to_defaults(self) -> None:
+        s = _FakeSettings({"agent.rounds.max": 0, "agent.rounds.tool_max": -1})
+        limits = limits_from_settings(s)
+        assert (limits.max_rounds, limits.max_tool_calls) == (20, 40)
+
+    def test_stricter_override_beats_dirty_global_default(self) -> None:
+        """The global is dirty (fallback 20); a dispatch tier of 5 stays 5,
+        one of 99 is clamped back to the fallback."""
+        s = _FakeSettings({})
+        assert limits_from_settings(s, max_rounds=5).max_rounds == 5
+        assert limits_from_settings(s, max_rounds=99).max_rounds == 20
+
+    def test_token_budget_global_only(self) -> None:
+        s = _FakeSettings({"agent.rounds.max_tokens": 8000})
+        assert limits_from_settings(s).max_tokens == 8000
+
+    def test_token_budget_override_only_tightens(self) -> None:
+        s = _FakeSettings({"agent.rounds.max_tokens": 8000})
+        assert limits_from_settings(s, max_tokens=1000).max_tokens == 1000
+        assert limits_from_settings(s, max_tokens=9000).max_tokens == 8000
+
+    def test_token_budget_override_wins_when_global_unset(self) -> None:
+        s = _FakeSettings({})
+        assert limits_from_settings(s, max_tokens=1000).max_tokens == 1000
+
+    def test_token_budget_dirty_or_negative_global_means_unlimited(self) -> None:
+        s = _FakeSettings({"agent.rounds.max_tokens": "junk"})
+        assert limits_from_settings(s).max_tokens == 0
+        s = _FakeSettings({"agent.rounds.max_tokens": -50})
+        assert limits_from_settings(s).max_tokens == 0
+        # negative overrides are not budgets at all
+        assert limits_from_settings(_FakeSettings({}), max_tokens=-5).max_tokens == 0

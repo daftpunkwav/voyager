@@ -6,7 +6,7 @@
 
 ## 布局
 
-根目录下平铺的 `test_*.py` 覆盖横切面：wiring、capabilities、mcp（含 discovery 与 resilience）、hooks、plugins、personas、policy（含 notify）、repl（含 replay）、skills、redaction、streaming UX、LLM 客户端（http / multimodal / structured）、用户钩子重载、命名中立性（源码中的品牌字面量），以及模块 docstring 头部风格。
+根目录下平铺的 `test_*.py` 覆盖横切面：wiring、capabilities、mcp（含 discovery、resilience 与客户端会话）、hooks、plugins、personas、policy（含 notify）、repl（含 replay）、skills、redaction、streaming UX、LLM 客户端（http / multimodal / structured）、用户钩子重载、命名中立性（源码中的品牌字面量），以及模块 docstring 头部风格。
 
 子目录与包结构镜像（仅列选取的主题，并非穷举）：
 

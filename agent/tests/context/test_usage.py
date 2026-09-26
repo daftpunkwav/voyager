@@ -184,3 +184,42 @@ class TestCacheStableStatusLine:
 
     def test_bucket_floor_is_rendered(self) -> None:
         assert "about 70%+ used" in self._line(71.2)
+
+
+class TestResolveWindowWarnings:
+    def test_unknown_model_warns_exactly_once_per_process(self, caplog) -> None:
+        import logging
+        import uuid
+
+        from agent.runtime.tokens import _WARNED_MODELS
+
+        model = f"unknown-model-{uuid.uuid4().hex[:8]}"
+        # the warning fires when profiles is a dict that lacks this model
+        settings = _FakeSettings({"agent.context.model_profiles": {}})
+        with caplog.at_level(logging.WARNING, logger="agent.runtime.tokens"):
+            first = resolve_window(settings, model_name=model)
+            second = resolve_window(settings, model_name=model)
+        assert first == second == ContextWindow()  # conservative defaults hold
+        warnings = [r for r in caplog.records if model in r.getMessage()]
+        assert len(warnings) == 1  # one log line per model, not one per call
+        assert model in _WARNED_MODELS
+
+    def test_profiles_container_shapes_other_than_dict_are_ignored(self) -> None:
+        from typing import Any
+
+        bad_shapes: list[Any] = [[], "junk", 42]
+        for bad in bad_shapes:
+            settings = _FakeSettings({"agent.context.model_profiles": bad})
+            resolved = resolve_window(settings, model_name="any-model")
+            assert resolved == ContextWindow()
+
+    def test_profiled_models_never_warn(self, caplog) -> None:
+        import logging
+
+        settings = _FakeSettings(
+            {"agent.context.model_profiles": {"known": {"window_tokens": 8000}}}
+        )
+        with caplog.at_level(logging.WARNING, logger="agent.runtime.tokens"):
+            resolved = resolve_window(settings, model_name="known")
+        assert resolved.window_tokens == 8000
+        assert not [r for r in caplog.records if r.levelno >= logging.WARNING]

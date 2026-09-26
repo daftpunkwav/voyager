@@ -272,3 +272,139 @@ class TestSessionRouting:
                 app.master.sessions.rename("nope123", "x")
         finally:
             app.close()
+
+
+class TestSessionConcurrencyEdges:
+    """Fork/rename racing a running turn and each other: the store stays
+    consistent and no history is silently lost."""
+
+    def test_fork_with_keep_messages_truncates_the_branch(self, tmp_path) -> None:
+        app = _app(tmp_path, FakeLLM(default="Got it."))
+        try:
+            mgr = app.master.sessions
+            source = mgr.resolve("")
+            source.history.extend(
+                [
+                    {"role": "user", "content": "t1"},
+                    {"role": "assistant", "content": "a1"},
+                    {"role": "user", "content": "t2"},
+                    {"role": "assistant", "content": "a2"},
+                ]
+            )
+            mgr.persist(source.session)
+            created = mgr.fork("", title="cut here", keep_messages=2)
+            forked = mgr.instance_for(created["session_id"])
+            assert forked is not None
+            assert [m["content"] for m in forked.history] == ["t1", "a1"]
+            # the source keeps everything
+            assert len(source.history) == 4
+        finally:
+            app.close()
+
+    def test_rename_survives_the_racing_turn_end_persist(self, tmp_path) -> None:
+        """The turn-end snapshot rewrites the row after the user renamed the
+        session: the rename must win, not be clobbered by a stale title."""
+        app = _app(tmp_path, FakeLLM(default="Got it."))
+        try:
+            mgr = app.master.sessions
+            inst = mgr.resolve("")
+            inst.history.extend(
+                [
+                    {"role": "user", "content": "mid-turn message"},
+                    {"role": "assistant", "content": "partial answer"},
+                ]
+            )
+            # the turn is running: its persist is serialized behind the lock
+            lock = mgr.lock_for(inst.session)
+
+            async def scenario() -> None:
+                async with lock:  # the running turn holds the session lock
+                    inst.state.status = RunStatus.RUNNING
+                    mgr.rename(inst.session, "renamed mid-turn")
+                    mgr.persist(inst.session)  # the turn-end snapshot
+                inst.state.status = RunStatus.WAITING_INPUT
+
+            asyncio.run(scenario())
+            rows = {r["session_id"]: r for r in mgr.list()}
+            assert rows[inst.session]["title"] == "renamed mid-turn"
+            assert rows[inst.session]["turns"] == 1  # history persisted too
+        finally:
+            app.close()
+
+    def test_fork_of_a_running_session_copies_the_partial_history(self, tmp_path) -> None:
+        app = _app(tmp_path, FakeLLM(default="Got it."))
+        try:
+            mgr = app.master.sessions
+            source = mgr.resolve("")
+            source.history.append({"role": "user", "content": "partial"})
+            source.state.status = RunStatus.RUNNING  # mid-turn
+            created = mgr.fork("", title="branch mid-turn")
+            forked = mgr.instance_for(created["session_id"])
+            assert forked is not None
+            assert [m["content"] for m in forked.history] == ["partial"]
+            assert forked is not source
+            # the branch is a fresh conversational instance, not the running one
+            assert forked.task.conversational is True
+            assert forked.state.status is not RunStatus.RUNNING
+        finally:
+            app.close()
+
+    def test_lock_for_is_per_session_and_rebuilt_after_delete(self, tmp_path) -> None:
+        """Master serializes turns through lock_for: the same session always
+        resolves to the same lock; a deleted session's stale lock must not be
+        reused if the id is recreated."""
+        app = _app(tmp_path, FakeLLM())
+        try:
+            mgr = app.master.sessions
+            a = mgr.create(session_id="sess-a")
+            b = mgr.create(session_id="sess-b")
+            assert mgr.lock_for("sess-a") is mgr.lock_for("sess-a")
+            assert mgr.lock_for(a["session_id"]) is not mgr.lock_for(b["session_id"])
+            mgr.delete("sess-a")
+            mgr.create(session_id="sess-a")
+            assert mgr.lock_for("sess-a") is not mgr.lock_for("sess-b")
+        finally:
+            app.close()
+
+    def test_concurrent_forks_of_one_source_all_land(self, tmp_path) -> None:
+        """Two tasks forking the same source in one loop: both branches exist
+        with the copied history and independent lineage rows."""
+        app = _app(tmp_path, FakeLLM(default="Got it."))
+        try:
+            mgr = app.master.sessions
+            source = mgr.resolve("")
+            source.history.append({"role": "user", "content": "shared root"})
+            mgr.persist(source.session)
+
+            async def two_forks() -> list[dict]:
+                return [mgr.fork("", title=f"branch {i}") for i in range(2)]
+
+            created = asyncio.run(two_forks())
+            assert len({c["session_id"] for c in created}) == 2
+            for c in created:
+                forked = mgr.instance_for(c["session_id"])
+                assert forked is not None
+                assert [m["content"] for m in forked.history] == ["shared root"]
+                assert c["forked_from"] == source.session
+                lineage = mgr.lineage(c["session_id"])
+                assert lineage["ancestors"] == [source.session]
+                children = mgr.lineage(source.session)["children"]
+                assert sorted(children) == sorted(c["session_id"] for c in created)
+        finally:
+            app.close()
+
+    def test_delete_of_active_session_moves_the_pointer(self, tmp_path) -> None:
+        app = _app(tmp_path, FakeLLM())
+        try:
+            mgr = app.master.sessions
+            first = mgr.resolve("")  # active by default
+            second = mgr.create(title="second")
+            mgr.set_active(second["session_id"])
+            mgr.delete(second["session_id"])
+            assert mgr.active_id() == first.session  # falls back to the remaining row
+            # deleting the last session empties the pointer cleanly
+            mgr.delete(first.session)
+            assert mgr.active_id() == ""
+            assert mgr.list() == []
+        finally:
+            app.close()

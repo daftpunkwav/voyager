@@ -1,6 +1,7 @@
 """Session goals: durable per-session state, the boot downgrade fence
-(active never survives a restart unattended), the daily round budget, and
-the driver's admission checks before any continuation turn."""
+(active never survives a restart unattended), the daily round budget,
+the driver's admission checks before any continuation turn, and the goal
+capability's action/scope matrix with its actor-based driver rules."""
 
 from __future__ import annotations
 
@@ -259,5 +260,306 @@ class TestGoalCapabilityAndTools:
                 {"session_id": "nope", "action": "get"},
             )
             assert out["main"] is None and out["subs"] == []
+        finally:
+            app.close()
+
+
+class TestGoalManagerEdges:
+    def _goals(self, app) -> GoalManager:
+        return GoalManager(app.session_store)
+
+    def test_set_text_keeps_status_and_counter(self, tmp_path) -> None:
+        app = _app(tmp_path)
+        try:
+            goals = self._goals(app)
+            goals.create("s1", "old text")
+            goals.record_round("s1")
+            updated = goals.set_text("s1", "new text")
+            assert updated is not None
+            assert updated.text == "new text"
+            assert updated.status == ACTIVE and updated.rounds == 1
+        finally:
+            app.close()
+
+    def test_set_text_on_missing_session_returns_none(self, tmp_path) -> None:
+        app = _app(tmp_path)
+        try:
+            goals = self._goals(app)
+            assert goals.set_text("ghost", "x") is None
+            assert goals.set_status("ghost", PAUSED) is None
+            goals.record_round("ghost")  # quiet no-op
+            assert goals.get("ghost") is None
+        finally:
+            app.close()
+
+    def test_corrupt_meta_json_reads_as_missing(self, tmp_path) -> None:
+        app = _app(tmp_path)
+        try:
+            goals = self._goals(app)
+            goals.create("s1", "text")
+            app.session_store.set_meta("goal:s1", "{not json")
+            assert goals.get("s1") is None
+            app.session_store.set_meta("goal:sub:s1", "{broken")
+            assert goals.subs("s1") == []
+        finally:
+            app.close()
+
+    def test_missing_fields_fall_back_to_defaults(self, tmp_path) -> None:
+        app = _app(tmp_path)
+        try:
+            app.session_store.set_meta("goal:s1", '{"text": "t"}')
+            goal = self._goals(app).get("s1")
+            assert goal is not None
+            assert goal.status == PAUSED and goal.rounds == 0 and goal.day == ""
+        finally:
+            app.close()
+
+    def test_subs_roundtrip_and_non_list_payload(self, tmp_path) -> None:
+        app = _app(tmp_path)
+        try:
+            goals = self._goals(app)
+            goals.set_subs("s1", [{"text": "a", "status": "pending"}])
+            assert goals.subs("s1") == [{"text": "a", "status": "pending"}]
+            app.session_store.set_meta("goal:sub:s1", '{"not": "a list"}')
+            assert goals.subs("s1") == []
+        finally:
+            app.close()
+
+    def test_active_sessions_and_corrupt_entries(self, tmp_path) -> None:
+        app = _app(tmp_path)
+        try:
+            goals = self._goals(app)
+            goals.create("s1", "a")
+            goals.create("s2", "b")
+            goals.set_status("s2", PAUSED)
+            assert goals.active_sessions() == ["s1"]
+            app.session_store.set_meta("goal:s3", "{corrupt")
+            assert goals.active_sessions() == ["s1"]  # corrupt entry skipped
+        finally:
+            app.close()
+
+    def test_may_continue_requires_active_goal(self, tmp_path) -> None:
+        app = _app(tmp_path)
+        try:
+            goals = self._goals(app)
+            assert goals.may_continue("ghost", max_rounds_per_day=2) is False
+            goals.create("s1", "a")
+            goals.set_status("s1", PAUSED)
+            assert goals.may_continue("s1", max_rounds_per_day=2) is False
+        finally:
+            app.close()
+
+    def test_round_counter_resets_on_a_new_day(self, tmp_path) -> None:
+        app = _app(tmp_path)
+        try:
+            goals = self._goals(app)
+            goals.create("s1", "a")
+            goals.record_round("s1")
+            goals.record_round("s1")
+            # simulate yesterday's counter still persisted
+            app.session_store.set_meta(
+                "goal:s1",
+                '{"text": "a", "status": "active", "rounds": 2, "day": "2000-01-01"}',
+            )
+            assert goals.may_continue("s1", max_rounds_per_day=2) is True
+            goals.record_round("s1")
+            goal = goals.get("s1")
+            assert goal is not None and goal.rounds == 1  # fresh day restarts at 1
+        finally:
+            app.close()
+
+    def test_storeless_manager_degrades_to_memory(self) -> None:
+        goals = GoalManager(None)
+        assert goals.get("s1") is None
+        assert goals.subs("s1") == []
+        assert goals.active_sessions() == []
+        goal = goals.create("s1", "text")  # returned, never persisted
+        assert goal.text == "text" and goals.get("s1") is None
+        goals.set_subs("s1", [])  # quiet no-op
+        goals.clear("s1")
+
+
+class TestGoalCapabilitySurface:
+    """The goal capability's full action/scope matrix and the anti
+    self-continuation driver rules applied by actor."""
+
+    HUMAN = ActorContext(actor=LOCAL_USER)
+    AGENT = ActorContext(actor=ActorRef(kind=ActorKind.AGENT, id="agent.main", scopes=()))
+
+    def _app(self, tmp_path):
+        return _app(tmp_path)
+
+    async def _goal(self, app, ctx, **args):
+        return await execute(app.registry, "goal", ctx, {"session_id": "s1", **args})
+
+    async def test_human_creates_then_updates_main_text(self, tmp_path) -> None:
+        app = self._app(tmp_path)
+        try:
+            out = await self._goal(app, self.HUMAN, action="create", text="  ship it  ")
+            assert out["main"] == {"text": "ship it", "status": ACTIVE}
+            # set on an existing goal replaces the text, keeping status
+            await self._goal(app, self.HUMAN, action="status", status=PAUSED)
+            out = await self._goal(app, self.HUMAN, action="set", scope="main", text="ship v2")
+            assert out["main"] == {"text": "ship v2", "status": PAUSED}
+        finally:
+            app.close()
+
+    async def test_create_with_empty_text_rejected(self, tmp_path) -> None:
+        app = self._app(tmp_path)
+        try:
+            with pytest.raises(ServiceError) as exc:
+                await self._goal(app, self.HUMAN, action="create", text="   ")
+            assert exc.value.body.code.endswith(ErrorSuffix.INVALID_INPUT.value)
+        finally:
+            app.close()
+
+    async def test_set_main_with_empty_text_clears_the_goal(self, tmp_path) -> None:
+        app = self._app(tmp_path)
+        try:
+            await self._goal(app, self.HUMAN, action="create", text="temp")
+            out = await self._goal(app, self.HUMAN, action="set", scope="main", text="")
+            assert out["cleared"] is True and out["main"] is None
+        finally:
+            app.close()
+
+    async def test_agent_cannot_touch_main_text_or_arm(self, tmp_path) -> None:
+        app = self._app(tmp_path)
+        try:
+            await self._goal(app, self.HUMAN, action="create", text="theirs")
+            for args in (
+                {"action": "set", "scope": "main", "text": "mine"},
+                {"action": "set", "scope": "main", "text": ""},
+                {"action": "create", "text": "mine"},
+                {"action": "status", "scope": "main", "status": "active"},
+                {"action": "status", "scope": "main", "status": "paused"},
+            ):
+                with pytest.raises(ServiceError) as exc:
+                    await self._goal(app, self.AGENT, **args)
+                assert exc.value.body.code.endswith(ErrorSuffix.FORBIDDEN.value)
+        finally:
+            app.close()
+
+    async def test_agent_reports_blocked_and_done(self, tmp_path) -> None:
+        app = self._app(tmp_path)
+        try:
+            await self._goal(app, self.HUMAN, action="create", text="g")
+            out = await self._goal(app, self.AGENT, action="status", status="blocked")
+            assert out["main"]["status"] == "blocked"
+        finally:
+            app.close()
+
+    async def test_human_status_validates_against_human_vocabulary(self, tmp_path) -> None:
+        app = self._app(tmp_path)
+        try:
+            await self._goal(app, self.HUMAN, action="create", text="g")
+            with pytest.raises(ServiceError) as exc:
+                await self._goal(app, self.HUMAN, action="status", status="doing")
+            assert exc.value.body.code.endswith(ErrorSuffix.INVALID_INPUT.value)
+            with pytest.raises(ServiceError) as exc:
+                await self._goal(app, self.HUMAN, action="status", status="")
+            assert exc.value.body.code.endswith(ErrorSuffix.INVALID_INPUT.value)
+        finally:
+            app.close()
+
+    async def test_status_on_missing_goal_not_found(self, tmp_path) -> None:
+        app = self._app(tmp_path)
+        try:
+            with pytest.raises(ServiceError) as exc:
+                await self._goal(app, self.HUMAN, action="status", status="paused")
+            assert exc.value.body.code.endswith(ErrorSuffix.NOT_FOUND.value)
+        finally:
+            app.close()
+
+    async def test_sub_goals_full_agent_authority(self, tmp_path) -> None:
+        app = self._app(tmp_path)
+        try:
+            # agent adds a sub goal (no index: append as pending)
+            out = await self._goal(app, self.AGENT, action="set", scope="sub", text="step one")
+            assert out["subs"] == [{"text": "step one", "status": "pending"}]
+            # replace text via index: status preserved
+            out = await self._goal(
+                app, self.AGENT, action="set", scope="sub", index=0, text="step one revised"
+            )
+            assert out["subs"] == [{"text": "step one revised", "status": "pending"}]
+            # sub status transitions
+            out = await self._goal(
+                app, self.AGENT, action="status", scope="sub", index=0, status="done"
+            )
+            assert out["subs"][0]["status"] == "done"
+            # delete via empty text
+            out = await self._goal(app, self.AGENT, action="set", scope="sub", index=0, text="")
+            assert out["subs"] == []
+        finally:
+            app.close()
+
+    async def test_sub_status_on_plain_string_entry_is_tolerated(self, tmp_path) -> None:
+        """A legacy/plain-string sub entry gains an object shape on first
+        status update instead of crashing."""
+        app = self._app(tmp_path)
+        try:
+            GoalManager(app.session_store).set_subs("s1", ["raw step"])
+            out = await self._goal(
+                app, self.HUMAN, action="status", scope="sub", index=0, status="doing"
+            )
+            assert out["subs"] == [{"text": "raw step", "status": "doing"}]
+        finally:
+            app.close()
+
+    async def test_sub_set_replaces_text_of_plain_string_entry(self, tmp_path) -> None:
+        app = self._app(tmp_path)
+        try:
+            GoalManager(app.session_store).set_subs("s1", ["raw step"])
+            out = await self._goal(
+                app, self.HUMAN, action="set", scope="sub", index=0, text="typed step"
+            )
+            assert out["subs"] == [{"text": "typed step", "status": "pending"}]
+        finally:
+            app.close()
+
+    async def test_sub_validation_errors(self, tmp_path) -> None:
+        app = self._app(tmp_path)
+        try:
+            goals = GoalManager(app.session_store)
+            goals.set_subs("s1", [{"text": "a", "status": "pending"}])
+            cases = (
+                {"action": "set", "scope": "sub", "index": None, "text": ""},  # empty append
+                {"action": "set", "scope": "sub", "index": 5, "text": "x"},  # out of range
+                {"action": "status", "scope": "sub", "index": None, "status": "done"},
+                {"action": "status", "scope": "sub", "index": 0, "status": ""},
+                {"action": "status", "scope": "sub", "index": 0, "status": "active"},
+                {"action": "status", "scope": "sub", "index": 9, "status": "done"},
+            )
+            for args in cases:
+                with pytest.raises(ServiceError) as exc:
+                    await self._goal(app, self.HUMAN, **args)
+                assert exc.value.body.code.endswith(
+                    (ErrorSuffix.INVALID_INPUT.value, ErrorSuffix.NOT_FOUND.value)
+                )
+        finally:
+            app.close()
+
+    async def test_unknown_scope_and_action_rejected(self, tmp_path) -> None:
+        app = self._app(tmp_path)
+        try:
+            for args in (
+                {"action": "set", "scope": "other", "text": "x"},
+                {"action": "status", "scope": "other", "status": "done"},
+                {"action": "destroy"},
+            ):
+                with pytest.raises(ServiceError) as exc:
+                    await self._goal(app, self.HUMAN, **args)
+                assert exc.value.body.code.endswith(ErrorSuffix.INVALID_INPUT.value)
+        finally:
+            app.close()
+
+    async def test_get_snapshot_reports_main_and_subs(self, tmp_path) -> None:
+        app = self._app(tmp_path)
+        try:
+            goals = GoalManager(app.session_store)
+            goals.create("s1", "main goal")
+            goals.set_subs("s1", [{"text": "sub", "status": "doing"}])
+            out = await self._goal(app, self.HUMAN, action="get")
+            assert out["main"] == {"text": "main goal", "status": ACTIVE, "rounds": 0}
+            assert out["subs"] == [{"text": "sub", "status": "doing"}]
         finally:
             app.close()

@@ -6,7 +6,7 @@ Pytest suite for `agent/src/agent`, run from the repository root: `npm run test:
 
 ## Layout
 
-Flat `test_*.py` files at the root cover cross-cutting surfaces: wiring, capabilities, mcp (plus discovery and resilience), hooks, plugins, personas, policy (plus notify), repl (plus replay), skills, redaction, streaming UX, the LLM clients (http / multimodal / structured), user-hook reload, naming neutrality (brand literals in source), and the module docstring header style.
+Flat `test_*.py` files at the root cover cross-cutting surfaces: wiring, capabilities, mcp (plus discovery, resilience, and the client session), hooks, plugins, personas, policy (plus notify), repl (plus replay), skills, redaction, streaming UX, the LLM clients (http / multimodal / structured), user-hook reload, naming neutrality (brand literals in source), and the module docstring header style.
 
 Subdirectories mirror the package (selected themes, not exhaustive listings):
 
