@@ -112,8 +112,50 @@ class TestGreeting:
         assert job["kind"] == FOLLOWUP_JOB_KIND
         assert job["payload"]["session"] == "s9"
         assert job["payload"]["topic"] == "a gentle nudge"
-        assert job["payload"]["followups"] == 1
+        assert job["payload"]["followups"] == 0  # the scheduled job IS the first follow-up
         assert before <= job["payload"]["after_ts"] <= _time.time()
+
+    async def test_scheduled_followup_job_actually_fires(self) -> None:
+        """End-to-end over the real payload: the job the greeting schedules must
+        pass its own gates (a followups value of 1 would make the handler read
+        the chain as exhausted and the follow-up would never send). The budget
+        allows two touches so the greeting does not consume the follow-up's
+        room."""
+        roomy = SimpleNamespace(
+            get=lambda key: {
+                "agent.outreach.enabled": True,
+                "agent.outreach.quiet_hours": "",
+                "agent.outreach.daily_max": 5,
+                "agent.outreach.session_max": 2,
+                "agent.outreach.cooldown_minutes": 0,
+            }.get(key, True)
+        )
+
+        def build() -> tuple[ProactiveEngine, list[tuple[str, str]]]:
+            replies: list[tuple[str, str]] = []
+
+            async def reply(text: str, session: str = "") -> None:
+                replies.append((text, session))
+
+            async def complete(_messages):
+                return SimpleNamespace(text="a gentle nudge", degraded=False)
+
+            engine = ProactiveEngine(
+                master=SimpleNamespace(reply=reply, _bus=SimpleNamespace(log=_FakeLog([]))),
+                llm=SimpleNamespace(complete=complete),
+                budget=OutreachBudget(settings=roomy),
+                settings=roomy,
+                scheduler=SimpleNamespace(register_job_handler=lambda *a, **k: None),
+                queue=_FakeQueue(),
+            )
+            return engine, replies
+
+        engine, replies = build()
+        await engine.on_user_online(SimpleNamespace(payload={"session": "s7"}))
+        assert len(replies) == 1  # the greeting
+        (job,) = engine._queue.enqueued
+        await engine._run_followup_job(job["payload"])
+        assert replies == [("a gentle nudge", "s7"), ("a gentle nudge", "s7")]
 
     async def test_budget_refusal_stays_silent(self) -> None:
         async def complete(_messages):

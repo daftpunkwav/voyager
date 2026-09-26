@@ -99,7 +99,11 @@ class ProactiveEngine:
             payload={
                 "session": session,
                 "topic": topic,
-                "followups": 1,
+                # Followups already sent (the handler refuses >= _MAX_FOLLOWUPS):
+                # this job IS the first follow-up, so the chain must start at 0 —
+                # a 1 here would make the handler drop the only followup it is
+                # scheduled to send.
+                "followups": 0,
                 # Baseline for "did the user reply": the moment this outreach
                 # went out. Any user message in the session after it cancels
                 # the chain.
