@@ -286,3 +286,43 @@ class TestCrossTurnNumbering:
         await inst.run_turn("ok")
         assert seen == ["sess-1"]
         assert current_chat_session.get() == ""
+
+
+class TestPreMigrationDatabase:
+    def test_legacy_db_without_new_columns_is_migrated_on_open(self, tmp_path) -> None:
+        """A database created before seq_round/wire_request existed gains the
+        columns on open (CREATE TABLE IF NOT EXISTS cannot alter), and the
+        legacy row gets a session-global number via the backfill."""
+        import sqlite3
+
+        db = tmp_path / "trajectory.db"
+        conn = sqlite3.connect(db)
+        conn.executescript(
+            """
+            CREATE TABLE raw_rounds (
+                run_id   TEXT NOT NULL,
+                round    INTEGER NOT NULL,
+                session  TEXT NOT NULL DEFAULT '',
+                ts       REAL NOT NULL,
+                request  TEXT NOT NULL DEFAULT '',
+                response TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY (run_id, round)
+            );
+            INSERT INTO raw_rounds (run_id, round, session, ts, request, response)
+            VALUES ('old', 3, 'chat', 100.0, 'q', 'a');
+            """
+        )
+        conn.commit()
+        conn.close()
+        store = TrajectoryStore(db, EventLog(tmp_path / "events.db"))
+        try:
+            rounds, total = store.raw_rounds_for_session("chat")
+            assert total == 1
+            # the backfilled session-global number leads on display
+            assert rounds[0]["round"] == 1
+            assert rounds[0]["wire_request"] == ""
+            with store._lock:
+                cols = {r[1] for r in store._conn.execute("PRAGMA table_info(raw_rounds)")}
+            assert {"seq_round", "wire_request"} <= cols
+        finally:
+            store.close()

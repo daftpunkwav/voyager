@@ -62,7 +62,6 @@ CREATE TABLE IF NOT EXISTS raw_rounds (
     wire_request TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (run_id, round)
 );
-CREATE INDEX IF NOT EXISTS idx_raw_rounds_session ON raw_rounds(session, seq_round);
 """
 
 #: Event types the projection folds; everything else is skipped by the read filter.
@@ -99,9 +98,9 @@ class TrajectoryStore:
             self._conn.execute(
                 "ALTER TABLE raw_rounds ADD COLUMN wire_request TEXT NOT NULL DEFAULT ''"
             )
-        # executescript above already created the index on fresh databases;
-        # for pre-existing ones the CREATE INDEX IF NOT EXISTS in _SCHEMA ran
-        # before the ALTER, so re-run it now that all columns exist.
+        # The session index needs seq_round to exist, so it is created only
+        # here, after the column migrations above have covered both fresh and
+        # legacy databases.
         self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_raw_rounds_session ON raw_rounds(session, seq_round)"
         )
