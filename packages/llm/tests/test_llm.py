@@ -1559,3 +1559,113 @@ class TestMaxOutputTokensSetting:
 
         init_deps(Deps(store=cur.store, secrets=cur.secrets, settings=_Zero()))
         assert configured_max_output_tokens() == 4096
+
+
+class TestMultimodalListContent:
+    """List content (the neutral protocol's multi-modal part list) must never
+    reach the anthropic / responses encoders as Python repr garbage or crash
+    them: those two formats degrade part lists to their text projection, while
+    chat keeps forwarding the list structurally (vision models)."""
+
+    _PARTS: ClassVar[list] = [
+        {"type": "text", "text": "看看这张图:"},
+        {"type": "image_url", "image_url": {"url": "https://example.test/x.png"}},
+        {"type": "text", "text": "描述一下"},
+    ]
+
+    def _history(self) -> list[dict[str, Any]]:
+        return [
+            {"role": "system", "content": [{"type": "text", "text": "You are an assistant."}]},
+            {"role": "user", "content": self._PARTS},
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "收到"}],
+                "tool_calls": [{"id": "c1", "name": "look", "arguments": {"u": "x"}}],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "c1",
+                "name": "look",
+                "content": [{"type": "text", "text": "画面里有猫"}],
+            },
+        ]
+
+    async def test_anthropic_encodes_text_projection(self, monkeypatch) -> None:
+        seen = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["body"] = json.loads(request.content)
+            return httpx.Response(
+                200, json={"content": [{"type": "text", "text": "ok"}], "usage": {}}
+            )
+
+        real = httpx.AsyncClient
+        monkeypatch.setattr(
+            client_mod.httpx,
+            "AsyncClient",
+            lambda **kw: real(transport=httpx.MockTransport(handler)),
+        )
+        await client_mod.complete(
+            TestMessageTranslation._ANTHROPIC,
+            api_key="sk",
+            model="m",
+            messages=self._history(),
+        )
+        body = seen["body"]
+        assert body["system"] == "You are an assistant."
+        wire = json.dumps(body["messages"], ensure_ascii=False)
+        # Text members survive as real text...
+        assert "看看这张图:" in wire and "画面里有猫" in wire and "收到" in wire
+        # ...never as Python repr of the part list
+        assert "'type':" not in wire and "image_url" not in wire
+
+    async def test_responses_encodes_text_projection(self) -> None:
+        from llm.wire_responses import responses_input
+
+        instructions, items = responses_input(self._history())
+        assert instructions == "You are an assistant."
+        blob = json.dumps(items, ensure_ascii=False)
+        assert "看看这张图:" in blob and "画面里有猫" in blob
+        assert "image_url" not in blob
+
+    async def test_chat_keeps_list_content_structural(self, monkeypatch) -> None:
+        seen = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": "ok"}}], "usage": {}, "model": "m"},
+            )
+
+        real = httpx.AsyncClient
+        monkeypatch.setattr(
+            client_mod.httpx,
+            "AsyncClient",
+            lambda **kw: real(transport=httpx.MockTransport(handler)),
+        )
+        await client_mod.complete(
+            TestMessageTranslation._CHAT,
+            api_key="sk",
+            model="m",
+            messages=[{"role": "user", "content": self._PARTS}],
+        )
+        (msg,) = seen["body"]["messages"]
+        assert isinstance(msg["content"], list)
+        assert msg["content"][1]["type"] == "image_url"
+
+    def test_duplicate_tool_call_ids_made_unique(self) -> None:
+        """A compat provider echoing the same id on two calls would replay
+        duplicate tool_use ids in the history, which strict endpoints reject
+        on every later round; the duplicate is renamed at parse time and the
+        empty id stays empty (it degrades downstream)."""
+        calls = client_mod._parse_tool_calls(
+            [
+                {"id": "call_0", "function": {"name": "a", "arguments": "{}"}},
+                {"id": "call_0", "function": {"name": "b", "arguments": "{}"}},
+                {"id": "", "function": {"name": "c", "arguments": "{}"}},
+                {"id": "call_0_dup", "function": {"name": "d", "arguments": "{}"}},
+            ]
+        )
+        assert [c["id"] for c in calls] == ["call_0", "call_0_dup", "", "call_0_dup_dup"]
+        assert [c["name"] for c in calls] == ["a", "b", "c", "d"]

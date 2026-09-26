@@ -34,7 +34,7 @@ from typing import Any
 import httpx
 
 from .inline_split import parse_tool_blocks, split_inline
-from .wire_responses import parse_response_output, responses_input, responses_tools
+from .wire_responses import content_text, parse_response_output, responses_input, responses_tools
 
 _TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
 
@@ -243,7 +243,9 @@ class TestResult:
 
 
 def _split_system(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
-    system = "\n".join(m["content"] for m in messages if m.get("role") == "system")
+    system = "\n".join(
+        content_text(m.get("content")) for m in messages if m.get("role") == "system"
+    )
     rest = [m for m in messages if m.get("role") != "system"]
     return system, rest
 
@@ -356,13 +358,15 @@ def _anthropic_messages(rest: list[dict[str, Any]]) -> list[dict[str, Any]]:
       field name, not OpenAI's tool_call_id); consecutive results are merged
       into one user message — the Anthropic convention is several tool_result
       blocks in a single user message per assistant turn.
-    - other messages: string content passes through unchanged.
+    - other messages: string content passes through unchanged (multi-modal
+      part lists degrade to their text projection — see wire_responses
+      .content_text; chat is the only format that forwards part lists).
     """
     out: list[dict[str, Any]] = []
     for m in rest:
         role = m.get("role")
         if role == "assistant":
-            text = str(m.get("content") or "")
+            text = content_text(m.get("content"))
             blocks: list[dict[str, Any]] = []
             # Echo stored thinking blocks first and verbatim: with extended
             # thinking enabled the provider requires the exact blocks back
@@ -386,7 +390,7 @@ def _anthropic_messages(rest: list[dict[str, Any]]) -> list[dict[str, Any]]:
             block = {
                 "type": "tool_result",
                 "tool_use_id": str(m.get("tool_call_id") or ""),
-                "content": str(m.get("content") or ""),
+                "content": content_text(m.get("content")),
             }
             prev = out[-1] if out else None
             if (
@@ -400,7 +404,7 @@ def _anthropic_messages(rest: list[dict[str, Any]]) -> list[dict[str, Any]]:
             else:
                 out.append({"role": "user", "content": [block]})
             continue
-        out.append({"role": role, "content": str(m.get("content") or "")})
+        out.append({"role": role, "content": content_text(m.get("content"))})
     return out
 
 
@@ -442,8 +446,14 @@ def _anthropic_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _parse_tool_calls(raw: list[dict[str, Any]] | None) -> tuple[dict[str, Any], ...]:
     """chat format: arguments is a JSON string; fall back to empty args on
-    parse failure."""
+    parse failure. Ids are made unique within the response: a compat provider
+    echoing the same id on two calls would otherwise replay duplicate tool_use
+    ids in the history, which strict endpoints (Anthropic, MiniMax) reject on
+    every later round. Results pair off call.id, so renaming the duplicate
+    here keeps the transcript consistent; an empty id stays empty (it degrades
+    to user text downstream, see _resolve_tool_messages)."""
     calls = []
+    seen: set[str] = set()
     for tc in raw or []:
         fn = tc.get("function") or {}
         args = fn.get("arguments") or "{}"
@@ -452,9 +462,14 @@ def _parse_tool_calls(raw: list[dict[str, Any]] | None) -> tuple[dict[str, Any],
                 args = json.loads(args)
             except ValueError:
                 args = {}
+        tid = str(tc.get("id") or "")
+        while tid and tid in seen:
+            tid += "_dup"
+        if tid:
+            seen.add(tid)
         calls.append(
             {
-                "id": tc.get("id", ""),
+                "id": tid,
                 "name": fn.get("name", ""),
                 "arguments": args if isinstance(args, dict) else {},
             }

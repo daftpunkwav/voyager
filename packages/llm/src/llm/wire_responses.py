@@ -34,17 +34,56 @@ from typing import Any
 import httpx
 
 
+def content_text(content: Any) -> str:
+    """Multi-modal content (str or content-part list) -> its text projection.
+
+    The neutral protocol allows list content (text / image / file parts, see
+    agent.llm.MessageContent), but this module's input items and the anthropic
+    encoder speak plain text; ``str()`` on a part list would leak Python repr
+    onto the wire, so a list degrades to its text members: dict parts with a
+    string ``text`` and plain strings pass, dataclass text parts pass via
+    their ``text`` attribute, image/file parts (tagged ``image_url`` /
+    ``file``) carry no text channel and drop. Mirrors agent.llm.content_to_text,
+    which this package cannot import (import-linter: packages never import
+    agent). The chat format deliberately does NOT flatten: it forwards part
+    lists structurally so vision models keep their images.
+    """
+    if not content:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, (list, tuple)):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, dict):
+                text = part.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+                continue
+            if isinstance(part, str):
+                parts.append(part)
+                continue
+            if getattr(part, "type", "") in ("image_url", "file"):
+                continue
+            text = getattr(part, "text", None)
+            parts.append(text if isinstance(text, str) else str(part))
+        return "\n".join(parts) if parts else ""
+    return str(content)
+
+
 def responses_input(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
     """Paired history (post ``_resolve_tool_messages``) -> ``(instructions,
     input items)``."""
-    instructions = "\n".join(m["content"] for m in messages if m.get("role") == "system")
+    instructions = "\n".join(
+        content_text(m.get("content")) for m in messages if m.get("role") == "system"
+    )
     out: list[dict[str, Any]] = []
     for m in messages:
         role = m.get("role")
         if role == "system":
             continue
         if role == "assistant":
-            text = str(m.get("content") or "")
+            text = content_text(m.get("content"))
             if text:
                 out.append(
                     {"role": "assistant", "content": [{"type": "output_text", "text": text}]}
@@ -65,14 +104,14 @@ def responses_input(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str,
                 {
                     "type": "function_call_output",
                     "call_id": str(m.get("tool_call_id") or ""),
-                    "output": str(m.get("content") or ""),
+                    "output": content_text(m.get("content")),
                 }
             )
         else:  # user (and any unknown role) rides the user channel
             out.append(
                 {
                     "role": "user",
-                    "content": [{"type": "input_text", "text": str(m.get("content") or "")}],
+                    "content": [{"type": "input_text", "text": content_text(m.get("content"))}],
                 }
             )
     return instructions, out
@@ -224,6 +263,7 @@ async def responses_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
 
 
 __all__ = [
+    "content_text",
     "parse_response_output",
     "responses_input",
     "responses_sse",
