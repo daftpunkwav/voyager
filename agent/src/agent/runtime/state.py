@@ -123,6 +123,9 @@ class RunState:
     )
     result: str | None = None
     error: str = ""
+    surrender_reason: str = (
+        ""  # budget-exhaustion ending (tool_cap/rounds_cap/token_budget/loop_abort); "" = completed
+    )
     started_ts: float = field(default_factory=time.time)  # for instance duration display
     resume: dict[str, Any] | None = None  # ResumeSnapshot.to_dict(); None = legacy, not resumable
 

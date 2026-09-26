@@ -368,6 +368,12 @@ async def _run_turn(
             inst.state.error = f"{type(exc).__name__}: {exc}"
             raise
         finally:
+            # Budget-exhaustion endings return normally; stamp the reason so
+            # wait/dispatch callers can tell a truncated run from a real one
+            for step in reversed(inst.state.steps):
+                if step.kind == "system" and step.name == "surrender":
+                    inst.state.surrender_reason = str((step.detail or {}).get("reason") or "")
+                    break
             # The turn is over (success or failure): start()'s finally already
             # persisted the turn-boundary snapshot and no further step events
             # will fire; clear _turn_messages to stop mis-capturing

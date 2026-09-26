@@ -17,12 +17,12 @@ def _spawner_with(inst) -> Spawner:
     return cast(Spawner, SimpleNamespace(instances={inst.id: inst}))
 
 
-def _inst(status: RunStatus, result: str = "") -> SimpleNamespace:
+def _inst(status: RunStatus, result: str = "", surrendered: str = "") -> SimpleNamespace:
     return SimpleNamespace(
         id="abc123",
         name="worker",
         status=status,
-        state=SimpleNamespace(result=result, error=""),
+        state=SimpleNamespace(result=result, error="", surrender_reason=surrendered),
         last_step_summary=lambda: "step",
     )
 
@@ -88,3 +88,17 @@ async def test_timeout_is_capped_and_malformed_falls_back(monkeypatch) -> None:
     for bad in (10**9, "not-a-number"):
         out = await wait_subagent(_spawner_with(inst), "abc123", timeout_s=cast(float, bad))
         assert out["timed_out"] is True
+
+
+async def test_cap_surrender_is_flagged_on_the_result() -> None:
+    """A cap surrender returns COMPLETED normally; wait must surface the
+    reason so a parent can tell the truncated run from a real completion."""
+    inst = _inst(RunStatus.COMPLETED, result="[中断] 已达工具调用上限(5)", surrendered="tool_cap")
+    out = await wait_subagent(_spawner_with(inst), "abc123")
+    assert out["surrendered"] == "tool_cap"
+
+
+async def test_plain_completion_has_no_surrender_key() -> None:
+    inst = _inst(RunStatus.COMPLETED, result="all done")
+    out = await wait_subagent(_spawner_with(inst), "abc123")
+    assert "surrendered" not in out

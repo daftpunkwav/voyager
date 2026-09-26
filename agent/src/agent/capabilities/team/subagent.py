@@ -60,10 +60,21 @@ _MAX_TIMEOUT_S = 600.0
 
 
 def _find(spawner: Spawner, id_or_name: str):
-    for inst in spawner.instances.values():
-        if id_or_name in (inst.id, inst.name):
-            return inst
-    return None
+    """Resolve by instance id first, then by name — names are user-chosen and
+    can collide, so an ambiguous name is a readable conflict instead of a
+    silent first-match."""
+    by_id = [i for i in spawner.instances.values() if i.id == id_or_name]
+    if by_id:
+        return by_id[0]
+    by_name = [i for i in spawner.instances.values() if i.name == id_or_name]
+    if len(by_name) > 1:
+        raise ServiceError(
+            "agent",
+            ErrorSuffix.CONFLICT,
+            f"instance name {id_or_name!r} is ambiguous ({len(by_name)} runs)",
+            hint="address the instance by its id (see subagent(action=list))",
+        )
+    return by_name[0] if by_name else None
 
 
 def _list_subagents(registry: SubagentRegistry, spawner: Spawner) -> dict:
@@ -129,7 +140,7 @@ async def _wait_subagent(
                 "last_step": inst.last_step_summary(),
             }
         await asyncio.sleep(_POLL_S)
-    return {
+    out = {
         "id": inst.id,
         "name": inst.name,
         "status": inst.status.value,
@@ -137,6 +148,11 @@ async def _wait_subagent(
         "result": str(inst.state.result or ""),
         "error": str(inst.state.error or ""),
     }
+    if inst.state.surrender_reason:
+        # cap surrender (tool/round/token/loop guard): the run ended early —
+        # surface it instead of letting the COMPLETED status mask the cut
+        out["surrendered"] = inst.state.surrender_reason
+    return out
 
 
 async def subagent_action(
