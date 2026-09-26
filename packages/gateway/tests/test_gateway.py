@@ -1,5 +1,10 @@
 """Gateway tests: service mounting and error envelopes, chat channel, SSE,
 rate limiting, activity reporting, and health aggregation.
+
+The chat/activity classes at the end cover the raw-LLM round log endpoint,
+projection-backed trajectory reads, session-filtered forward paging, SSE
+keep-alive/live delivery (exercised on the shared _stream_events generator,
+never through a long-lived ASGI transport), and activity feed validation.
 """
 
 import asyncio
@@ -773,3 +778,214 @@ class TestStreamVocabulary:
                     f"{member!r} is not a DomainEvent vocabulary member; use the"
                     " platform_contracts.DomainEvent constant"
                 )
+
+
+class _FakeTrajectory:
+    """TrajectoryReader stand-in recording which query path was taken."""
+
+    def __init__(self) -> None:
+        self.steps_page_calls: list[dict] = []
+        self.run_steps_calls: list[str] = []
+        self.rounds_calls: list[str] = []
+        self.session_calls: list[tuple[str, int]] = []
+        self.round_calls: list[tuple[str, int]] = []
+
+    def steps_page(self, *, session, after_seq, before_seq, limit):
+        self.steps_page_calls.append(
+            {"session": session, "after_seq": after_seq, "before_seq": before_seq, "limit": limit}
+        )
+        return [{"seq": 5, "type": "agent.step", "payload": {}, "ts": 1.0}], True
+
+    def run_steps(self, run_id: str):
+        self.run_steps_calls.append(run_id)
+        return [{"seq": 7, "type": "agent.step", "payload": {"run_id": run_id}, "ts": 1.0}]
+
+    def raw_rounds(self, run_id: str):
+        self.rounds_calls.append(run_id)
+        return [{"run_id": run_id, "round": 0, "bodies": []}]
+
+    def raw_rounds_for_session(self, session: str, *, limit: int = 200):
+        self.session_calls.append((session, limit))
+        return [{"round": 1}, {"round": 2}], 9
+
+    def raw_round(self, run_id: str, round: int):
+        self.round_calls.append((run_id, round))
+        if round != 1:
+            return None
+        return {"run_id": run_id, "round": round, "bodies": [{"role": "user"}]}
+
+
+class TestRawLlm:
+    """GET /api/chat/rawllm: the raw LLM round log served from the trajectory
+    projection (session page with full bodies; run rounds / one round)."""
+
+    def _app(self, bus, tmp_path, echo_registry, trajectory):
+        return create_app(
+            [MountSpec(domain="echo", registry=echo_registry, probe=lambda: {"status": "up"})],
+            bus=bus,
+            db_path=tmp_path / "gw-rawllm.db",
+            trajectory=trajectory,
+        )
+
+    def test_session_mode_returns_rounds_and_total(self, bus, tmp_path, echo_registry) -> None:
+        reader = _FakeTrajectory()
+        with TestClient(self._app(bus, tmp_path, echo_registry, reader)) as c:
+            body = c.get("/api/chat/rawllm?session=s1&limit=50").json()
+        assert reader.session_calls == [("s1", 50)]
+        assert body == {"rounds": [{"round": 1}, {"round": 2}], "total": 9, "round": None}
+
+    def test_session_limit_clamped_to_ceiling(self, bus, tmp_path, echo_registry) -> None:
+        reader = _FakeTrajectory()
+        with TestClient(self._app(bus, tmp_path, echo_registry, reader)) as c:
+            c.get("/api/chat/rawllm?session=s1&limit=99999")
+        assert reader.session_calls == [("s1", 1000)]
+
+    def test_run_rounds_mode(self, bus, tmp_path, echo_registry) -> None:
+        reader = _FakeTrajectory()
+        with TestClient(self._app(bus, tmp_path, echo_registry, reader)) as c:
+            body = c.get("/api/chat/rawllm?run_id=r1").json()
+        assert reader.rounds_calls == ["r1"]
+        assert body["rounds"][0]["run_id"] == "r1" and body["round"] is None
+
+    def test_single_round_mode_with_missing_round(self, bus, tmp_path, echo_registry) -> None:
+        reader = _FakeTrajectory()
+        with TestClient(self._app(bus, tmp_path, echo_registry, reader)) as c:
+            body = c.get("/api/chat/rawllm?run_id=r1&round=1").json()
+            assert reader.round_calls == [("r1", 1)]
+            assert body["round"] == {"run_id": "r1", "round": 1, "bodies": [{"role": "user"}]}
+
+            body = c.get("/api/chat/rawllm?run_id=r1&round=5").json()
+            assert body["round"] is None  # unknown round: null, not a 404/500
+
+    def test_without_reader_degrades_to_empty(self, client) -> None:
+        body = client.get("/api/chat/rawllm?session=s1").json()
+        assert body == {"rounds": [], "total": 0, "round": None}
+
+    def test_without_run_id_or_session_is_400(self, bus, tmp_path, echo_registry) -> None:
+        with TestClient(self._app(bus, tmp_path, echo_registry, _FakeTrajectory())) as c:
+            r = c.get("/api/chat/rawllm")
+        assert r.status_code == 400
+        assert r.json()["error"]["code"] == "GATEWAY.INVALID_INPUT"
+
+    def test_malformed_session_is_400(self, bus, tmp_path, echo_registry) -> None:
+        with TestClient(self._app(bus, tmp_path, echo_registry, _FakeTrajectory())) as c:
+            r = c.get("/api/chat/rawllm?session=../evil")
+        assert r.status_code == 400
+
+
+class TestTrajectoryProjection:
+    def test_projection_reader_serves_step_pages(self, bus, tmp_path, echo_registry) -> None:
+        """When a trajectory projection is wired, step pages come from the
+        reader (same cursor contract) instead of a log scan."""
+        reader = _FakeTrajectory()
+        app = create_app(
+            [MountSpec(domain="echo", registry=echo_registry, probe=lambda: {"status": "up"})],
+            bus=bus,
+            db_path=tmp_path / "gw-proj.db",
+            trajectory=reader,
+        )
+        with TestClient(app) as c:
+            body = c.get("/api/chat/trajectory?session=s1&after_seq=4&before_seq=9&limit=7").json()
+        assert reader.steps_page_calls == [
+            {"session": "s1", "after_seq": 4, "before_seq": 9, "limit": 7}
+        ]
+        assert body == {
+            "has_more": True,
+            "steps": [{"seq": 5, "type": "agent.step", "payload": {}, "ts": 1.0}],
+        }
+
+
+class TestChatPaging:
+    def test_history_after_seq_with_session_filter(self, client, bus) -> None:
+        """Forward paging with a session filter scans chunks and keeps the
+        cursor contract: matches after after_seq, ascending, has_more False
+        at the tail."""
+        for sid, content in (("s1", "a1"), ("s2", "b1"), ("s1", "a2")):
+            client.post("/api/chat/messages", json={"content": content, "session": sid})
+        page = client.get("/api/chat/messages", params={"session": "s1", "after_seq": 1}).json()
+        assert [m["payload"]["content"] for m in page["messages"]] == ["a2"]
+        assert page["has_more"] is False
+
+    def test_sse_once_session_filter(self, client, bus) -> None:
+        """once-mode replay honors the session filter: rows of other lanes
+        (and legacy rows without a session) stay out of the stream."""
+        agent = ActorRef(kind=ActorKind.AGENT, id="agent.main")
+
+        def _pub(content: str, session: str) -> None:
+            asyncio.run(
+                bus.publish(
+                    Event(
+                        type=DomainEvent.AGENT_MESSAGE,
+                        actor=agent,
+                        payload={"content": content, "session": session},
+                    )
+                )
+            )
+
+        _pub("s1-row", "s1")
+        _pub("s2-row", "s2")
+        r = client.get("/api/chat/stream", params={"after_seq": 0, "once": "true", "session": "s1"})
+        assert r.status_code == 200
+        assert "s1-row" in r.text and "s2-row" not in r.text
+
+    def test_sse_malformed_session_is_400(self, client) -> None:
+        r = client.get("/api/chat/stream", params={"session": "../evil"})
+        assert r.status_code == 400
+
+    def test_sse_live_delivery_after_catchup(self, tmp_path, monkeypatch) -> None:
+        """After the replay reaches the tail, events published live on the bus
+        are delivered to the open subscription (the queue path, not the log
+        replay path)."""
+        from gateway.chat import _SSE_IDLE_PING_S, _stream_events
+        from platform_eventbus import EventBus, EventLog
+
+        monkeypatch.setattr("gateway.chat._SSE_IDLE_PING_S", 0.2)
+        assert _SSE_IDLE_PING_S  # referenced for clarity; the patch drives the idle timeout
+
+        async def scenario() -> tuple[int, str]:
+            event_log = EventLog(tmp_path / "sse-live.db")
+            bus = EventBus(event_log)
+            agent = ActorRef(kind=ActorKind.AGENT, id="agent.main")
+            agen = _stream_events(
+                bus, start_seq=0, types=("agent.message",), wanted=lambda _e: True
+            )
+            pending = asyncio.ensure_future(agen.__anext__())
+            await asyncio.sleep(0.05)  # let the generator reach its queue wait
+            await bus.publish(
+                Event(type=DomainEvent.AGENT_MESSAGE, actor=agent, payload={"content": "live"})
+            )
+            item = await asyncio.wait_for(pending, timeout=2)
+            assert item is not None
+            seq, event = item
+            assert seq and event.type == "agent.message"
+            await agen.aclose()
+            event_log.close()
+            return seq, str(event.payload["content"])
+
+        seq, content = asyncio.run(scenario())
+        assert (seq, content) == (1, "live")
+
+    def test_sse_keepalive_ping_on_idle(self, tmp_path, monkeypatch) -> None:
+        """An idle stream yields the None keep-alive marker (rendered as an
+        SSE comment) instead of hanging silently; the loop keeps pinging on
+        continued idleness."""
+        from gateway.chat import _stream_events
+        from platform_eventbus import EventBus, EventLog
+
+        monkeypatch.setattr("gateway.chat._SSE_IDLE_PING_S", 0.05)
+
+        async def scenario() -> list[tuple[int, Event] | None]:
+            event_log = EventLog(tmp_path / "sse-ping.db")
+            bus = EventBus(event_log)
+            agen = _stream_events(
+                bus, start_seq=0, types=("agent.message",), wanted=lambda _e: True
+            )
+            items = [
+                await asyncio.wait_for(agen.__anext__(), timeout=2),
+                await asyncio.wait_for(agen.__anext__(), timeout=2),
+            ]
+            await agen.aclose()
+            event_log.close()
+            return items
+
+        assert asyncio.run(scenario()) == [None, None]

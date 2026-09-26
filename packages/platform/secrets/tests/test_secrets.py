@@ -62,3 +62,58 @@ class TestKeyMaterial:
         env = tmp_path / ".env"
         env.write_text('SECRETS_ENCRYPTION_KEY="from-file"\n', encoding="utf-8")
         assert load_key_material(env_file=env) == "from-file"
+
+    def test_missing_env_file_yields_empty(self, tmp_path, monkeypatch) -> None:
+        """No environment material and no env file: empty material, the caller
+        decides (BYOK: secrets become unavailable)."""
+        monkeypatch.delenv("SECRETS_ENCRYPTION_KEY", raising=False)
+        monkeypatch.delenv("SECRET_KEY", raising=False)
+        assert load_key_material(env_file=tmp_path / "absent.env") == ""
+
+    def test_env_file_skips_comments_blank_and_keyless_lines(self, tmp_path, monkeypatch) -> None:
+        """The .env scan tolerates comments, blank lines and malformed rows
+        before finding the primary key."""
+        monkeypatch.delenv("SECRETS_ENCRYPTION_KEY", raising=False)
+        monkeypatch.delenv("SECRET_KEY", raising=False)
+        env = tmp_path / ".env"
+        env.write_text(
+            "# comment line\n"
+            "\n"
+            "GARBAGE line without equals\n"
+            "OTHER_KEY=noise\n"
+            "SECRETS_ENCRYPTION_KEY = 'spaced-value'\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        assert load_key_material(env_file=env) == "spaced-value"
+
+    def test_env_file_without_known_keys_yields_empty(self, tmp_path, monkeypatch) -> None:
+        """A well-formed env file that names neither key yields no material."""
+        monkeypatch.delenv("SECRETS_ENCRYPTION_KEY", raising=False)
+        monkeypatch.delenv("SECRET_KEY", raising=False)
+        env = tmp_path / ".env"
+        env.write_text("OTHER_KEY=noise\nANOTHER=2\n", encoding="utf-8")
+        assert load_key_material(env_file=env) == ""
+
+    def test_env_file_secret_key_fallback(self, tmp_path, monkeypatch) -> None:
+        """Without SECRETS_ENCRYPTION_KEY in file or environment, the file's
+        SECRET_KEY is the second fallback (quotes stripped)."""
+        monkeypatch.delenv("SECRETS_ENCRYPTION_KEY", raising=False)
+        monkeypatch.delenv("SECRET_KEY", raising=False)
+        env = tmp_path / ".env"
+        env.write_text('SECRET_KEY="file-fallback-material"\n', encoding="utf-8")
+        assert load_key_material(env_file=env) == "file-fallback-material"
+
+    def test_env_secret_key_fallback_warns_on_short_material(
+        self, tmp_path, monkeypatch, caplog
+    ) -> None:
+        """Short material is used (BYOK must not refuse service) but warns."""
+        import logging
+
+        monkeypatch.delenv("SECRETS_ENCRYPTION_KEY", raising=False)
+        monkeypatch.delenv("SECRET_KEY", raising=False)
+        monkeypatch.setenv("SECRET_KEY", "short")
+        with caplog.at_level(logging.WARNING, logger="platform.secrets"):
+            material = load_key_material(env_file=tmp_path / "absent.env")
+        assert material == "short"
+        assert any("only 5 characters" in r.message for r in caplog.records)
