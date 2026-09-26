@@ -77,8 +77,9 @@ class TestRender:
         store.upsert(_inst("i2", name="planner", status="pending", step=""))
         text = store.render()
         lines = text.splitlines()
-        assert lines[0] == "- [running] scout(i1): ship it | recent: reading files"
-        assert lines[1] == "- [pending] planner(i2): ship it"  # no empty tail
+        # render follows list(): newest card first
+        assert lines[0] == "- [pending] planner(i2): ship it"  # no empty tail
+        assert lines[1] == "- [running] scout(i1): ship it | recent: reading files"
 
 
 class TestTerminalTrimming:
