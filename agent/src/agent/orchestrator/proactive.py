@@ -122,7 +122,7 @@ class ProactiveEngine:
                 str(e.payload.get("session") or "") == session and e.ts > ts for _, e in rows
             )
         except Exception:  # noqa: BLE001  # cannot tell -> assume replied (stay quiet)
-            return False
+            return True
 
     async def _compose(self, instruction: str) -> str:
         """One LLM call, no tools, no residency; an empty reply means 'say
