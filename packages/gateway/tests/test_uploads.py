@@ -60,3 +60,16 @@ class TestUpload:
         path = Path(resp.json()["file_path"])
         assert path.parent.parent == ws / "imports"  # no path escape
         assert ".." not in path.name
+
+    def test_oversize_content_length_rejected_before_spool(self, client) -> None:
+        """An honest oversized Content-Length is refused up front (413)
+        without the multipart parser spooling the body to disk first; the
+        streamed cap stays as the fallback for lying headers."""
+        tc, _ = client
+        resp = tc.post(
+            "/api/uploads",
+            files={"file": ("big.bin", b"x")},
+            headers={"content-length": str(1024 * 1024 * 1024 + 1)},
+        )
+        assert resp.status_code == 413
+        assert resp.json()["error"]["code"] == "GATEWAY.PAYLOAD_TOO_LARGE"

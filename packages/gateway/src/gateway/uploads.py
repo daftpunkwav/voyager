@@ -44,6 +44,24 @@ def build_upload_router(workspace: Path) -> APIRouter:
                     }
                 },
             )
+        # Reject an honest oversized upload before the multipart parser spools
+        # the whole body to a temp file: request.form() buffers first, so the
+        # streamed cap below only runs after the disk copy. A lying (small)
+        # Content-Length still hits the streamed cap.
+        declared = request.headers.get("content-length")
+        try:
+            if declared is not None and int(declared) > _MAX_BYTES:
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "error": {
+                            "code": "GATEWAY.PAYLOAD_TOO_LARGE",
+                            "message": "file exceeds the 1GB transport limit",
+                        }
+                    },
+                )
+        except ValueError:
+            pass
         form = await request.form()
         file = form.get("file")
         if not isinstance(file, UploadFile):

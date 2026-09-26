@@ -14,9 +14,11 @@ build_router; this handler covers the gateway's own endpoints
 
 from __future__ import annotations
 
+import ipaddress
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -37,6 +39,53 @@ from .ratelimit import RateLimiter
 from .session import build_session_router
 
 _DEFAULT_DB = Path(__file__).parents[2] / "data" / "events.db"  # package root
+
+#: Loopback-ish Host/Origin names always trusted: the real loopback family
+#: plus the ASGI test-client virtual-host names (the TestClient reports Host
+#: "testserver", matching the "testclient" remote-host allowance in
+#: platform_actor.http_auth).
+_TRUSTED_HOST_NAMES = frozenset({"localhost", "testclient", "testserver"})
+
+
+def _trusted_host(value: str) -> bool:
+    """Whether a Host header / origin hostname names this machine.
+
+    Accepts IP literals in loopback/private space (127.x, RFC1918, ::1 —
+    the deployment is loopback-bound, but a LAN-IP host header with a Bearer
+    token keeps working) and the localhost family; any other DNS name is
+    rejected. That name rejection is the DNS-rebinding defense: a rebound
+    attacker domain resolves to 127.0.0.1 but still presents its own name in
+    Host, so every request it carries fails here.
+    """
+    host = (value or "").strip()
+    if not host:
+        return False
+    if host.startswith("["):  # [::1] or [::1]:8000
+        host = host[1:].split("]", 1)[0]
+    elif host.count(":") == 1:  # name-or-IPv4:port (a bare IPv6 never has one colon)
+        host = host.rsplit(":", 1)[0]
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        h = host.lower().rstrip(".")
+        return h in _TRUSTED_HOST_NAMES or h.endswith(".localhost")
+    mapped = getattr(addr, "ipv4_mapped", None)
+    return (mapped or addr).is_private or addr.is_loopback or addr.is_unspecified
+
+
+def _trusted_origin(value: str) -> bool:
+    """Whether an Origin header belongs to the app's own loopback surface.
+
+    Browsers attach Origin to every cross-site request (and to same-site
+    non-GET ones), so requiring a loopback origin stops cross-origin CSRF
+    against the write endpoints (chat/messages, uploads, workspace switch)
+    from any web page the user visits. The port is not compared: the vite
+    dev server on :5173 proxies to the API with its own origin attached.
+    """
+    parsed = urlparse((value or "").strip())
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+    return _trusted_host(parsed.hostname)
 
 
 def create_app(
@@ -101,6 +150,39 @@ def create_app(
             request.state.actor = resolve_http_actor(request, issuer)
         except ServiceError as exc:
             return JSONResponse(status_code=exc.http_status, content=exc.to_envelope())
+        return await call_next(request)
+
+    @app.middleware("http")
+    async def _origin_guard(request: Request, call_next):
+        # Local REST surface gate (defined last = outermost middleware, so it
+        # runs before identity resolution): Host must name this machine
+        # (DNS-rebinding defense — a rebound attacker domain resolves to
+        # 127.0.0.1 but still carries its own name in Host), and a browser-
+        # attached Origin must be the app's own loopback origin (CSRF defense
+        # — browsers always attach Origin to cross-site requests, so a web
+        # page the user visits cannot drive the write endpoints; non-browser
+        # clients send no Origin and are unaffected).
+        if not _trusted_host(request.headers.get("host", "")):
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": {
+                        "code": "GATEWAY.FORBIDDEN",
+                        "message": "request host is not trusted (DNS rebinding protection)",
+                    }
+                },
+            )
+        origin = request.headers.get("origin")
+        if origin and not _trusted_origin(origin):
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": {
+                        "code": "GATEWAY.FORBIDDEN",
+                        "message": "cross-origin request rejected (CSRF protection)",
+                    }
+                },
+            )
         return await call_next(request)
 
     mount_services(app, mounts or [], probe, issuer=issuer, auth=auth, quota=quota, audit=audit)
