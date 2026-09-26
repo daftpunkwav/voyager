@@ -106,12 +106,15 @@ def metered_llm(
                 )
 
     class _MeteredStreaming(_MeteredBase):
-        def complete_stream(self, messages, tools=None, response_format=None, max_tokens=None):
-            return self._stream(
-                messages, tools, response_format=response_format, max_tokens=max_tokens
-            )
+        def complete_stream(self, messages, tools=None, max_tokens=None):
+            # Protocol shape (StreamingLLClient): messages/tools/max_tokens
+            # only. The complete channel carries response_format; the streaming
+            # tier does not — forwarding it anyway would trip a TypeError on
+            # every protocol-shaped inner client (e.g. the output-cap wrapper),
+            # silently knocking the max_tokens pass-through onto the fallback.
+            return self._stream(messages, tools, max_tokens=max_tokens)
 
-        async def _stream(self, messages, tools=None, response_format=None, max_tokens=None):
+        async def _stream(self, messages, tools=None, max_tokens=None):
             degraded = _quota_degraded()
             if degraded is not None:
                 yield StreamReply(final=degraded)
@@ -121,9 +124,7 @@ def metered_llm(
             ok = False  # success is recorded only after the stream ends; mid-stream errors fail
             try:
                 try:
-                    stream = llm.complete_stream(
-                        messages, tools, response_format=response_format, max_tokens=max_tokens
-                    )
+                    stream = llm.complete_stream(messages, tools, max_tokens=max_tokens)
                 except TypeError:
                     stream = llm.complete_stream(messages, tools)
                 async for ev in stream:

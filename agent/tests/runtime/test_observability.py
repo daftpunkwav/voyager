@@ -125,6 +125,80 @@ class TestMeteredQuota:
         assert len(fake.calls) == 1
 
 
+class TestMeteredStreaming:
+    """metered_llm streaming tier: protocol-shaped inner complete_stream
+    (messages/tools/max_tokens, per StreamingLLClient) must receive the
+    caller's max_tokens — forwarding the complete channel's response_format
+    kwarg used to trip a TypeError on every protocol-shaped inner client and
+    silently drop the pass-through onto the no-max_tokens fallback."""
+
+    async def test_max_tokens_reaches_protocol_shaped_inner_stream(self) -> None:
+        from agent.llm import StreamReply
+
+        class _StreamingInner:
+            def __init__(self) -> None:
+                self.seen: list[dict] = []
+
+            async def complete(
+                self, messages, tools=None, response_format=None, max_tokens=None
+            ) -> LLMReply:
+                return LLMReply(text="done")
+
+            def complete_stream(self, messages, tools=None, max_tokens=None):
+                self.seen.append({"messages": messages, "tools": tools, "max_tokens": max_tokens})
+
+                async def _gen():
+                    yield StreamReply(text_delta="ok")
+                    yield StreamReply(final=LLMReply(text="ok"))
+
+                return _gen()
+
+        inner = _StreamingInner()
+        metered = metered_llm(inner, Meter())
+        # Same getattr probe as the production callers: streaming is the
+        # optional protocol tier, LLMClient itself does not declare it.
+        stream_fn = getattr(metered, "complete_stream", None)
+        assert callable(stream_fn)
+        final = None
+        async for ev in stream_fn([{"role": "user", "content": "hi"}], max_tokens=512):
+            if ev.final is not None:
+                final = ev.final
+        assert final is not None and final.text == "ok"
+        assert inner.seen[0]["max_tokens"] == 512  # pass-through survived the wrapper
+        assert metered.__class__.__name__.startswith("_Metered")  # streaming tier selected
+
+    async def test_over_quota_stream_degrades_without_inner_call(self) -> None:
+        from agent.llm import StreamReply
+
+        class _StreamingInner:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            async def complete(self, messages, tools=None, response_format=None, max_tokens=None):
+                return LLMReply(text="done")
+
+            def complete_stream(self, messages, tools=None, max_tokens=None):
+                self.calls += 1
+
+                async def _gen():
+                    yield StreamReply(final=LLMReply(text="ok"))
+
+                return _gen()
+
+        inner = _StreamingInner()
+        meter = Meter()
+        meter.record(_rec(inp=100))
+        metered = metered_llm(inner, meter, quota_fn=lambda: 100)
+        stream_fn = getattr(metered, "complete_stream", None)
+        assert callable(stream_fn)
+        replies: list[StreamReply] = []
+        async for ev in stream_fn([{"role": "user", "content": "hi"}]):
+            replies.append(ev)
+        assert inner.calls == 0  # quota precheck gates the stream too
+        assert len(replies) == 1 and replies[0].final is not None
+        assert "配额" in (replies[0].final.text or "")
+
+
 class TestBuildAgentQuota:
     """build_agent wiring: the main conversation (master direct chat / spawner ReAct instance) goes through the wrapper."""
 
