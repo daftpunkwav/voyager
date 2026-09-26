@@ -65,9 +65,15 @@ class TestRender:
     def test_empty_store_renders_empty_string(self) -> None:
         assert DigestStore().render() == ""
 
-    def test_render_format_with_and_without_recent_step(self) -> None:
+    def test_render_format_with_and_without_recent_step(self, monkeypatch) -> None:
+        # Card order is newest-first by ts: advance the clock so the two
+        # upserts cannot land on the same timestamp (render order flips on ties).
+        clock = {"t": 1000.0}
+        monkeypatch.setattr(digest_module.time, "time", lambda: clock["t"])
         store = DigestStore()
+        clock["t"] += 1.0
         store.upsert(_inst("i1", name="scout", status="running", step="reading files"))
+        clock["t"] += 1.0
         store.upsert(_inst("i2", name="planner", status="pending", step=""))
         text = store.render()
         lines = text.splitlines()
