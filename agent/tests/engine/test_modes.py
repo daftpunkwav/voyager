@@ -277,6 +277,62 @@ class TestReAct:
         )
         assert result == "echo 完了"
 
+    async def test_user_text_containing_react_mark_still_nudged(self) -> None:
+        """A user message that merely contains the harness control token
+        ("[react]") is real input, not a past nudge: the idle-continue nudge
+        still fires. The old transcript scan read the mark anywhere in history
+        and silently disabled the nudge — for the whole session once such a
+        row persisted."""
+        llm = FakeLLM(
+            [
+                LLMReply(text="我先确认一下。"),
+                LLMReply(tool_calls=(ToolCall("1", "echo_tool", {"x": "a"}),)),
+                LLMReply(text="echo 完了"),
+            ]
+        )
+        messages = [{"role": "user", "content": "日志里出现 [react] 标记该怎么处理?都测试一下"}]
+        result = await run_mode(
+            Mode.REACT,
+            llm=llm,
+            toolbelt=_belt(),
+            messages=messages,
+            limits=ModeLimits(),
+            continue_if_idle=True,
+        )
+        assert result == "echo 完了"
+        assert len(llm.calls) == 3  # the nudge fired despite the mark in user text
+
+    async def test_stale_nudge_row_in_history_does_not_block_nudge(self) -> None:
+        """A previous run's nudge row carried in the session history (summary
+        write-back) must not suppress this run's nudge: the gate is per-run,
+        not a transcript scan."""
+        llm = FakeLLM(
+            [
+                LLMReply(text="我先看一下。"),
+                LLMReply(tool_calls=(ToolCall("1", "echo_tool", {"x": "a"}),)),
+                LLMReply(text="echo 完了"),
+            ]
+        )
+        messages = [
+            {"role": "user", "content": "旧输入"},
+            {"role": "assistant", "content": "旧回答"},
+            {
+                "role": "user",
+                "content": "[react] Observation: no tool call was produced this round.",
+            },
+            {"role": "user", "content": "都测试一下"},
+        ]
+        result = await run_mode(
+            Mode.REACT,
+            llm=llm,
+            toolbelt=_belt(),
+            messages=messages,
+            limits=ModeLimits(),
+            continue_if_idle=True,
+        )
+        assert result == "echo 完了"
+        assert len(llm.calls) == 3
+
 
 class TestOtherModes:
     async def test_cot_plan_steps_synthesis(self) -> None:

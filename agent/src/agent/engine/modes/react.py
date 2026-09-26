@@ -106,7 +106,10 @@ def _last_user_text(messages: list[dict[str, Any]]) -> str:
         if m.get("role") != "user":
             continue
         content = content_to_text(m.get("content"))
-        if CONTINUE_MARK in content:
+        # The in-run nudge row (rendered with the mark prefix) is harness
+        # plumbing, not user input. startswith: a user message that merely
+        # contains "[react]" must still count as real input.
+        if content.startswith(CONTINUE_MARK):
             continue
         if content.startswith(TURN_CONTEXT_HEADER):
             continue  # the trailing per-turn context row, not user input
@@ -114,18 +117,23 @@ def _last_user_text(messages: list[dict[str, Any]]) -> str:
     return ""
 
 
-def _should_continue_react(messages: list[dict[str, Any]], tool_calls_used: int) -> bool:
+def _should_continue_react(
+    messages: list[dict[str, Any]], tool_calls_used: int, *, nudged: bool
+) -> bool:
     """Plain-text ending with no Action yet this turn -> continue the same
     ReAct loop.
 
     Does not read assistant wording (no polite-phrase matching). Small talk is
     allowed to end with zero tools; once one continuation already happened, a
     second plain text is respected (the model explicitly said no tools are
-    needed).
+    needed). `nudged` is tracked by the loop itself (set when it appends the
+    nudge) instead of scanning the transcript for the mark: a user message
+    that happens to contain "[react]" — or a stale nudge row carried in
+    session history — must not disable the nudge for this run.
     """
     if tool_calls_used > 0:
         return False
-    if any(CONTINUE_MARK in content_to_text(m.get("content")) for m in messages):
+    if nudged:
         return False
     user = _last_user_text(messages)
     return not (not user or CHITCHAT_RE.match(user))
@@ -218,6 +226,11 @@ async def run_react(
     # plumbing, and the "no tool needed" justification the model writes under it
     # must never replace the real answer the user already saw streaming
     pending_answer: str | None = None
+    # Whether this run already appended the idle-continue nudge: gates the
+    # continue check instead of scanning the transcript for the mark, so a
+    # user message containing "[react]" or a stale nudge row from session
+    # history cannot disable the nudge
+    nudged = False
     # Context-overflow recovery: one aggressive compact + retry; a second
     # overflow means even the compressed transcript cannot fit and the turn
     # ends with an actionable message instead of a raw provider error
@@ -407,7 +420,7 @@ async def run_react(
             if (
                 continue_if_idle
                 and round_n < limits.max_rounds
-                and _should_continue_react(messages, tool_calls_used)
+                and _should_continue_react(messages, tool_calls_used, nudged=nudged)
             ):
                 if text:
                     pending_answer = text
@@ -418,6 +431,7 @@ async def run_react(
                         "content": render(P.modes.react.continue_idle, mark=CONTINUE_MARK),
                     }
                 )
+                nudged = True
                 continue
             if pending_answer is not None and tool_calls_used == 0:
                 # The continuation only confirmed "no tools needed": deliver the
