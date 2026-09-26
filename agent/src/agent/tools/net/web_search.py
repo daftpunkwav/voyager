@@ -16,8 +16,12 @@ import re
 from urllib.parse import parse_qs, urlparse
 
 import httpx
-from platform_webguard.dns_pin import pinned_request, resolve_public
-from platform_webguard.redirects import MAX_REDIRECTS, redirect_target
+from platform_webguard import (
+    MAX_REDIRECTS,
+    pinned_request,
+    redirect_target,
+    resolve_public,
+)
 
 from agent.context.provenance import wrap_untrusted
 from agent.policy import Action, PolicyEngine

@@ -22,9 +22,15 @@ import httpx
 from platform_capability import Registry, capability
 from platform_contracts import ActorKind, ActorRef, DomainEvent, ErrorSuffix, Event, ServiceError
 from platform_eventbus import EventBus
-from platform_webguard.body import read_bounded
-from platform_webguard.dns_pin import default_resolver, literal_ips, pinned_request
-from platform_webguard.url_policy import as_ip, check_url_syntax, is_internal
+from platform_webguard import (
+    as_ip,
+    check_url_syntax,
+    default_resolver,
+    is_internal,
+    literal_ips,
+    pinned_request,
+    read_bounded,
+)
 
 from .._shared.events import with_session
 from .store import WebStore, html_to_text, valid_tag

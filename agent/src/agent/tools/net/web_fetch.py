@@ -15,9 +15,13 @@ answer a second time — the DNS rebinding window the pin closes.
 from __future__ import annotations
 
 import httpx
-from platform_webguard.body import read_bounded
-from platform_webguard.dns_pin import pinned_request, resolve_public
-from platform_webguard.redirects import MAX_REDIRECTS, redirect_target
+from platform_webguard import (
+    MAX_REDIRECTS,
+    pinned_request,
+    read_bounded,
+    redirect_target,
+    resolve_public,
+)
 
 from agent.context.provenance import wrap_untrusted
 from agent.policy import Action, PolicyEngine
