@@ -191,7 +191,10 @@ async def run_in_runtime(
     artifact_dir.mkdir(parents=True, exist_ok=True)
     ext = runtime.get("file_ext", ".txt")
     src = artifact_dir / f"main{ext}"
-    src.write_text(code, encoding="utf-8")
+    # LF line endings regardless of platform: Windows text mode would
+    # translate \n to \r\n, and a shell script carrying CR endings fails to
+    # execute inside the (Linux) container / bash.
+    src.write_text(code, encoding="utf-8", newline="\n")
 
     has_docker = shutil.which("docker") is not None
     if has_docker:

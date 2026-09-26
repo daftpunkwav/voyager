@@ -222,6 +222,26 @@ class TestExecutorDiscipline:
         assert result.status == "timeout" and result.stdout == ""
         await asyncio.sleep(0.1)  # reap completes; the suite must not hang
 
+    async def test_snippet_source_has_lf_newlines(self, tmp_path, monkeypatch) -> None:
+        """The snippet source lands with LF line endings on every platform: a
+        Windows text-mode write would translate \\n to \\r\\n, and a shell
+        script carrying CR endings fails to execute under bash."""
+        from code_exec import executor
+
+        monkeypatch.setattr(executor.shutil, "which", lambda name: None)  # no docker
+        runtime = {"id": "shell", "image": "busybox:stable", "file_ext": ".sh", "cmd": ["bash"]}
+        result = await run_in_runtime(
+            runtime,
+            "echo one\necho two\n",
+            timeout=15,
+            memory_mb=256,
+            network=False,
+            use_host_fallback=True,
+            workspace=tmp_path,
+        )
+        src = Path(result.artifact_dir) / "main.sh"
+        assert src.read_bytes() == b"echo one\necho two\n"
+
     async def test_early_eof_does_not_escape_timeout(self, tmp_path, monkeypatch) -> None:
         """A child that closes its output descriptors and keeps running must
         not be reported as completed with exit code 0: pipe EOF precedes
