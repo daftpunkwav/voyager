@@ -132,6 +132,33 @@ class TestShellCancellation:
         assert raised  # propagation preserved; child killed inside the handler
 
 
+class TestDrainBound:
+    async def test_orphaned_pipe_holder_does_not_hang_the_tool(self, tmp_path) -> None:
+        """A grandchild that inherits stdout keeps the pipe open past the
+        parent's exit (and past a kill). The drain must give up within its
+        grace period instead of hanging the tool call - and with it the
+        harness deadline cancel - until the orphan exits on its own."""
+        import time
+
+        script = tmp_path / "_orphan.py"
+        script.write_text(
+            "import subprocess, sys\n"
+            "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        bash = shell_tools(tmp_path)["bash"].handler
+        started = time.monotonic()
+        # timeout=8: the parent must run to completion on its own (interpreter
+        # startup + the Popen spawn); only the orphan outlives the call
+        out = await bash(f"{sys.executable} {script.name}", timeout=8)
+        elapsed = time.monotonic() - started
+        assert "exit=0" in out, out
+        # Post-fix the tool returns after the ~5s drain grace; pre-fix this
+        # await stretches to the orphan's 30s sleep.
+        assert elapsed < 20, f"drain hung {elapsed:.1f}s: {out}"
+
+
 class TestConsoleDecode:
     def test_utf8_still_wins(self) -> None:
         assert decode_console_output("中文 ok\n".encode()) == "中文 ok\n"

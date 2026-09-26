@@ -31,7 +31,6 @@ import shlex
 import shutil
 import sys
 import time
-from contextlib import suppress
 from pathlib import Path
 
 from agent.tools.core.base import AgentTool
@@ -42,6 +41,13 @@ from agent.tools.workspace.console_decode import decode_console_output
 #: exit code stays truthful. The result budget, not this cap, decides what
 #: the model sees.
 _MAX_COLLECT_BYTES = 1_000_000
+
+#: Grace period for draining the output pipe once the process is done. A
+#: grandchild that inherited the stdout handle keeps the pipe open past the
+#: parent's exit (and past a kill - TerminateProcess/kill never reaches
+#: grandchildren), so without a bound the final drain await - and with it the
+#: tool call and its deadline-cancel - would hang until the orphan exits.
+_DRAIN_GRACE_S = 5.0
 
 #: Read chunk size for the capped collector
 _CHUNK = 65_536
@@ -63,23 +69,26 @@ _DESTRUCTIVE_RE = re.compile(
 )
 
 
-async def _read_capped(stream: asyncio.StreamReader | None, cap: int) -> tuple[bytes, int]:
-    """Read the stream to EOF, keeping at most `cap` bytes; returns the kept
-    bytes and how many bytes were discarded beyond the cap."""
+async def _read_capped(stream: asyncio.StreamReader | None, cap: int, buf: bytearray) -> int:
+    """Read the stream to EOF, appending up to `cap` bytes into the
+    caller-held buffer; returns the count of bytes discarded beyond the cap.
+
+    The buffer is filled incrementally so a forced partial drain (an orphaned
+    descendant holding the pipe; see the bounded IO finish in bash()) still
+    keeps whatever was captured before the grace expiry."""
     if stream is None:
-        return b"", 0
-    kept: list[bytes] = []
-    total = 0
+        return 0
+    kept = 0
     discarded = 0
     while True:
         chunk = await stream.read(_CHUNK)
         if not chunk:
-            return b"".join(kept), discarded
-        if total < cap:
-            keep = chunk[: cap - total]
-            kept.append(keep)
-            total += len(keep)
-            discarded += len(chunk) - len(keep)
+            return discarded
+        if kept < cap:
+            take = chunk[: cap - kept]
+            buf.extend(take)
+            kept += len(take)
+            discarded += len(chunk) - len(take)
         else:
             discarded += len(chunk)
 
@@ -146,29 +155,46 @@ def bash_tool(cwd: str | Path) -> AgentTool:
             # Race: the directory was moved away / became inaccessible after the
             # check; never fall back to the process cwd by omitting cwd
             return f"[失败] 工作目录不可用: {exc}"
-        reader = asyncio.ensure_future(_read_capped(proc.stdout, _MAX_COLLECT_BYTES))
+        buf = bytearray()
+        reader = asyncio.ensure_future(_read_capped(proc.stdout, _MAX_COLLECT_BYTES, buf))
+        # The process-exit future is shielded so a timeout does not consume
+        # it: the bounded IO finish below still needs it.
+        waiter = asyncio.ensure_future(proc.wait())
         timed_out = False
         started = time.monotonic()
         try:
-            await asyncio.wait_for(proc.wait(), timeout)
+            # Windows asyncio resolves proc.wait() only when the process has
+            # exited AND every pipe reached EOF (transport._try_finish), so a
+            # grandchild inheriting the stdout handle delays it past the
+            # command's own completion. The timeout bounds that wait; the
+            # returncode check afterwards separates a still-running command
+            # (kill it) from a completed one whose output pipe is merely held
+            # (report its real result instead of a fake timeout).
+            await asyncio.wait_for(asyncio.shield(waiter), timeout)
         except TimeoutError:
-            timed_out = True
-            proc.kill()
-            try:
-                await proc.wait()
-            except Exception:  # noqa: BLE001, S110  # best-effort reaping; timeout semantics kept
-                pass
+            timed_out = proc.returncode is None
+            if timed_out:
+                proc.kill()
         except asyncio.CancelledError:
             # the calling task was cancelled (run tree cancel / shutdown):
-            # never leak the child process or the reader task
-            proc.kill()
-            with suppress(Exception):
-                await proc.wait()
-            with suppress(Exception):
-                await reader
+            # never leak the child process or the reader/waiter tasks; the
+            # reaping below is grace-bounded so the cancellation itself
+            # cannot hang on an orphaned pipe holder
+            if proc.returncode is None:
+                proc.kill()
+            reader.cancel()
+            waiter.cancel()
+            await asyncio.wait({reader, waiter}, timeout=_DRAIN_GRACE_S)
             raise
         wall = time.monotonic() - started
-        out, discarded = await reader
+        # Bounded finish: an orphaned descendant holding the inherited stdout
+        # handle would otherwise hang the drain (and the deadline cancel)
+        # until the orphan exits on its own.
+        done, pending = await asyncio.wait({reader, waiter}, timeout=_DRAIN_GRACE_S)
+        for task in pending:
+            task.cancel()
+        discarded = reader.result() if reader in done else 0
+        out = bytes(buf)
         text = decode_console_output(out)
         if discarded:
             text += (
