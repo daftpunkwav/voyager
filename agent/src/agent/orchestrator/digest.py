@@ -24,8 +24,9 @@ class Digest:
 
 class DigestStore:
     #: Card cap: runs are unbounded while cards only surface in list/render,
-    #: so over the cap the **oldest terminal** cards are evicted (active and
-    #: freshly updated cards are never evicted); same trade-off as
+    #: so over the cap the **oldest (first-seen)** terminal cards are evicted
+    #: (running cards are never evicted; ts is the first-seen time, so this is
+    #: creation order, not last-activity order); same trade-off as
     #: Spawner.TERMINAL_INSTANCE_CAP
     _MAX_CARDS = 200
     _TERMINAL = frozenset({"completed", "failed", "cancelled"})

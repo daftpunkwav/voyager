@@ -102,3 +102,26 @@ async def test_plain_completion_has_no_surrender_key() -> None:
     inst = _inst(RunStatus.COMPLETED, result="all done")
     out = await wait_subagent(_spawner_with(inst), "abc123")
     assert "surrendered" not in out
+
+
+async def test_ambiguous_name_raises_conflict() -> None:
+    """Names are user-chosen and can collide: an ambiguous name must fail with
+    a readable conflict pointing at ids, never silently pick the first match."""
+    from agent.capabilities.team.subagent import _find
+
+    first = _inst(RunStatus.COMPLETED)
+    second = SimpleNamespace(
+        id="def456",
+        name="worker",
+        status=RunStatus.COMPLETED,
+        state=SimpleNamespace(result="", error="", surrender_reason=""),
+        last_step_summary=lambda: "step",
+    )
+    spawner = cast(Spawner, SimpleNamespace(instances={"abc123": first, "def456": second}))
+    with pytest.raises(ServiceError) as exc:
+        _find(spawner, "worker")
+    assert "CONFLICT" in exc.value.body.code
+    assert "ambiguous" in exc.value.body.message
+    # id resolution wins over names and still works with the collision present
+    assert _find(spawner, "abc123") is first
+    assert _find(spawner, "def456") is second

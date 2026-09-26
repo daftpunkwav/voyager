@@ -37,8 +37,13 @@ from agent.personas import Persona
 
 MEMORY_CARDS_HEADER = "【最近记忆】"
 #: Marker prefixing the trailing per-turn context row (engine.turn); consumers
-#: (react's idle-continue check, turn's history write-back) use it to tell the
-#: volatile context row apart from real user input.
+#: (react's idle-continue check, turn's history write-back, the resume row
+#: refresh) use it to tell the volatile context row apart from real user input.
+#: A user message literally starting with this exact marker would be misread
+#: as harness state (skipped by idle-continue, dropped from history on the
+#: compaction write-back); accepted, because the marker is a full-width CJK
+#: bracket phrase no real input opens with. Keep it short: it must stay intact
+#: even after overflow truncation of the row.
 TURN_CONTEXT_HEADER = "【会话状态】"
 _CARD_FIELD_CHARS = 60
 

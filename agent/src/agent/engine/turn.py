@@ -85,9 +85,13 @@ def _refresh_turn_context_row(messages: list[dict[str, Any]], row: dict[str, Any
     """Mid-turn resume: swap the snapshot's context row for a fresh one, so a
     resumed run sees current usage/digests. The snapshot row is replaced in
     place (same position keeps the message shape the loop expects); a snapshot
-    without one gets the fresh row appended."""
+    without one gets the fresh row appended.
+
+    Matching is user-role only: the marker check must never hit an assistant
+    entry (a model echoing the marker) — replacing that with the context row
+    would drop its tool_calls and break pairing."""
     for i, m in enumerate(messages):
-        if str(m.get("content") or "").startswith(TURN_CONTEXT_HEADER):
+        if m.get("role") == "user" and str(m.get("content") or "").startswith(TURN_CONTEXT_HEADER):
             if row is not None:
                 messages[i] = row
             return

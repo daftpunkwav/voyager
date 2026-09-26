@@ -416,7 +416,10 @@ def build_agent(
         The budget runs AFTER invoke_detailed's exception boundary, so a spill
         write failure (read-only workspace, disk full) would escape as a raw
         OSError and kill the whole turn over a bookkeeping step; it degrades to
-        a plain truncation instead."""
+        a plain truncation instead. The directory bound is separate: it is
+        housekeeping over already-written files (and races with parallel
+        calls' cleanup), so its failure must never truncate an in-budget
+        result — only the spill write itself degrades the text."""
         limit = int(settings.get("agent.context.tool_result_max") or 0)
         max_lines = int(settings.get("agent.context.tool_result_max_lines") or 0)
         try:
@@ -427,8 +430,6 @@ def build_agent(
                 limit=limit,
                 max_lines=max_lines,
             )
-            bound_spill_dir(workspace / "spill", max_age_s=MAX_AGE_SECONDS)
-            return text
         except OSError:
             logging.getLogger("agent.runtime").warning(
                 "spill write failed for tool %s; falling back to plain truncation",
@@ -439,6 +440,15 @@ def build_agent(
                 result[:PREVIEW_KEEP]
                 + f"\n…[输出超长已截断,共 {len(result)} 字符;溢出文件写入失败,请换更精确的输入重试。]"
             )
+        try:
+            bound_spill_dir(workspace / "spill", max_age_s=MAX_AGE_SECONDS)
+        except OSError:  # cleanup only: the tool result above is already intact
+            logging.getLogger("agent.runtime").warning(
+                "spill dir bound failed after tool %s; retrying on the next call",
+                tool,
+                exc_info=True,
+            )
+        return text
 
     # spawn_subagent is not assembled here: it calls back into
     # master.dispatch_task while the master depends on this toolbelt - so it is
