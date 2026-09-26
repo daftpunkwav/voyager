@@ -86,3 +86,32 @@ class TestStatusLineInjection:
         log = EventLog(log_path)
         steps = [e for _, e in log.read_after(types=[DomainEvent.AGENT_STEP])]
         assert steps and all(s.payload.get("session") == "sess0001" for s in steps)
+
+
+class TestSurrenderResetPerTurn:
+    async def test_previous_turn_surrender_does_not_leak(self, tmp_path) -> None:
+        """state.steps is never cleared, so the finally's reverse scan would
+        re-stamp an older turn's cap surrender onto a later turn that finished
+        normally; each turn starts with the stamp cleared."""
+        from agent.runtime.state import Step
+
+        llm = FakeLLM(
+            [
+                LLMReply(text="第一回合被上限截断"),
+                LLMReply(text="第二回合正常完成"),
+            ]
+        )
+        inst = _instance(llm, tmp_path / "events.db")
+        inst.state.steps.append(
+            Step(
+                n=1,
+                kind="system",
+                name="surrender",
+                summary="旧回合",
+                detail={"reason": "tool_cap"},
+            )
+        )
+        inst.state.surrender_reason = "tool_cap"
+        await inst.run_turn("再来一次")
+        assert inst.state.surrender_reason == ""  # this turn finished normally
+        assert inst.state.status.value == "completed"

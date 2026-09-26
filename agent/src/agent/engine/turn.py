@@ -84,8 +84,14 @@ def _turn_context_row(
 def _refresh_turn_context_row(messages: list[dict[str, Any]], row: dict[str, Any] | None) -> None:
     """Mid-turn resume: swap the snapshot's context row for a fresh one, so a
     resumed run sees current usage/digests. The snapshot row is replaced in
-    place (same position keeps the message shape the loop expects); a snapshot
-    without one gets the fresh row appended.
+    place (same position keeps the message shape the loop expects).
+
+    A snapshot without one (pre-feature checkpoint) gets the fresh row folded
+    into the trailing plain user entry, row content first — never appended as
+    a second user message when the snapshot ends on one: strict anthropic-
+    format endpoints reject consecutive user turns and _anthropic_messages
+    does not merge them. After any other tail shape (assistant / tool rows)
+    the row still appends, which is a legal adjacency.
 
     Matching is user-role only: the marker check must never hit an assistant
     entry (a model echoing the marker) — replacing that with the context row
@@ -95,8 +101,16 @@ def _refresh_turn_context_row(messages: list[dict[str, Any]], row: dict[str, Any
             if row is not None:
                 messages[i] = row
             return
-    if row is not None:
-        messages.append(row)
+    if row is None:
+        return
+    last = messages[-1] if messages else None
+    if last is not None and last.get("role") == "user" and not last.get("tool_calls"):
+        # Row content first: the folded entry must keep the marker prefix so
+        # react's idle-continue check and the history write-back still
+        # recognize it as context, not user input.
+        last["content"] = f"{row['content']}\n\n{last.get('content') or ''}"
+        return
+    messages.append(row)
 
 
 def _transcript_view(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -168,6 +182,12 @@ async def run_turn(
 async def _run_turn(
     inst: SubagentInstance, user_text: str | None, view: Persona | None, was_paused: bool
 ) -> str:
+    # Fresh turn: drop any previous turn's cap-surrender stamp (it must not
+    # claim this turn), and remember the step-trail length so the finally's
+    # reverse scan only sees THIS turn's steps — state.steps is never cleared,
+    # so an unscoped scan would re-stamp an older turn's reason here.
+    inst.state.surrender_reason = ""
+    step_base = len(inst.state.steps)
     if was_paused:
         await inst.events.emit(
             RuntimeEvent.AGENT_RESUMED, run_id=inst.state.run_id, subagent=_speaker_label(inst)
@@ -374,7 +394,7 @@ async def _run_turn(
         finally:
             # Budget-exhaustion endings return normally; stamp the reason so
             # wait/dispatch callers can tell a truncated run from a real one
-            for step in reversed(inst.state.steps):
+            for step in reversed(inst.state.steps[step_base:]):
                 if step.kind == "system" and step.name == "surrender":
                     inst.state.surrender_reason = str((step.detail or {}).get("reason") or "")
                     break
