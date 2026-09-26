@@ -227,6 +227,10 @@ class RoutingServiceLLM(ServiceLLM):
             async for chunk in gen:
                 if isinstance(chunk, dict) and chunk.get("type") == "final":
                     yield StreamReply(final=self._parse_complete(chunk))
+                elif isinstance(chunk, dict) and chunk.get("type") == "reasoning":
+                    # Live thinking stays on its own channel, never in the
+                    # answer text (same mapping as ServiceLLM).
+                    yield StreamReply(reasoning_delta=str(chunk.get("text") or ""))
                 elif isinstance(chunk, dict):
                     yield StreamReply(text_delta=str(chunk.get("text") or ""))
             return
