@@ -1,4 +1,4 @@
-"""Background-job projection (phase 19): task.* events folded into a
+"""Background-job projection: task.* events folded into a
 read-only view the model can query, without importing any domain.
 
 Only the event log is read; a job's identity comes from its payload

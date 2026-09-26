@@ -18,9 +18,11 @@
 6. `【风格】` — `agent.style` / 按人格 `agent.style.overrides`
 7. `【可用 skill】` — 只放名称 + 一行简介(正文按需加载)
 
-随后是稳定在先、易变在后的尾部:用户画像、近期记忆卡、任务书(goal/constraints/done_when)、相关度召回节(`read_policy.py`)、进行中子代理摘要、用户当前页面上下文、计划评审态(`plan_gate.py`)、MCP 指引。
+稳定尾部到此结束:用户画像、任务书(goal/constraints/done_when)、MCP 指引。
 
-每个 turn 由 `engine/turn.py:run_turn` 重建系统提示;历史由 `ContextBudget` 约束。
+逐 turn 的易变层——近期记忆卡、相关度召回节(`read_policy.py`)、进行中子代理摘要、用户当前页面上下文、计划评审态(`plan_gate.py`)——不进系统提示:`ContextBuilder.turn_context()` 将它们渲染为追加在全部历史之后的一条尾部 user 消息(以 `【会话状态】` 开头)。provider 缓存是整个请求的字节前缀,系统提示跨 turn 字节稳定才能让历史前缀命中缓存;用量状态行也搭同一条消息。
+
+每个 turn 由 `engine/turn.py:run_turn` 重建系统提示(除非设置/磁盘上的 skill/蒸馏/MCP 挂载等源变化,字节不变)并重渲染上下文行;回合中恢复时快照中的该行原位刷新。历史由 `ContextBudget` 约束。
 
 ## 预算
 
@@ -43,4 +45,4 @@
 
 ## 按需加载与页面上下文
 
-`loader.py` — `OnDemandLoader` 只在构建器索要时供给 `skill_text` 与 `recall` 载荷。`pages.py` — `PageContextRegistry` 持有前端上报的当前页面(能力 `report_page_context`);构建器按字符上限(`agent.context.page_chars`)把它渲染进提示。
+`loader.py` — `OnDemandLoader` 只在构建器索要时供给 `skill_text` 与 `recall` 载荷。`pages.py` — `PageContextRegistry` 持有前端上报的当前页面(能力 `report_page_context`);构建器按字符上限(`agent.context.page_chars`)把它渲染进逐 turn 上下文行。

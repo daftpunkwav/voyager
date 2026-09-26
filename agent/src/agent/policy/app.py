@@ -1,5 +1,5 @@
-"""In-app dimension: capability allow/deny lists and the decision function
-(split from policy.engine, phase 21)."""
+"""In-app dimension: capability allow/deny lists and the decision
+function for mounted app tools."""
 
 from __future__ import annotations
 

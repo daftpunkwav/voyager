@@ -37,7 +37,7 @@ One chat session is a group chat among the resident team: the five built-in pers
 
 ## Modes
 
-`modes/registry.py` dispatches `run_mode()` over seven modes, one file each: `react`, `plan_execute`, `cot`, `tot`, `got`, `reflexion`, `direct`. Dispatches ride the persona's `default_mode`; resident-host chat turns stay ReAct, while member turns (@-mention / handoff / board runs) use the member persona's `default_mode` (explainer runs cot). `wait` on a subagent is the `subagent` capability's `wait` action: polls at 0.5 s, default timeout 120 s, cap 600 s.
+`modes/registry.py` dispatches `run_mode()` over seven modes, one file each: `react`, `plan_execute`, `cot`, `tot`, `got`, `reflexion`, `direct`. Dispatches ride the persona's `default_mode`; resident-host chat turns stay ReAct, while member turns (@-mention / handoff / board runs) use the member persona's `default_mode` (explainer runs cot). `wait` on a subagent is the `subagent` capability's `wait` action: polls at 0.5 s, default timeout 120 s, cap 600 s. A run ended early by a budget guard (tool/round/token cap, loop abort) carries a `surrendered` field naming the reason (`tool_cap`/`rounds_cap`/`token_budget`/`loop_abort`), so a COMPLETED status does not mask a truncated run.
 
 ## Orchestration (`orchestrator/`)
 

@@ -33,11 +33,11 @@ Filesystem roots: `agent.fs.read_roots` / `agent.fs.write_roots` fix the jail at
 6. Handler with retry and a per-tool `CircuitBreaker`; writes and irreversible calls are never retried; timeouts and `ServiceError` are not retried.
 7. Meter record (`MeterRecord(kind="tool", ...)`).
 8. `post_tool` hook; result normalization to `ToolResult`; episodic recording.
-9. Result budget — oversized results spill to `workspace/spill/` (`agent.context.tool_result_max` / `agent.context.tool_result_max_lines`).
+9. Result budget — oversized results spill to `workspace/spill/` (`agent.context.tool_result_max` / `agent.context.tool_result_max_lines`). A spill write failure degrades to plain truncation; the spill-directory bound is separate best-effort housekeeping that never truncates an in-budget result.
 
 ## MCP tools
 
-`mcp/` mounts external MCP servers (`agent.mcp.servers`, approval-gated): remote tools become `mcp__<server>__<tool>` agent tools (`mcp/mount.py`), `dimension="app"`, registered only after approval. `McpSession` (`mcp/session.py`) speaks JSON-RPC 2.0 over stdio or HTTP with a 30 s call timeout.
+`mcp/` mounts external MCP servers (`agent.mcp.servers`, approval-gated): remote tools become `mcp__<server>__<tool>` agent tools (`mcp/mount.py`), `dimension="app"`, registered only after approval. `McpSession` (`mcp/session.py`) speaks JSON-RPC 2.0 over stdio or HTTP with a 30 s call timeout. Only server-answered JSON-RPC errors (`McpRpcError`) return as `[MCP 错误]` text; timeouts and transport failures propagate into the pipeline's retry and circuit breaker.
 
 ## Domain tool bridge
 

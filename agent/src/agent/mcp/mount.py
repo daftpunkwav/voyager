@@ -43,8 +43,10 @@ async def _call_remote(session: McpSession, remote_name: str, kwargs: dict) -> s
 
 
 def _build_tool(cfg: dict, session: McpSession, remote: dict) -> AgentTool:
-    """Build an AgentTool for one remote tool; remote failures come back as
-    text results for the LLM instead of breaking the tool loop."""
+    """Build an AgentTool for one remote tool: server-decided JSON-RPC
+    errors return as [MCP 错误] text for the model to correct, while
+    timeouts and transport failures propagate into the pipeline's retry
+    and circuit breaker."""
     remote_name = str(remote.get("name") or "")
     tool_name = _tool_name(cfg["id"], remote_name)
 

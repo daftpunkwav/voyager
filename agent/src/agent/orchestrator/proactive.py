@@ -1,7 +1,7 @@
-"""Proactive outreach engine (phase 19): greet the user when they come
-online, follow up once on an unanswered outreach, and otherwise stay quiet.
+"""Proactive outreach engine: greet the user when they come online,
+follow up once on an unanswered outreach, and otherwise stay quiet.
 
-Design constraints (architecture.md §9.8, task book T-19.3):
+Design constraints:
 - fire-and-forget: every message is composed in ONE LLM call and posted to
   the session via the master's reply outlet; nothing stays resident waiting
   (a proactive instance that lingers burns tokens for no one);

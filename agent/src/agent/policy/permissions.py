@@ -47,8 +47,9 @@ PERMISSIONS_DEFAULT = {"mode": FULL, "deny": [], "allow": []}
 CLASS_R, CLASS_D = "R", "D"
 
 #: Single source of truth: tool -> R (read-only class) | D (dangerous class).
-#: Absent = unknown = D (fail-closed). P3 aggregation re-keys to "tool.action"
-#: (exact action keys take precedence over the tool-level default).
+#: Absent = unknown = D (fail-closed). An action-keyed aggregation would
+#: re-key this table (exact action keys take precedence over the
+#: tool-level default).
 TOOL_CLASS: dict[str, str] = {
     # workspace hands
     "read": CLASS_R,

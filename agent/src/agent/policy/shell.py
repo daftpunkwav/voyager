@@ -1,5 +1,5 @@
 """Shell dimension: destructive/skills/read-root guards and the decision
-function (split from policy.engine, phase 21).
+function.
 
 The confirm era is over: every command executes unless a guard hard-rejects
 (skills subtree, read-only roots) — the reported default level stays L2 for

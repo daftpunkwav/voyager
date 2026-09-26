@@ -70,7 +70,7 @@ class Scheduler:
         self._timers[timer_id] = asyncio.create_task(_fire())
         return timer_id
 
-    # -- durable queue (phase 19): storage in runtime.queue_store, dispatch
+    # -- durable queue: storage in runtime.queue_store, dispatch
     # policy here. Handlers map job kinds to coroutines; rows survive restarts.
 
     def register_job_handler(

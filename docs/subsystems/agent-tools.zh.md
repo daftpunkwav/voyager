@@ -33,11 +33,11 @@
 6. 处理器带重试与每工具 `CircuitBreaker`;写入与不可逆调用绝不重试;超时与 `ServiceError` 不重试。
 7. 计量记录(`MeterRecord(kind="tool", ...)`)。
 8. `post_tool` 钩子;结果归一为 `ToolResult`;情景记录。
-9. 结果预算 — 超限结果外溢到 `workspace/spill/`(`agent.context.tool_result_max` / `agent.context.tool_result_max_lines`)。
+9. 结果预算 — 超限结果外溢到 `workspace/spill/`(`agent.context.tool_result_max` / `agent.context.tool_result_max_lines`)。外溢写盘失败退化为纯截断;外溢目录限额是独立的尽力而为清理,绝不截断未超限的结果。
 
 ## MCP 工具
 
-`mcp/` 挂载外部 MCP 服务器(`agent.mcp.servers`,须批准):远端工具成为 `mcp__<server>__<tool>` 的 agent 工具(`mcp/mount.py`),`dimension="app"`,仅在批准后注册。`McpSession`(`mcp/session.py`)以 JSON-RPC 2.0 走 stdio 或 HTTP,调用超时 30 秒。
+`mcp/` 挂载外部 MCP 服务器(`agent.mcp.servers`,须批准):远端工具成为 `mcp__<server>__<tool>` 的 agent 工具(`mcp/mount.py`),`dimension="app"`,仅在批准后注册。`McpSession`(`mcp/session.py`)以 JSON-RPC 2.0 走 stdio 或 HTTP,调用超时 30 秒。只有服务端裁决的 JSON-RPC 错误(`McpRpcError`)以 `[MCP 错误]` 文本返回;超时与传输故障上抛,进入管线的重试与熔断。
 
 ## 域工具桥
 

@@ -1,6 +1,6 @@
 # agent.context — Context engineering
 
-builder.py assembles (rules → persona → profile → task brief → summary);
+builder.py assembles the stable system head (rules → scoped rules → persona → skill index → profile → task brief → MCP instructions) and turn_context() renders the per-turn volatile block (memory cards, recall, subagent digests, current page, plan gate) as one trailing user row;
 compressor.py compresses/prunes/rebuilds; loader.py is the on-demand
 loader: skill/memory/page context (index resident, full text on demand).
 The global rules source text lives in prompts/definitions/common.toml

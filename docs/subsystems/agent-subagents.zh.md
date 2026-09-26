@@ -37,7 +37,7 @@
 
 ## 模式
 
-`modes/registry.py` 在七种模式间分发 `run_mode()`,一模式一文件:`react`、`plan_execute`、`cot`、`tot`、`got`、`reflexion`、`direct`。派单走人格的 `default_mode`;主持的会话 turn 保持 ReAct,而成员 turn(@点名 / handoff / 板上运行)用成员人格的 `default_mode`(explainer 跑 cot)。对子代理的 `wait` 是 `subagent` 能力的 `wait` 动作:0.5 秒轮询,默认超时 120 秒,上限 600 秒。
+`modes/registry.py` 在七种模式间分发 `run_mode()`,一模式一文件:`react`、`plan_execute`、`cot`、`tot`、`got`、`reflexion`、`direct`。派单走人格的 `default_mode`;主持的会话 turn 保持 ReAct,而成员 turn(@点名 / handoff / 板上运行)用成员人格的 `default_mode`(explainer 跑 cot)。对子代理的 `wait` 是 `subagent` 能力的 `wait` 动作:0.5 秒轮询,默认超时 120 秒,上限 600 秒。被预算守卫提前终结的运行(工具/轮数/token 上限、死循环中止)带有 `surrendered` 字段注明原因(`tool_cap`/`rounds_cap`/`token_budget`/`loop_abort`),COMPLETED 状态不会掩盖被截断的运行。
 
 ## 编排(`orchestrator/`)
 

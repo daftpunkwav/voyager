@@ -66,8 +66,8 @@ def resolve_window(settings: SettingsReader, model_name: str = "") -> ContextWin
     Malformed shapes (non-dict profiles, non-dict entry, bad numbers) fall
     back to the next source instead of raising - a bad setting must never
     cripple context accounting. A model with no profile entry runs on the
-    global defaults and logs one warning (phase 18: keep the profiles in sync
-    with llm.list_models).
+    global defaults and logs one warning (profiles must stay in sync with
+    the models the llm domain serves).
     """
     window = _int_or(settings.get("agent.context.window_tokens"), DEFAULT_WINDOW_TOKENS)
     output = _int_or(settings.get("agent.context.max_output_tokens"), DEFAULT_MAX_OUTPUT_TOKENS)

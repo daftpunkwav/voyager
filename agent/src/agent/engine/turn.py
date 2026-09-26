@@ -93,6 +93,13 @@ def _refresh_turn_context_row(messages: list[dict[str, Any]], row: dict[str, Any
     does not merge them. After any other tail shape (assistant / tool rows)
     the row still appends, which is a legal adjacency.
 
+    Accepted fold cost: with the input buried under the marker prefix,
+    prefix-keyed consumers (react's idle-continue check, the SUMMARY_MARK
+    history write-back) treat the whole entry as context — when that turn
+    also compacted mid-way, its original input text stays out of history.
+    Bounded to a legacy-checkpoint resume; the alternative (a second user
+    message) is a hard provider rejection, not a softer loss.
+
     Matching is user-role only: the marker check must never hit an assistant
     entry (a model echoing the marker) — replacing that with the context row
     would drop its tool_calls and break pairing."""
@@ -199,9 +206,10 @@ async def _run_turn(
         # never go stale
         member_prompt = inst.build_system(inst.task, view.key, user_text or "")
     elif inst.build_system is not None:
-        # Rebuild the system prompt every turn so style/profile/page/digest
+        # Rebuild the system prompt every turn so style/profile/skill
         # changes never go stale across turns; the turn's input rides along
-        # as the memory read policy's recall query (resident relevance layer)
+        # as the memory read policy's recall query (the relevance layer),
+        # and page/digest state renders into the per-turn context row
         inst.system_prompt = inst.build_system(inst.task, inst.persona, user_text or "")
     if inst.resume_messages and view is None:
         # Mid-turn resume: pending_messages already contains system /
@@ -344,7 +352,7 @@ async def _run_turn(
                     log.debug("failed to emit cancel closure message", exc_info=True)
             raise
         except PauseRequested:
-            # Cooperative pause (phase 20): stop at a paired boundary, persist a
+            # Cooperative pause: stop at a paired boundary, persist a
             # mid-turn snapshot for resume_run, and announce it. The transcript
             # rolls back to the last paired exchange so a resume never continues
             # from a half-executed tool batch.

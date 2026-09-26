@@ -332,7 +332,7 @@ def build_agent(
         return output_capped_llm(client, settings)
 
     chat_llm = _metered(_capped(llm))
-    # Purpose routing (phase 18): arbiter, distillation, and the context
+    # Purpose routing: arbiter, distillation, and the context
     # editor's planning call may run on lighter models resolved by the host
     # routing layer; without an injected transport everything shares the chat
     # model as before
@@ -614,7 +614,7 @@ def build_agent(
                 str(e.get("summary") or "")
                 for e in memory.episodic.recent(limit=cards.memory_cards)
             }
-            # Profile keys already ride the resident profile layer (Phase A):
+            # Profile keys already ride the resident profile layer:
             # keep the recall budget for episodic/semantic hits. When the
             # profile layer itself is off, its hits stay eligible here.
             profile_keys = set(memory.profile.all()) if cards.profile_chars > 0 else None

@@ -42,7 +42,7 @@ agent 引擎是事件驱动的:它不拥有请求处理器。总线事件启动�
 
 ## 终止
 
-turn 在以下情况结束:模型返回最终文本;触及 token 上限(`[预算]`);触及工具调用上限(`[中断]`);`LoopDetector` 在一轮 `LoopAdvisory` 催促后触发;触及 ReAct 轮数上限;或期限到期。上下文溢出触发一次激进压缩、`_emergency_truncate` 与重试。
+turn 在以下情况结束:模型返回最终文本;触及 token 上限(`[预算]`);触及工具调用上限(`[中断]`);`LoopDetector` 在一轮 `LoopAdvisory` 催促后触发;触及 ReAct 轮数上限;或期限到期。上下文溢出触发一次激进压缩、`_emergency_truncate` 与重试。在输出上限处被截断且仍携带工具调用的回复按 fail-closed 处理:调用以 `[未执行]` 结果回显,配对保持完整,模型在下轮重新完整发起。
 
 `engine/turn.py:run_turn` 随后写回压缩历史摘要(`[历史压缩]` 标记),追加 assistant 回复,置终态 — 会话型实例为 `WAITING_INPUT`,任务为 `COMPLETED` — 并发出 `AGENT_COMPLETED`。错误路径置 `FAILED`/`CANCELLED`;`PauseRequested` 置 `PAUSED` 并落轮中检查点。
 

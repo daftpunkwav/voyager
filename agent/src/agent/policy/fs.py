@@ -1,5 +1,4 @@
-"""Filesystem dimension: jail roots ordering and the decision function
-(split from policy.engine, phase 21).
+"""Filesystem dimension: jail roots ordering and the decision function.
 
 Root priority: workspace roots (L2 on delete, skills subtree hard-no-write)
 > additional read-write roots (L2 on write/delete) > additional read-only

@@ -44,9 +44,9 @@ class DigestStore:
         """Sync a card from a SubagentInstance (duck-typed, avoiding a circular
         dependency; data comes through the instance's public interface, not
         the state machine's internals). The timestamp stays at first sight:
-        upserts re-stamp it on every step, which would reshuffle the
-        ts-ordered render between turns and churn the prompt's volatile
-        context row byte-for-byte even when nothing changed."""
+        re-stamping it on every step would reshuffle the ts-ordered render
+        between turns and churn the volatile context row byte-for-byte even
+        when nothing changed."""
         with self._lock:
             existing = self._cards.get(instance.id)
             card = Digest(

@@ -1,5 +1,5 @@
-"""Network dimension: mode policy, the literal-host intranet check, and the
-decision function (split from policy.engine, phase 21).
+"""Network dimension: mode policy, the literal-host intranet check, and
+the decision function.
 
 Order of checks is frozen: off -> non-global literal -> all/whitelist. Even
 the ALL mode must not hit loopback/intranet literals (SSRF), and a whitelist

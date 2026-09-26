@@ -18,9 +18,11 @@ Source: `agent/src/agent/context/`
 6. `【风格】` — `agent.style` / per-persona `agent.style.overrides`
 7. `【可用 skill】` — name + one-line index only (texts load on demand)
 
-Then the stable-then-volatile tail: user profile, recent memory cards, task book (goal/constraints/done_when), the relevance-recall section (`read_policy.py`), in-flight subagent digests, the user's current page context, plan review-phase state (`plan_gate.py`), and MCP instructions.
+The head ends with the stable tail: user profile, task book (goal/constraints/done_when), and MCP instructions.
 
-Each turn, `engine/turn.py:run_turn` rebuilds the system prompt; history is bounded by `ContextBudget`.
+The per-turn volatile layers — recent memory cards, the relevance-recall section (`read_policy.py`), in-flight subagent digests, the user's current page context, and plan review-phase state (`plan_gate.py`) — do not live in the system prompt: `ContextBuilder.turn_context()` renders them into ONE trailing user-role row (marked `【会话状态】`) appended after the full history. Providers cache the byte-prefix of the whole request, so keeping the system prompt byte-stable across turns is what makes the history prefix cacheable; the usage status line rides the same row.
+
+Each turn, `engine/turn.py:run_turn` rebuilds the system prompt (byte-stable unless a source changed) and re-renders the context row; on a mid-turn resume the snapshot's row is refreshed in place. History is bounded by `ContextBudget`.
 
 ## Budgets
 
@@ -43,4 +45,4 @@ Each turn, `engine/turn.py:run_turn` rebuilds the system prompt; history is boun
 
 ## On-demand loading and page context
 
-`loader.py` — `OnDemandLoader` supplies `skill_text` and `recall` payloads only when the builder asks. `pages.py` — `PageContextRegistry` holds the frontend-reported current page (capability `report_page_context`); the builder renders it into the prompt under a character cap (`agent.context.page_chars`).
+`loader.py` — `OnDemandLoader` supplies `skill_text` and `recall` payloads only when the builder asks. `pages.py` — `PageContextRegistry` holds the frontend-reported current page (capability `report_page_context`); the builder renders it into the per-turn context row under a character cap (`agent.context.page_chars`).

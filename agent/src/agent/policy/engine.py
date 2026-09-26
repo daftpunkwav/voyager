@@ -1,6 +1,6 @@
 """Permission engine facade: hot-readable dimension snapshots dispatched to
-the per-dimension decision functions (network / fs / app / shell — one file
-each since phase 21; the skill dimension is decided inline below).
+the per-dimension decision functions (network / fs / app / shell, one file
+each; the skill dimension is decided inline below).
 Decisions are pure; the confirmation interaction lives in the invoke pipeline
 (tools/core/invoke.py) — since the confirm channel retired, its one survivor
 is the write_roots residual keyed by Decision.confirm_scope.

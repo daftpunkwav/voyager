@@ -42,7 +42,7 @@ Defaults: `ModeLimits(max_rounds=20, max_tool_calls=40, max_tokens=0)` (`engine/
 
 ## Termination
 
-A turn ends when: the model returns final text; the token cap is hit (`[预算]`); the tool-call cap is hit (`[中断]`); `LoopDetector` trips after one `LoopAdvisory` nudge round; the ReAct round cap is hit; or the deadline expires. Context overflow triggers one aggressive compact, `_emergency_truncate`, and a retry.
+A turn ends when: the model returns final text; the token cap is hit (`[预算]`); the tool-call cap is hit (`[中断]`); `LoopDetector` trips after one `LoopAdvisory` nudge round; the ReAct round cap is hit; or the deadline expires. Context overflow triggers one aggressive compact, `_emergency_truncate`, and a retry. A reply cut at the output cap that still carries tool calls fails closed: the calls are echoed back with `[未执行]` results so pairing holds and the model re-issues them whole.
 
 `engine/turn.py:run_turn` then writes back the compacted history summary (`[历史压缩]` marker), appends the assistant reply, sets the terminal state — `WAITING_INPUT` for conversational instances, `COMPLETED` for tasks — and emits `AGENT_COMPLETED`. Error paths set `FAILED`/`CANCELLED`; `PauseRequested` sets `PAUSED` with a mid-turn checkpoint.
 

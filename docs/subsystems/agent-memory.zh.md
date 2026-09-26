@@ -17,11 +17,11 @@
 
 ## 蒸馏
 
-`distill.py` — `Distiller.maybe_distill()` 每 `agent.memory.distill_interval` 个 turn 触发:一次 LLM 调用产出严格 JSON,落入 profile/semantic 写入。蒸馏只读工作记忆,不读全量日志。
+`distill.py` — `Distiller.maybe_distill()` 每 `agent.memory.distill_interval` 个 turn 触发:一次 LLM 调用产出严格 JSON,落入 profile/semantic 写入。重新抽取的同主谓不同宾事实会替代旧的蒸馏事实(`SemanticMemory.add(supersede=True)`);其他写入者的事实不受影响。蒸馏只读工作记忆,不读全量日志。
 
 ## 读策略
 
-`read_policy.py` — `render_relevant_recall` 是系统提示中的常驻相关度层:召回事实按内容寻址渲染(相同事实 → 相同字节),保持提示前缀缓存稳定。
+`read_policy.py` — `render_relevant_recall` 是逐 turn 上下文行中的相关度层:召回事实按内容寻址渲染(相同事实 → 相同字节),输入不变时该行跨 turn 字节稳定。
 
 ## 聊天会话
 
@@ -29,7 +29,7 @@
 
 ## 技能
 
-`skills/loader.py` — `SkillLoader(roots)` 扫描各根下的 `<name>/SKILL.md`。`index()` 只返回名称 + 首行简介(≤120 字符);`full_text(name)` 按需加载(不可读 → `KeyError`)。`add_root`/`remove_root` 支撑插件热加载/卸载。内置根:`agent/src/agent/skills/builtin` 与 `workspace/skills`。
+`skills/loader.py` — `SkillLoader(roots)` 扫描各根下的 `<name>/SKILL.md`,按根以排序后的 `(path, mtime)` 集合缓存,树未变化时不重读。`index()` 只返回名称 + 首行简介(≤120 字符);`full_text(name)` 按需加载(不可读 → `KeyError`)。`add_root`/`remove_root` 支撑插件热加载/卸载。内置根:`agent/src/agent/skills/builtin` 与 `workspace/skills`。
 
 `skills/organizer.py` — `SkillOrganizer` 在情景记忆中检视重复的连续工具调用序列(≥2 个不同工具),按 `agent.skills.organize_every` 节奏发出非阻塞 `skill.proposed` 事件;保存经 `skill` 工具的 propose 动作。
 
