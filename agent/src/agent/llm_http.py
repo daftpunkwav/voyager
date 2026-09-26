@@ -725,6 +725,11 @@ class HttpLLM:
         if calls:
             yield StreamReply(
                 final=LLMReply(
+                    # The preamble text streams to the user and rides the
+                    # transcript echo-back, exactly like the non-streaming
+                    # _parse_reply — a tool-call round must not lose the
+                    # model's words just because the round streamed.
+                    text=text or None,
                     tool_calls=calls,
                     usage=_parse_usage(usage),
                     reasoning=reasoning,

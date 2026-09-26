@@ -335,6 +335,47 @@ class TestStream:
         assert final.tool_calls[0].name == "too"  # split name reassembled
         assert final.tool_calls[0].arguments == {"a": 1}
 
+    async def test_stream_tool_calls_keep_preamble_text(self) -> None:
+        """A tool-call round that streamed answer text first must carry that
+        text on the final reply, same as the non-streaming parse — the text
+        already reached the user and belongs in the transcript echo-back."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            chunks = [
+                {"choices": [{"delta": {"content": "Let me check."}}]},
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "c1",
+                                        "function": {"name": "t", "arguments": "{}"},
+                                    },
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "DONE",
+            ]
+            body = b"".join(
+                f"data: {json.dumps(c)}\n\n".encode()
+                if isinstance(c, dict)
+                else b"data: [DONE]\n\n"
+                for c in chunks
+            )
+            return httpx.Response(200, content=body)
+
+        final = None
+        async for ev in _client(handler).complete_stream(MSGS):
+            if ev.final is not None:
+                final = ev.final
+        assert final is not None
+        assert final.text == "Let me check."
+        assert final.tool_calls[0].name == "t"
+
     async def test_stream_tool_name_resent_every_chunk(self) -> None:
         """Some compat endpoints resend the full id/name on every fragment:
         must overwrite, not append (same policy as packages/llm's stream)."""
