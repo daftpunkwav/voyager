@@ -632,6 +632,29 @@ class HttpLLM:
                                 chunk = json.loads(data_str)
                             except ValueError:
                                 continue
+                            if chunk.get("error") is not None:
+                                # OpenAI-compatible endpoints report mid-stream
+                                # failures (content filter, overload) as a data
+                                # frame carrying an error object even on HTTP
+                                # 200. Ending here would silently truncate the
+                                # answer into a normal-looking final chunk —
+                                # same semantics as packages/llm's stream
+                                # parser, which raises on this frame; folded
+                                # here because the standalone client degrades
+                                # instead of raising.
+                                err = chunk["error"]
+                                detail = (
+                                    err.get("message") or err.get("type") or str(err)
+                                    if isinstance(err, dict)
+                                    else str(err)
+                                )
+                                yield StreamReply(
+                                    final=LLMReply(
+                                        text=f"{_DEGRADED_PREFIX} provider stream error: {detail}",
+                                        degraded=True,
+                                    )
+                                )
+                                return
                             if chunk.get("usage"):
                                 usage = chunk["usage"]
                             for choice in chunk.get("choices") or []:
