@@ -6,10 +6,15 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   gate-py:
     name: gate:py (ruff + import-linter + mypy + pytest + graph:check)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -42,6 +47,7 @@ jobs:
   gate-web:
     name: gate:web (tsc + eslint + vitest + i18n keys + prettier)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
