@@ -168,3 +168,27 @@ class TestMultiTermRecall:
         m.profile.set("interest", "graph and notes")
         assert m.recall("graph whatever")[0]["key"] == "interest"
         m.close()
+
+
+class TestSemanticSupersede:
+    def test_supersede_replaces_same_subject_relation_from_same_source(self, tmp_path) -> None:
+        mem = Memory(tmp_path / "m")
+        try:
+            mem.semantic.add("编辑器", "使用版本", "v1", source="distill")
+            mem.semantic.add("编辑器", "使用版本", "v2", source="distill", supersede=True)
+            facts = mem.semantic.query(subject="编辑器", relation="使用版本")
+            assert [f["object"] for f in facts] == ["v2"]  # the stale value is gone
+            # the exact-triple dedup (has_fact) is the distiller's guard, not add()'s
+            assert mem.semantic.has_fact("编辑器", "使用版本", "v2") is True
+        finally:
+            mem.close()
+
+    def test_supersede_never_touches_other_sources(self, tmp_path) -> None:
+        mem = Memory(tmp_path / "m")
+        try:
+            mem.semantic.add("编辑器", "使用版本", "v1", source="feedback")
+            mem.semantic.add("编辑器", "使用版本", "v2", source="distill", supersede=True)
+            facts = mem.semantic.query(subject="编辑器", relation="使用版本")
+            assert {f["object"] for f in facts} == {"v1", "v2"}  # both survive
+        finally:
+            mem.close()

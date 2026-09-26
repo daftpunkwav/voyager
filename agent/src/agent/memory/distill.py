@@ -123,8 +123,12 @@ class Distiller:
                     # graph tools; stored only, so recall can hand it back for
                     # graph__expand_neighbors without the agent importing graph
                     node_id = str(fact[3]).strip() if len(fact) == 4 else ""
+                    # supersede: a re-extracted (subject, relation) with a new
+                    # object replaces the older distilled fact (contradictions
+                    # must not accumulate in the recall budget); exact dupes
+                    # were already skipped above
                     self._memory.semantic.add(
-                        subject, relation, obj, source="distill", node_id=node_id
+                        subject, relation, obj, source="distill", node_id=node_id, supersede=True
                     )
 
 

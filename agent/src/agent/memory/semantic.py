@@ -46,8 +46,21 @@ class SemanticMemory:
         *,
         source: str = "",
         node_id: str = "",
+        supersede: bool = False,
     ) -> int:
+        """Insert one fact triple. With supersede=True, older facts sharing the
+        same (subject, relation) and the same source but a different object are
+        deleted first — a distilled "X uses v2" replaces the earlier "X uses v1"
+        instead of both surviving and competing for the same recall budget.
+        Only same-source rows are replaced, so facts from other writers
+        (user ratings, tool writes) are never touched."""
         with self._lock:
+            if supersede:
+                self._conn.execute(
+                    "DELETE FROM facts WHERE subject = ? AND relation = ?"
+                    " AND object <> ? AND source = ?",
+                    (subject, relation, obj, source),
+                )
             cur = self._conn.execute(
                 "INSERT INTO facts (ts, subject, relation, object, source, node_id)"
                 " VALUES (?, ?, ?, ?, ?, ?)",
