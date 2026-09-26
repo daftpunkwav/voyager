@@ -88,6 +88,9 @@ platform-webguard = { workspace = true }
 
 [dependency-groups]
 dev = [
+    # grimp is a direct import of scripts/gen_dep_graph.py (graph:check); the
+    # floor follows import-linter's own requirement so both resolve together
+    "grimp>=3.0",
     "import-linter>=2.0",
     "mypy>=1.13",
     "pytest>=8.0.0",

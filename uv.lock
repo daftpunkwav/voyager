@@ -118,6 +118,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "grimp" },
     { name = "import-linter" },
     { name = "mypy" },
     { name = "pytest" },
@@ -158,6 +159,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "grimp", specifier = ">=3.0" },
     { name = "import-linter", specifier = ">=2.0" },
     { name = "mypy", specifier = ">=1.13" },
     { name = "pytest", specifier = ">=8.0.0" },
