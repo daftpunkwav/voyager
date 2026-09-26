@@ -130,9 +130,11 @@ class TestSkillLayerBudget:
 class TestOtherLayerBudgets:
     def test_digest_truncated_and_omitted(self) -> None:
         builder = ContextBuilder(digests=_Digests("x" * 5000))
-        assert "subagent 摘要过长已截断" in builder.system(digest_chars=100)
-        assert "【进行中的 subagent】" not in builder.system(digest_chars=0)
-        assert "【进行中的 subagent】" not in ContextBuilder().system()
+        # Digests are a per-turn volatile layer: they render in the
+        # turn-context block, never in the stable system head
+        assert "subagent 摘要过长已截断" in builder.turn_context(digest_chars=100)
+        assert "【进行中的 subagent】" not in builder.turn_context(digest_chars=0)
+        assert "【进行中的 subagent】" not in ContextBuilder().turn_context()
 
     def test_task_truncated_and_omitted(self) -> None:
         task = TaskBook(goal="g" * 3000, constraints="c", done_when="d")
@@ -142,8 +144,8 @@ class TestOtherLayerBudgets:
     def test_page_truncated_and_omitted(self, tmp_path) -> None:
         pages = PageContextRegistry()
         pages.update("notes", "n" * 3000)
-        assert "页面信息过长已截断" in ContextBuilder(pages=pages).system(page_chars=100)
-        assert "【用户当前页面】" not in ContextBuilder(pages=pages).system(page_chars=0)
+        assert "页面信息过长已截断" in ContextBuilder(pages=pages).turn_context(page_chars=100)
+        assert "【用户当前页面】" not in ContextBuilder(pages=pages).turn_context(page_chars=0)
 
     def test_mcp_truncated_and_omitted(self) -> None:
         section = "【MCP: s】\n" + "y" * 3000

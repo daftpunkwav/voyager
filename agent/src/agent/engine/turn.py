@@ -10,6 +10,7 @@ public surface (instance.run_turn, scheduler callbacks) is unchanged.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 from typing import TYPE_CHECKING, Any
@@ -17,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 from platform_capability import current_chat_session
 from platform_contracts import DomainEvent, RuntimeEvent
 
+from agent.context.builder import TURN_CONTEXT_HEADER
 from agent.context.editor import SUMMARY_MARK
 from agent.engine.modes import Mode, ModeLimits, run_mode
 from agent.personas import PERSONAS, Persona, resolve_persona
@@ -52,6 +54,45 @@ def _speaker_label(inst: SubagentInstance) -> str:
     """Event attribution: the speaking member's display name during a member
     turn, else the instance name (session instances are named "chat")."""
     return inst._member_label or inst.name or inst.id
+
+
+def _turn_context_row(
+    inst: SubagentInstance, persona_key: str, user_text: str
+) -> dict[str, Any] | None:
+    """Build the trailing per-turn context row: bucketed usage status plus the
+    volatile builder layers (memory cards, relevance recall, subagent digests,
+    current page, plan gate).
+
+    The row is a user-role message appended AFTER the full history, not a
+    per-turn mutation inside the system prompt: a provider prefix cache is a
+    byte-prefix of the whole request, so volatile content at the head would
+    re-bill the entire history every turn, while at the tail it only re-bills
+    itself. None when nothing has content (no context row is appended).
+    """
+    built = (
+        inst.build_turn_context(inst.task, persona_key, user_text)
+        if inst.build_turn_context is not None
+        else ""
+    )
+    parts = "\n\n".join(p for p in (inst.context_status_line(), built) if p)
+    inst._turn_context = built
+    if not parts:
+        return None
+    return {"role": "user", "content": f"{TURN_CONTEXT_HEADER}\n\n{parts}"}
+
+
+def _refresh_turn_context_row(messages: list[dict[str, Any]], row: dict[str, Any] | None) -> None:
+    """Mid-turn resume: swap the snapshot's context row for a fresh one, so a
+    resumed run sees current usage/digests. The snapshot row is replaced in
+    place (same position keeps the message shape the loop expects); a snapshot
+    without one gets the fresh row appended."""
+    for i, m in enumerate(messages):
+        if str(m.get("content") or "").startswith(TURN_CONTEXT_HEADER):
+            if row is not None:
+                messages[i] = row
+            return
+    if row is not None:
+        messages.append(row)
 
 
 def _transcript_view(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -142,13 +183,15 @@ async def _run_turn(
         # Mid-turn resume: pending_messages already contains system /
         # history / this turn's tool entries, so skip history rebuild and
         # continue from the next complete after the crash point; the system
-        # entry is recomputed so style/profile changes apply to the resume.
+        # entry is recomputed so style/profile changes apply to the resume,
+        # and the snapshot's context row is swapped for a fresh one.
         # Resume carries no new input: the only entry point resume_run->start
         # passes no user_text.
         messages = [dict(m) for m in inst.resume_messages]
         inst.resume_messages = None
         if messages and messages[0].get("role") == "system":
             messages[0] = inst._system_message()
+        _refresh_turn_context_row(messages, _turn_context_row(inst, inst.persona, user_text or ""))
     else:
         if user_text:
             inst.history.append({"role": "user", "content": user_text})
@@ -156,6 +199,11 @@ async def _run_turn(
             inst._system_message(member_prompt),
             *_transcript_view(inst.history),
         ]
+        row = _turn_context_row(
+            inst, view.key if view is not None else inst.persona, user_text or ""
+        )
+        if row is not None:
+            messages.append(row)
     inst._turn_messages = messages  # live reference for mid-turn snapshots (on_step)
     belt = inst.toolbelt
     if view is not None and view.tool_allow is not None:
@@ -183,10 +231,19 @@ async def _run_turn(
             preactivate=tuple(preactivate),
         )
     # Prefix-cache diagnostics: fold this turn's request head; a changed
-    # segment emits one debug line on the "agent.context.prefix" logger
+    # segment emits one debug line on the "agent.context.prefix" logger. The
+    # tool segment hashes the ACTIVE specs (what the wire actually carries),
+    # schema bytes included — a graded-activation change is a real tools-segment
+    # cache break and must not be misread as provider-side.
+    specs = belt.specs()
     inst.prefix_watch.observe(
         system=str(messages[0].get("content") or "") if messages else "",
-        tools=belt.names(),
+        tools=[spec.name for spec in specs],
+        tool_fingerprint=json.dumps(
+            [[spec.name, spec.description, spec.schema] for spec in specs],
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
     )
     await inst.events.emit(
         RuntimeEvent.RUN_STARTED, run_id=inst.state.run_id, subagent=_speaker_label(inst)
@@ -331,14 +388,19 @@ async def _run_turn(
             # the key never survives onto these messages: recover it here
             # (display name -> persona key) and strip the prefix again, so
             # history keeps its invariant "raw text + optional speaker" and
-            # the next turn's view prefixes exactly once.
+            # the next turn's view prefixes exactly once. The trailing
+            # turn-context row is transient per-turn state: it never enters
+            # history (the next turn renders a fresh one).
             by_display = {p.display_name: k for k, p in PERSONAS.items()}
             for m in messages[
                 1:
             ]:  # skip system; tool entries and empty tool-turn text stay out of history
                 role = m.get("role")
                 if role == "user":
-                    rebuilt.append({"role": "user", "content": str(m.get("content", ""))})
+                    text = str(m.get("content", ""))
+                    if text.startswith(TURN_CONTEXT_HEADER):
+                        continue
+                    rebuilt.append({"role": "user", "content": text})
                 elif role == "assistant":
                     text = str(m.get("content", ""))
                     if text:

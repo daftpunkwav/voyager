@@ -36,7 +36,11 @@ def _instance(llm, log_path, **kw) -> SubagentInstance:
 
 
 class TestStatusLineInjection:
-    async def test_system_entry_carries_status_line(self, tmp_path) -> None:
+    async def test_status_line_rides_the_trailing_context_row(self, tmp_path) -> None:
+        """The status line is per-turn volatile state: it rides the trailing
+        context row (one user message appended after the history), never the
+        system prompt — a per-turn change in message[0] would re-bill the
+        whole history against the provider prefix cache."""
         llm = FakeLLM([LLMReply(text="done")])
         inst = _instance(
             llm,
@@ -44,11 +48,14 @@ class TestStatusLineInjection:
             budget=ContextBudget(window_tokens=123_456, max_output_tokens=1_000),
         )
         await inst.run_turn("hello")
-        system = llm.calls[0]["messages"][0]
+        messages = llm.calls[0]["messages"]
+        system = messages[0]
         assert system["role"] == "system"
-        assert system["content"].startswith("SYS")
-        assert "123456" in system["content"]  # resolved window reaches the model
-        assert "context(action=compact)" in system["content"]
+        assert system["content"] == "SYS"  # stable head: no per-turn state
+        row = messages[-1]
+        assert row["role"] == "user" and row["content"].startswith("【会话状态】")
+        assert "123456" in row["content"]  # resolved window reaches the model
+        assert "context(action=compact)" in row["content"]
 
     async def test_reported_usage_anchors_next_turn(self, tmp_path) -> None:
         llm = FakeLLM(

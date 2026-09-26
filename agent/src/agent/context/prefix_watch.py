@@ -65,10 +65,15 @@ class PrefixWatch:
 
     # -- turn-level segment stability -----------------------------------------
 
-    def observe(self, *, system: str, tools: Iterable[str]) -> None:
+    def observe(self, *, system: str, tools: Iterable[str], tool_fingerprint: str = "") -> None:
         """Fold one turn's head; logs on each segment change after the
         baseline turn. Tool order is normalized (sorted) so registry copy
-        order alone never reads as a change."""
+        order alone never reads as a change.
+
+        tool_fingerprint (when given) hashes the serialized ACTIVE tool specs
+        — schema bytes included — instead of the names alone: a schema or
+        graded-activation change is a real tools-segment cache break, while
+        the full roster's names stay identical."""
         system_hash = _hash(system)
         if system_hash != self._system:
             if self._system:
@@ -81,7 +86,9 @@ class PrefixWatch:
                     system_hash,
                 )
             self._system = system_hash
-        tools_hash = _hash("\n".join(sorted(tools)))
+        tools_hash = (
+            _hash(tool_fingerprint) if tool_fingerprint else _hash("\n".join(sorted(tools)))
+        )
         if tools_hash != self._tools:
             if self._tools:
                 self.changes["tools"] += 1

@@ -257,10 +257,13 @@ class TestMidTurnCheckpoint:
             else:
                 pytest.fail("no mid-turn snapshot landed on disk after the tool step")
             pending = saved["pending_messages"]
-            # Snapshot shape: pair-wise backfill (system first, assistant(tool_calls) grouped with its tool rows)
-            assert [m["role"] for m in pending] == ["system", "assistant", "tool"]
-            assert pending[1]["tool_calls"][0]["id"] == "c1"
-            assert pending[2]["tool_call_id"] == "c1"
+            # Snapshot shape: system + the trailing context row (this turn has
+            # no user input — run_turn is driven directly), then the
+            # assistant(tool_calls) grouped with its tool rows
+            assert [m["role"] for m in pending] == ["system", "user", "assistant", "tool"]
+            assert pending[1]["content"].startswith("【会话状态】")  # per-turn context row
+            assert pending[2]["tool_calls"][0]["id"] == "c1"
+            assert pending[3]["tool_call_id"] == "c1"
             assert inst.state.tool_calls == 1
             assert inst.state.rounds == 1
 
@@ -295,8 +298,12 @@ class TestMidTurnCheckpoint:
             assert inst2.state.tool_calls == 1
             assert inst2.state.rounds == 2
             msgs = llm2.calls[0]["messages"]
-            assert [m["role"] for m in msgs] == ["system", "assistant", "tool"]
+            # The snapshot's trailing context row is refreshed IN PLACE on
+            # resume (current usage/digests), transcript rows untouched
+            assert [m["role"] for m in msgs] == ["system", "user", "assistant", "tool"]
+            assert msgs[1]["content"].startswith("【会话状态】")
             assert msgs[2]["content"] == pending[2]["content"]
+            assert msgs[3]["content"] == pending[3]["content"]
             # After the run, the turn-boundary snapshot replaces the mid-turn one: in_turn reset, terminal status
             final = CheckpointStore(rd / "checkpoints").load(inst.state.run_id)
             assert final is not None and final.resume is not None

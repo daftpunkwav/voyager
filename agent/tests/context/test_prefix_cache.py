@@ -1,7 +1,8 @@
-"""Prefix-cache friendliness: the system prompt puts stable layers first so
-per-turn volatile layers only invalidate the tail, and the compaction
-planner request replays the conversation verbatim with one tail instruction
-(never a rewritten copy of the transcript)."""
+"""Prefix-cache friendliness: the system prompt is byte-stable across turns
+and the per-turn volatile layers render into ONE trailing user-role row
+appended after the full history, so the request prefix (system + history)
+survives turn-to-turn; the compaction planner request replays the
+conversation verbatim with one tail instruction (never a rewritten copy)."""
 
 from __future__ import annotations
 
@@ -28,9 +29,10 @@ class _FakeMemory:
         return [{"kind": "tool", "summary": f"第{n}条"} for n in range(self._cards)]
 
 
-def test_volatile_layers_stay_after_stable_prefix() -> None:
-    """Changing the memory-card layer keeps the stable layers byte-identical:
-    the divergence point sits at the volatile profile/memory layers, after skills."""
+def test_system_head_stable_and_volatile_in_tail_row() -> None:
+    """Changing the memory-card layer leaves the system prompt byte-identical;
+    the change lands in the turn-context block (rendered as one trailing
+    user-role row) so the provider prefix cache keeps the whole history."""
     from types import SimpleNamespace
 
     skills = SimpleNamespace(index=lambda: [{"name": "s1", "description": "d"}])
@@ -38,15 +40,15 @@ def test_volatile_layers_stay_after_stable_prefix() -> None:
     mem_b: Any = _FakeMemory(cards=5)
     builder_a = ContextBuilder(rules=["规则A", "规则B"], memory=mem_a, skills=skills)
     builder_b = ContextBuilder(rules=["规则A", "规则B"], memory=mem_b, skills=skills)
-    sys_a = builder_a.system(memory_cards=4, memory_card_chars=400)
-    sys_b = builder_b.system(memory_cards=4, memory_card_chars=400)
-    assert sys_a != sys_b  # the volatile layer differs
-    # Byte-identical stable head: everything up to the volatile block
-    marker = "【用户画像】"
-    head_a, head_b = sys_a.split(marker)[0], sys_b.split(marker)[0]
-    assert head_a == head_b and "规则A" in head_a
-    # Volatile layers sit after the stable ones (skills before the profile)
-    assert sys_a.index("【可用 skill】") < sys_a.index(marker)
+    sys_a = builder_a.system()
+    sys_b = builder_b.system()
+    assert sys_a == sys_b  # the stable head carries no per-turn state at all
+    ctx_a = builder_a.turn_context(memory_cards=4, memory_card_chars=400)
+    ctx_b = builder_b.turn_context(memory_cards=4, memory_card_chars=400)
+    assert ctx_a != ctx_b  # the volatile row carries the change
+    assert "规则A" in sys_a and "【用户画像】" in sys_a
+    assert "第0条" in ctx_b  # card content lives in the volatile row only
+    assert "第0条" not in sys_b
 
 
 def test_planner_request_replays_transcript_verbatim() -> None:

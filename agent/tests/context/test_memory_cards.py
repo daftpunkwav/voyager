@@ -38,8 +38,12 @@ class TestRenderMemoryCards:
             "tool", "grep", {"action": {"tool": "grep", "target": "x"}, "result": "hit"}
         )
         builder = ContextBuilder(memory=mem)
-        with_cards = builder.system(memory_cards=3, memory_card_chars=500)
+        # Cards are a per-turn volatile layer: they render in the turn-context
+        # block (engine.turn appends it as one trailing user row), never in the
+        # stable system head
+        with_cards = builder.turn_context(memory_cards=3, memory_card_chars=500)
         assert MEMORY_CARDS_HEADER in with_cards and "grep" in with_cards
+        assert MEMORY_CARDS_HEADER not in builder.turn_context()
         assert MEMORY_CARDS_HEADER not in builder.system()
         mem.close()
 

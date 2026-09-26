@@ -113,9 +113,10 @@ def test_broken_store_never_breaks_the_turn(tmp_path) -> None:
         app.close()
 
 
-def test_turn_system_prompt_carries_relevance_layer(tmp_path) -> None:
-    """End-to-end: a seeded fact surfaces in the next turn's system prompt
-    without the model calling recall_memory."""
+def test_turn_context_row_carries_relevance_layer(tmp_path) -> None:
+    """End-to-end: a seeded fact surfaces in the next turn's trailing context
+    row (the volatile block rides one user-role row at the tail, not the
+    system prompt) without the model calling recall."""
     llm = FakeLLM()
     app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=llm)
     try:
@@ -129,8 +130,14 @@ def test_turn_system_prompt_carries_relevance_layer(tmp_path) -> None:
         asyncio.run(_drive())
         sent = llm.calls[0]["messages"]
         system = str(sent[0].get("content") or "")
-        assert HEADER in system
-        assert "年假五天" in system
+        assert HEADER not in system  # the stable head carries no per-turn recall
+        ctx_rows = [
+            str(m.get("content") or "")
+            for m in sent
+            if str(m.get("content") or "").startswith("【会话状态】")
+        ]
+        assert ctx_rows and HEADER in ctx_rows[0]
+        assert "年假五天" in ctx_rows[0]
     finally:
         app.memory.close()
 

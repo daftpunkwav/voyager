@@ -133,3 +133,19 @@ class TestTerminalTrimming:
         ids = {c.subagent_id for c in cards}
         assert "just-finished" in ids
         assert "r0" in ids and f"r{store._MAX_CARDS - 1}" in ids
+
+
+class TestStableOrdering:
+    def test_upsert_preserves_first_seen_ts(self, monkeypatch) -> None:
+        """Re-upserts must not restamp the card: the render order is ts-based,
+        and restamping every step reshuffled the volatile context row bytes
+        between turns even when nothing changed."""
+        clock = {"t": 1000.0}
+        monkeypatch.setattr(digest_module.time, "time", lambda: clock["t"])
+        store = DigestStore()
+        store.upsert(_inst("i1", step="first"))
+        clock["t"] += 50.0
+        store.upsert(_inst("i2", step="second"))
+        clock["t"] += 50.0
+        store.upsert(_inst("i1", status="running", step="update"))  # not restamped
+        assert [c.subagent_id for c in store.list()] == ["i2", "i1"]

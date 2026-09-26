@@ -35,9 +35,19 @@ log = logging.getLogger("agent.engine.spawn")
 # the memory read policy's resident relevance layer
 BuildSystemFn = Callable[[TaskBook, str, str], str]
 
+# (task book, persona key, turn input) -> the per-turn volatile context block
+# (memory cards / recall / digests / page / plan gate); rendered into ONE
+# trailing user-role row by engine.turn so the stable system head keeps the
+# provider prefix cache intact
+BuildTurnContextFn = Callable[[TaskBook, str, str], str]
+
 
 def _default_build_system(task: TaskBook, persona: str, query: str = "") -> str:
     return task.goal
+
+
+def _default_build_turn_context(task: TaskBook, persona: str, query: str = "") -> str:
+    return ""
 
 
 #: Resident cap for terminal instances (runtime hygiene): when COMPLETED /
@@ -60,6 +70,7 @@ class Spawner:
         events: RuntimeEvents,
         checkpoints: CheckpointStore | None = None,
         build_system: BuildSystemFn | None = None,
+        build_turn_context: BuildTurnContextFn | None = None,
         pages=None,  # PageContextRegistry: conversational instances preactivate tools per current page
         sync_digest=None,  # refreshes the DigestStore as steps happen; duck-typed
         budget_fn: Callable[[], ContextBudget] | None = None,  # hot-read context budget per spawn
@@ -72,6 +83,7 @@ class Spawner:
         self._events = events
         self._checkpoints = checkpoints
         self._build_system = build_system or _default_build_system
+        self._build_turn_context = build_turn_context or _default_build_turn_context
         self._pages = pages
         self._sync_digest = sync_digest
         self._budget_fn = budget_fn
@@ -121,6 +133,7 @@ class Spawner:
             pages=self._pages,
             persona=persona,
             build_system=self._build_system,  # rebuild system each turn
+            build_turn_context=self._build_turn_context,  # per-turn volatile row
             sync_digest=self._sync_digest,  # refresh DigestStore on steps
             checkpoint_persist=self._persist_checkpoint,  # mid-run persistence
             budget=self._budget(),  # hot-read settings at spawn time
@@ -253,6 +266,7 @@ class Spawner:
             pages=self._pages,
             persona=snap.persona,
             build_system=self._build_system,  # rebuild system each turn on resume (same source as spawn)
+            build_turn_context=self._build_turn_context,  # per-turn volatile row
             sync_digest=self._sync_digest,
             budget=self._budget(),
         )

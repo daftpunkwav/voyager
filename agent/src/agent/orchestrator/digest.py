@@ -42,16 +42,20 @@ class DigestStore:
     def upsert(self, instance) -> Digest:
         """Sync a card from a SubagentInstance (duck-typed, avoiding a circular
         dependency; data comes through the instance's public interface, not
-        the state machine's internals)."""
-        card = Digest(
-            subagent_id=instance.id,
-            name=instance.name,
-            goal=instance.task.goal,
-            status=instance.status.value,
-            last_step=instance.last_step_summary()[: self.STEP_MAX],
-            ts=time.time(),
-        )
+        the state machine's internals). The timestamp stays at first sight:
+        upserts re-stamp it on every step, which would reshuffle the
+        ts-ordered render between turns and churn the prompt's volatile
+        context row byte-for-byte even when nothing changed."""
         with self._lock:
+            existing = self._cards.get(instance.id)
+            card = Digest(
+                subagent_id=instance.id,
+                name=instance.name,
+                goal=instance.task.goal,
+                status=instance.status.value,
+                last_step=instance.last_step_summary()[: self.STEP_MAX],
+                ts=existing.ts if existing is not None else time.time(),
+            )
             self._cards[instance.id] = card
             self._trim(active_id=instance.id)
         return card

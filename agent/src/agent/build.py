@@ -104,7 +104,12 @@ from agent.tools import (
     tools_tools,
     web_tools,
 )
-from agent.tools.core.result_budget import MAX_AGE_SECONDS, bound_spill_dir, spill_result
+from agent.tools.core.result_budget import (
+    MAX_AGE_SECONDS,
+    PREVIEW_KEEP,
+    bound_spill_dir,
+    spill_result,
+)
 from agent.tools.core.self_capability import AuditSinks
 from agent.tools.workspace.write_journal import WriteJournal
 
@@ -409,15 +414,26 @@ def build_agent(
         later results stay small."""
         limit = int(settings.get("agent.context.tool_result_max") or 0)
         max_lines = int(settings.get("agent.context.tool_result_max_lines") or 0)
-        text = spill_result(
-            result,
-            tool=tool,
-            spill_dir=workspace / "spill",
-            limit=limit,
-            max_lines=max_lines,
-        )
-        bound_spill_dir(workspace / "spill", max_age_s=MAX_AGE_SECONDS)
-        return text
+        try:
+            text = spill_result(
+                result,
+                tool=tool,
+                spill_dir=workspace / "spill",
+                limit=limit,
+                max_lines=max_lines,
+            )
+            bound_spill_dir(workspace / "spill", max_age_s=MAX_AGE_SECONDS)
+            return text
+        except OSError:
+            logging.getLogger("agent.runtime").warning(
+                "spill write failed for tool %s; falling back to plain truncation",
+                tool,
+                exc_info=True,
+            )
+            return (
+                result[:PREVIEW_KEEP]
+                + f"\n…[输出超长已截断,共 {len(result)} 字符;溢出文件写入失败,请换更精确的输入重试。]"
+            )
 
     # spawn_subagent is not assembled here: it calls back into
     # master.dispatch_task while the master depends on this toolbelt - so it is
@@ -524,6 +540,11 @@ def build_agent(
         return "\n\n".join(blocks)
 
     def _build_system(task, persona_key: str, query: str = "") -> str:
+        """Stable system head: rules, scoped rules, conduct, persona layers,
+        style, skill index, profile, task brief, MCP instructions. `query` is
+        accepted for signature compatibility (the spawner passes it) but no
+        longer shapes the prompt: per-turn volatile content lives in
+        _build_turn_context so the system bytes stay prefix-cache stable."""
         persona = resolve_persona(persona_key) if persona_key else None
         # Guidelines are hot-read each turn like style: settings changes apply
         # on the next turn
@@ -537,10 +558,40 @@ def build_agent(
             if isinstance(raw, dict)
             else ""
         )
+        # Speaking style: the per-agent override (agent.style.overrides) wins
+        # over the global agent.style, mirroring the guidelines lookup above
+        raw_styles = settings.get(STYLE_OVERRIDES_KEY) or {}
+        style = (
+            str(raw_styles.get(canonical_persona_key(persona_key), "") or "")
+            if isinstance(raw_styles, dict)
+            else ""
+        ) or str(settings.get("agent.style") or "")
+        cards = budget_from_settings(settings)
+        return builder.system(
+            persona=persona,
+            task=task,
+            style=style,
+            conduct=conduct,
+            guideline=guideline,
+            mcp_section=_mcp_section(),
+            skill_max=cards.skill_max,
+            skill_chars=cards.skill_chars,
+            profile_chars=cards.profile_chars,
+            task_chars=cards.task_chars,
+            mcp_chars=cards.mcp_chars,
+        )
+
+    def _build_turn_context(task, persona_key: str, query: str = "") -> str:
+        """The per-turn volatile block, rendered into one trailing user-role
+        row by engine.turn: recent memory cards, relevance recall for this
+        input, subagent digests, the user's current page, the plan gate.
+        Rendered per turn so state is never stale; kept OUT of the system
+        prompt because providers cache the request byte-prefix and any
+        per-turn change in the head re-bills the whole history."""
         cards = budget_from_settings(settings)
         # Resident relevance layer (memory read policy): memory hits for the
         # current input, so long-term knowledge surfaces without the model
-        # having to call recall_memory. Episodic entries already shown by the
+        # having to call recall. Episodic entries already shown by the
         # recent-cards layer are excluded, not duplicated.
         recall = ""
         if query and cards.recall_facts > 0 and cards.recall_chars > 0 and memory is not None:
@@ -560,32 +611,13 @@ def build_agent(
                 exclude_summaries=exclude,
                 exclude_profile_keys=profile_keys,
             )
-        # Speaking style: the per-agent override (agent.style.overrides) wins
-        # over the global agent.style, mirroring the guidelines lookup above
-        raw_styles = settings.get(STYLE_OVERRIDES_KEY) or {}
-        style = (
-            str(raw_styles.get(canonical_persona_key(persona_key), "") or "")
-            if isinstance(raw_styles, dict)
-            else ""
-        ) or str(settings.get("agent.style") or "")
-        return builder.system(
-            persona=persona,
-            task=task,
-            style=style,
-            conduct=conduct,
-            guideline=guideline,
+        return builder.turn_context(
             memory_cards=cards.memory_cards,
             memory_card_chars=cards.memory_card_chars,
             plan_section=plan_gates.section_for(getattr(task, "session", "")),
             recall_section=recall,
-            mcp_section=_mcp_section(),
-            skill_max=cards.skill_max,
-            skill_chars=cards.skill_chars,
-            profile_chars=cards.profile_chars,
-            task_chars=cards.task_chars,
             digest_chars=cards.digest_chars,
             page_chars=cards.page_chars,
-            mcp_chars=cards.mcp_chars,
         )
 
     def _budget_model_name() -> str:
@@ -611,6 +643,7 @@ def build_agent(
         events=events,
         checkpoints=checkpoints,
         build_system=_build_system,
+        build_turn_context=_build_turn_context,
         pages=pages,  # conversational instances preactivate tools per current page
         sync_digest=digests.upsert,  # refresh the DigestStore on steps
         budget_fn=lambda: budget_from_settings(

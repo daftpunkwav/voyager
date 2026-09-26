@@ -1,12 +1,20 @@
-"""Context assembly: rules -> scoped rules -> persona -> profile -> recent
-memory cards -> skill index -> task brief -> subagent digests -> pages.
+"""Context assembly, split by cache stability:
+
+- ContextBuilder.system(): the stable head — rules, scoped rules, conduct,
+  persona, guideline, style, skill index, profile, task brief, MCP
+  instructions. Byte-stable across turns unless a real source (settings,
+  skills on disk, distillation) changed.
+- ContextBuilder.turn_context(): the per-turn volatile block — recent memory
+  cards, relevance recall, subagent digests, current page, plan gate. The
+  caller (engine.turn) renders it into ONE trailing user-role row appended
+  after the full history, so the request prefix (system + history) stays
+  byte-identical across turns and the provider prefix cache survives: any
+  per-turn change inside the system message would re-bill the whole history,
+  because a provider cache is a byte-prefix of the entire request.
 
 Each layer is injected as a summary; full content is loaded on demand via
-OnDemandLoader. The memory-card layer is bounded by its own budget
-(count + characters) and, living in the system layer, is counted by the
-context governor like every other layer. The skill / profile / task /
-digest / page / MCP layers carry their own character caps (plus an entry
-cap for the skill index); a zero cap omits the layer entirely.
+OnDemandLoader. Layers carry their own character caps (plus an entry cap for
+the skill index); a zero cap omits the layer entirely.
 """
 
 from __future__ import annotations
@@ -28,6 +36,10 @@ from agent.contracts import MemoryRecallSource, SkillIndexProvider, TaskSpec
 from agent.personas import Persona
 
 MEMORY_CARDS_HEADER = "【最近记忆】"
+#: Marker prefixing the trailing per-turn context row (engine.turn); consumers
+#: (react's idle-continue check, turn's history write-back) use it to tell the
+#: volatile context row apart from real user input.
+TURN_CONTEXT_HEADER = "【会话状态】"
 _CARD_FIELD_CHARS = 60
 
 
@@ -88,19 +100,17 @@ class ContextBuilder:
         style: str = "",
         conduct: str = "",
         guideline: str = "",
-        memory_cards: int = 0,
-        memory_card_chars: int = 0,
-        plan_section: str = "",
-        recall_section: str = "",
         mcp_section: str = "",
         skill_max: int = SKILL_MAX,
         skill_chars: int = SKILL_CHARS,
         profile_chars: int = PROFILE_CHARS,
         task_chars: int = TASK_CHARS,
-        digest_chars: int = DIGEST_CHARS,
-        page_chars: int = PAGE_CHARS,
         mcp_chars: int = MCP_CHARS,
     ) -> str:
+        """The stable head of the request. Only layers whose source changes
+        rarely (settings, skills on disk, distillation, MCP mounts) live here:
+        the profile rides along because distillation cadence is low, while the
+        per-turn volatile layers are rendered by turn_context() instead."""
         layers: list[str] = []
         if self._rules:
             layers.append("【全局规则】\n" + "\n".join(f"- {r}" for r in self._rules))
@@ -136,17 +146,8 @@ class ContextBuilder:
                     + "\n需要步骤时用 skill(action=load, name) 取全文。"
                 )
                 layers.append(truncate_layer(block, skill_chars, "\n…(skill 索引过长已截断)"))
-        # Layer ordering serves the provider prefix cache: stable layers
-        # (rules/persona/style/skills) come first, per-turn volatile layers
-        # (profile/cards/task/digests/pages/plan) after them, so a turn-to-
-        # turn change only invalidates the tail of the system prompt
         if self._memory is not None and profile_chars > 0:
             layers.append("【用户画像】\n" + self._memory.profile.render(max_chars=profile_chars))
-            cards = render_memory_cards(
-                self._memory, count=memory_cards, max_chars=memory_card_chars
-            )
-            if cards:
-                layers.append(MEMORY_CARDS_HEADER + "\n" + cards)
         if task is not None and task.goal and task_chars > 0:
             block = f"【任务书】目标: {task.goal}"
             if task.constraints:
@@ -154,11 +155,42 @@ class ContextBuilder:
             if task.done_when:
                 block += f"\n完成判定: {task.done_when}"
             layers.append(truncate_layer(block, task_chars, "\n…(任务书过长已截断)"))
+        if mcp_section and mcp_chars > 0:
+            # Server-declared instructions; changes only when servers mount or
+            # unmount (rare), so unlike the per-turn layers it stays in the head.
+            # Content is pre-rendered by the caller, sorted by sid.
+            layers.append(truncate_layer(mcp_section, mcp_chars, "\n…(MCP 指引过长已截断)"))
+        return "\n\n".join(layers)
+
+    def turn_context(
+        self,
+        *,
+        memory_cards: int = 0,
+        memory_card_chars: int = 0,
+        plan_section: str = "",
+        recall_section: str = "",
+        digest_chars: int = DIGEST_CHARS,
+        page_chars: int = PAGE_CHARS,
+    ) -> str:
+        """The per-turn volatile block, rendered into one trailing user-role
+        row by the caller. Returns "" when no layer has content, in which case
+        no context row is appended at all.
+
+        Layer order inside the block follows attention value: recent memory
+        and relevance hits carry the most per-turn signal and come first;
+        digests, the current page and the plan gate follow.
+        """
+        layers: list[str] = []
+        if self._memory is not None and memory_card_chars > 0:
+            cards = render_memory_cards(
+                self._memory, count=memory_cards, max_chars=memory_card_chars
+            )
+            if cards:
+                layers.append(MEMORY_CARDS_HEADER + "\n" + cards)
         if recall_section:
             # Resident relevance layer (memory read policy): memory hits for
-            # the current input. Sits after the per-instance task layer and
-            # before the more volatile digest/page layers - it re-renders per
-            # turn with the input, so it belongs in the volatile tail.
+            # the current input, so long-term knowledge surfaces without the
+            # model having to call the recall tool.
             layers.append(recall_section)
         if self._digests is not None and digest_chars > 0:
             rendered = self._digests.render()
@@ -173,18 +205,17 @@ class ContextBuilder:
                 + truncate_layer(self._pages.render(), page_chars, "…(页面信息过长已截断)")
             )
         if plan_section:
-            # Volatile layer stays last: per-turn review-phase state must not
-            # bust the prefix cache for the stable layers above
             layers.append(plan_section)
-        if mcp_section and mcp_chars > 0:
-            # Server-declared instructions (volatile tail: servers connect and
-            # disconnect asynchronously, so this changes rarely but is not
-            # stable); content is pre-rendered by the caller, sorted by sid
-            layers.append(truncate_layer(mcp_section, mcp_chars, "\n…(MCP 指引过长已截断)"))
         return "\n\n".join(layers)
 
     def messages(self, system: str, history: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [{"role": "system", "content": system}, *history]
 
 
-__all__ = ["MEMORY_CARDS_HEADER", "ContextBuilder", "render_memory_cards", "truncate_layer"]
+__all__ = [
+    "MEMORY_CARDS_HEADER",
+    "TURN_CONTEXT_HEADER",
+    "ContextBuilder",
+    "render_memory_cards",
+    "truncate_layer",
+]

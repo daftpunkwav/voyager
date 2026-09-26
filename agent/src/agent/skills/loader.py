@@ -22,6 +22,12 @@ class SkillLoader:
 
     def __init__(self, roots: list[str | Path]) -> None:
         self._roots = [Path(r) for r in roots]
+        # Per-root scan cache: (fingerprint, entries) where the fingerprint is
+        # the sorted (path, mtime) list of SKILL.md files. The index feeds the
+        # system prompt's skill layer every turn; without the cache each render
+        # re-reads every SKILL.md from disk. mtimes detect edits, creations and
+        # deletions, so the cached bytes only go stale if the filesystem lies.
+        self._scan_cache: dict[str, tuple[list[tuple[str, float]], list[dict[str, str]]]] = {}
 
     def add_root(self, root: str | Path) -> None:
         """Append a scan root (after plugin approval); deduplicated after resolve."""
@@ -59,22 +65,37 @@ class SkillLoader:
 
     def _scan(self) -> list[dict[str, str]]:
         """Internal scan: includes path so full_text can read from disk on demand. Bad files
-        are skipped with a warning."""
+        are skipped with a warning. Per-root cached on the SKILL.md (path, mtime) set."""
         out: list[dict[str, str]] = []
         for root in self._roots:
             if not root.exists():
                 continue
-            for skill_md in sorted(root.rglob("SKILL.md")):
+            files = sorted(root.rglob("SKILL.md"))
+            fingerprint: list[tuple[str, float]] = []
+            for p in files:
+                try:
+                    fingerprint.append((str(p), p.stat().st_mtime))
+                except OSError:
+                    fingerprint.append((str(p), -1.0))  # vanished mid-scan: re-read next time
+            key = str(root)
+            cached = self._scan_cache.get(key)
+            if cached is not None and cached[0] == fingerprint:
+                out.extend(cached[1])
+                continue
+            entries: list[dict[str, str]] = []
+            for skill_md in files:
                 description = self._read_desc(skill_md)
                 if description is None:
                     continue  # bad file: already warned in _read_desc; kept out of the index
-                out.append(
+                entries.append(
                     {
                         "name": skill_md.parent.name,
                         "description": description,
                         "path": str(skill_md),
                     }
                 )
+            self._scan_cache[key] = (fingerprint, entries)
+            out.extend(entries)
         return out
 
     @staticmethod

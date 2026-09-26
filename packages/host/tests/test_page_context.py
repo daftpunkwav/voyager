@@ -33,9 +33,14 @@ def test_page_context_reaches_agent(tmp_path) -> None:
         assert "notes=36" in rendered
         assert "当前选中: langgraph notes" in rendered
 
-        # Context assembly: the builder output contains the "user's current page" layer
-        system = agent_app.master._spawner._build_system(None, "orchestrator")  # Backend handle
-        assert "用户当前页面" in system and "36 notes" in system
+        # Context assembly: the "user's current page" layer renders in the
+        # per-turn volatile block (engine.turn appends it as one trailing user
+        # row), not in the stable system head
+        spawner = agent_app.master._spawner  # Backend handle
+        system = spawner._build_system(None, "orchestrator")
+        assert "用户当前页面" not in system
+        turn_ctx = spawner._build_turn_context(None, "orchestrator", "")
+        assert "用户当前页面" in turn_ctx and "36 notes" in turn_ctx
 
 
 def test_activity_report_event_chain(tmp_path) -> None:

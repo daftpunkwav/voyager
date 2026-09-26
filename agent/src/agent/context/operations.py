@@ -24,14 +24,14 @@ if TYPE_CHECKING:
     from agent.engine.instance import SubagentInstance
 
 
-def _memory_cards_tokens(system: str) -> int:
-    """Estimated tokens of the resident memory-card layer inside the system
-    prompt (0 when the layer is absent)."""
-    start = system.find(MEMORY_CARDS_HEADER)
+def _memory_cards_tokens(turn_context: str) -> int:
+    """Estimated tokens of the memory-card layer inside the instance's most
+    recent volatile context block (0 when the layer is absent)."""
+    start = turn_context.find(MEMORY_CARDS_HEADER)
     if start < 0:
         return 0
-    end = system.find("\n\n【", start + len(MEMORY_CARDS_HEADER))
-    block = system[start:] if end < 0 else system[start:end]
+    end = turn_context.find("\n\n【", start + len(MEMORY_CARDS_HEADER))
+    block = turn_context[start:] if end < 0 else turn_context[start:end]
     return estimate_text(block)
 
 
@@ -40,10 +40,10 @@ def context_status(*, instance: SubagentInstance) -> dict[str, Any]:
     plus the share taken by the resident memory cards and the prefix-cache
     health the instance's sentinel has accumulated."""
     status = instance.governor().status(instance.context_view())
-    # The system prompt is rebuilt per turn and kept on the instance, so the
-    # card share is measurable between turns too (the view then holds only
+    # The volatile block is re-rendered per turn and kept on the instance, so
+    # the card share is measurable between turns too (the view then holds only
     # the cross-turn history)
-    status["memory_cards_tokens"] = _memory_cards_tokens(str(instance.system_prompt or ""))
+    status["memory_cards_tokens"] = _memory_cards_tokens(str(instance._turn_context or ""))
     status["prefix_cache"] = instance.prefix_watch.health()
     return status
 

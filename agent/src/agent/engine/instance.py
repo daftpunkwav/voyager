@@ -155,10 +155,15 @@ class SubagentInstance:
     parent_run_id: str = ""  # dispatching instance's id (cancel cascade); "" = top-level
     build_system: Callable[[TaskBook, str, str], str] | None = None
     # (task, persona key, turn input) -> system prompt. Injected by the
-    # spawner and called fresh each turn in run_turn, so style/profile/page/
-    # digest/skill-index changes apply to the very next message; no builder
-    # reference held, avoiding a circular import. The third argument feeds
-    # the memory read policy's resident relevance layer.
+    # spawner and called fresh each turn in run_turn, so style/profile/skill
+    # changes apply to the very next message; no builder reference held,
+    # avoiding a circular import. The third argument feeds the memory read
+    # policy's resident relevance layer.
+    build_turn_context: Callable[[TaskBook, str, str], str] | None = None
+    # (task, persona key, turn input) -> the per-turn volatile block (memory
+    # cards, relevance recall, subagent digests, current page, plan gate),
+    # rendered into ONE trailing user-role row by engine.turn. None/"" (the
+    # test default) means no context row is appended.
     deadline: Any | None = (
         None  # runtime.deadline.Deadline (wall-clock caps), set by master per turn
     )
@@ -190,6 +195,10 @@ class SubagentInstance:
     _turn_messages: list[dict[str, Any]] | None = field(default=None, init=False, repr=False)
     # Live reference to the in-turn ReAct messages (run_mode appends in place);
     # _on_step uses it to capture mid-turn snapshots, cleared when the turn ends
+    _turn_context: str = field(default="", init=False, repr=False)
+    # The most recent per-turn volatile block (memory cards / recall / digests
+    # / page / plan gate) as rendered for the trailing context row; kept so
+    # context_status can measure the card share between turns too
 
     @property
     def status(self) -> RunStatus:
@@ -253,15 +262,21 @@ class SubagentInstance:
         return await turn.run_turn(self, user_text, member=member)
 
     def _system_message(self, system_prompt: str = "") -> dict[str, Any]:
-        """System entry: persona layers plus the per-turn context status line.
+        """System entry: the stable persona layers only.
 
-        The status travels inside the one system message (a second system row
-        would be pruned like ordinary content by the compressor), rebuilt each
-        turn so the model always sees current window facts and can compact
-        proactively before heavy work. An explicit prompt (member turn) wins
-        over the resident one.
+        The per-turn context status line moved out of this message: providers
+        cache the byte-prefix of the whole request, so a per-turn change inside
+        the system row re-bills the entire history that follows it. The status
+        line now rides the trailing turn-context row (engine.turn) instead.
+        An explicit prompt (member turn) wins over the resident one.
         """
         base = system_prompt or self.system_prompt
+        return {"role": "system", "content": base}
+
+    def context_status_line(self) -> str:
+        """Bucketed context-usage line for the trailing turn-context row:
+        current window facts so the model can compact proactively before heavy
+        work. 5%-bucket quantized, so the bytes stay stable most turns."""
         status = usage_status(
             ContextWindow(
                 window_tokens=self.budget.window_tokens,
@@ -271,8 +286,7 @@ class SubagentInstance:
             self.usage,
             auto_compact_at=self.budget.auto_compact_at,
         )
-        line = render_status_line(status, session=self.session)
-        return {"role": "system", "content": f"{base}\n\n{line}"}
+        return render_status_line(status, session=self.session)
 
     def context_view(self) -> list[dict[str, Any]]:
         """The live transcript: in-turn messages while running, else the
