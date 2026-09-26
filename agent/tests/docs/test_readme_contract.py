@@ -1,4 +1,4 @@
-"""README contract audit (T-22.8): every enumerated package
+"""README contract audit: every enumerated package
 README carries the four contract sections plus Known Limitations and
 Deferred Work. Pure-mechanism packages are exempt from Model Experience via
 the frozen MODEL_AGNOSTIC list; missing READMEs must join an exemption list

@@ -1,4 +1,4 @@
-"""Evaluation baseline (phase 22, T-22.5): fixed task scenarios replayed on
+"""Evaluation baseline: fixed task scenarios replayed on
 FakeLLM scripts with deterministic assertions on tool-call sequences, final
 state, and budget behavior. Fully offline and hermetic — real-model
 evaluation is triggered manually against the same scenarios.

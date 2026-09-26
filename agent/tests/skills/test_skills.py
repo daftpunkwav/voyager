@@ -166,3 +166,37 @@ class TestOrganizer:
         org = SkillOrganizer(ep)
         assert await org.propose(min_count=3) == []
         assert not (tmp_path / "skills").exists()
+
+
+class TestLoaderToleranceAndCache:
+    def test_unreadable_file_skipped_from_index(self, tmp_path) -> None:
+        """A SKILL.md that fails to read (non-UTF-8) is skipped per file with a
+        warning; the rest of the index still loads."""
+        good = tmp_path / "good"
+        good.mkdir()
+        (good / "SKILL.md").write_text("# good skill\n", encoding="utf-8")
+        bad = tmp_path / "bad"
+        bad.mkdir()
+        (bad / "SKILL.md").write_bytes(b"\xff\xfe\x81\x81")
+        index = SkillLoader([tmp_path]).index()
+        assert [i["name"] for i in index] == ["good"]
+
+    def test_full_text_missing_or_broken_raises_key_error(self, tmp_path) -> None:
+        loader = SkillLoader([tmp_path])
+        try:
+            loader.full_text("nope")
+            raise AssertionError("expected KeyError")
+        except KeyError as exc:
+            assert "unknown skill" in str(exc)
+
+    def test_index_reflects_edits_without_reloader(self, tmp_path) -> None:
+        """The per-root (path, mtime) cache serves unchanged trees and picks up
+        edited descriptions on the next scan through the same loader."""
+        d = tmp_path / "s"
+        d.mkdir()
+        (d / "SKILL.md").write_text("# old description" + chr(10), encoding="utf-8")
+        loader = SkillLoader([tmp_path])
+        assert loader.index()[0]["description"] == "old description"
+        assert loader.index()[0]["description"] == "old description"  # cached, same bytes
+        (d / "SKILL.md").write_text("# new description" + chr(10), encoding="utf-8")
+        assert loader.index()[0]["description"] == "new description"

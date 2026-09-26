@@ -1,4 +1,4 @@
-"""Provenance fencing (T-21.4): external content is data, never instructions.
+"""Provenance fencing: external content is data, never instructions.
 
 Injected instruction text travels inside the fence and can never cross the
 role boundary: markers only ever wrap tool-result payloads (the web tools),

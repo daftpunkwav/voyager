@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 BRAND_RE = re.compile(r"voyager|repopilot", re.IGNORECASE)
 QUOTED_RE = re.compile(r"""['"]([^'"\n]{1,64})['"]""")
 

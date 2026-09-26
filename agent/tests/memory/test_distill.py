@@ -4,13 +4,14 @@ malformed or degraded output.
 """
 
 import json
+from typing import cast
 
-from agent.llm import FakeLLM, LLMReply
+from agent.llm import FakeLLM, LLMClient, LLMReply
 from agent.memory import Memory
 from agent.memory.distill import Distiller
 
 
-def _settings(values: dict[str, int]):
+def _settings(values: dict[str, object]):
     class _S:
         def get(self, key: str):
             return values.get(key)
@@ -165,3 +166,40 @@ async def test_exact_duplicate_fact_not_rewritten(tmp_path) -> None:
     await coro  # model repeats the same fact for the new window
     hits = memory.semantic.query(keyword="voyager")
     assert len(hits) == 1
+
+
+class TestDistillDegradation:
+    async def test_llm_failure_skips_and_keeps_cursor(self, tmp_path) -> None:
+        """A failing distillation LLM call is swallowed (never surfaces as chat
+        noise) and the cursor stays put, so the same entries retry next time."""
+        calls = 0
+
+        class _BoomLLM:
+            async def complete(self, _messages):
+                nonlocal calls
+                calls += 1
+                raise RuntimeError("provider down")
+
+        mem = _memory(tmp_path)
+        for i in range(6):
+            mem.working.add("user", f"msg {i}")
+        distiller = Distiller(
+            llm=cast(LLMClient, _BoomLLM()),
+            memory=mem,
+            settings=_settings({"agent.memory.distill_interval": 1}),
+        )
+        job = distiller.maybe_distill()
+        assert job is not None
+        await job
+        assert calls == 1
+        assert distiller._cursor == -1  # nothing consumed
+        mem.close()
+
+    async def test_broken_interval_setting_disables(self, tmp_path) -> None:
+        """A non-numeric interval reads as disabled instead of raising."""
+        mem = _memory(tmp_path)
+        distiller = Distiller(
+            llm=FakeLLM(), memory=mem, settings=_settings({"agent.memory.distill_interval": "bad"})
+        )
+        assert distiller.maybe_distill() is None
+        mem.close()

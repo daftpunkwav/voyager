@@ -94,3 +94,11 @@ def test_templates_render_to_wire_text():
         auto_compact_at_pct=75,
     ).startswith("[Context status] window 100 tok")
     assert P.orchestrator.chat_goal.startswith("与用户对话")
+
+
+class TestGlobalRules:
+    def test_shape_locked(self) -> None:
+        """Locks only the count and the first rule's prefix, not the full text."""
+        rules = P.common.global_rules.splitlines()
+        assert len(rules) == 9
+        assert rules[0].startswith("Honesty first")

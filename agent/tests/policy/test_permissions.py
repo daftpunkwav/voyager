@@ -43,9 +43,9 @@ class TestToolClass:
         assert TOOL_CLASS["agent_instance.cancel"] == CLASS_D
 
     def test_table_tracks_the_real_roster(self, tmp_path) -> None:
-        """No stale keys: every entry names a live roster tool (the P1 flat
-        names died with the aggregation; a leftover key would classify nothing
-        while the real tool reads as unknown=D)."""
+        """No stale keys: every entry names a live roster tool (the flat
+        per-capability names died with the aggregation; a leftover key would
+        classify nothing while the real tool reads as unknown=D)."""
         from agent.build import build_agent
 
         app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
@@ -69,7 +69,7 @@ class TestToolClass:
         assert tool_class_of("no-such-tool") == CLASS_D
 
     def test_action_key_overrides_tool_default(self) -> None:
-        # The P3 aggregation re-keys this table to "tool.action" entries with
+        # The action-keyed aggregation re-keys this table to "tool.action" entries with
         # the tool-level entry as default; prove the lookup order now.
         TOOL_CLASS["session"] = CLASS_R
         TOOL_CLASS["session.delete"] = CLASS_D
@@ -160,8 +160,9 @@ class TestModes:
 
     def test_no_dangerous_allows_aggregated_read_tools(self) -> None:
         """The aggregated context/extension surfaces must not fall through to
-        unknown=D: their P1 flat names (context_status, list_plugins, ...) are
-        gone, so the tool-level keys are what read_only/no_dangerous consult."""
+        unknown=D: their flat per-capability names (context_status,
+        list_plugins, ...) are gone, so the tool-level keys are what
+        read_only/no_dangerous consult."""
         rp = _resolver({"mode": "no_dangerous", "deny": [], "allow": []})
         assert rp.check("context", {"action": "status"}) is None
         assert rp.check("extension", {"kind": "plugin", "action": "list"}) is None

@@ -1,9 +1,10 @@
-"""Tests for resident system-prompt layer budgets (Phase A).
+"""Tests for context-layer budgets.
 
-Every always-resident layer (skill index, profile, task brief, digests,
-pages, MCP instructions) carries its own count/character budget from
-ContextBudget; a zero budget omits the layer. Truncation is deterministic
-(head kept) so the provider prefix cache stays stable.
+Every layer carries its own count/character budget from ContextBudget —
+the resident head layers (skill index, profile, task brief, MCP
+instructions) and the per-turn volatile layers (memory cards, recall,
+digests, pages) alike; a zero budget omits the layer. Truncation is
+deterministic (head kept) so renders stay byte-stable.
 """
 
 from agent.context import ContextBuilder, PageContextRegistry
