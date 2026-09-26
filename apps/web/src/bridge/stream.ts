@@ -91,9 +91,22 @@ function connect(): void {
   };
 }
 
+/** Compiled subscription patterns: every SSE frame runs matchPattern once per
+ *  handler pattern, so each pattern compiles once here instead of once per
+ *  frame (call sites pass static constant patterns; the reset guard only
+ *  exists so a hypothetical dynamic-pattern caller cannot grow the map
+ *  without bound). */
+const patternCache = new Map<string, RegExp>();
+const PATTERN_CACHE_CAP = 256;
+
 function matchPattern(pattern: string, type: string): boolean {
   // Glob semantics: '*' matches any (possibly empty) substring, in any position.
-  const re = new RegExp('^' + pattern.split('*').map(escapeRe).join('.*') + '$');
+  let re = patternCache.get(pattern);
+  if (re === undefined) {
+    if (patternCache.size >= PATTERN_CACHE_CAP) patternCache.clear();
+    re = new RegExp('^' + pattern.split('*').map(escapeRe).join('.*') + '$');
+    patternCache.set(pattern, re);
+  }
   return re.test(type);
 }
 
