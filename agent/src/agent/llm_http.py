@@ -759,8 +759,13 @@ class HttpLLM:
     def _merge_tool_fragment(acc: dict[int, dict[str, Any]], frag: dict[str, Any]) -> None:
         """Accumulate one streaming tool-call fragment by index: arguments
         stream in pieces; some compat endpoints resend the full id/name on
-        every fragment, so both are overwritten (idempotent), never appended."""
-        idx = int(frag.get("index", 0))
+        every fragment, so both are overwritten (idempotent), never appended.
+
+        ``or 0`` (not a default arg): the wire type is integer, but some
+        compatible gateways emit "index": null — that must degrade to the
+        first fragment, not raise int(None) TypeError mid-stream. Same
+        null-safe semantics as packages/llm's chat parser."""
+        idx = int(frag.get("index") or 0)
         slot = acc.setdefault(idx, {"id": "", "name": "", "arguments": ""})
         if frag.get("id"):
             slot["id"] = frag["id"]

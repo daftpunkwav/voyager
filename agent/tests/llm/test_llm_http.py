@@ -352,6 +352,57 @@ class TestStream:
         assert final.tool_calls[0].name == "too"  # split name reassembled
         assert final.tool_calls[0].arguments == {"a": 1}
 
+    async def test_stream_tool_fragment_null_index_degrades_to_zero(self) -> None:
+        """A gateway emitting "index": null must degrade to the first
+        fragment slot (packages/llm's ``or 0`` semantics), not raise
+        int(None) TypeError mid-stream."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            chunks = [
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": None,
+                                        "id": "c1",
+                                        "function": {"name": "too", "arguments": '{"a"'},
+                                    },
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {"index": 0, "function": {"arguments": ": 1}"}},
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "DONE",
+            ]
+            body = b"".join(
+                f"data: {json.dumps(c)}\n\n".encode()
+                if isinstance(c, dict)
+                else b"data: [DONE]\n\n"
+                for c in chunks
+            )
+            return httpx.Response(200, content=body)
+
+        final = None
+        async for ev in _client(handler).complete_stream(MSGS):
+            if ev.final is not None:
+                final = ev.final
+        assert final is not None
+        assert final.tool_calls[0].name == "too"
+        assert final.tool_calls[0].arguments == {"a": 1}
+
     async def test_stream_tool_calls_keep_preamble_text(self) -> None:
         """A tool-call round that streamed answer text first must carry that
         text on the final reply, same as the non-streaming parse — the text
