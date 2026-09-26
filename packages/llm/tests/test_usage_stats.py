@@ -91,6 +91,33 @@ class TestUsageStatsContract:
         assert "top" not in stats and stats["recent"] == [] and stats["by_day"] == []
 
 
+class TestCorruptRows:
+    def test_corrupt_provider_json_degrades_not_crashes(self, tmp_path) -> None:
+        """A corrupt models/models_meta JSON cell (external edit / legacy
+        write) degrades to the empty default in get()/list() instead of
+        raising out of the read and hiding every provider behind one bad
+        row."""
+        store = _store(tmp_path)
+        store.upsert(
+            {
+                "id": "p2",
+                "display_name": "Broken",
+                "base_url": "https://example.test/v1",
+                "api_format": "chat",
+                "models": ["m1"],
+            }
+        )
+        store._conn.execute("UPDATE providers SET models='{broken' WHERE id='p2'")
+        store._conn.execute("UPDATE providers SET models_meta='[not-an-object]' WHERE id='p1'")
+        store._conn.commit()
+        got = store.get("p2")
+        assert got is not None
+        assert got["models"] == [] and got["models_meta"] == {}
+        listed = {p["id"]: p for p in store.list(include_disabled=True)}
+        assert listed["p2"]["models"] == []
+        assert listed["p1"]["models"] == ["m1", "m2"] and listed["p1"]["models_meta"] == {}
+
+
 class TestMigration:
     def test_older_db_gains_cached_tokens_column(self, tmp_path) -> None:
         db = tmp_path / "llm.db"

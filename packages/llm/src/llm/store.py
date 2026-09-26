@@ -357,8 +357,21 @@ class ProviderStore:
 
 def _row(r: tuple) -> dict[str, Any]:
     d = dict(zip(_COLS, r))
-    d["models"] = json.loads(d["models"])
-    d["models_meta"] = json.loads(d["models_meta"])
+    # Tolerant loads: a corrupt JSON cell (external edit / legacy write)
+    # degrades to the empty default instead of raising out of get()/list()
+    # and hiding every provider behind one bad row.
+    try:
+        d["models"] = json.loads(d["models"])
+    except ValueError:
+        d["models"] = []
+    try:
+        d["models_meta"] = json.loads(d["models_meta"])
+    except ValueError:
+        d["models_meta"] = {}
+    if not isinstance(d["models"], list):
+        d["models"] = []
+    if not isinstance(d["models_meta"], dict):
+        d["models_meta"] = {}
     d["enabled"] = bool(d["enabled"])
     d["custom"] = bool(d["custom"])
     return d
