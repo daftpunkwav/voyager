@@ -357,8 +357,13 @@ def _tools_to_wire(specs: list[ToolSpec] | None) -> list[dict[str, Any]] | None:
 def _parse_tool_calls(raw: list[dict[str, Any]] | None) -> tuple[ToolCall, ...]:
     """Wire tool_calls -> internal ToolCall tuple; malformed argument JSON
     degrades to an empty argument dict so the loop can surface a tool error
-    instead of crashing."""
+    instead of crashing. Ids are made unique within the response: a compat
+    provider echoing the same id on two calls would otherwise replay duplicate
+    tool_call ids in the history, which strict endpoints reject on every later
+    round. Results pair off ToolCall.id, so renaming the duplicate here keeps
+    the transcript consistent."""
     calls: list[ToolCall] = []
+    seen: set[str] = set()
     for i, c in enumerate(raw or []):
         fn = c.get("function") or {}
         try:
@@ -368,9 +373,13 @@ def _parse_tool_calls(raw: list[dict[str, Any]] | None) -> tuple[ToolCall, ...]:
             args = {}
         if not isinstance(args, dict):
             args = {}
+        tid = str(c.get("id") or f"call_{i}")
+        while tid in seen:
+            tid += "_dup"
+        seen.add(tid)
         calls.append(
             ToolCall(
-                id=str(c.get("id") or f"call_{i}"),
+                id=tid,
                 name=str(fn.get("name", "")),
                 arguments=args,
             )

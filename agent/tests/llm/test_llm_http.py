@@ -117,6 +117,23 @@ class TestComplete:
         call = reply.tool_calls[0]
         assert (call.id, call.name, call.arguments) == ("c1", "t", {"a": 2})
 
+    async def test_duplicate_tool_call_ids_made_unique(self) -> None:
+        """A compat provider echoing the same id on two calls would replay
+        duplicate tool_call ids in the history, which strict endpoints reject
+        on every later round; the duplicate is renamed at parse time (empty
+        ids keep their call_N synthesis, already unique by index)."""
+        from agent.llm_http import _parse_tool_calls
+
+        calls = _parse_tool_calls(
+            [
+                {"id": "call_0", "function": {"name": "a", "arguments": "{}"}},
+                {"id": "call_0", "function": {"name": "b", "arguments": "{}"}},
+                {"function": {"name": "c", "arguments": "{}"}},
+            ]
+        )
+        assert [c.id for c in calls] == ["call_0", "call_0_dup", "call_2"]
+        assert [c.name for c in calls] == ["a", "b", "c"]
+
     async def test_http_error_degrades_readable(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(401, json={"error": {"message": "bad key"}})
