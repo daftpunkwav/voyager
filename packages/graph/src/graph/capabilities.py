@@ -57,10 +57,13 @@ def _require_deps() -> Deps:
 
 
 def _ensure_node_id(store: GraphStore, project: str, qn: str, *, source: str, actor: str) -> str:
-    """Find a node id by qualified_name, creating a placeholder Term node if absent."""
-    for row in store.query(project, keyword=qn, limit=5)["nodes"]:
-        if row["qualified_name"] == qn:
-            return row["id"]
+    """Find a node id by exact effective qualified_name, creating a placeholder
+    Term node if absent. Substring search would silently miss the real node
+    whenever >=5 substring matches crowd it out of the window and attach the
+    edge to a duplicate placeholder instead."""
+    existing = store.node_id_by_qn(project, qn)
+    if existing is not None:
+        return existing
     node = store.upsert_node(
         project, "Term", qn, qn, {"placeholder": True}, source=source, actor=actor
     )
@@ -241,6 +244,8 @@ def graph_guide() -> dict:
     registry, name="query_graph", description="Query a project graph (filterable by label/keyword)"
 )
 def query_graph(project: str, label: str = "", keyword: str = "", limit: int = 200) -> dict:
+    # Clamp like l0_view: the raw value goes straight into SQL LIMIT
+    limit = min(max(1, limit), 2000)
     return _require_deps().store.query(project, label=label or None, keyword=keyword, limit=limit)
 
 
@@ -309,9 +314,13 @@ def find_path(project: str, a: str, b: str, max_hops: int = 4, edge_filter: str 
     name="set_nodes",
     description="Batch write/update nodes (fewer AI pipeline round trips)",
 )
-def set_nodes(project: str, nodes: list[dict]) -> dict:
+def set_nodes(project: str, nodes: list[dict], _actor: ActorRef | None = None) -> dict:
     ai_guide.validate_nodes_batch(project, nodes)
     deps = _require_deps()
+    # Same provenance rule as the single write path: never hardcode it, or a
+    # caller's real identity is lost and source-based cleanup misfires.
+    actor_id = _actor.id if _actor else ""
+    source = "ai" if (_actor and _actor.kind.value == "agent") else "manual"
     out = []
     for n in nodes:
         out.append(
@@ -321,8 +330,8 @@ def set_nodes(project: str, nodes: list[dict]) -> dict:
                 n["name"],
                 n.get("qualified_name", ""),
                 n.get("attrs"),
-                source="ai",
-                actor="agent.batch",
+                source=source,
+                actor=actor_id,
             )
         )
     return {"project": project, "count": len(out), "nodes": out}
@@ -333,9 +342,11 @@ def set_nodes(project: str, nodes: list[dict]) -> dict:
     name="set_relationships",
     description="Batch write/update relationships (placeholder nodes auto-created)",
 )
-def set_relationships(project: str, relations: list[dict]) -> dict:
+def set_relationships(project: str, relations: list[dict], _actor: ActorRef | None = None) -> dict:
     ai_guide.validate_relations_batch(project, relations)
     deps = _require_deps()
+    actor_id = _actor.id if _actor else ""
+    source = "ai" if (_actor and _actor.kind.value == "agent") else "manual"
     out = []
     for r in relations:
         src = r["src"]
@@ -343,12 +354,12 @@ def set_relationships(project: str, relations: list[dict]) -> dict:
         out.append(
             deps.store.upsert_edge(
                 project,
-                _ensure_node_id(deps.store, project, src, source="ai", actor="agent.batch"),
-                _ensure_node_id(deps.store, project, dst, source="ai", actor="agent.batch"),
+                _ensure_node_id(deps.store, project, src, source=source, actor=actor_id),
+                _ensure_node_id(deps.store, project, dst, source=source, actor=actor_id),
                 r["type"],
                 r.get("attrs"),
-                source="ai",
-                actor="agent.batch",
+                source=source,
+                actor=actor_id,
             )
         )
     return {"project": project, "count": len(out), "edges": out}

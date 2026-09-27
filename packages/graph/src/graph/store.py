@@ -127,6 +127,19 @@ class GraphStore:
             ).fetchone()
         return _row(_NODE_COLS, row) if row else None
 
+    def node_id_by_qn(self, project: str, qn: str) -> str | None:
+        """Exact effective-qualified-name lookup (effective qn = qualified_name,
+        falling back to name when empty — the same rule upsert_node applies).
+        Write paths must resolve endpoints by exact match, never by substring."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id FROM nodes WHERE project=?"
+                " AND CASE WHEN qualified_name != '' THEN qualified_name ELSE name END = ?"
+                " LIMIT 1",
+                (project, qn),
+            ).fetchone()
+        return row[0] if row else None
+
     def upsert_edge(
         self,
         project: str,
