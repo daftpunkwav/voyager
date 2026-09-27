@@ -213,9 +213,6 @@ class ContextBuilder:
             layers.append(plan_section)
         return "\n\n".join(layers)
 
-    def messages(self, system: str, history: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        return [{"role": "system", "content": system}, *history]
-
 
 __all__ = [
     "MEMORY_CARDS_HEADER",

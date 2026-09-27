@@ -19,7 +19,6 @@ from __future__ import annotations
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
-from enum import Enum
 from typing import Any
 
 from agent.context.backoff import CompactionBackoff
@@ -66,18 +65,6 @@ def _paired_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 del out[i:]
             break
     return out
-
-
-class SubStatus(str, Enum):
-    """Kept importable for older external readers; the live state machine is
-    runtime.state.RunStatus — no runtime code branches on this enum."""
-
-    CREATED = "created"
-    RUNNING = "running"
-    WAITING_INPUT = "waiting_input"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
 
 
 @dataclass(frozen=True)
@@ -371,6 +358,3 @@ class SubagentInstance:
         self, kind: str, name: str, summary: str, detail: dict[str, Any] | None = None
     ) -> None:
         return await turn.on_step(self, kind, name, summary, detail)
-
-    def _mid_save_checkpoint(self) -> None:
-        turn.mid_save_checkpoint(self)
