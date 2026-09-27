@@ -13,6 +13,8 @@ Responsibilities:
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Request
 from platform_contracts import (
     LOCAL_USER,
@@ -175,7 +177,11 @@ def build_activity_router(bus: EventBus, limiter: RateLimiter) -> APIRouter:
             before = bus.log.latest_seq() + 1
             kept: list[tuple[int, Event]] = []
             for _round in range(6):
-                chunk = bus.log.read_before(before_seq=before, types=sql_types, limit=cap)
+                # EventLog reads hold a lock and fetchall synchronously: run
+                # them off the event loop, as get_messages does (chat.py)
+                chunk = await asyncio.to_thread(
+                    bus.log.read_before, before_seq=before, types=sql_types, limit=cap
+                )
                 if not chunk:
                     break
                 before = chunk[0][0]
@@ -184,7 +190,9 @@ def build_activity_router(bus: EventBus, limiter: RateLimiter) -> APIRouter:
                     break
             rows = kept[-cap:]
         else:
-            rows = bus.log.read_after(after_seq=after_seq, types=type_list, limit=cap)
+            rows = await asyncio.to_thread(
+                bus.log.read_after, after_seq=after_seq, types=type_list, limit=cap
+            )
 
         return {"events": [{"seq": seq, **e.to_dict()} for seq, e in rows if _wanted(e)]}
 

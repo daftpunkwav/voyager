@@ -229,7 +229,10 @@ def build_chat_router(
             return rows[-(max_rows + 1) :] if after_seq > 0 else rows
 
         matched: list[tuple[int, Event]] = []
-        if after_seq > 0:  # forward: stop at the first max_rows+1 matches
+        # Direction check mirrors the unfiltered branch above: before_seq wins
+        # when both cursors arrive, so the paging direction never flips merely
+        # because a session filter is present.
+        if before_seq is None and after_seq > 0:  # forward: stop at the first max_rows+1 matches
             cursor = after_seq
             while len(matched) <= max_rows:
                 rows = read(after_seq=cursor, types=types, limit=_FILTER_CHUNK)
@@ -297,9 +300,12 @@ def build_chat_router(
         )
         has_more = len(rows) > max_rows
         if has_more:
-            # Over-page trim: backward reads keep the rows nearest the cursor
-            # (the tail of the ascending window), forward reads the head
-            rows = rows[-max_rows:] if after_seq <= 0 else rows[:max_rows]
+            # Over-page trim follows the same direction rule as _page:
+            # backward reads (before_seq wins) keep the rows nearest the
+            # cursor (the tail of the ascending window), forward reads the head
+            rows = (
+                rows[-max_rows:] if (before_seq is not None or after_seq <= 0) else rows[:max_rows]
+            )
         return {
             "has_more": has_more,
             "messages": [{"seq": seq, **e.to_dict()} for seq, e in rows],
@@ -438,7 +444,12 @@ async def _stream_events(
     async def replay_to_tail() -> AsyncGenerator[tuple[int, Event] | None, None]:
         nonlocal cursor
         while True:
-            rows = bus.log.read_after(after_seq=cursor, types=types, limit=_REPLAY_PAGE)
+            # Off the event loop: with a task.* glob this read_after walks the
+            # log in paged rounds while holding the EventLog lock, which would
+            # otherwise stall every concurrent request on one SSE connection.
+            rows = await asyncio.to_thread(
+                bus.log.read_after, after_seq=cursor, types=types, limit=_REPLAY_PAGE
+            )
             for seq, event in rows:
                 cursor = max(cursor, seq)
                 if wanted(event):
