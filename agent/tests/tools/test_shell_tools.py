@@ -28,6 +28,28 @@ class TestShellGuard:
             out = await bash(cmd, timeout=2)
             assert "[已拒绝]" in out, cmd
 
+    async def test_empty_command_rejected(self, tmp_path) -> None:
+        bash = shell_tools(tmp_path)["bash"].handler
+        out = await bash("   ", timeout=5)
+        assert "[已拒绝]" in out and "空命令" in out
+
+    async def test_unparseable_command_rejected(self, tmp_path) -> None:
+        """An unterminated quote fails argv parsing: refused up front instead
+        of silently exec'ing a truncated command."""
+        bash = shell_tools(tmp_path)["bash"].handler
+        out = await bash('python -c "print(1)', timeout=5)
+        assert "[已拒绝]" in out and "无法解析" in out
+
+    async def test_missing_workdir_refuses_without_fallback(self, tmp_path) -> None:
+        """A vanished workspace must fail the call: never fall back to the
+        process cwd, where the subprocess would land somewhere unexpected."""
+        gone = tmp_path / "vanished"
+        gone.mkdir()
+        bash = shell_tools(gone)["bash"].handler
+        gone.rmdir()
+        out = await bash(f"{sys.executable} -c print(1)", timeout=5)
+        assert "[失败]" in out and "工作目录不可用" in out
+
     async def test_normal_command_not_blocked(self, tmp_path) -> None:
         bash = shell_tools(tmp_path)["bash"].handler
         # Not via the shell: interpreter -c avoids Windows' builtin echo; no nested quotes so shlex does not mis-split in nt mode
