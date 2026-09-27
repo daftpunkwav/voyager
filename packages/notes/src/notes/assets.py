@@ -16,6 +16,7 @@ Responsibilities:
 
 from __future__ import annotations
 
+import asyncio
 import re
 import shutil
 import sqlite3
@@ -228,7 +229,10 @@ def register(registry: Registry) -> None:
                 ErrorSuffix.FORBIDDEN,
                 "Destination path escaped the workspace; check the workspace configuration",
             )
-        shutil.copy2(src_copy, dest)
+        # Copy off the event loop: an async handler stays on the loop (guards
+        # only offloads sync handlers), and a 20MB copy must not block it —
+        # same as sources/modules/doc/capabilities.py.
+        await asyncio.to_thread(shutil.copy2, src_copy, dest)
         safe_name = _UNSAFE_FILENAME_RE.sub("_", filename or src.name)[:120]
         store.add(
             {
