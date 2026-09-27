@@ -19,7 +19,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from platform_contracts import ErrorSuffix, ServiceError
-from platform_webguard import default_resolver, literal_ips, resolve_public
+from platform_webguard import ResolutionError, default_resolver, literal_ips, resolve_public
 
 log = logging.getLogger("llm.net_pin")
 
@@ -56,6 +56,16 @@ async def pinned_ip(provider: dict[str, Any]) -> str:
         return ips[0]
     try:
         return await resolve_public(url)
+    except ResolutionError as exc:
+        # Transient outage, not a policy violation: retryable (503-class),
+        # and the resolver detail stays in the log.
+        log.warning("provider host resolution failed: %s", exc)
+        raise ServiceError(
+            "llm",
+            ErrorSuffix.UNAVAILABLE,
+            f"provider host could not be resolved: {urlparse(url).hostname or ''}",
+            hint="Check network connectivity and the base_url in the settings page",
+        ) from None
     except ValueError as exc:
         # The raw ValueError names the intranet IP it resolved to; that
         # detail stays in the log, the agent gets a generic refusal.

@@ -12,6 +12,7 @@ which carries metering written directly at call sites (not parsed from logs).
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import sqlite3
 import threading
@@ -20,6 +21,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS providers (
@@ -51,6 +53,23 @@ CREATE TABLE IF NOT EXISTS usage (
 );
 CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage(ts);
 """
+
+
+def is_private_host(host: str) -> bool:
+    """Loopback/private/link-local/non-global hosts, judged literally from the
+    hostname without DNS resolution (keeps write-path and migration calls
+    non-blocking). Single source for the write path's private_endpoint flag
+    and the migration backfill."""
+    h = (host or "").lower().rstrip(".")
+    if h in {"localhost", "metadata.google.internal"} or h.endswith(".localhost"):
+        return True
+    try:
+        addr = ipaddress.ip_address(h)
+        mapped = getattr(addr, "ipv4_mapped", None)
+        return not (mapped or addr).is_global
+    except ValueError:
+        return False
+
 
 _COLS = (
     "id",
@@ -124,6 +143,17 @@ class ProviderStore:
             self._conn.execute(
                 "ALTER TABLE providers ADD COLUMN private_endpoint INTEGER NOT NULL DEFAULT 0"
             )
+            self._conn.commit()
+            # Backfill: every pre-migration row was written through the write
+            # path when private targets were USER-only, so a private base_url
+            # there was by definition USER-authorized — without this, an
+            # upgraded local-Ollama provider (hostname form, e.g. the built-in
+            # preset) would be refused at request time by the pin check.
+            for pid, base_url in self._conn.execute("SELECT id, base_url FROM providers"):
+                if is_private_host(urlparse(str(base_url)).hostname or ""):
+                    self._conn.execute(
+                        "UPDATE providers SET private_endpoint = 1 WHERE id = ?", (pid,)
+                    )
             self._conn.commit()
 
     def upsert(self, p: dict[str, Any]) -> str:

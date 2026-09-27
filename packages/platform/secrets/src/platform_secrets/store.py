@@ -81,19 +81,19 @@ class SecretStore:
 
     def _kdf_params(self) -> tuple[bytes, int]:
         """Per-store salt, created once and persisted next to the ciphertext;
-        the iteration count is stored so a future raise can still decrypt."""
-        with self._lock:
-            row = self._conn.execute("SELECT salt, iterations FROM secrets_kdf WHERE id = 0")
-            existing = row.fetchone()
-            if existing is None:
-                salt = os.urandom(16)
-                self._conn.execute(
-                    "INSERT INTO secrets_kdf (id, salt, iterations) VALUES (0, ?, ?)",
-                    (salt, _KDF_ITERATIONS),
-                )
-                self._conn.commit()
-                return salt, _KDF_ITERATIONS
-            return bytes(existing[0]), int(existing[1])
+        the iteration count is stored so a future raise can still decrypt.
+        Caller holds self._lock (the lock is non-reentrant)."""
+        row = self._conn.execute("SELECT salt, iterations FROM secrets_kdf WHERE id = 0")
+        existing = row.fetchone()
+        if existing is None:
+            salt = os.urandom(16)
+            self._conn.execute(
+                "INSERT INTO secrets_kdf (id, salt, iterations) VALUES (0, ?, ?)",
+                (salt, _KDF_ITERATIONS),
+            )
+            self._conn.commit()
+            return salt, _KDF_ITERATIONS
+        return bytes(existing[0]), int(existing[1])
 
     def _fernet(self) -> Fernet:
         if not self._material:
@@ -101,14 +101,16 @@ class SecretStore:
                 "no key material configured: set SECRETS_ENCRYPTION_KEY (or SECRET_KEY)"
             )
         # The 600k-round derivation runs once per store (startup cost of a
-        # few hundred ms), never on the hot get() path.
-        if self._fernet_instance is None:
-            salt, iterations = self._kdf_params()
-            digest = hashlib.pbkdf2_hmac(
-                "sha256", self._material.encode("utf-8"), salt, iterations, dklen=32
-            )
-            self._fernet_instance = Fernet(base64.urlsafe_b64encode(digest))
-        return self._fernet_instance
+        # few hundred ms), never on the hot get() path. Under the same lock
+        # as _kdf_params: concurrent first reads must derive exactly once.
+        with self._lock:
+            if self._fernet_instance is None:
+                salt, iterations = self._kdf_params()
+                digest = hashlib.pbkdf2_hmac(
+                    "sha256", self._material.encode("utf-8"), salt, iterations, dklen=32
+                )
+                self._fernet_instance = Fernet(base64.urlsafe_b64encode(digest))
+            return self._fernet_instance
 
     def set(self, key: str, plain: str) -> None:
         token = self._fernet().encrypt(plain.encode("utf-8")).decode("ascii")

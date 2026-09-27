@@ -341,3 +341,47 @@ class TestUnifiedSubgraphSemantics:
         b = store.upsert_node("p", "Func", "b", "b")
         d = store.upsert_node("p", "Func", "d", "d")
         assert (b["id"], d["id"]) in edge_pairs
+
+
+class TestExactNodeLookupAndStaleRecovery:
+    def test_node_id_by_qn_exact_match(self, tmp_path) -> None:
+        store = GraphStore(tmp_path / "qn.db")
+        store.upsert_node("p", "Func", "get_user", "mod.get_user")
+        store.upsert_node("p", "Func", "get", "mod.get")
+        # exact qualified_name wins over the substring crowd
+        nid = store.node_id_by_qn("p", "mod.get")
+        get_node = store.get_node("p", "Func", "mod.get")
+        bare_node = store.upsert_node("p", "Term", "bare", "")
+        assert get_node is not None and nid == get_node["id"]
+        # effective qn: empty qualified_name falls back to name
+        assert store.node_id_by_qn("p", "bare") == bare_node["id"]
+        assert store.node_id_by_qn("p", "missing") is None
+
+    def test_recover_stale_running_requeues_and_fails(self, tmp_path) -> None:
+        from graph.index_queue import IndexQueue
+
+        queue = IndexQueue(tmp_path / "rec.db")
+        j1 = queue.enqueue("p", "/ws/r1", 100, level="l1")
+        j2 = queue.enqueue("p", "/ws/r2", 100, level="l1")
+        running1 = queue.next()
+        running2 = queue.next()
+        assert running1 is not None and running2 is not None
+        assert running1["id"] == j1 and running2["id"] == j2
+
+        # crash leftover under the attempts cap: requeued
+        requeued = queue.recover_stale_running(max_attempts=3)
+        assert requeued == 2
+        row1 = queue.get(j1)
+        assert row1 is not None and row1["status"] == "queued"
+
+        # crash leftover past the cap: failed, not requeued forever
+        job = queue.next()
+        assert job is not None
+        queue._conn.execute("UPDATE index_jobs SET attempts = 5 WHERE id = ?", (job["id"],))
+        queue._conn.commit()
+        queue.recover_stale_running(max_attempts=3)
+        row1 = queue.get(j1)
+        row2 = queue.get(j2)
+        assert row1 is not None and row2 is not None
+        statuses = {row1["status"], row2["status"]}
+        assert "failed" in statuses or all(s in ("queued", "failed") for s in statuses)

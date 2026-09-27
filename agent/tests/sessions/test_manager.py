@@ -408,3 +408,29 @@ class TestSessionConcurrencyEdges:
             assert mgr.list() == []
         finally:
             app.close()
+
+
+class TestDeleteValidationOrder:
+    """A NOT_FOUND refusal must happen before any teardown: raising after
+    the instances/locks were dropped (and on_delete fired) would silently
+    discard a live in-memory session on a refused call."""
+
+    def test_delete_unknown_session_leaves_state_intact(self, tmp_path) -> None:
+        app = _app(tmp_path, FakeLLM())
+        try:
+            mgr = app.master.sessions
+            inst = mgr.resolve("")  # creates the default session in memory
+            sid = inst.session
+            # The store row is gone (another path deleted it), but the
+            # in-memory instance is alive
+            app.session_store.delete(sid)
+            assert sid in mgr._instances
+
+            with pytest.raises(ServiceError, match="not found"):
+                mgr.delete(sid)
+
+            # The refused delete dismantled nothing: the instance (with its
+            # tools and unpersisted history) survives for the next resolve
+            assert sid in mgr._instances
+        finally:
+            app.close()

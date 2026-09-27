@@ -1044,3 +1044,32 @@ class TestChatPaging:
             return items
 
         assert asyncio.run(scenario()) == [None, None]
+
+
+class TestRequestValidationEnvelope:
+    def test_query_validation_error_uses_unified_envelope(self, client) -> None:
+        """A malformed typed query parameter must land in the same error
+        envelope as every other client error — not FastAPI's bare
+        {"detail": [...]} 422 that clients cannot branch on."""
+        r = client.get("/api/chat/messages", params={"limit": "abc"})
+        assert r.status_code == 400
+        body = r.json()
+        assert body["error"]["code"] == "GATEWAY.INVALID_INPUT"
+        assert "limit" in body["error"]["message"]
+
+    def test_history_dual_cursor_prefers_before_seq(self, client) -> None:
+        """With both cursors given (session-filtered or not), before_seq wins:
+        the paging direction never flips merely because a filter is present."""
+        for i in range(5):
+            client.post(
+                "/api/chat/messages",
+                json={"content": f"m{i}", "session": "s-dual"},
+            )
+        rows = client.get(
+            "/api/chat/messages", params={"session": "s-dual", "before_seq": 4}
+        ).json()["messages"]
+        seqs = [m["seq"] for m in rows]
+        assert seqs and max(seqs) <= 3  # strictly older than the cursor
+        # same request without the session filter walks the same direction
+        rows_all = client.get("/api/chat/messages", params={"before_seq": 4}).json()["messages"]
+        assert [m["seq"] for m in rows_all][-1] <= 3

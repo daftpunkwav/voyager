@@ -58,6 +58,13 @@ def reject_nonglobal(
             )
 
 
+class ResolutionError(ValueError):
+    """DNS resolution itself failed (server unreachable, no answer) — as
+    opposed to resolving successfully into private space. Both are ValueError
+    to existing callers; the subclass lets them tell a transient outage from
+    a policy violation and map them to different error classes."""
+
+
 async def resolve_public(url: str, *, resolver: ResolverFn | None = None) -> str:
     """Resolve the URL's host and return one validated public IP; ValueError
     on syntax/intranet answers (callers map it into their error vocabulary).
@@ -75,8 +82,10 @@ async def resolve_public(url: str, *, resolver: ResolverFn | None = None) -> str
             # Failing closed: returning the raw hostname here would send an
             # unvalidated string back as if it were the pinned IP, reopening
             # the rebinding window on a second resolution. Callers surface
-            # ValueError in their own error vocabulary.
-            raise ValueError(f"DNS resolution failed for {host}: {exc}") from exc
+            # ValueError in their own error vocabulary; ResolutionError marks
+            # the transient-outage case so it is not reported as a policy
+            # violation.
+            raise ResolutionError(f"DNS resolution failed for {host}: {exc}") from exc
     if not ips:
         raise ValueError(f"{host} resolves to no address")
     for ip in ips:
@@ -108,6 +117,7 @@ def pinned_request(
 
 
 __all__ = [
+    "ResolutionError",
     "ResolverFn",
     "default_resolver",
     "literal_ips",

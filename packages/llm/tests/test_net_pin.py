@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 from llm.net_pin import pinned_ip
 from platform_contracts import ServiceError
+from platform_webguard import ResolutionError
 
 
 def _patch_resolver(monkeypatch, answers: dict[str, list[str]]):
@@ -49,18 +50,19 @@ class TestPinnedIp:
         assert "127.0.0.1" not in exc.value.body.message
         assert "127.0.0.1" not in (exc.value.body.hint or "")
 
-    async def test_dns_failure_maps_to_service_error(self, monkeypatch) -> None:
+    async def test_dns_failure_maps_to_unavailable_not_forbidden(self, monkeypatch) -> None:
+        """A transient outage (ResolutionError) is retryable UNAVAILABLE, not
+        a FORBIDDEN policy violation that would tell the agent to give up."""
         from llm import net_pin
 
         async def fake_resolve_public(url: str, *, resolver=None) -> str:
-            raise ValueError("DNS resolution failed for api.test: no answer")
+            raise ResolutionError("DNS resolution failed for api.test: no answer")
 
         monkeypatch.setattr(net_pin, "resolve_public", fake_resolve_public)
         provider = {"base_url": "https://api.test/v1"}
         with pytest.raises(ServiceError) as exc:
             await pinned_ip(provider)
-        # Refused either way; the raw DNS detail stays in the log
-        assert exc.value.body.code.endswith("FORBIDDEN")
+        assert exc.value.body.code.endswith("UNAVAILABLE")
         assert "no answer" not in exc.value.body.message
 
 
@@ -98,3 +100,66 @@ class TestHttpsEnforcement:
         user = ActorRef(kind=ActorKind.USER, id="local")
         out = validate_base_url("http://127.0.0.1:11434", user)
         assert out == "http://127.0.0.1:11434"
+
+
+class TestLegacyMigrationBackfill:
+    """Pre-flag rows get private_endpoint backfilled during the column
+    migration: an upgraded local-Ollama provider (the built-in preset is the
+    hostname form http://localhost:11434/v1) must keep working."""
+
+    def test_legacy_hostname_private_row_backfilled(self, tmp_path) -> None:
+        import sqlite3
+
+        db = tmp_path / "llm.db"
+        # Build the pre-migration schema by hand (no private_endpoint column)
+        conn = sqlite3.connect(db)
+        conn.executescript(
+            """
+            CREATE TABLE providers (
+                id TEXT PRIMARY KEY, display_name TEXT NOT NULL, preset_id TEXT NOT NULL DEFAULT '',
+                base_url TEXT NOT NULL, api_format TEXT NOT NULL, models TEXT NOT NULL DEFAULT '[]',
+                enabled INTEGER NOT NULL DEFAULT 1, custom INTEGER NOT NULL DEFAULT 0,
+                created_ts REAL NOT NULL, updated_ts REAL NOT NULL
+            );
+            """
+        )
+        conn.execute(
+            "INSERT INTO providers (id, display_name, base_url, api_format, created_ts, updated_ts)"
+            " VALUES ('p1', 'Ollama (local)', 'http://localhost:11434/v1', 'chat', 1, 1)"
+        )
+        conn.commit()
+        conn.close()
+
+        from llm.store import ProviderStore
+
+        store = ProviderStore(db)
+        row = store.get("p1")
+        assert row is not None and row["private_endpoint"] == 1
+
+    def test_legacy_public_row_stays_zero(self, tmp_path) -> None:
+        import sqlite3
+
+        db = tmp_path / "llm.db"
+        conn = sqlite3.connect(db)
+        conn.executescript(
+            """
+            CREATE TABLE providers (
+                id TEXT PRIMARY KEY, display_name TEXT NOT NULL, preset_id TEXT NOT NULL DEFAULT '',
+                base_url TEXT NOT NULL, api_format TEXT NOT NULL, models TEXT NOT NULL DEFAULT '[]',
+                enabled INTEGER NOT NULL DEFAULT 1, custom INTEGER NOT NULL DEFAULT 0,
+                created_ts REAL NOT NULL, updated_ts REAL NOT NULL
+            );
+            """
+        )
+        conn.execute(
+            "INSERT INTO providers (id, display_name, base_url, api_format, created_ts, updated_ts)"
+            " VALUES ('p2', 'Anthropic', 'https://api.anthropic.com', 'anthropic', 1, 1)"
+        )
+        conn.commit()
+        conn.close()
+
+        from llm.store import ProviderStore
+
+        store = ProviderStore(db)
+        row = store.get("p2")
+        assert row is not None and row["private_endpoint"] == 0

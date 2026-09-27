@@ -374,3 +374,40 @@ class TestReadOnlyMetadata:
             "set_github_token",
         ):
             assert registry.get(name).write is True, name
+
+
+class TestCloneTimeout:
+    async def test_hung_clone_times_out_and_kills(self, tmp_path, monkeypatch) -> None:
+        """A git clone that never finishes is cut off at the timeout: the
+        child is killed and reaped, and the failure surfaces (never a silent
+        hang that would stall the single-consumer queue forever)."""
+        import asyncio
+
+        import sources.modules.repo.worker as worker_mod
+
+        monkeypatch.setattr(worker_mod, "_CLONE_TIMEOUT_S", 0.05)
+        killed: list[bool] = []
+
+        class HungProc:
+            returncode = None
+
+            def __init__(self):
+                self._done = asyncio.Event()
+
+            async def communicate(self):
+                # Hangs like a wedged network — until killed, after which a
+                # real git would let the pipes drain and return
+                await self._done.wait()
+                return b"", b""
+
+            def kill(self):
+                killed.append(True)
+                self._done.set()
+
+        async def fake_exec(*args, **kw):
+            return HungProc()
+
+        monkeypatch.setattr(worker_mod.asyncio, "create_subprocess_exec", fake_exec)
+        with pytest.raises(RuntimeError, match="timed out"):
+            await worker_mod._git_clone("o", "n", tmp_path / "dest")
+        assert killed == [True]

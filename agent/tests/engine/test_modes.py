@@ -9,6 +9,7 @@ import pytest
 from agent.engine import Mode, ModeLimits, run_mode
 from agent.llm import FakeLLM, LLMReply, ToolCall, Usage
 from agent.policy import PolicyEngine
+from agent.runtime.events import RuntimeEvent
 from agent.tools import AgentTool, Toolbelt
 
 
@@ -921,3 +922,55 @@ class TestSurrenderSteps:
         assert "已达工具调用上限" in result
         surrenders = [d for k, n, d in steps if k == "system" and n == "surrender"]
         assert surrenders and surrenders[-1]["reason"] == "tool_cap"
+
+
+class TestTokenBudgetAccountingOrder:
+    """A budget-surrendering round is fully accounted for (LLM_COMPLETED +
+    the llm step + raw log) BEFORE the surrender note: the tokens were really
+    spent, so the round must not vanish from the trajectory."""
+
+    async def test_budget_round_records_completed_and_step_before_surrender(
+        self,
+    ) -> None:
+        timeline: list[str] = []
+        llm = FakeLLM(
+            [
+                # Round 1 spends budget on a tool call and continues; round 2
+                # crosses the cap (1000 + 1000 >= 1500) and must surrender
+                LLMReply(
+                    text="checking",
+                    usage=Usage(input_tokens=900, output_tokens=100),
+                    tool_calls=(ToolCall("1", "echo_tool", {"x": "a"}),),
+                ),
+                LLMReply(text="done", usage=Usage(input_tokens=900, output_tokens=100)),
+            ]
+        )
+
+        async def on_step(kind: str, name: str, summary: str, detail: dict | None = None) -> None:
+            if kind == "llm":
+                timeline.append(f"step:{name}")
+
+        async def on_event(name: str, **kw) -> None:
+            if name == RuntimeEvent.LLM_COMPLETED:
+                timeline.append(f"event:{kw.get('round')}")
+
+        async def on_raw(round_n, messages, reply) -> None:
+            timeline.append(f"raw:{round_n}")
+
+        result = await run_mode(
+            Mode.REACT,
+            llm=llm,
+            toolbelt=_belt(),
+            messages=_msgs(),
+            limits=ModeLimits(max_tokens=1500),
+            on_step=on_step,
+            on_event=on_event,
+            on_raw=on_raw,
+        )
+        assert "预算" in result
+        # Round 2 (the budget-crossing one) is accounted: event + step + raw
+        # all present, and all of them precede the surrender step.
+        assert "event:2" in timeline
+        assert "step:round-2" in timeline
+        assert "raw:2" in timeline
+        assert timeline.index("event:2") < len(timeline) - 1  # surrender comes after

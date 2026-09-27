@@ -155,11 +155,22 @@ async def _run_code(exec_id: str, runtime_id: str, code: str) -> dict[str, Any]:
         )
     except ServiceError as exc:
         # A refusal (host mode without allow_unisolated) is the contract
-        # answer, not a bug: surface message + hint to the caller verbatim
+        # answer, not a bug: surface message + hint to the caller verbatim.
+        # No re-raise: this runs as a fire-and-forget task (_spawn), and an
+        # unretrieved task exception would only surface as GC noise — the
+        # store row and TASK_FAILED event above are the honest signal.
         error = exc.body.message + (f" — {exc.body.hint}" if exc.body.hint else "")
         deps.store.finish(exec_id, "failed", -1, "", error[:500], "")
         await _emit_failed(exec_id, error[:300])
-        raise
+        return {
+            "exec_id": exec_id,
+            "runtime": runtime_id,
+            "status": "failed",
+            "exit_code": -1,
+            "stdout": "",
+            "stderr": error[:500],
+            "artifact_dir": "",
+        }
     except Exception as exc:  # noqa: BLE001  # background task: record errors, never silent
         error = f"{type(exc).__name__}: {exc}"
         deps.store.finish(exec_id, "failed", -1, "", error[:500], "")

@@ -8,7 +8,6 @@ provider dicts carry a has_api_key flag and never the key itself.
 
 from __future__ import annotations
 
-import ipaddress
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
@@ -29,7 +28,7 @@ from llm.client import (
     ProviderError,
     RateLimitError,
 )
-from llm.store import ProviderStore
+from llm.store import ProviderStore, is_private_host
 
 DOMAIN = "llm"
 registry = Registry(DOMAIN)
@@ -219,20 +218,6 @@ def read_api_key(pid: str) -> str:
         ) from None
 
 
-def _host_is_nonglobal(host: str) -> bool:
-    """Loopback/private/link-local/non-global hosts, judged literally from the
-    hostname without DNS resolution (keeps write-path calls non-blocking)."""
-    h = (host or "").lower().rstrip(".")
-    if h in {"localhost", "metadata.google.internal"} or h.endswith(".localhost"):
-        return True
-    try:
-        addr = ipaddress.ip_address(h)
-        mapped = getattr(addr, "ipv4_mapped", None)
-        return not (mapped or addr).is_global
-    except ValueError:
-        return False
-
-
 def validate_base_url(base_url: str, actor: ActorRef | None) -> str:
     """http(s) only. Private/loopback hosts are writable by USER actors alone
     (e.g. local Ollama); agents must not be able to send keys to intranets.
@@ -246,7 +231,7 @@ def validate_base_url(base_url: str, actor: ActorRef | None) -> str:
             ErrorSuffix.INVALID_INPUT,
             "base_url must be http(s) and include a hostname",
         )
-    private = _host_is_nonglobal(parsed.hostname)
+    private = is_private_host(parsed.hostname)
     if private and (actor is None or actor.kind is not ActorKind.USER):
         raise ServiceError(
             DOMAIN,
@@ -272,7 +257,7 @@ def private_endpoint_flag(base_url: str, actor: ActorRef | None) -> bool:
     honoring the recorded authorization."""
     parsed = urlparse(base_url.strip())
     return bool(
-        _host_is_nonglobal(parsed.hostname or "")
+        is_private_host(parsed.hostname or "")
         and actor is not None
         and actor.kind is ActorKind.USER
     )

@@ -9,6 +9,7 @@ The clone function is injectable so tests stay offline.
 from __future__ import annotations
 
 import asyncio
+import logging
 import shutil
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -17,6 +18,8 @@ from platform_contracts import ActorKind, ActorRef, DomainEvent, Event
 from platform_eventbus import EventBus
 
 from .store import RepoStore
+
+log = logging.getLogger("sources.repo.worker")
 
 _ACTOR = ActorRef(kind=ActorKind.SYSTEM, id="sources.repo.worker")
 
@@ -90,11 +93,7 @@ class RepoWorker:
                 else:
                     await self._run_one(item)
             except Exception as exc:  # the worker must not die on a single bad job
-                import logging
-
-                logging.getLogger("sources.repo.worker").warning(
-                    "worker task failed: item=%r error=%s", item, exc, exc_info=True
-                )
+                log.warning("worker task failed: item=%r error=%s", item, exc, exc_info=True)
 
     async def _run_remove(self, local_path: str) -> None:
         """Delete the local clone directory (queued by remove_repo after the
