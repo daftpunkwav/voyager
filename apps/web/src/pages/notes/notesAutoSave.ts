@@ -40,6 +40,21 @@ export function useNotesAutoSave(options: { newProjectId: string }) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPersistedRef = useRef<{ id: string; title: string; content: string } | null>(null);
 
+  /** Shared settle tail after a save resolves: apply the clean/dirty verdict
+   *  (dirty flag + save state) and re-arm the debounce when keystrokes landed
+   *  during the in-flight request — they must stay dirty or they would be
+   *  silently dropped behind a "saved" indicator (including on beforeunload,
+   *  which reads the same dirty flag). Returns the verdict; callers must
+   *  propagate it before navigating away or promoting the URL. */
+  const settleAfterSave = useCallback((clean: boolean): boolean => {
+    dirtyRef.current = !clean;
+    setSaveState(clean ? 'saved' : 'unsaved');
+    if (!clean && !timerRef.current) {
+      timerRef.current = setTimeout(() => void flushRef.current(), 5000);
+    }
+    return clean;
+  }, []);
+
   /** Persists dirty content immediately (or creates the draft); a clean state passes through untouched.
    *  Returns false when there are real changes that could not be saved (empty title or save failure):
    *  callers must check the return value before navigating away or overwriting and abort on failure —
@@ -81,21 +96,15 @@ export function useNotesAutoSave(options: { newProjectId: string }) {
         await updateNote.mutateAsync({ id, title: t, content: c });
         lastPersistedRef.current = { id, title: t, content: c };
         // Clear dirty only when the editor still holds exactly what was just
-        // persisted. Keystrokes that landed during the in-flight save must
-        // stay dirty (and re-arm), or they would be silently dropped behind
-        // a "saved" indicator — including on beforeunload, which reads the
-        // same dirty flag.
+        // persisted (id included: the editor may have switched notes while
+        // the request was in flight). Keystrokes that landed during the
+        // in-flight save must stay dirty (and re-arm), or they would be
+        // silently dropped behind a "saved" indicator — including on
+        // beforeunload, which reads the same dirty flag.
         const cur = useNoteStore.getState();
-        if (cur.editingNoteId === id && cur.editorTitle === t && cur.editorContent === c) {
-          dirtyRef.current = false;
-          setSaveState('saved');
-          return true;
-        }
-        setSaveState('unsaved');
-        if (!timerRef.current) {
-          timerRef.current = setTimeout(() => void flushRef.current(), 5000);
-        }
-        return false;
+        return settleAfterSave(
+          cur.editingNoteId === id && cur.editorTitle === t && cur.editorContent === c
+        );
       } catch (err) {
         setSaveState('unsaved');
         addToast({
@@ -118,19 +127,15 @@ export function useNotesAutoSave(options: { newProjectId: string }) {
         content: created.content ?? c,
       };
       lastPersistedRef.current = saved;
-      // Same in-flight guard as the update path: keystrokes that landed while
-      // the create request was running must stay dirty (and re-arm), or the
-      // note=<id> promotion below would silently mark them saved behind a
-      // clean dirty flag — including on beforeunload, which reads the same
-      // flag. The editor id has not switched yet at this point (the URL sync
-      // happens after setSearchParams), so title/content decide.
+      // Same in-flight guard via settleAfterSave: keystrokes that landed
+      // while the create request was running must stay dirty (and re-arm),
+      // or the note=<id> promotion below would silently mark them saved
+      // behind a clean dirty flag. The editor id is not compared here: it
+      // has not switched yet at this point (the URL sync happens in the
+      // setSearchParams below), so title/content decide.
       const cur = useNoteStore.getState();
       const clean = cur.editorTitle === saved.title && cur.editorContent === saved.content;
-      dirtyRef.current = !clean;
-      setSaveState(clean ? 'saved' : 'unsaved');
-      if (!clean && !timerRef.current) {
-        timerRef.current = setTimeout(() => void flushRef.current(), 5000);
-      }
+      const settled = settleAfterSave(clean);
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -140,7 +145,7 @@ export function useNotesAutoSave(options: { newProjectId: string }) {
         },
         { replace: true }
       );
-      return clean;
+      return settled;
     } catch (err) {
       setSaveState('unsaved');
       addToast({
@@ -149,7 +154,7 @@ export function useNotesAutoSave(options: { newProjectId: string }) {
       });
       return false;
     }
-  }, [updateNote, createNote, newProjectId, addToast, setSearchParams]);
+  }, [updateNote, createNote, newProjectId, addToast, setSearchParams, settleAfterSave]);
 
   /** Marks dirty and resets the 5s debounce timer. */
   const markDirty = useCallback(() => {
