@@ -31,7 +31,19 @@ async def pinned_ip(provider: dict[str, Any]) -> str:
     url = str(provider.get("base_url") or "")
     parsed = urlparse(url)
     host = parsed.hostname or ""
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    except ValueError:
+        # urlparse raises on an out-of-range / non-numeric port; the write
+        # path only validates scheme + hostname, so such a row is reachable.
+        # A raw ValueError would slip past the ServiceError-only degradation
+        # in the host adapter and end the turn unclassified.
+        raise ServiceError(
+            "llm",
+            ErrorSuffix.INVALID_INPUT,
+            f"provider base_url has an invalid port: {host}",
+            hint="Check the base_url in the settings page",
+        ) from None
     literal = literal_ips(host)
     if provider.get("private_endpoint") or literal is not None:
         # USER-authorized private endpoint (or an IP literal, which pins to

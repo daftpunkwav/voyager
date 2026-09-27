@@ -166,6 +166,22 @@ class TestLegacyMigrationBackfill:
 
 
 class TestPrivateEndpointResolutionFailures:
+    async def test_invalid_port_maps_to_invalid_input(self) -> None:
+        """An out-of-range port (write-path validation only checks scheme +
+        hostname, so such a row is storable) must surface as a typed
+        ServiceError, not a raw ValueError that slips past the host
+        adapter's ServiceError-only degradation and ends the turn."""
+        provider = {"base_url": "https://api.test:99999/v1", "private_endpoint": False}
+        with pytest.raises(ServiceError) as exc:
+            await pinned_ip(provider)
+        assert exc.value.body.code.endswith("INVALID_INPUT")
+
+    async def test_invalid_port_on_private_endpoint_maps_to_invalid_input(self) -> None:
+        provider = {"base_url": "http://localhost:notaport", "private_endpoint": True}
+        with pytest.raises(ServiceError) as exc:
+            await pinned_ip(provider)
+        assert exc.value.body.code.endswith("INVALID_INPUT")
+
     async def test_private_host_resolution_failure_maps_to_unavailable(self, monkeypatch) -> None:
         _patch_resolver(monkeypatch, {})  # every host fails to resolve
         provider = {"base_url": "http://localhost:11434", "private_endpoint": True}
