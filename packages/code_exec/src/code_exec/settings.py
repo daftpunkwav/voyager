@@ -77,6 +77,11 @@ DEFS = [
         module="code_exec",
         type=SettingType.BOOL,
         default=False,
+        # The unisolated-execution gate must stay in the user's hands: an
+        # agent that could flip this setting could grant itself full-host
+        # code execution (settings.set rejects user_only keys for non-user
+        # actors).
+        user_only=True,
         description=(
             "Explicitly accept running generated code with full host "
             "privileges and network access when docker is missing (host "

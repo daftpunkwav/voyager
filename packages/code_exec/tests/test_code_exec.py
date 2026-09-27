@@ -10,9 +10,10 @@ from code_exec import capabilities
 from code_exec.capabilities import registry
 from code_exec.executor import RunResult, run_in_runtime
 from code_exec.rest import create_app
+from code_exec.settings import DEFS
 from platform_actor import ActorContext
 from platform_capability import execute
-from platform_contracts import LOCAL_USER, ServiceError
+from platform_contracts import LOCAL_USER, ActorKind, ActorRef, ServiceError
 from platform_eventbus import EventBus, EventLog
 from platform_settings import SettingsStore
 
@@ -374,3 +375,25 @@ class TestUnisolatedGate:
         )
         assert result.isolation == "docker"
         assert result.limits_applied == {"memory_mb": 256, "network": False}
+
+
+class TestUnisolatedGateSetting:
+    """code_exec.allow_unisolated is the unisolated-execution privilege gate:
+    it must stay user_only, or an agent could grant itself full-host code
+    execution through settings__set_setting."""
+
+    def test_def_is_user_only(self) -> None:
+        (item,) = [d for d in DEFS if d.key == "code_exec.allow_unisolated"]
+        assert item.user_only is True
+
+    async def test_agent_write_forbidden_user_write_ok(self, tmp_path) -> None:
+        agent = ActorRef(kind=ActorKind.AGENT, id="agent.main")
+        store = SettingsStore(tmp_path / "settings.db")
+        store.register_fresh(DEFS)
+        with pytest.raises(ServiceError) as exc:
+            await store.set("code_exec.allow_unisolated", True, agent)
+        assert exc.value.body.code == "SETTINGS.FORBIDDEN"
+        assert store.get("code_exec.allow_unisolated") is False  # value unchanged
+        await store.set("code_exec.allow_unisolated", True, LOCAL_USER)
+        assert store.get("code_exec.allow_unisolated") is True  # the user may still opt in
+        store.close()
