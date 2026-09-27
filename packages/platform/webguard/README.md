@@ -20,8 +20,8 @@ Model-agnostic security mechanism.
 
 ## Known Limitations
 
-fake-ip range (198.18.0.0/15) is allowed by policy (Clash-style proxies); TOCTOU remains for non-pinning consumers.
+fake-ip range (198.18.0.0/15) is allowed by policy (Clash-style proxies).
 
 ## Deferred Work
 
-Optional full-pinning helper for the agent web tools.
+None currently.

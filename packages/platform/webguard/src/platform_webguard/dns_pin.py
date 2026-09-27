@@ -1,12 +1,8 @@
 """DNS resolve-and-pin: resolve once, validate every candidate as public,
-and (for the pinning consumer) rewrite the request onto the validated IP so
-the connection cannot drift to a different address (DNS rebinding).
-
-Two consumer levels:
-- validate-only (agent web tools): resolve and refuse intranet answers;
-- full pinning (sources save_url): also rewrite the httpx request host to
-  the chosen IP, keeping the original hostname in the Host header and the
-  TLS sni_hostname so certificates and routing stay correct.
+then rewrite the request onto the validated IP so the connection cannot
+drift to a different address (DNS rebinding). Every consumer pins: the
+original hostname stays in the Host header and the TLS sni_hostname so
+certificates and routing stay correct.
 """
 
 from __future__ import annotations

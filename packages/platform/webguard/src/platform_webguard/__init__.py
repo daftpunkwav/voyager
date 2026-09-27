@@ -2,10 +2,10 @@
 per-hop redirect checks — the single implementation behind the agent's web
 tools and the sources domain's page importer.
 
-Two consumers, two levels (both satisfy "a second implementation means split
-the seam"): validate-only resolution for the agent's web_fetch/web_search,
-full request pinning for sources save_url. Zero business vocabulary: errors
-surface as ValueError/Exception subclasses the callers translate.
+Every consumer resolves once and connects to the validated IP (full
+pinning, closing the rebinding window of a second resolution). Zero
+business vocabulary: errors surface as ValueError/Exception subclasses the
+callers translate.
 
 The re-exports below are the package's public surface: consumers import from
 ``platform_webguard`` directly, so the internal module layout (body / dns_pin /
