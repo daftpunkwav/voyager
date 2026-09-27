@@ -45,7 +45,7 @@ RECOMMENDED_RELATIONS = (
     "IMPORTS",
 )
 
-_GUIDE = """# AI 建图约定(§8.4)
+_GUIDE = """# AI 建图约定
 
 - 节点:set_node(project, label, name, qualified_name?, attrs?)
   —— upsert 语义,同一 (project, label, qualified_name) 重复写=更新;

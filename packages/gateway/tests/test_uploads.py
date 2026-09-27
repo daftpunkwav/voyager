@@ -114,7 +114,7 @@ class TestUpload:
         """A body large enough to roll Starlette's spooled form data to disk
         parses fine through the async-with form (spooled temp files are closed
         and removed by the context exit, never left for the caller)."""
-        tc, ws = client
+        tc, _ = client
         body = b"y" * (2 * 1024 * 1024)
         resp = tc.post("/api/uploads", files={"file": ("big-ok.bin", body)})
         assert resp.status_code == 201

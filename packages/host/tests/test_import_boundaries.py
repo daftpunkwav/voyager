@@ -108,7 +108,7 @@ def test_current_repo_has_zero_violations() -> None:
         # cross-domain imports; agent uses the first segment
         scope = rel.parts[:2] if rel.parts[0] == "packages" else rel.parts[:1]
         problems.extend(_violations(scope, path.read_text(encoding="utf-8"), rel.as_posix()))
-    assert not problems, "cross-boundary imports found (§12 dependency matrix):\n" + "\n".join(
+    assert not problems, "cross-boundary imports found (dependency matrix):\n" + "\n".join(
         problems
     )
 

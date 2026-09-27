@@ -125,7 +125,7 @@ export function SettingsPage() {
   const [unbindId, setUnbindId] = useState<string | null>(null);
 
   // Language names are autonomous: they never follow the current UI language,
-  // so users can always find their own language (design §8.4).
+  // so users can always find their own language.
   const LOCALE_CARDS = [
     { id: 'zh-CN', name: t('appearance.locale.zhCN') },
     { id: 'en', name: t('appearance.locale.en') },

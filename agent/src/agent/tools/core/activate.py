@@ -27,7 +27,7 @@ from agent.tools.core.base import AgentTool, Toolbelt
 
 #: Always active (full schema): tools that conversation orchestration cannot
 #: do without, plus activate_tools itself; todowrite is the structured plan
-#: for long/multi-step conversations (baseline 2026-09): small and
+#: for long/multi-step conversations: small and
 #: cross-domain, so kept always active
 CORE_TOOLS = (
     "ask_user",
@@ -52,7 +52,7 @@ CORE_TOOLS = (
     # compacts proactively (the harness auto-triggers at the threshold too)
     "context",
     # Agent-side session surface: one aggregated tool (list/create/fork/…);
-    # activation granularity is the whole surface (known cost, design §9.3)
+    # activation granularity is the whole surface (a known cost)
     "session",
     # Usage self-awareness: the llm domain's usage stats are preactivated so
     # the model can check its own consumption without an activation round

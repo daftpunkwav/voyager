@@ -1,5 +1,4 @@
-"""web_search tool: keyless search via the DuckDuckGo HTML endpoint
-(baseline 2026-09).
+"""web_search tool: keyless search via the DuckDuckGo HTML endpoint.
 
 The search endpoint URL passes the same policy whitelist as web_fetch — in
 whitelist mode duckduckgo.com must be added to agent.network.domains.

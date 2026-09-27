@@ -231,7 +231,7 @@ def set_relationship(
 @capability(
     registry,
     name="graph_guide",
-    description="Full AI graph-building conventions (loaded on demand by agents, §9.20)",
+    description="Full AI graph-building conventions (loaded on demand by agents)",
 )
 def graph_guide() -> dict:
     return {"guide": ai_guide.guide_text()}

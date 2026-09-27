@@ -292,7 +292,7 @@ class TestExport:
 class TestUnifiedSubgraphSemantics:
     """The single BFS lives in store.subgraph: expand_neighbors reuses it, so
     both capabilities return the same induced subgraph at every depth (the
-    old star-expansion divergence is gone; owner decision 2026-09-28)."""
+    old star-expansion divergence is gone)."""
 
     @pytest.fixture()
     def store(self, tmp_path):

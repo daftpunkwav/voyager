@@ -213,7 +213,8 @@ class GraphStore:
         outermost ring's own edges are included). This is the single BFS in
         the store: expand_neighbors used to carry a second, divergent depth
         semantics (star expansion, dropping the outermost ring's edges) and
-        was reconciled into this implementation (owner decision 2026-09-28).
+        was reconciled into this implementation, so the two entry points
+        cannot drift apart again.
 
         `edge_filter` restricts the returned edges to one type; it never
         restricts traversal — the walk follows all edges — matching the

@@ -110,7 +110,7 @@ export function reportPageContext(args: Record<string, unknown>): Promise<unknow
   return callCapability('agent', 'report_page_context', args);
 }
 
-/** The aggregated memory capability: one action parameter (design §3). */
+/** The aggregated memory capability: one action parameter. */
 function memoryCap<T>(action: string, params: Record<string, unknown> = {}): Promise<T> {
   return callCapability<T>('agent', 'memory', { action, ...params });
 }
@@ -213,7 +213,7 @@ export interface ChatSessionRow {
   archived?: boolean;
 }
 
-/** The aggregated session capability: one action parameter (design §3). */
+/** The aggregated session capability: one action parameter. */
 function sessionCap<T>(action: string, params: Record<string, unknown> = {}): Promise<T> {
   return callCapability<T>('agent', 'session', { action, ...params });
 }

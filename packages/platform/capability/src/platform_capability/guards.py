@@ -295,13 +295,13 @@ async def _invoke(
             registry.domain,
             ErrorSuffix.INTERNAL,
             f"long-running capability {name} must return JobRef "
-            f"(a synchronous long-running result is a defect, §7.3)",
+            f"(a synchronous long-running result is a defect)",
         )
     if cap.streaming and not hasattr(result, "__aiter__"):
         raise ServiceError(
             registry.domain,
             ErrorSuffix.INTERNAL,
             f"streaming capability {name} must return an async iterable (AsyncIterator), got "
-            f"{type(result).__name__} (baseline 2026-09 contract)",
+            f"{type(result).__name__} (streaming contract)",
         )
     return result
