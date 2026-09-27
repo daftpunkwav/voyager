@@ -43,9 +43,13 @@ def literal_ips(host: str) -> list[str] | None:
         return None
 
 
-def reject_nonglobal(host: str, ips: list[str], *, error: type[Exception]) -> None:
+def reject_nonglobal(
+    host: str, ips: list[str], *, error: type[Exception] | Callable[[str], Exception]
+) -> None:
     """Raise `error` if any candidate is non-global (loopback/link-local mixed
-    into dual-stack answers counts as DNS rebinding)."""
+    into dual-stack answers counts as DNS rebinding). `error` is an exception
+    class or a factory taking the message and returning the exception, so
+    callers can raise in their own error vocabulary."""
     for ip in ips:
         if is_internal(as_ip(ip)):
             raise error(

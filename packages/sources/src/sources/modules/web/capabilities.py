@@ -12,7 +12,6 @@ literal with no second resolution -- closing the DNS rebinding window of
 
 from __future__ import annotations
 
-import ipaddress
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -23,13 +22,12 @@ from platform_capability import Registry, capability
 from platform_contracts import ActorKind, ActorRef, DomainEvent, ErrorSuffix, Event, ServiceError
 from platform_eventbus import EventBus
 from platform_webguard import (
-    as_ip,
     check_url_syntax,
     default_resolver,
-    is_internal,
     literal_ips,
     pinned_request,
     read_bounded,
+    reject_nonglobal,
 )
 
 from .._shared.events import with_session
@@ -54,23 +52,6 @@ async def _default_resolver(host: str, port: int) -> list[str]:
     return await default_resolver(host, port)
 
 
-def _as_ip(value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
-    return as_ip(value)
-
-
-def _reject_nonglobal(host: str, ips: list[str]) -> None:
-    """Shared SSRF policy (platform_webguard) with this domain's error
-    vocabulary; any non-global candidate counts as DNS rebinding."""
-    for ip in ips:
-        if is_internal(_as_ip(ip)):
-            raise ServiceError(
-                _DOMAIN,
-                ErrorSuffix.FORBIDDEN,
-                f"Target is not in public address space: {host}({ip})",
-                hint="Private/loopback/link-local addresses are rejected by SSRF protection",
-            )
-
-
 def _assert_pinnable(url: str) -> tuple[ParseResult, list[str]]:
     """Syntax-level plus address-level validation (shared webguard policy):
     http(s) only, non-empty hostname, every literal address globally routable.
@@ -84,7 +65,16 @@ def _assert_pinnable(url: str) -> tuple[ParseResult, list[str]]:
     ips = literal_ips(host)
     if ips is None:
         return parsed, []
-    _reject_nonglobal(host, ips)
+    reject_nonglobal(
+        host,
+        ips,
+        error=lambda msg: ServiceError(
+            _DOMAIN,
+            ErrorSuffix.FORBIDDEN,
+            msg,
+            hint="Private/loopback/link-local addresses are rejected by SSRF protection",
+        ),
+    )
     return parsed, ips
 
 
@@ -140,7 +130,16 @@ async def _fetch_pinned(
         raise ServiceError(
             _DOMAIN, ErrorSuffix.UNAVAILABLE, f"Hostname resolves to no address: {host}"
         )
-    _reject_nonglobal(host, ips)
+    reject_nonglobal(
+        host,
+        ips,
+        error=lambda msg: ServiceError(
+            _DOMAIN,
+            ErrorSuffix.FORBIDDEN,
+            msg,
+            hint="Private/loopback/link-local addresses are rejected by SSRF protection",
+        ),
+    )
     request = pinned_request(client, url, ips[0])
     resp = await client.send(request, stream=True)
     body = await read_bounded(resp, max_bytes)

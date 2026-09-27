@@ -13,7 +13,7 @@ redirects / url_policy) stays free to change without touching either domain.
 """
 
 from .body import read_bounded
-from .dns_pin import default_resolver, literal_ips, pinned_request, resolve_public
+from .dns_pin import default_resolver, literal_ips, pinned_request, reject_nonglobal, resolve_public
 from .redirects import MAX_REDIRECTS, redirect_target
 from .url_policy import as_ip, check_url_syntax, is_internal
 
@@ -27,5 +27,6 @@ __all__ = [
     "pinned_request",
     "read_bounded",
     "redirect_target",
+    "reject_nonglobal",
     "resolve_public",
 ]

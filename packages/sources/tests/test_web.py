@@ -111,11 +111,13 @@ class TestSaveUrl:
 
     async def test_ssrf_guards(self, deps) -> None:
         """Loopback/link-local/non-http schemes are rejected before any
-        request goes out.
+        request goes out. The message comes from the shared webguard policy;
+        the envelope stays in this domain's vocabulary (SOURCES.FORBIDDEN).
         """
-        with pytest.raises(ServiceError, match="not in public address space"):
+        with pytest.raises(ServiceError, match="non-public address") as exc:
             await execute(registry, "save_url", USER_CTX, {"url": "http://127.0.0.1:8123/api"})
-        with pytest.raises(ServiceError, match="not in public address space"):
+        assert exc.value.body.code == "SOURCES.FORBIDDEN"
+        with pytest.raises(ServiceError, match="non-public address"):
             await execute(
                 registry, "save_url", USER_CTX, {"url": "http://169.254.169.254/latest/meta-data"}
             )
@@ -136,9 +138,10 @@ class TestSaveUrl:
             raise OSError(host)
 
         web_caps.init_deps(web_caps.WebDeps(store=d.web_store, bus=d.bus, resolve=resolve_loopback))
-        with pytest.raises(ServiceError, match="not in public address space"):
+        with pytest.raises(ServiceError, match="non-public address") as exc:
             await execute(registry, "save_url", USER_CTX, {"url": "http://localtest.me/"})
-        with pytest.raises(ServiceError, match="not in public address space"):
+        assert exc.value.body.code == "SOURCES.FORBIDDEN"
+        with pytest.raises(ServiceError, match="non-public address"):
             await execute(registry, "save_url", USER_CTX, {"url": "http://mapped.example/"})
 
 
