@@ -12,6 +12,7 @@
 
 - 安全头中间件:CSP 镜像前端 `index.html` 的 meta CSP(`frame-ancestors 'none'`、`script-src 'self' 'unsafe-eval' blob:`、`worker-src 'self' blob:`)、`X-Content-Type-Options: nosniff`。
 - actor 中间件:`platform_actor.resolve_http_actor` 解析 Bearer/cookie 调用方;未认证的回环请求按 `LOCAL_USER` 处理;未认证的非回环请求得到 401。
+- Origin/Host 守卫中间件:`Host` 头必须指向本机(回环/私有 IP 字面量或 `localhost` 族 —— DNS 重绑定防御),浏览器附带的 `Origin` 必须是本机回环 origin(CSRF 防御);违规返回 403 `GATEWAY.FORBIDDEN`。非浏览器客户端不发送 `Origin`,不受影响。
 - `ServiceError` 处理器渲染 `ErrorEnvelope`(`{error: {code, message, hint, trace_id}}`)。
 
 ## 挂载的路由
