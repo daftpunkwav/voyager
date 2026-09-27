@@ -15,7 +15,7 @@
  * This module must not depend on UI-layer components.
  */
 
-import { callCapability, unwrapDataField } from '@/bridge/client';
+import { callCapability } from '@/bridge/client';
 
 /** Raw return shape of get_subgraph (shared with toRenderGraph as its input). */
 export interface RawSubgraph {
@@ -72,7 +72,7 @@ export async function listCodeGraphIndexStatuses(): Promise<{ items: CodeGraphIn
 }
 
 export function cancelCodeGraphIndex(projectId: string): Promise<unknown> {
-  return callCapability('graph', 'cancel_index', { project: projectId }).then(unwrapDataField);
+  return callCapability('graph', 'cancel_index', { project: projectId });
 }
 
 /** Trigger indexing (mode: fast|moderate|full). */
@@ -80,9 +80,7 @@ export function triggerCodeGraphIndex(
   projectId: string,
   b?: { mode?: 'fast' | 'moderate' | 'full' }
 ): Promise<unknown> {
-  return callCapability('graph', 'enqueue_index', { project: projectId, ...b }).then(
-    unwrapDataField
-  );
+  return callCapability('graph', 'enqueue_index', { project: projectId, ...b });
 }
 
 /** Rebuild index (same capability as trigger; semantic alias kept for call-site readability). */
@@ -90,20 +88,16 @@ export function refreshCodeGraphIndex(
   projectId: string,
   b?: { mode?: 'fast' | 'moderate' | 'full' }
 ): Promise<unknown> {
-  return callCapability('graph', 'enqueue_index', { project: projectId, ...b }).then(
-    unwrapDataField
-  );
+  return callCapability('graph', 'enqueue_index', { project: projectId, ...b });
 }
 
 export function deleteCodeGraphIndex(projectId: string): Promise<unknown> {
-  return callCapability('graph', 'drop_project_graph', { project: projectId }).then(
-    unwrapDataField
-  );
+  return callCapability('graph', 'drop_project_graph', { project: projectId });
 }
 
 export function getCodeGraph(projectId: string, p?: { max_nodes?: number }): Promise<RawSubgraph> {
-  return callCapability('graph', 'get_subgraph', { project: projectId, ...p }).then((r) =>
-    unwrapDataField<RawSubgraph>(r)
+  return callCapability('graph', 'get_subgraph', { project: projectId, ...p }).then(
+    (r) => <RawSubgraph>r
   );
 }
 
@@ -111,5 +105,5 @@ export function batchIndexCodeGraph(
   ids: string[],
   mode?: 'fast' | 'moderate' | 'full'
 ): Promise<unknown> {
-  return callCapability('graph', 'enqueue_index', { project_ids: ids, mode }).then(unwrapDataField);
+  return callCapability('graph', 'enqueue_index', { project_ids: ids, mode });
 }

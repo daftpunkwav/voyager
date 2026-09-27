@@ -11,8 +11,6 @@ const { callCapabilityMock } = vi.hoisted(() => ({ callCapabilityMock: vi.fn() }
 
 vi.mock('@/bridge/client', () => ({
   callCapability: callCapabilityMock,
-  unwrapDataField: (r: unknown) =>
-    r && typeof r === 'object' && 'data' in (r as object) ? (r as { data: unknown }).data : r,
 }));
 
 import {
@@ -32,8 +30,8 @@ beforeEach(() => {
 });
 
 describe('api/llm bridge wrappers', () => {
-  it('listProviders unwraps the payload', async () => {
-    callCapabilityMock.mockResolvedValue({ data: [{ id: 'p1' }] });
+  it('listProviders resolves the payload as-is', async () => {
+    callCapabilityMock.mockResolvedValue([{ id: 'p1' }]);
     await expect(listProviders()).resolves.toEqual([{ id: 'p1' }]);
     // callCapability's default arg applies at its own definition site:
     // the mock observes the two explicit arguments only.
@@ -41,7 +39,7 @@ describe('api/llm bridge wrappers', () => {
   });
 
   it('addProvider forwards the descriptor', async () => {
-    callCapabilityMock.mockResolvedValue({ data: { id: 'new' } });
+    callCapabilityMock.mockResolvedValue({ id: 'new' });
     await expect(addProvider({ display_name: 'X' })).resolves.toEqual({ id: 'new' });
     expect(callCapabilityMock).toHaveBeenCalledWith('llm', 'add_provider', {
       display_name: 'X',
@@ -68,14 +66,14 @@ describe('api/llm bridge wrappers', () => {
   });
 
   it('testConnection and listRemoteModels pass provider/model through', async () => {
-    callCapabilityMock.mockResolvedValue({ data: { ok: true } });
+    callCapabilityMock.mockResolvedValue({ ok: true });
     await testConnection('p1', 'm1');
     expect(callCapabilityMock).toHaveBeenCalledWith('llm', 'test_connection', {
       provider_id: 'p1',
       model: 'm1',
     });
 
-    callCapabilityMock.mockResolvedValue({ data: { models: ['a', 'b'] } });
+    callCapabilityMock.mockResolvedValue({ models: ['a', 'b'] });
     await expect(listRemoteModels('p1')).resolves.toEqual(['a', 'b']);
     expect(callCapabilityMock).toHaveBeenCalledWith('llm', 'list_remote_models', {
       provider_id: 'p1',

@@ -15,19 +15,15 @@
  * This module must not depend on UI-layer components.
  */
 
-import { callCapability, unwrapDataField } from '@/bridge/client';
+import { callCapability } from '@/bridge/client';
 import type { LlmProvider, LlmTestOutcome } from '@/api/types';
 
 export function listProviders(): Promise<LlmProvider[]> {
-  return callCapability<LlmProvider[]>('llm', 'list_providers').then(
-    unwrapDataField<LlmProvider[]>
-  );
+  return callCapability<LlmProvider[]>('llm', 'list_providers');
 }
 
 export function addProvider(d: Record<string, unknown>): Promise<{ id: string }> {
-  return callCapability<{ id: string }>('llm', 'add_provider', d).then(
-    unwrapDataField<{ id: string }>
-  );
+  return callCapability<{ id: string }>('llm', 'add_provider', d);
 }
 
 /** Metadata patch (never the key; api_format is limited to chat/anthropic). */
@@ -40,9 +36,7 @@ export function updateProvider(
     >
   >
 ): Promise<unknown> {
-  return callCapability('llm', 'update_provider', { provider_id: providerId, ...patch }).then(
-    unwrapDataField
-  );
+  return callCapability('llm', 'update_provider', { provider_id: providerId, ...patch });
 }
 
 /** First enabled model of a provider (models_meta enabled=False entries are
@@ -60,27 +54,23 @@ export function firstEnabledModel(p: LlmProvider | null | undefined): string {
 
 /** Write-only key storage: keys persist via secrets and are never returned; pages read has_api_key instead. */
 export function setApiKey(providerId: string, apiKey: string): Promise<unknown> {
-  return callCapability('llm', 'set_api_key', { provider_id: providerId, api_key: apiKey }).then(
-    unwrapDataField
-  );
+  return callCapability('llm', 'set_api_key', { provider_id: providerId, api_key: apiKey });
 }
 
 export function testConnection(providerId: string, model: string): Promise<LlmTestOutcome> {
   return callCapability<LlmTestOutcome>('llm', 'test_connection', {
     provider_id: providerId,
     model,
-  }).then(unwrapDataField<LlmTestOutcome>);
+  });
 }
 
 /** Live model catalog from the provider's GET /models endpoint. */
 export function listRemoteModels(providerId: string): Promise<string[]> {
   return callCapability<{ models: string[] }>('llm', 'list_remote_models', {
     provider_id: providerId,
-  }).then((r) => unwrapDataField<{ models: string[] }>(r).models);
+  }).then((r) => r.models);
 }
 
 export function removeProvider(providerId: string): Promise<unknown> {
-  return callCapability('llm', 'remove_provider', { provider_id: providerId }).then(
-    unwrapDataField
-  );
+  return callCapability('llm', 'remove_provider', { provider_id: providerId });
 }

@@ -11,8 +11,6 @@ const { callCapabilityMock } = vi.hoisted(() => ({ callCapabilityMock: vi.fn() }
 
 vi.mock('@/bridge/client', () => ({
   callCapability: callCapabilityMock,
-  unwrapDataField: (r: unknown) =>
-    r && typeof r === 'object' && 'data' in (r as object) ? (r as { data: unknown }).data : r,
 }));
 
 import {
@@ -74,12 +72,12 @@ describe('api/codeGraph status mapping', () => {
 });
 
 describe('api/codeGraph lifecycle wrappers', () => {
-  it('cancel/drop route by project id and unwrap {data}', async () => {
-    callCapabilityMock.mockResolvedValue({ data: 'ok-cancel' });
+  it('cancel/drop route by project id and resolve the payload as-is', async () => {
+    callCapabilityMock.mockResolvedValue('ok-cancel');
     await expect(cancelCodeGraphIndex('p1')).resolves.toBe('ok-cancel');
     expect(callCapabilityMock).toHaveBeenCalledWith('graph', 'cancel_index', { project: 'p1' });
 
-    callCapabilityMock.mockResolvedValue({ data: 'ok-drop' });
+    callCapabilityMock.mockResolvedValue('ok-drop');
     await expect(deleteCodeGraphIndex('p2')).resolves.toBe('ok-drop');
     expect(callCapabilityMock).toHaveBeenCalledWith('graph', 'drop_project_graph', {
       project: 'p2',
@@ -106,9 +104,9 @@ describe('api/codeGraph lifecycle wrappers', () => {
     });
   });
 
-  it('getCodeGraph unwraps the shared RawSubgraph shape', async () => {
+  it('getCodeGraph resolves the shared RawSubgraph shape as-is', async () => {
     const subgraph = { nodes: [{}], edges: [{}], stats: { node_count: 1 } };
-    callCapabilityMock.mockResolvedValue({ data: subgraph });
+    callCapabilityMock.mockResolvedValue(subgraph);
     await expect(getCodeGraph('p1', { max_nodes: 10 })).resolves.toEqual(subgraph);
     expect(callCapabilityMock).toHaveBeenCalledWith('graph', 'get_subgraph', {
       project: 'p1',

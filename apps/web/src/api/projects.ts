@@ -19,7 +19,7 @@
  * This module must not depend on UI-layer components.
  */
 
-import { callCapability, ServiceError, unwrapDataField } from '@/bridge/client';
+import { callCapability, ServiceError } from '@/bridge/client';
 import { i18n } from '@/i18n';
 import type { PaginatedList, Project, ProjectListParams, ProjectReadme, Tag } from '@/api/types';
 
@@ -104,27 +104,23 @@ export async function listProjects(p?: ProjectListParams): Promise<PaginatedList
 }
 
 export function getProject(id: string): Promise<Project> {
-  return callCapability('sources', 'get_repo', { repo_id: id }).then(unwrapDataField<Project>);
+  return callCapability('sources', 'get_repo', { repo_id: id });
 }
 
 export function getProjectReadme(id: string): Promise<ProjectReadme> {
-  return callCapability('sources', 'get_readme', { repo_id: id }).then(
-    unwrapDataField<ProjectReadme>
-  );
+  return callCapability('sources', 'get_readme', { repo_id: id });
 }
 
 export function updateProject(id: string, d: Record<string, unknown>): Promise<unknown> {
-  return callCapability('sources', 'set_repo_meta', { repo_id: id, ...d }).then(unwrapDataField);
+  return callCapability('sources', 'set_repo_meta', { repo_id: id, ...d });
 }
 
 export function deleteProject(id: string): Promise<unknown> {
-  return callCapability('sources', 'remove_repo', { repo_id: id }).then(unwrapDataField);
+  return callCapability('sources', 'remove_repo', { repo_id: id });
 }
 
 export function updateProgress(id: string, progress: unknown): Promise<unknown> {
-  return callCapability('sources', 'set_repo_meta', { repo_id: id, progress }).then(
-    unwrapDataField
-  );
+  return callCapability('sources', 'set_repo_meta', { repo_id: id, progress });
 }
 
 /** Stats aggregated from live list_repos data. */
@@ -144,12 +140,12 @@ export async function getProjectStats(): Promise<{
 
 /** Export = current resource list as JSON (raw list_repos output). */
 export function exportProjects(): Promise<RepoRow[]> {
-  return callCapability('sources', 'list_repos', {}).then(unwrapDataField<RepoRow[]>);
+  return callCapability('sources', 'list_repos', {});
 }
 
 /** Categories: plain string fields on resources in the current model; the backend returns a bare string array. */
 export function listCategories(): Promise<string[]> {
-  return callCapability('sources', 'list_categories', {}).then(unwrapDataField<string[]>);
+  return callCapability('sources', 'list_categories', {});
 }
 
 /** Tags aggregated from each resource's tags string field (tags are not entities);
@@ -173,11 +169,9 @@ export async function listTags(): Promise<Tag[]> {
 
 /** Tags are plain strings: checked tag names are stored as-is via set_repo_meta. */
 export function setProjectTags(projectId: string, tags: string[]): Promise<unknown> {
-  return callCapability('sources', 'set_repo_meta', { repo_id: projectId, tags }).then(
-    unwrapDataField
-  );
+  return callCapability('sources', 'set_repo_meta', { repo_id: projectId, tags });
 }
 
 export function searchGithubRepos(query: string): Promise<unknown> {
-  return callCapability('sources', 'search_remote_repos', { query }).then(unwrapDataField);
+  return callCapability('sources', 'search_remote_repos', { query });
 }

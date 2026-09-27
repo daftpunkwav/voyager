@@ -276,7 +276,7 @@ export function NoteEditor({
       for (const file of allowed) {
         const { uploadFile } = await import('@/bridge/client');
         const { file_path, filename } = await uploadFile(file);
-        // api/notes.addAsset already unwraps the legacy envelope semantics (unwrapDataField); the return value is the business payload
+        // api/notes.addAsset returns the business payload directly
         const payload = (await (await import('@/api/notes')).addAsset(file_path, filename)) as {
           markdown?: string;
           url?: string;

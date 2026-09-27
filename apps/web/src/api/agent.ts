@@ -15,7 +15,7 @@
  * This module must not depend on UI-layer components.
  */
 
-import { callCapability, ServiceError, unwrapDataField } from '@/bridge/client';
+import { callCapability, ServiceError } from '@/bridge/client';
 
 function asArray<T>(raw: T[] | { [k: string]: T[] | undefined }, key: string): T[] {
   if (Array.isArray(raw)) return raw;
@@ -195,9 +195,7 @@ export interface ResourceQuota {
 }
 
 export function getResourceQuota(): Promise<ResourceQuota> {
-  return callCapability<ResourceQuota>('agent', 'observe', { action: 'quota' }).then(
-    unwrapDataField<ResourceQuota>
-  );
+  return callCapability<ResourceQuota>('agent', 'observe', { action: 'quota' });
 }
 
 // ---- Chat sessions & context (multi-session) --------------------------

@@ -15,15 +15,11 @@
  * This module must not depend on UI-layer components.
  */
 
-import { callCapability, unwrapDataField } from '@/bridge/client';
+import { callCapability } from '@/bridge/client';
 
 /** Trending approximated by remote repo search (returns real data, no longer flagged as degraded). */
 export function listTrending(p?: { period?: string; language?: string }): Promise<unknown> {
-  return callCapability(
-    'sources',
-    'search_remote_repos',
-    (p ?? {}) as Record<string, unknown>
-  ).then(unwrapDataField);
+  return callCapability('sources', 'search_remote_repos', (p ?? {}) as Record<string, unknown>);
 }
 
 /** Activity feed: the backend has no dedicated activity entity yet, so this stays
@@ -34,11 +30,11 @@ export function listActivities(): Promise<unknown[]> {
 
 /** Recommended approximated by in-library projects (list_repos). */
 export function listRecommendedProjects(p?: { limit?: number }): Promise<unknown> {
-  return callCapability('sources', 'list_repos', p ?? {}).then(unwrapDataField);
+  return callCapability('sources', 'list_repos', p ?? {});
 }
 
 export function listOverviewRecentNotes(p?: { limit?: number }): Promise<unknown> {
-  return callCapability('notes', 'list_notes', p ?? {}).then(unwrapDataField);
+  return callCapability('notes', 'list_notes', p ?? {});
 }
 
 /** Scout intro stream (empty): the backend stream is not wired up, so

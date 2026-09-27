@@ -3,8 +3,8 @@
  * @description Unified capability-call channel: POST /api/<domain>/capabilities/<name>
  * with a single {result}/{error} envelope unwrapping.
  *
- * Also hosts the file-upload transport, the sendBeacon fallback for unload-time
- * saves, and unwrapDataField for legacy {data} envelopes during migration.
+ * Also hosts the file-upload transport and the sendBeacon fallback for
+ * unload-time saves.
  *
  * Responsibilities:
  * - POST capabilities to /api/<domain>/capabilities/<name> with credentials
@@ -12,7 +12,6 @@
  * - Unwrap the {result} success envelope and raise ServiceError from {error}
  *   envelopes, including envelope-less proxy failures
  * - Provide the file-upload transport and the sendBeacon unload fallback
- * - Pass legacy top-level {data} envelopes through during migration
  *
  * This module must not depend on UI-layer components.
  */
@@ -76,16 +75,6 @@ export async function callCapability<T = unknown>(
   // not fall through to returning the whole envelope
   if (body && typeof body === 'object' && 'result' in body) return body.result as T;
   return body as T;
-}
-
-/** Migration-era equivalent accessor for the legacy API facade: if the result carries a
- *  top-level data key, pass that value through; otherwise return the result as-is.
- *  Can be retired per-domain once every capability is verified to have no data key. */
-export function unwrapDataField<T>(result: unknown): T {
-  if (result && typeof result === 'object' && 'data' in (result as object)) {
-    return (result as { data: T }).data;
-  }
-  return result as T;
 }
 
 /** Browser file upload (a transport action, not a capability): stores under

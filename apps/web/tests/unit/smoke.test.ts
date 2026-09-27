@@ -9,7 +9,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useUIStore } from '@/stores/uiStore';
-import { ServiceError, unwrapDataField } from '@/bridge/client';
+import { ServiceError } from '@/bridge/client';
 import type { AgentSession, Note, Project, User } from '@/api/types';
 import { canonicalPersonaId } from '@/constants/personas';
 
@@ -68,12 +68,6 @@ describe('bridge/client (unified capability channel)', () => {
     expect(e.status).toBe(500);
     expect(e.message).toBe('boom');
     expect(e.name).toBe('ServiceError');
-  });
-
-  it('unwrapDataField: passes through a top-level data key, otherwise returns input as-is', () => {
-    expect(unwrapDataField({ data: [1, 2] })).toEqual([1, 2]);
-    expect(unwrapDataField('bare')).toBe('bare');
-    expect(unwrapDataField({ a: 1 })).toEqual({ a: 1 });
   });
 });
 
