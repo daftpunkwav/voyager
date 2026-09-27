@@ -16,9 +16,9 @@
 
 ## 存储
 
-`store.py` — `GraphStore`(SQLite `graph.db`):`nodes`(唯一 `(project, label, qualified_name)`)与 `edges`(唯一 `(project, src, dst, type)`),每行携带溯源 `source` ∈ `code`/`ai`/`manual`。粗粒度操作在 `operations.py`,行/列助手在 `columns.py`。
+`store.py` — `GraphStore`(SQLite `graph.db`):`nodes`(唯一 `(project, label, qualified_name)`)与 `edges`(唯一 `(project, src, dst, type)`),每行携带溯源 `source` ∈ `code`/`ai`/`manual`。`subgraph` 是 `get_subgraph` 与 `expand_neighbors` 共同背后的唯一广度优先遍历:返回 `depth` 跳以内的全部节点及其关联的全部边;`edge_filter` 只过滤返回的边,不影响遍历。粗粒度操作在 `operations.py`,行/列助手在 `columns.py`。
 
-`index_queue.py` — `IndexQueue`(SQLite `index.db`,`index_jobs` 表):带优先级的队列,状态机(`queued → running → done/failed/cancelled`),`level`(`l1` 单仓库 / `l0` 跨资源)与 `kinds` 列由 `_migrate` 添加。
+`index_queue.py` — `IndexQueue`(SQLite `index.db`,`index_jobs` 表):带优先级的队列,状态机(`queued → running → done/failed/cancelled`),`level`(`l1` 单仓库 / `l0` 跨资源)与 `kinds` 列由 `_migrate` 添加。`recover_stale_running` 在调度器启动时运行:崩溃遗留的 `running` 行在 attempts 上限内重新入队,超过上限则置为 failed。
 
 ## 引擎
 

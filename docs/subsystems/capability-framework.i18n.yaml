@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   git hash-object docs\subsystems\capability-framework.md docs\subsystems\capability-framework.zh.md
-docs/subsystems/capability-framework.md: 3b222fb6790cf530da8045296acb8b12717d4de3
-docs/subsystems/capability-framework.zh.md: 7a5452d8272120f774e4a833e02003dc7c7c6090
+docs/subsystems/capability-framework.md: 29d364fdef6fc16c4c7e97a4dbcdecccb84d4014
+docs/subsystems/capability-framework.zh.md: d972519ea12ac95fed330565effe9cb398abf152

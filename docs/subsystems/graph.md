@@ -16,9 +16,9 @@ Source: `packages/graph/src/graph/` — port 8030, enabled by default; `depends_
 
 ## Storage
 
-`store.py` — `GraphStore` (SQLite `graph.db`): `nodes` (unique `(project, label, qualified_name)`) and `edges` (unique `(project, src, dst, type)`), each row carrying provenance `source` ∈ `code`/`ai`/`manual`. Coarse operations in `operations.py`, row/column helpers in `columns.py`.
+`store.py` — `GraphStore` (SQLite `graph.db`): `nodes` (unique `(project, label, qualified_name)`) and `edges` (unique `(project, src, dst, type)`), each row carrying provenance `source` ∈ `code`/`ai`/`manual`. `subgraph` is the single breadth-first walk behind both `get_subgraph` and `expand_neighbors`: every node within `depth` hops plus every edge incident to those nodes; its `edge_filter` narrows the returned edges only, never the traversal. Coarse operations in `operations.py`, row/column helpers in `columns.py`.
 
-`index_queue.py` — `IndexQueue` (SQLite `index.db`, `index_jobs`): priority queue with a status machine (`queued → running → done/failed/cancelled`), `level` (`l1` single-repo / `l0` cross-resource) and `kinds` columns added by `_migrate`.
+`index_queue.py` — `IndexQueue` (SQLite `index.db`, `index_jobs`): priority queue with a status machine (`queued → running → done/failed/cancelled`), `level` (`l1` single-repo / `l0` cross-resource) and `kinds` columns added by `_migrate`. `recover_stale_running` runs at scheduler start: crash-leftover `running` rows requeue under the attempts cap and fail past it.
 
 ## Engines
 

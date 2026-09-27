@@ -157,5 +157,6 @@ Every registered settings key, grouped by owner. Keys register through `platform
 | code_exec | `code_exec.memory_mb` | INT | 512 | same |
 | code_exec | `code_exec.network` | BOOL | false | same |
 | code_exec | `code_exec.use_host` | BOOL | true | same |
+| code_exec | `code_exec.allow_unisolated` | BOOL | false | same |
 | host | `host.domains.enabled` | JSON | `[]` | `packages/host/src/host/plan.py` |
 | _template | `template.worker.concurrency` | INT | 1 | `packages/_template/…/settings.py` |

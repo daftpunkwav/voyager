@@ -157,5 +157,6 @@
 | code_exec | `code_exec.memory_mb` | INT | 512 | 同上 |
 | code_exec | `code_exec.network` | BOOL | false | 同上 |
 | code_exec | `code_exec.use_host` | BOOL | true | 同上 |
+| code_exec | `code_exec.allow_unisolated` | BOOL | false | 同上 |
 | host | `host.domains.enabled` | JSON | `[]` | `packages/host/src/host/plan.py` |
 | _template | `template.worker.concurrency` | INT | 1 | `packages/_template/…/settings.py` |

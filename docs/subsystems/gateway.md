@@ -8,12 +8,12 @@ Source: `packages/gateway/src/gateway/`
 
 ## Application
 
-`rest.py` — `create_app(mounts, db_path, bus, lifespan, issuer, auth, quota, audit, rate_limit_per_minute=600, sse_max_connections=8, ...)`:
+`rest.py` — `create_app(mounts, db_path, bus, lifespan, issuer, quota, audit, rate_limit_per_minute=600, sse_max_connections=8, ..., uploads_workspace=None)`:
 
 - Security-header middleware: CSP mirroring the frontend's `index.html` meta CSP (`frame-ancestors 'none'`, `script-src 'self' 'unsafe-eval' blob:`, `worker-src 'self' blob:`), `X-Content-Type-Options: nosniff`.
 - Actor middleware: `platform_actor.resolve_http_actor` resolves Bearer/cookie callers; unauthenticated loopback requests act as `LOCAL_USER`; unauthenticated non-loopback requests get 401.
 - Origin/Host guard middleware: the `Host` header must name this machine (loopback/private IP literals or the `localhost` family — the DNS-rebinding defense), and a browser-attached `Origin` must be a loopback origin (CSRF defense); violations get 403 `GATEWAY.FORBIDDEN`. Non-browser clients send no `Origin` and are unaffected.
-- `ServiceError` handlers render the `ErrorEnvelope` (`{error: {code, message, hint, trace_id}}`).
+- `ServiceError` and `RequestValidationError` handlers render the `ErrorEnvelope` (`{error: {code, message, hint, trace_id}}`) — malformed typed query parameters land in the same envelope as every other client error.
 
 ## Mounted routers
 
@@ -23,7 +23,7 @@ Source: `packages/gateway/src/gateway/`
 | `chat.py` | `POST /api/chat/messages`, `GET /api/chat/messages`, `GET /api/chat/trajectory`, `GET /api/chat/rawllm`, `GET /api/chat/stream` | history pages take `before_seq`/`after_seq`/`session`; trajectory adds a `run_id` mode (one run's full step list), rawllm serves the trajectory projection's raw rounds; SSE carries `after_seq` resume, backlog replay (`once=true`), keep-alive comments, and a `_STREAM_TYPES` filter |
 | `session.py` | `GET /api/session/bootstrap` | loopback-only HttpOnly session cookie, 30-day TTL |
 | `activity.py` | `POST /api/activity`, `GET /api/activity/feed` | kinds `page_view`/`pointer`/`selection`/`manual` → publishes `user.activity`; the feed takes `recent` (newest window), `types` (fnmatch) and the `agent`/`session` attribution filters — an operations whitelist (note/source lifecycle, session deletes, agent-driven settings changes, file writes) keyed on `payload.session`, which only events raised inside a chat turn carry |
-| `uploads.py` | `POST /api/uploads` | multipart, 1 GiB cap, lands under `workspace/imports/` |
+| `uploads.py` | `POST /api/uploads` | multipart; the 1 GiB cap is enforced at the ASGI receive boundary (`max_files=1`, spooled temp files released by the form context); shares the gateway-wide rate limiter (remounted on workspace hot-swap via `app.state.limiter`); lands under `workspace/imports/` |
 | `workspace.py` | `GET /api/workspace/list`, `GET /api/workspace/read`, `GET /api/workspace/pick` | `read` caps previews at 256 KiB / 400 lines; `pick` browses any directory read-only |
 | `health.py` | `GET /health` | aggregates `HealthProbe`s |
 

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   git hash-object docs\catalog\config-catalog.md docs\catalog\config-catalog.zh.md
-docs/catalog/config-catalog.md: 898057b6440076ea341c7189c1be2c93a5461ac7
-docs/catalog/config-catalog.zh.md: 49ec719f58da6f64f3dfd06900574bc31f07e957
+docs/catalog/config-catalog.md: 3a63ec862289dd747cfaab8bbbacb38fc9e9ce32
+docs/catalog/config-catalog.zh.md: 5151692067ccf6c23fe6ed3160ab51cf3789c949

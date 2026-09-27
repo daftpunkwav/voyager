@@ -18,7 +18,7 @@ Per kind:
 
 ## Workers and extraction
 
-`worker.py` — `RepoWorker` clones repositories into `workspace/repo/{owner}__{repo}` (clone function injectable for tests); `DocWorker` parses documents asynchronously. Both run under `Wiring.start`/`stop` with asyncio queues.
+`worker.py` — `RepoWorker` clones repositories into `workspace/repo/{owner}__{repo}` (clone function injectable for tests; a clone is cut off at a 600 s hard timeout and the child killed and reaped); directory removal runs off the event loop via `asyncio.to_thread`. The worker loop survives a failed job (one bad job never stops the queue). `DocWorker` parses documents asynchronously. Both run under `Wiring.start`/`stop` with asyncio queues.
 
 `extract.py` — section extraction (`Section(section_no, title, page_start, page_end, text)`) for `.pdf` (bookmarks), `.epub` (spine; zip-bomb caps at 20 MiB/entry, 200 MiB total), `.docx`, and plain text/markdown; failures raise `ExtractError`.
 

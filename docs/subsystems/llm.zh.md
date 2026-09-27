@@ -26,9 +26,11 @@
 
 工具以中立格式(`[{"name", "description", "schema"}]`)传输,再按 wire 格式翻译。上游错误被分类(限流 / 认证 / 上下文溢出 / 瞬态),有界重试 2 次、退避 0.5 秒,遵循封顶 5 秒的 `Retry-After`。
 
+出站加固:`add_provider`/`update_provider` 校验 `base_url`(http(s) 且含主机名;公网端点必须 https;私网/loopback 目标仅 USER 可配,并记为该供应商行的 `private_endpoint`)。每次请求前由 `net_pin.pinned_ip` 解析供应商主机一次——USER 授权的私网端点照常解析(本地 Ollama 不受影响)——并用 `pinned_request` 把请求构建到已校验的 IP 上(保留原 Host 头与 TLS SNI),封死解析与连接之间的重绑定窗口。解析失败映射为 `LLM.UNAVAILABLE`;未授权供应商解析到私网映射为 `LLM.FORBIDDEN`,且解析到的内网 IP 不进入错误消息。
+
 ## 存储
 
-`store.py` — `ProviderStore`(SQLite `llm.db`):`providers`(base_url、api_format、models、enabled、custom)与 `usage`(ts、provider_id、model、caller、input/output/cached/reasoning/cache-write tokens、ok)。API key 绝不存这里 — 存入 `SecretStore`(`platform_secrets`)。`catalog.py` 持有 `BUILTIN_PROVIDERS` 预设(如 `openai`、`openai-responses`、`anthropic`、`deepseek`、`moonshot`)。
+`store.py` — `ProviderStore`(SQLite `llm.db`):`providers`(base_url、api_format、models、enabled、custom、private_endpoint)与 `usage`(ts、provider_id、model、caller、input/output/cached/reasoning/cache-write tokens、ok)。API key 绝不存这里 — 存入 `SecretStore`(`platform_secrets`)。`catalog.py` 持有 `BUILTIN_PROVIDERS` 预设(如 `openai`、`openai-responses`、`anthropic`、`deepseek`、`moonshot`)。
 
 ## 用量与定价
 

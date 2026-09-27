@@ -35,7 +35,7 @@ class Capability:
 
 ## REST 生成
 
-`gen_rest.py` — `build_router(registry, issuer, auth, quota, audit)` 为每个 registry 产出两条路由,由 host 挂载到 `/api/<domain>`:
+`gen_rest.py` — `build_router(registry, issuer, quota, audit)` 为每个 registry 产出两条路由,由 host 挂载到 `/api/<domain>`:
 
 - `GET /capabilities` — 含输入 schema 的清单。
 - `POST /capabilities/{name}` — 调用;返回 `{"result": ...}` 或 `ErrorEnvelope`。
@@ -50,9 +50,9 @@ class Capability:
 
 `guards.py` — `execute()` 让每次调用都穿过同一条链,与调用方无关:
 
-1. **认证** — 注入的认证器解析 `ActorContext`(REST:`platform_actor.resolve_http_actor`;进程内调用显式携带 actor)。
+1. **认证** — `LocalAuth` 永远执行:user actor 直接信任,agent actor 需要能力要求的 scope。不存在调用方注入的认证器列表(空列表即 fail-open)。
 2. **配额** — `CostQuota` 执行每日 token 预算(每次调用计 `cost`)。
-3. **校验** — 输入模型校验载荷。
+3. **校验** — 有 `input_model` 时对载荷做浅校验并构建模型;没有时将调用与handler 签名绑定(`inspect.Signature.bind` 拒绝未知键与缺失参数),并对原始类型参数做浅类型检查。handler 体内抛出的 `TypeError` 仍原样冒泡。
 4. **处理器** — 能力函数执行。
 5. **审计** — `AuditSink` 记录本次调用。
 

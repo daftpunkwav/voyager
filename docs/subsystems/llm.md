@@ -26,9 +26,11 @@ Source: `packages/llm/src/llm/` — port 8070, enabled by default, store `data/r
 
 Tools travel in a neutral format (`[{"name", "description", "schema"}]`) and are translated per wire format. Upstream errors are classified (rate limit / auth / context overflow / transient) and retried with a bound of 2 attempts and 0.5 s backoff, honoring `Retry-After` capped at 5 s.
 
+Egress hardening: `add_provider`/`update_provider` validate `base_url` (http(s) with a hostname; public endpoints must use https; private/loopback targets are USER-only and recorded as `private_endpoint` on the provider row). Before any request, `net_pin.pinned_ip` resolves the provider host once — USER-authorized private endpoints resolve without rejection (local Ollama stays working) — and every request is built onto the validated IP with `pinned_request` (original Host header and TLS SNI preserved), closing the resolve-then-connect rebinding window. Resolution failures map to `LLM.UNAVAILABLE`; a non-authorized provider resolving into private space maps to `LLM.FORBIDDEN` with the resolved IP kept out of the message.
+
 ## Storage
 
-`store.py` — `ProviderStore` (SQLite `llm.db`): `providers` (base_url, api_format, models, enabled, custom) and `usage` (ts, provider_id, model, caller, input/output/cached/reasoning/cache-write tokens, ok). API keys are never stored here — they go to `SecretStore` (`platform_secrets`). `catalog.py` holds `BUILTIN_PROVIDERS` presets (e.g. `openai`, `openai-responses`, `anthropic`, `deepseek`, `moonshot`).
+`store.py` — `ProviderStore` (SQLite `llm.db`): `providers` (base_url, api_format, models, enabled, custom, private_endpoint) and `usage` (ts, provider_id, model, caller, input/output/cached/reasoning/cache-write tokens, ok). API keys are never stored here — they go to `SecretStore` (`platform_secrets`). `catalog.py` holds `BUILTIN_PROVIDERS` presets (e.g. `openai`, `openai-responses`, `anthropic`, `deepseek`, `moonshot`).
 
 ## Usage and pricing
 

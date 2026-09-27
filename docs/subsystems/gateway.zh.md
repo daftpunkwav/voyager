@@ -8,12 +8,12 @@
 
 ## 应用
 
-`rest.py` — `create_app(mounts, db_path, bus, lifespan, issuer, auth, quota, audit, rate_limit_per_minute=600, sse_max_connections=8, ...)`:
+`rest.py` — `create_app(mounts, db_path, bus, lifespan, issuer, quota, audit, rate_limit_per_minute=600, sse_max_connections=8, ..., uploads_workspace=None)`:
 
 - 安全头中间件:CSP 镜像前端 `index.html` 的 meta CSP(`frame-ancestors 'none'`、`script-src 'self' 'unsafe-eval' blob:`、`worker-src 'self' blob:`)、`X-Content-Type-Options: nosniff`。
 - actor 中间件:`platform_actor.resolve_http_actor` 解析 Bearer/cookie 调用方;未认证的回环请求按 `LOCAL_USER` 处理;未认证的非回环请求得到 401。
 - Origin/Host 守卫中间件:`Host` 头必须指向本机(回环/私有 IP 字面量或 `localhost` 族 —— DNS 重绑定防御),浏览器附带的 `Origin` 必须是本机回环 origin(CSRF 防御);违规返回 403 `GATEWAY.FORBIDDEN`。非浏览器客户端不发送 `Origin`,不受影响。
-- `ServiceError` 处理器渲染 `ErrorEnvelope`(`{error: {code, message, hint, trace_id}}`)。
+- `ServiceError` 与 `RequestValidationError` 处理器渲染 `ErrorEnvelope`(`{error: {code, message, hint, trace_id}}`)——类型化的 query 参数非法时,与其他客户端错误落入同一信封。
 
 ## 挂载的路由
 
@@ -23,7 +23,7 @@
 | `chat.py` | `POST /api/chat/messages`、`GET /api/chat/messages`、`GET /api/chat/trajectory`、`GET /api/chat/rawllm`、`GET /api/chat/stream` | 历史分页接受 `before_seq`/`after_seq`/`session`;trajectory 另有 `run_id` 模式(单个 run 的完整步骤列表),rawllm 读取轨迹投影的原始轮次;SSE 支持 `after_seq` 续传、积压重放(`once=true`)、保活注释帧与 `_STREAM_TYPES` 过滤 |
 | `session.py` | `GET /api/session/bootstrap` | 仅回环可用的 HttpOnly 会话 cookie,30 天 TTL |
 | `activity.py` | `POST /api/activity`、`GET /api/activity/feed` | 类型 `page_view`/`pointer`/`selection`/`manual` → 发布 `user.activity`;feed 支持 `recent`(最新窗口)、`types`(fnmatch)与 `agent`/`session` 归属过滤——操作白名单(笔记/资源生命周期、会话删除、agent 驱动的设置变更、文件写入)按 `payload.session` 归属,仅 agent 回合内产生的事件携带该字段 |
-| `uploads.py` | `POST /api/uploads` | multipart,上限 1 GiB,落在 `workspace/imports/` |
+| `uploads.py` | `POST /api/uploads` | multipart;1 GiB 上限在 ASGI receive 边界执行(`max_files=1`,spool 临时文件由 form 上下文释放);共享网关级限流器(工作区热切换时经 `app.state.limiter` 重挂载);落在 `workspace/imports/` |
 | `workspace.py` | `GET /api/workspace/list`、`GET /api/workspace/read`、`GET /api/workspace/pick` | `read` 预览上限 256 KiB / 400 行;`pick` 只读浏览任意目录 |
 | `health.py` | `GET /health` | 聚合各 `HealthProbe` |
 

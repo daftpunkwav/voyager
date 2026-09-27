@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   git hash-object docs\subsystems\sources.md docs\subsystems\sources.zh.md
-docs/subsystems/sources.md: 2907a7031c0272c34bd151ebc8e9d8d8327b865d
-docs/subsystems/sources.zh.md: 76ee8ac6ba790f3536a208825bf89172ba609e18
+docs/subsystems/sources.md: 2d24bd7cdcd78a934e7644636165e9417aeee902
+docs/subsystems/sources.zh.md: fea0e7a7a58c73ed890dbc52548f8ed38a3c8e34

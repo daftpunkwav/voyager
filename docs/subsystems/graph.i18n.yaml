@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   git hash-object docs\subsystems\graph.md docs\subsystems\graph.zh.md
-docs/subsystems/graph.md: f2a8e40d902fbe242cc9cda76420b3186016f1e9
-docs/subsystems/graph.zh.md: 257b3942bd1b67045b4b41a24227bed2542b7175
+docs/subsystems/graph.md: 0a32879567fa95f41e472ec8bcc16112f042cf9f
+docs/subsystems/graph.zh.md: 968e5c895f33521c91e451df478ab1fdd808f534

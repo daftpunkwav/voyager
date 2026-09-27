@@ -18,7 +18,7 @@
 
 ## Worker 与抽取
 
-`worker.py` — `RepoWorker` 把仓库克隆到 `workspace/repo/{owner}__{repo}`(clone 函数可注入供测试);`DocWorker` 异步解析文档。两者在 `Wiring.start`/`stop` 下配合 asyncio 队列运行。
+`worker.py` — `RepoWorker` 把仓库克隆到 `workspace/repo/{owner}__{repo}`(clone 函数可注入供测试;clone 在 600 秒硬超时处被切断,子进程被 kill 并回收);目录删除经 `asyncio.to_thread` 在事件循环外执行。worker 循环在单个任务失败后仍存活(一个坏任务不会停掉整个队列)。`DocWorker` 异步解析文档。两者在 `Wiring.start`/`stop` 下配合 asyncio 队列运行。
 
 `extract.py` — 分节抽取(`Section(section_no, title, page_start, page_end, text)`),支持 `.pdf`(书签)、`.epub`(spine;zip 炸弹上限 20 MiB/条目、总量 200 MiB)、`.docx` 与纯文本/markdown;失败抛 `ExtractError`。
 

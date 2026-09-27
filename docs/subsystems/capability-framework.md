@@ -35,7 +35,7 @@ Domains typically declare one registry per concern module and merge them (`sourc
 
 ## REST generation
 
-`gen_rest.py` — `build_router(registry, issuer, auth, quota, audit)` emits two routes per registry, mounted by host at `/api/<domain>`:
+`gen_rest.py` — `build_router(registry, issuer, quota, audit)` emits two routes per registry, mounted by host at `/api/<domain>`:
 
 - `GET /capabilities` — the listing with input schemas.
 - `POST /capabilities/{name}` — the invocation; returns `{"result": ...}` or the `ErrorEnvelope`.
@@ -50,9 +50,9 @@ Domains typically declare one registry per concern module and merge them (`sourc
 
 `guards.py` — `execute()` runs every invocation through one chain, regardless of caller:
 
-1. **Auth** — the injected authenticator resolves the `ActorContext` (REST: `platform_actor.resolve_http_actor`; in-process calls carry their actor explicitly).
+1. **Auth** — `LocalAuth` always runs: user actors are trusted, agent actors need the capability's scopes. There is no caller-supplied authenticator list (an empty one would be a fail-open).
 2. **Quota** — `CostQuota` enforces the daily token budget (`cost` per call).
-3. **Validation** — the input model validates the payload.
+3. **Validation** — with an `input_model` the payload is shallow-checked and the model built; without one, the handler signature is bound against the call (`inspect.Signature.bind` rejects unknown keys and missing arguments) and primitive-typed parameters are shallow-checked. A `TypeError` raised inside the handler body still propagates untouched.
 4. **Handler** — the capability function runs.
 5. **Audit** — the `AuditSink` records the call.
 
