@@ -99,6 +99,28 @@ class TestCatalog:
 
 
 class TestSecretBoundary:
+    async def test_remove_provider_deletes_row_and_key(self, deps) -> None:
+        """Deleting a provider removes the row AND clears its stored API key:
+        an orphaned secret must never outlive the provider it belongs to."""
+        from llm.capabilities.common import key_name
+
+        _store, secrets = deps
+        pid = await _add_sample()
+        await execute(
+            registry, "set_api_key", USER_CTX, {"provider_id": pid, "api_key": "sk-doomed"}
+        )
+        assert secrets.has(key_name(pid)) is True
+        out = await execute(registry, "remove_provider", USER_CTX, {"provider_id": pid})
+        assert out == {"removed": pid}
+        providers = await execute(registry, "list_providers", USER_CTX, {})
+        assert all(p["id"] != pid for p in providers)
+        assert secrets.has(key_name(pid)) is False
+
+    async def test_remove_unknown_provider_not_found(self, deps) -> None:
+        with pytest.raises(ServiceError) as exc:
+            await execute(registry, "remove_provider", USER_CTX, {"provider_id": "ghost"})
+        assert exc.value.body.code == "LLM.NOT_FOUND"
+
     async def test_agent_cannot_write_api_key(self, deps) -> None:
         pid = await _add_sample()
         with pytest.raises(ServiceError) as exc:
