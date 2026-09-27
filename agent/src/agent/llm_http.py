@@ -595,6 +595,8 @@ class HttpLLM:
             # retried stream's answer text onto the reasoning channel.
             text_parts: list[str] = []
             calls_by_index: dict[int, dict[str, Any]] = {}
+            # Slot-allocator state shared by every fragment of this stream
+            alloc = {"next_slot": 0, "in_flight": -1}
             reasoning_parts: list[str] = []
             splitter = _InlineTagSplitter()
             usage: dict[str, Any] = {}
@@ -678,7 +680,7 @@ class HttpLLM:
                                         reasoning_delta=str(delta["reasoning_content"])
                                     )
                                 for frag in delta.get("tool_calls") or []:
-                                    self._merge_tool_fragment(calls_by_index, frag)
+                                    self._merge_tool_fragment(calls_by_index, frag, alloc)
                         break
             except _NO_RETRY_NET:
                 # Connection was established and the stream dropped: terminal,
@@ -779,16 +781,39 @@ class HttpLLM:
             )
 
     @staticmethod
-    def _merge_tool_fragment(acc: dict[int, dict[str, Any]], frag: dict[str, Any]) -> None:
+    def _merge_tool_fragment(
+        acc: dict[int, dict[str, Any]],
+        frag: dict[str, Any],
+        alloc: dict[str, int],
+    ) -> None:
         """Accumulate one streaming tool-call fragment by index: arguments
         stream in pieces; some compat endpoints resend the full id/name on
         every fragment, so both are overwritten (idempotent), never appended.
 
-        ``or 0`` (not a default arg): the wire type is integer, but some
-        compatible gateways emit "index": null — that must degrade to the
-        first fragment, not raise int(None) TypeError mid-stream. Same
-        null-safe semantics as packages/llm's chat parser."""
-        idx = int(frag.get("index") or 0)
+        Index-less fragments (some gateways emit "index": null) never collapse
+        onto slot 0: that would concatenate two parallel tool calls into one
+        dict with mangled arguments. A fragment without an index belongs to
+        the call in flight; a stream that never indexes at all gets a fresh
+        slot per call (the previous call's arguments closed into complete
+        JSON). Same slot-allocator semantics as packages/llm's chat parser —
+        this is a hand-mirrored pair (see host's parity suite)."""
+        raw_index = frag.get("index")
+        if raw_index is None:
+            prior = acc.get(alloc["in_flight"]) if alloc["in_flight"] >= 0 else None
+            closed = bool(
+                prior
+                and prior["id"]
+                and prior["arguments"]
+                and _is_complete_json(prior["arguments"])
+            )
+            if alloc["in_flight"] < 0 or closed:
+                alloc["in_flight"] = alloc["next_slot"]
+                alloc["next_slot"] += 1
+            idx = alloc["in_flight"]
+        else:
+            idx = int(raw_index)
+            alloc["next_slot"] = max(alloc["next_slot"], idx + 1)
+            alloc["in_flight"] = idx
         slot = acc.setdefault(idx, {"id": "", "name": "", "arguments": ""})
         if frag.get("id"):
             slot["id"] = frag["id"]
@@ -797,6 +822,17 @@ class HttpLLM:
             slot["name"] = str(fn["name"])
         if fn.get("arguments"):
             slot["arguments"] += fn["arguments"]
+
+
+def _is_complete_json(text: str) -> bool:
+    """True when `text` parses as a complete JSON value (a tool call's
+    arguments close exactly once, which is how an un-indexed stream reveals
+    that a new call has started). Mirror of llm.stream's helper."""
+    try:
+        json.loads(text)
+    except ValueError:
+        return False
+    return True
 
 
 def _parse_usage(usage: dict[str, Any]) -> Usage:

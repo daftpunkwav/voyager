@@ -70,6 +70,7 @@ graph LR
     p_llm --> p_platform_contracts
     p_llm --> p_platform_secrets
     p_llm --> p_platform_settings
+    p_llm --> p_platform_webguard
     p_notes --> p_platform_capability
     p_notes --> p_platform_contracts
     p_notes --> p_platform_eventbus

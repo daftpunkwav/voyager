@@ -68,6 +68,13 @@ def _patch_transport(monkeypatch: pytest.MonkeyPatch, handler: Any) -> None:
         lambda **kw: real(transport=httpx.MockTransport(handler), **kw),
     )
 
+    # The llm side pins the provider IP before connecting; keep the suite
+    # offline by stubbing the resolve step (the fixture host "fake" has no DNS).
+    async def fake_pinned_ip(provider: dict[str, Any]) -> str:
+        return "93.184.216.34"
+
+    monkeypatch.setattr(llm_stream_mod, "pinned_ip", fake_pinned_ip)
+
 
 async def _run_llm(monkeypatch: pytest.MonkeyPatch, sse: str) -> list[dict[str, Any]]:
     _patch_transport(monkeypatch, _handler(sse))
@@ -189,8 +196,9 @@ async def test_inline_tool_call_fallback_parity(monkeypatch: pytest.MonkeyPatch)
 async def test_fragment_reassembly_with_null_index_parity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Tool-call fragments reassemble by index; a null index degrades to slot
-    0 on both sides (the drift class this parity suite exists for)."""
+    """Tool-call fragments reassemble by index; an index-less fragment
+    belongs to the call in flight on both sides (the slot allocator landed on
+    both mirrors — collapsing to slot 0 would merge parallel calls)."""
     sse = _sse(
         {
             "choices": [
