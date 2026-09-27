@@ -97,6 +97,17 @@ class TestCatalog:
             )
         assert exc.value.body.code == "LLM.INVALID_INPUT"
 
+    async def test_provider_row_flags_are_bools(self, deps) -> None:
+        """Flag contract of the provider dict (the REST/frontend shape):
+        enabled / custom / private_endpoint are real booleans after the
+        sqlite 0/1 round-trip, never raw ints."""
+        store, _secrets = deps
+        await _add_sample()
+        (provider,) = store.list(include_disabled=True)
+        assert isinstance(provider["enabled"], bool)
+        assert isinstance(provider["custom"], bool)
+        assert isinstance(provider["private_endpoint"], bool)
+
 
 class TestSecretBoundary:
     async def test_remove_provider_deletes_row_and_key(self, deps) -> None:

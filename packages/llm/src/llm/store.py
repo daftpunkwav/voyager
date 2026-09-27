@@ -413,4 +413,7 @@ def _row(r: tuple) -> dict[str, Any]:
         d["models_meta"] = {}
     d["enabled"] = bool(d["enabled"])
     d["custom"] = bool(d["custom"])
+    # Same flag contract as enabled/custom: the row stores 0/1, the caller-
+    # facing dict carries a real bool so REST/JSON never leaks a 0/1 int.
+    d["private_endpoint"] = bool(d["private_endpoint"])
     return d

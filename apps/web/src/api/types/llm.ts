@@ -46,6 +46,9 @@ export interface LlmProvider {
   models_meta: Record<string, LlmModelMeta>;
   enabled: boolean;
   custom: boolean;
+  /** USER-authorized private endpoint flag recorded at write time (request-time
+   *  IP pinning honors it); informational on this side. */
+  private_endpoint: boolean;
   has_api_key: boolean;
 }
 
