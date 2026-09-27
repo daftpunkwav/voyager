@@ -56,7 +56,7 @@ Three source roots (product code only recognizes these three trees): `agent/` ·
 └── brand.json         # single source of brand strings
 ```
 
-Each package documents its contract in its own `README.md` (purpose / config / extension points / tool surface / limits / deferred), starting from [packages/README.md](packages/README.md).
+Each package documents its contract in its own `README.md` (purpose / configuration / extension points / model experience / known limitations / deferred work), starting from [packages/README.md](packages/README.md).
 
 > **Product surface**: the `packages/office / browser / code_exec` domains are implemented
 > and runnable standalone (each ships rest.py / mcp_server.py), but their module cards are
@@ -70,7 +70,7 @@ Each package documents its contract in its own `README.md` (purpose / config / e
 ## Documentation
 
 - The `docs/` tree documents the code as it is: start from [docs/README.md](docs/README.md) — architecture, subsystem references, catalogs (tools / settings / data layout), frontend, testing.
-- Each backend package documents its contract in its own `README.md` (purpose / config / extension points / tool surface / limits), starting from [packages/README.md](packages/README.md); the agent source root starts from [agent/README.md](agent/README.md).
+- Each backend package documents its contract in its own `README.md` (purpose / configuration / extension points / model experience / known limitations / deferred work), starting from [packages/README.md](packages/README.md); the agent source root starts from [agent/README.md](agent/README.md).
 - The frontend starts from [apps/web/README.md](apps/web/README.md).
 
 ## Conventions and contributing
