@@ -145,13 +145,17 @@ class AgentRebuilder:
         )
 
 
-async def _teardown_agent(
+async def teardown_agent(
     old: AgentApp,
     agent_task: asyncio.Task | None,
     mcp_task: asyncio.Task | None,
 ) -> None:
     """Stop one agent generation: no new turns, drain in-flight work, then
-    close its stores (shared bus/log/settings stay open — see owns_*)."""
+    close its stores (shared bus/log/settings stay open — see owns_*).
+
+    Public on purpose: this is the shared teardown contract between this
+    module and assemble.build's lifespan (same-package, but part of the
+    module boundary, not module-private state)."""
     old.loop.stop()
     for task in (agent_task, mcp_task):
         if task is not None:
@@ -277,7 +281,7 @@ async def switch_workspace(
                 "previous": str(previous),
                 "note": "already on this workspace; nothing was rebuilt.",
             }
-        await _teardown_agent(old, rebuilder.agent_task, rebuilder.mcp_task)
+        await teardown_agent(old, rebuilder.agent_task, rebuilder.mcp_task)
         rebuilder.agent_task = None
         rebuilder.mcp_task = None
         try:
@@ -375,4 +379,5 @@ __all__ = [
     "build_switch_router",
     "resolve_candidate_dir",
     "switch_workspace",
+    "teardown_agent",
 ]

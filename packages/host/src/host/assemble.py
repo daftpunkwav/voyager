@@ -46,7 +46,7 @@ from platform_eventbus import EventBus, EventLog
 from platform_secrets import SecretStore
 from platform_settings import SettingsStore
 
-from .agent_rebuild import AgentRebuilder, _teardown_agent, build_switch_router
+from .agent_rebuild import AgentRebuilder, build_switch_router, teardown_agent
 from .bridge import make_domain_tools
 from .call import bind_calls
 from .embedder_adapter import ServiceEmbedder
@@ -377,7 +377,7 @@ def build(
                     with suppress(Exception):
                         await built.start_queue_loop()
                 except BaseException:
-                    await _teardown_agent(built, rebuilder.agent_task, rebuilder.mcp_task)
+                    await teardown_agent(built, rebuilder.agent_task, rebuilder.mcp_task)
                     rebuilder.agent_task = None
                     rebuilder.mcp_task = None
                     rebuilder.agent = None
@@ -406,7 +406,7 @@ def build(
                     rebuilder.mcp_task = None
                     rebuilder.current_workspace = None
                     if current is not None:
-                        await _teardown_agent(current, agent_task, mcp_task)
+                        await teardown_agent(current, agent_task, mcp_task)
                     await stop_wirings(list(wirings.values()))
                     close_wirings(list(wirings.values()))
                     if current is not None:
