@@ -163,3 +163,20 @@ class TestLegacyMigrationBackfill:
         store = ProviderStore(db)
         row = store.get("p2")
         assert row is not None and row["private_endpoint"] == 0
+
+
+class TestPrivateEndpointResolutionFailures:
+    async def test_private_host_resolution_failure_maps_to_unavailable(self, monkeypatch) -> None:
+        _patch_resolver(monkeypatch, {})  # every host fails to resolve
+        provider = {"base_url": "http://localhost:11434", "private_endpoint": True}
+        with pytest.raises(ServiceError) as exc:
+            await pinned_ip(provider)
+        assert exc.value.body.code.endswith("UNAVAILABLE")
+        assert "localhost" in exc.value.body.message  # host is fine to name, not the IP
+
+    async def test_private_host_resolving_to_nothing_maps_to_unavailable(self, monkeypatch) -> None:
+        _patch_resolver(monkeypatch, {"localhost": []})
+        provider = {"base_url": "http://localhost:11434", "private_endpoint": True}
+        with pytest.raises(ServiceError) as exc:
+            await pinned_ip(provider)
+        assert exc.value.body.code.endswith("UNAVAILABLE")

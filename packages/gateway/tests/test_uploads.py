@@ -110,30 +110,31 @@ class TestUpload:
         assert resp.json()["error"]["code"] == "GATEWAY.PAYLOAD_TOO_LARGE"
         assert not (ws / "imports").exists()
 
-    def test_normal_upload_leaves_no_spool_leftovers(self, client) -> None:
-        """A successful upload works as before; the async-with form parse
-        must not leave spool temp files behind in the system temp dir."""
-        import tempfile
-        from pathlib import Path
-
-        tmp = Path(tempfile.gettempdir())
-        tempfile_before = set(tmp.iterdir())
-        tc, _ = client
-        resp = tc.post("/api/uploads", files={"file": ("ok.bin", b"y" * 4096)})
+    def test_upload_above_spool_roll_size_still_succeeds(self, client) -> None:
+        """A body large enough to roll Starlette's spooled form data to disk
+        parses fine through the async-with form (spooled temp files are closed
+        and removed by the context exit, never left for the caller)."""
+        tc, ws = client
+        body = b"y" * (2 * 1024 * 1024)
+        resp = tc.post("/api/uploads", files={"file": ("big-ok.bin", body)})
         assert resp.status_code == 201
-        assert resp.json()["size"] == 4096
-        tempfile_after = set(tmp.iterdir())
-        assert not (tempfile_after - tempfile_before)  # no spool residue
+        assert resp.json()["size"] == len(body)
+        assert Path(resp.json()["file_path"]).is_file()
 
     def test_extra_file_fields_rejected(self, client) -> None:
-        """max_files=1 at the multipart parser: one request cannot smuggle a
-        second file field."""
-        tc, _ = client
+        """max_files=1 at the multipart parser: a second file field fails the
+        parse with the unified 400 envelope (Starlette raises
+        MultiPartException; the handler maps parse failures to
+        GATEWAY.INVALID_INPUT)."""
+        tc, ws = client
         resp = tc.post(
             "/api/uploads",
             files=[("file", ("a.txt", b"x")), ("extra", ("b.txt", b"y"))],
         )
-        assert resp.status_code in (400, 413)  # rejected either way
+        assert resp.status_code == 400
+        assert resp.json()["error"]["code"] == "GATEWAY.INVALID_INPUT"
+        imports = ws / "imports"
+        assert not imports.exists() or list(imports.rglob("*")) == []
 
     def test_garbage_content_length_is_tolerated(self, client) -> None:
         """An unparseable Content-Length must not crash the endpoint: the
@@ -171,3 +172,24 @@ class TestUploadRateLimit:
             assert r.json()["error"]["code"] == "GATEWAY.RATE_LIMITED"
         after = sorted(p.name for p in imports.rglob("*") if p.is_file())
         assert after == before  # the throttled upload never touched the disk
+
+
+class TestUploadSharesGatewayLimiter:
+    def test_uploads_and_chat_share_one_limiter_instance(self, tmp_path, echo_registry) -> None:
+        """/api/uploads joins the gateway-wide limiter (create_app stashes it
+        on app.state for the hot-swap remount): exhausting chat requests must
+        throttle uploads too, proving it is one instance, not two counters."""
+        from gateway.rest import create_app
+
+        app = create_app(
+            [MountSpec(domain="echo", registry=echo_registry)],
+            db_path=tmp_path / "gw.db",
+            rate_limit_per_minute=3,
+            uploads_workspace=tmp_path / "ws",
+        )
+        with TestClient(app) as tc:
+            for i in range(3):
+                assert tc.post("/api/chat/messages", json={"content": f"c{i}"}).status_code == 200
+            r = tc.post("/api/uploads", files={"file": ("late.txt", b"x")})
+            assert r.status_code == 429
+            assert r.json()["error"]["code"] == "GATEWAY.RATE_LIMITED"

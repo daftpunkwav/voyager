@@ -252,3 +252,41 @@ async def test_midstream_error_frame_never_silent(monkeypatch: pytest.MonkeyPatc
     assert "blocked mid-stream" in (agent.text or "")
     with pytest.raises(llm_client_mod.ProviderError, match="blocked mid-stream"):
         await _run_llm(monkeypatch, sse)
+
+
+async def test_parallel_unindexed_calls_get_separate_slots_parity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two parallel tool calls in a stream that never sends an index: each
+    call lands in its own slot on both sides (collapsing onto slot 0 would
+    concatenate the two argument objects into one mangled call)."""
+    sse = _sse(
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {"id": "c1", "function": {"name": "a", "arguments": '{"x": 1}'}}
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {"id": "c2", "function": {"name": "b", "arguments": '{"y": 2}'}}
+                        ]
+                    }
+                }
+            ]
+        },
+        "[DONE]",
+    )
+    agent = _agent_semantics(await _run_agent(sse))
+    llm = _llm_semantics(await _run_llm(monkeypatch, sse))
+    assert agent.tool_calls == (("a", {"x": 1}), ("b", {"y": 2}))
+    assert llm.tool_calls == (("a", {"x": 1}), ("b", {"y": 2}))
+    assert agent == llm

@@ -199,4 +199,12 @@ class TestLoaderToleranceAndCache:
         assert loader.index()[0]["description"] == "old description"
         assert loader.index()[0]["description"] == "old description"  # cached, same bytes
         (d / "SKILL.md").write_text("# new description" + chr(10), encoding="utf-8")
+        # The cache keys on st_mtime: on a coarse clock the rewrite can land
+        # in the same tick as the original write, so pin a strictly later
+        # mtime instead of hoping the clock advanced between the two writes.
+        import os
+        import time
+
+        later = time.time() + 5
+        os.utime(d / "SKILL.md", (later, later))
         assert loader.index()[0]["description"] == "new description"
