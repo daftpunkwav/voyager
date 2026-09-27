@@ -82,15 +82,15 @@ def build_upload_router(workspace: Path, limiter: RateLimiter) -> APIRouter:
         # disk before any of our own checks ran. Counting inside receive
         # stops the spool the moment the cap is crossed, and the async with
         # below makes Starlette clean up whatever was spooled.
-        seen = 0
+        bytes_seen = 0
         receive = request._receive
 
         async def _capped_receive() -> Message:
-            nonlocal seen
+            nonlocal bytes_seen
             message = await receive()
             if message["type"] == "http.request":
-                seen += len(message.get("body", b""))
-                if seen > _MAX_BYTES:
+                bytes_seen += len(message.get("body", b""))
+                if bytes_seen > _MAX_BYTES:
                     raise _TooLarge
             return message
 
