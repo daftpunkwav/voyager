@@ -96,7 +96,6 @@ def create_app(
     bus: EventBus | None = None,
     lifespan=None,
     issuer=None,
-    auth: list | None = None,
     quota: list | None = None,
     audit: list | None = None,
     rate_limit_per_minute: int = 600,
@@ -204,7 +203,7 @@ def create_app(
             )
         return await call_next(request)
 
-    mount_services(app, mounts or [], probe, issuer=issuer, auth=auth, quota=quota, audit=audit)
+    mount_services(app, mounts or [], probe, issuer=issuer, quota=quota, audit=audit)
     app.include_router(build_session_router(issuer))
     # Cross-cutting routers injected by the deployment entry point (e.g. file
     # upload endpoints); the gateway holds no domain business logic, only

@@ -38,7 +38,7 @@ class HealthProbe:
             out = fn()
             report = await out if inspect.isawaitable(out) else out
             status = str(report.get("status", HealthStatus.UP.value))
-        except Exception as exc:  # noqa: BLE001 probes never take gateway down (isolation)
+        except Exception as exc:
             # Detail is for operators, not for the wire: /health is an
             # unauthenticated path, so the raw exception text (absolute
             # paths, sqlite messages) must never reach the snapshot.

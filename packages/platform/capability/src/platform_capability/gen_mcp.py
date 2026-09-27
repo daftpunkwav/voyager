@@ -139,7 +139,6 @@ def build_server(
     *,
     name: str = "capability-server",
     default_actor: ActorRef = LOCAL_USER,
-    auth: list | None = None,
     quota: list | None = None,
     audit: list | None = None,
 ):
@@ -177,7 +176,6 @@ def build_server(
                 tool_name,
                 ActorContext(actor=default_actor),
                 arguments or {},
-                auth=auth,
                 quota=quota,
                 audit=audit,
             )

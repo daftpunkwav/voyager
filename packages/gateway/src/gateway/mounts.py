@@ -37,17 +37,15 @@ def mount_services(
     probe: HealthProbe,
     *,
     issuer=None,
-    auth: list[Callable] | None = None,
     quota: list[Callable] | None = None,
     audit: list | None = None,
 ) -> None:
     """Mount all services: REST prefix /api/<domain>, probe registration,
-    and per-route auth / quota / audit shared across routers."""
+    and per-route quota / audit shared across routers."""
     for spec in mounts:
         router = build_router(
             spec.registry,
             issuer=issuer,
-            auth=auth,
             quota=quota,
             audit=audit,
         )

@@ -235,7 +235,6 @@ def _swap_workspace_routes(
         build_router(
             new_agent.registry,
             issuer=rebuilder.issuer,
-            auth=None,
             quota=rebuilder.quota,
             audit=rebuilder.audit,
         ),

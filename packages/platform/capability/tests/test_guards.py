@@ -250,3 +250,36 @@ class TestSignatureBinding:
         reg = _registry()
         out = await execute(reg, "do_thing", AGENT_CTX, {"text": "hello"})
         assert out == {"ok": "hello"}
+
+
+class TestAuthAlwaysOn:
+    """There is no caller-supplied way to switch authentication off: the
+    auth parameter is gone and LocalAuth always runs (a nominally-empty hook
+    list used to be a fail-open trap)."""
+
+    async def test_agent_without_scope_still_rejected(self) -> None:
+        reg = Registry("notes")
+
+        @capability(reg, name="w", description="scoped write", scopes=("notes.write",))
+        async def w() -> dict:
+            return {"ok": True}
+
+        outsider = ActorContext(actor=ActorRef(kind=ActorKind.AGENT, id="a.x", scopes=()))
+        with pytest.raises(ServiceError) as exc:
+            await execute(reg, "w", outsider, {})
+        assert "AUTH" in exc.value.body.code or exc.value.body.code.endswith("FORBIDDEN")
+
+    async def test_execute_rejects_auth_kwarg(self) -> None:
+        """Passing the retired auth kwarg is a TypeError at the call site, not
+        a silently honoured hook list."""
+        reg = Registry("notes")
+
+        @capability(reg, name="r", description="read")
+        async def r() -> dict:
+            return {"ok": True}
+
+        # **-expansion keeps the retired kwarg out of mypy's view of this
+        # call site while the runtime still rejects it
+        legacy: dict[str, Any] = {"auth": []}
+        with pytest.raises(TypeError):
+            await execute(reg, "r", USER_CTX, {}, **legacy)

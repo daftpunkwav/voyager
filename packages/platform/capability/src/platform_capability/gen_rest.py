@@ -38,7 +38,6 @@ def build_router(
     registry: Registry,
     *,
     issuer: LocalTokenIssuer | None = None,
-    auth: list[Callable[[CallRequest], None]] | None = None,
     quota: list[Callable[[CallRequest], None]] | None = None,
     audit: list[AuditSink | Callable] | None = None,
     prefix: str = "/capabilities",
@@ -95,7 +94,7 @@ def build_router(
                     f"streaming capability {name} supports in-process consumption only; not available over REST",
                 )
             ctx = _resolve_context(request, issuer)
-            result = await execute(registry, name, ctx, body, auth=auth, quota=quota, audit=audit)
+            result = await execute(registry, name, ctx, body, quota=quota, audit=audit)
         except ServiceError as exc:
             return JSONResponse(status_code=exc.http_status, content=exc.to_envelope())
         if isinstance(result, JobRef):

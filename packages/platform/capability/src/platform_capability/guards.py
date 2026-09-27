@@ -172,7 +172,6 @@ async def execute(
     actor: ActorContext | None,
     args: dict[str, Any] | None = None,
     *,
-    auth: list[Callable[[CallRequest], None]] | None = None,
     quota: list[Callable[[CallRequest], None]] | None = None,
     audit: list[AuditSink | Callable[[AuditEntry], None]] | None = None,
 ) -> Any:
@@ -184,6 +183,10 @@ async def execute(
     into _run_guards (pure guards) and _invoke (validation + call) so each
     can be tested independently; this function only orchestrates and
     finalizes auditing.
+
+    The former ``auth`` parameter is gone: no call site ever passed it, and a
+    parameter that could nominally switch authentication off is a fail-open
+    trap — every invocation runs LocalAuth.
     """
     args = dict(args or {})
     cap = registry.get(name)
@@ -202,7 +205,7 @@ async def execute(
         )
 
     try:
-        _run_guards(req, auth=auth, quota=quota)
+        _run_guards(req, quota=quota)
         result = await _invoke(registry, cap, actor, args, name=name)
     except ServiceError as exc:
         await asyncio.to_thread(_record, sinks, entry(False, exc.body.code))
@@ -214,19 +217,10 @@ async def execute(
     return result
 
 
-def _run_guards(
-    req: CallRequest,
-    *,
-    auth: list[Callable[[CallRequest], None]] | None,
-    quota: list[Callable[[CallRequest], None]] | None,
-) -> None:
-    """Guard phase: auth (LocalAuth by default) then quota; failures reject
-    with ServiceError."""
-    # An empty list is treated like None: passing a nominally-empty collection
-    # must not silently disable authentication (fail-open).
-    auth_hooks = [LocalAuth()] if not auth else auth
-    for hook in auth_hooks:
-        hook(req)
+def _run_guards(req: CallRequest, *, quota: list[Callable[[CallRequest], None]] | None) -> None:
+    """Guard phase: auth (always LocalAuth) then quota; failures reject with
+    ServiceError."""
+    LocalAuth()(req)
     for hook in quota or ():
         hook(req)
 
