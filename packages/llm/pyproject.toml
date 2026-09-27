@@ -9,6 +9,7 @@ dependencies = [
     "platform-contracts",
     "platform-secrets",
     "platform-settings",
+    "platform-webguard",
 ]
 
 [build-system]

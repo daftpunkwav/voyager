@@ -32,8 +32,10 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from platform_webguard import pinned_request
 
 from .inline_split import parse_tool_blocks, split_inline
+from .net_pin import pinned_ip
 from .wire_responses import content_text, parse_response_output, responses_input, responses_tools
 
 _TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
@@ -565,12 +567,19 @@ async def _send_with_retry(
 
 
 async def _post(
-    client: httpx.AsyncClient, url: str, *, headers: dict[str, str], body: dict[str, Any]
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    headers: dict[str, str],
+    body: dict[str, Any],
+    chosen_ip: str,
 ) -> httpx.Response:
-    """Single POST: network-level errors normalized to TransientError; non-2xx
-    classified and raised."""
+    """Single POST onto the pinned IP (net_pin resolves once; the Host header
+    and TLS SNI keep the original hostname): network-level errors normalized
+    to TransientError; non-2xx classified and raised."""
+    request = pinned_request(client, url, chosen_ip, method="POST", headers=headers, json=body)
     try:
-        resp = await client.post(url, headers=headers, json=body)
+        resp = await client.send(request)
     except _NO_RETRY_NET as exc:
         raise TransientError(f"{type(exc).__name__}: {exc}", retriable=False) from exc
     except httpx.TransportError as exc:  # transient connect/DNS/timeout: retryable
@@ -815,9 +824,14 @@ async def complete(
         reasoning_effort=reasoning_effort,
         stream=False,
     )
+    # Resolve-and-pin before anything is sent: the connection targets the
+    # validated IP, so DNS rebinding cannot retarget the request.
+    chosen_ip = await pinned_ip(provider)
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         if fmt == "responses":
-            resp = await _send_with_retry(lambda: _post(client, url, headers=headers, body=body))
+            resp = await _send_with_retry(
+                lambda: _post(client, url, headers=headers, body=body, chosen_ip=chosen_ip)
+            )
             data = resp.json()
             if data.get("status") == "failed":
                 # Same contract as the stream's response.failed: ride the
@@ -853,7 +867,9 @@ async def complete(
                 ),
             )
         if fmt == "anthropic":
-            resp = await _send_with_retry(lambda: _post(client, url, headers=headers, body=body))
+            resp = await _send_with_retry(
+                lambda: _post(client, url, headers=headers, body=body, chosen_ip=chosen_ip)
+            )
             data = resp.json()
             usage = data.get("usage") or {}
             blocks = data.get("content") or []
@@ -892,7 +908,9 @@ async def complete(
                     request_id=_request_id_from(resp),
                 ),
             )
-        resp = await _send_with_retry(lambda: _post(client, url, headers=headers, body=body))
+        resp = await _send_with_retry(
+            lambda: _post(client, url, headers=headers, body=body, chosen_ip=chosen_ip)
+        )
         data = resp.json()
         usage = data.get("usage") or {}
         choice = (data.get("choices") or [{}])[0]

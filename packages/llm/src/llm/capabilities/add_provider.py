@@ -9,6 +9,7 @@ from llm.capabilities.common import (
     DOMAIN,
     MODELS_META_ALLOWED,
     find_bad_models_meta_field,
+    private_endpoint_flag,
     registry,
     require_deps,
     require_provider,
@@ -55,6 +56,7 @@ def add_provider(
             "models": models or [],
             "models_meta": models_meta or {},
             "custom": True,
+            "private_endpoint": private_endpoint_flag(base_url, _actor),
         }
     )
     return with_key_flag(require_provider(pid), deps.secrets)

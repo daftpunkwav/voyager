@@ -235,7 +235,10 @@ def _host_is_nonglobal(host: str) -> bool:
 
 def validate_base_url(base_url: str, actor: ActorRef | None) -> str:
     """http(s) only. Private/loopback hosts are writable by USER actors alone
-    (e.g. local Ollama); agents must not be able to send keys to intranets."""
+    (e.g. local Ollama); agents must not be able to send keys to intranets.
+    Public endpoints must use https: an http:// API key would cross the
+    network in clear text; intranet endpoints are exempt (a LAN hop to local
+    Ollama is the deployment shape this domain documents)."""
     parsed = urlparse(base_url.strip())
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise ServiceError(
@@ -243,7 +246,8 @@ def validate_base_url(base_url: str, actor: ActorRef | None) -> str:
             ErrorSuffix.INVALID_INPUT,
             "base_url must be http(s) and include a hostname",
         )
-    if _host_is_nonglobal(parsed.hostname) and (actor is None or actor.kind is not ActorKind.USER):
+    private = _host_is_nonglobal(parsed.hostname)
+    if private and (actor is None or actor.kind is not ActorKind.USER):
         raise ServiceError(
             DOMAIN,
             ErrorSuffix.FORBIDDEN,
@@ -251,7 +255,27 @@ def validate_base_url(base_url: str, actor: ActorRef | None) -> str:
             hint="Configure local Ollama etc. in the settings page; agents must "
             "not send keys to intranets",
         )
+    if not private and parsed.scheme == "http":
+        raise ServiceError(
+            DOMAIN,
+            ErrorSuffix.INVALID_INPUT,
+            "public endpoints must use https: the API key would cross the network unencrypted",
+            hint="Local servers (Ollama etc. on private addresses) may keep http",
+        )
     return base_url.strip()
+
+
+def private_endpoint_flag(base_url: str, actor: ActorRef | None) -> bool:
+    """Whether this base_url is a USER-authorized private endpoint. The
+    judgment lives on the write path (the only place with actor context) and
+    is persisted with the provider; the request path then pins the IP while
+    honoring the recorded authorization."""
+    parsed = urlparse(base_url.strip())
+    return bool(
+        _host_is_nonglobal(parsed.hostname or "")
+        and actor is not None
+        and actor.kind is ActorKind.USER
+    )
 
 
 def configured_max_output_tokens(fallback: int = 4096) -> int:

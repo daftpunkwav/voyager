@@ -9,6 +9,7 @@ from llm.capabilities.common import (
     DOMAIN,
     MODELS_META_ALLOWED,
     find_bad_models_meta_field,
+    private_endpoint_flag,
     registry,
     require_deps,
     require_provider,
@@ -70,6 +71,10 @@ def update_provider(
                 "models": models,
                 "models_meta": models_meta,
                 "enabled": enabled,
+                # Re-derive alongside the base_url it describes
+                "private_endpoint": (
+                    private_endpoint_flag(base_url, _actor) if base_url is not None else None
+                ),
             }.items()
             if v is not None
         },

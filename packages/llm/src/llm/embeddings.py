@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 
 from llm.client import _TIMEOUT, ProviderError, _post, _send_with_retry
+from llm.net_pin import pinned_ip
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,7 @@ async def embed(
         )
     base = provider["base_url"].rstrip("/")
     body = {"model": model, "input": list(texts)}
+    chosen_ip = await pinned_ip(provider)  # resolve-and-pin before anything is sent
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         resp = await _send_with_retry(
             lambda: _post(
@@ -42,6 +44,7 @@ async def embed(
                 f"{base}/embeddings",
                 headers={"Authorization": f"Bearer {api_key}"},
                 body=body,
+                chosen_ip=chosen_ip,
             )
         )
     data = resp.json()

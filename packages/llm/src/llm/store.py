@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS providers (
     models_meta  TEXT NOT NULL DEFAULT '{}',
     enabled      INTEGER NOT NULL DEFAULT 1,
     custom       INTEGER NOT NULL DEFAULT 0,
+    private_endpoint INTEGER NOT NULL DEFAULT 0,
     created_ts   REAL NOT NULL,
     updated_ts   REAL NOT NULL
 );
@@ -61,6 +62,7 @@ _COLS = (
     "models_meta",
     "enabled",
     "custom",
+    "private_endpoint",
     "created_ts",
     "updated_ts",
 )
@@ -118,6 +120,11 @@ class ProviderStore:
                 "ALTER TABLE providers ADD COLUMN models_meta TEXT NOT NULL DEFAULT '{}'"
             )
             self._conn.commit()
+        if "private_endpoint" not in pcols:
+            self._conn.execute(
+                "ALTER TABLE providers ADD COLUMN private_endpoint INTEGER NOT NULL DEFAULT 0"
+            )
+            self._conn.commit()
 
     def upsert(self, p: dict[str, Any]) -> str:
         pid = p.get("id") or uuid.uuid4().hex[:12]
@@ -125,12 +132,13 @@ class ProviderStore:
         with self._lock:
             self._conn.execute(
                 "INSERT INTO providers (id, display_name, preset_id, base_url, api_format,"
-                " models, models_meta, enabled, custom, created_ts, updated_ts)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                " models, models_meta, enabled, custom, private_endpoint, created_ts, updated_ts)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 " ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,"
                 " base_url=excluded.base_url, api_format=excluded.api_format,"
                 " models=excluded.models, models_meta=excluded.models_meta,"
-                " enabled=excluded.enabled, updated_ts=excluded.updated_ts",
+                " enabled=excluded.enabled, private_endpoint=excluded.private_endpoint,"
+                " updated_ts=excluded.updated_ts",
                 (
                     pid,
                     p["display_name"],
@@ -141,6 +149,7 @@ class ProviderStore:
                     json.dumps(p.get("models_meta", {}), ensure_ascii=False),
                     int(p.get("enabled", True)),
                     int(p.get("custom", False)),
+                    int(p.get("private_endpoint", False)),
                     now,
                     now,
                 ),

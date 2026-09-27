@@ -14,6 +14,7 @@ from __future__ import annotations
 import httpx
 from platform_capability import capability
 from platform_contracts import ErrorSuffix, ServiceError
+from platform_webguard import pinned_request
 
 from llm.capabilities.common import (
     DOMAIN,
@@ -22,6 +23,7 @@ from llm.capabilities.common import (
     require_provider,
 )
 from llm.client import _TIMEOUT
+from llm.net_pin import pinned_ip
 
 
 def _models_headers(api_format: str, api_key: str) -> dict[str, str]:
@@ -53,9 +55,11 @@ async def list_remote_models(provider_id: str) -> dict:
     # anthropic base_url carries no version segment (client posts {base}/v1/messages)
     url = f"{base}/v1/models" if p["api_format"] == "anthropic" else f"{base}/models"
     headers = _models_headers(p["api_format"], key)
+    chosen_ip = await pinned_ip(p)  # resolve-and-pin before anything is sent
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            resp = await client.get(url, headers=headers)
+            request = pinned_request(client, url, chosen_ip, headers=headers)
+            resp = await client.send(request)
     except httpx.TransportError as exc:
         raise ServiceError(
             DOMAIN, ErrorSuffix.UNAVAILABLE, f"Model catalog request failed: {exc}"

@@ -32,7 +32,7 @@ class TestEmbed:
     async def test_vectors_sorted_by_index_with_usage(self, monkeypatch) -> None:
         seen: dict[str, Any] = {}
 
-        async def fake_post(client, url, *, headers, body):
+        async def fake_post(client, url, *, headers, body, chosen_ip):
             seen.update(url=url, headers=headers, body=body)
             return _FakeResponse(
                 _payload={
@@ -55,7 +55,7 @@ class TestEmbed:
         assert seen["body"] == {"model": "m", "input": ["a", "b"]}
 
     async def test_usage_falls_back_to_input_tokens(self, monkeypatch) -> None:
-        async def fake_post(client, url, *, headers, body):
+        async def fake_post(client, url, *, headers, body, chosen_ip):
             return _FakeResponse(
                 _payload={
                     "data": [{"index": 0, "embedding": []}],
@@ -83,7 +83,7 @@ class TestEmbed:
             )
 
     async def test_short_response_is_classified_provider_error(self, monkeypatch) -> None:
-        async def fake_post(client, url, *, headers, body):
+        async def fake_post(client, url, *, headers, body, chosen_ip):
             return _FakeResponse(
                 _payload={"data": [{"index": 0, "embedding": [1]}]}, status_code=200
             )
@@ -94,7 +94,7 @@ class TestEmbed:
         assert exc.value.status == 200 and "2 inputs" in str(exc.value)
 
     async def test_missing_data_section_counts_as_zero_vectors(self, monkeypatch) -> None:
-        async def fake_post(client, url, *, headers, body):
+        async def fake_post(client, url, *, headers, body, chosen_ip):
             return _FakeResponse(_payload={}, status_code=500)
 
         monkeypatch.setattr(embeddings, "_post", fake_post)

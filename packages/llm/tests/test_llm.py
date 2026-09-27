@@ -501,7 +501,10 @@ class TestRemoteModels:
             async def __aexit__(self, *exc):
                 return False
 
-            async def get(self, url, headers=None):
+            def build_request(self, method, url, **kw):
+                return httpx_mod.Request(method, url, **kw)
+
+            async def send(self, request, **kw):
                 if status == 200:
                     return httpx_mod.Response(200, json=payload or {"data": []})
                 return httpx_mod.Response(status, text="boom")
@@ -545,8 +548,12 @@ class TestRemoteModels:
             async def __aexit__(self, *exc):
                 return False
 
-            async def get(self, url, headers=None):
-                seen["url"] = url
+            def build_request(self, method, url, **kw):
+                return httpx_mod.Request(method, url, **kw)
+
+            async def send(self, request, **kw):
+                seen["url"] = str(request.url)
+                seen["host_header"] = request.headers.get("host")
                 return httpx_mod.Response(200, json={"data": [{"id": "m-a"}]})
 
         monkeypatch.setattr(httpx_mod, "AsyncClient", UrlCaptureClient)
@@ -563,7 +570,10 @@ class TestRemoteModels:
             },
         )
         await execute(registry, "list_remote_models", USER_CTX, {"provider_id": pid})
-        assert seen["url"] == "https://api.anthropic.com/v1/models"
+        # The connection is IP-pinned, but the version segment path and the
+        # original Host header survive the rewrite
+        assert seen["url"].endswith("/v1/models")
+        assert seen["host_header"] == "api.anthropic.com"
 
 
 class TestCompleteWithTools:

@@ -28,6 +28,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
+from platform_webguard import pinned_request
 
 from .client import (
     _TIMEOUT,
@@ -40,6 +41,7 @@ from .client import (
     _wire_request,
 )
 from .inline_split import InlineTagSplitter, parse_tool_blocks
+from .net_pin import pinned_ip
 from .wire_responses import responses_sse
 
 
@@ -115,27 +117,34 @@ async def complete_stream(
         parser = _chat_sse
 
     in_body = False  # False = pre-first-packet (connection/status), True = body streaming
+    chosen_ip = await pinned_ip(provider)  # resolve-and-pin before anything is sent
     try:
-        async with (
-            httpx.AsyncClient(timeout=_TIMEOUT) as client,
-            client.stream("POST", url, headers=headers, json=body) as resp,
-        ):
-            if resp.status_code >= 400:
-                # Read first, then dump: a streaming response has no readable
-                # .text before aread() (httpx raises ResponseNotRead), so the
-                # dump must be handed the already-read error body.
-                text = (await resp.aread()).decode("utf-8", errors="replace")
-                _dump_rejected_request(url, body, resp.status_code, text)
-                _raise_typed_text(resp.status_code, text)
-            in_body = True
-            async for chunk in parser(resp):
-                if chunk.get("type") == "final":
-                    # Attach the exact wire body to the final chunk: the raw
-                    # round log can then show the complete request as sent
-                    # (stream / stream_options / temperature / thinking fields
-                    # included), not just the neutral messages transcript.
-                    chunk = {**chunk, "request_body": body}
-                yield chunk
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            request = pinned_request(
+                client, url, chosen_ip, method="POST", headers=headers, json=body
+            )
+            resp = await client.send(request, stream=True)
+            try:
+                if resp.status_code >= 400:
+                    # Read first, then dump: a streaming response has no
+                    # readable .text before aread() (httpx raises
+                    # ResponseNotRead), so the dump must be handed the
+                    # already-read error body.
+                    text = (await resp.aread()).decode("utf-8", errors="replace")
+                    _dump_rejected_request(url, body, resp.status_code, text)
+                    _raise_typed_text(resp.status_code, text)
+                in_body = True
+                async for chunk in parser(resp):
+                    if chunk.get("type") == "final":
+                        # Attach the exact wire body to the final chunk: the
+                        # raw round log can then show the complete request as
+                        # sent (stream / stream_options / temperature /
+                        # thinking fields included), not just the neutral
+                        # messages transcript.
+                        chunk = {**chunk, "request_body": body}
+                    yield chunk
+            finally:
+                await resp.aclose()
     except httpx.TransportError as exc:
         # Mid-stream disconnect: deltas were already consumed and a retry
         # would duplicate output, so mark this non-retriable.
