@@ -100,5 +100,10 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './tests/setup.ts',
     include: ['tests/unit/**/*.test.{ts,tsx}'],
+    // Pin NODE_ENV before any module loads: react's CJS entry picks its build
+    // from this variable at import time, and a shell exporting production
+    // would resolve react.production (which has no act()) — setup.ts cannot
+    // fix that because its own imports hoist ahead of any assignment.
+    env: { NODE_ENV: 'development' },
   },
 });
