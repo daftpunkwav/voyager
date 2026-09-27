@@ -198,7 +198,6 @@
   "mcp.list.approveAllAria": "批准全部 {{name}}",
   "mcp.list.approveSelected": "批准所选",
   "mcp.list.approveSelectedAria": "批准所选 {{name}}",
-  "mcp.list.refresh": "刷新工具列表",
   "mcp.list.refreshAria": "刷新工具列表 {{name}}",
   "mcp.list.remove": "移除",
   "mcp.list.removeAria": "移除 {{name}}",

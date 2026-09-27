@@ -184,7 +184,6 @@
   "mcp.list.approveAllAria": "Approve all for {{name}}",
   "mcp.list.approveSelected": "Approve selected",
   "mcp.list.approveSelectedAria": "Approve selected for {{name}}",
-  "mcp.list.refresh": "Refresh tool list",
   "mcp.list.refreshAria": "Refresh tool list for {{name}}",
   "mcp.list.remove": "Remove",
   "mcp.list.removeAria": "Remove {{name}}",
