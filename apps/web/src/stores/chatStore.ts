@@ -423,6 +423,14 @@ function upsertTrail(trails: TurnTrail[], trail: TurnTrail): TurnTrail[] {
  *  up unboundedly and the side panel would render hundreds of settled cards. */
 const CARD_CAP = 30;
 
+/** Deliveries hold full answers and artifacts hold note receipts: both grow
+ *  with conversation length and both live in the always-mounted floating
+ *  chat window, so they need the same ceiling as cards and run steps. The
+ *  caps are deliberately well above CARD_CAP: a pruned delivery is a past
+ *  answer the user can no longer scroll back to. */
+const DELIVERIES_CAP = 100;
+const ARTIFACTS_CAP = 50;
+
 // Module-level, strictly decreasing: every system notice gets a fresh,
 // always-negative seq (-1, -2, ...), so notices can never collide nor ever
 // equal an SSE-assigned positive seq.
@@ -721,7 +729,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...get().lanes,
           [sessionId]: {
             ...lane,
-            deliveries: [...lane.deliveries, toDelivery(p, ev.seq, ev.ts)],
+            deliveries: [...lane.deliveries, toDelivery(p, ev.seq, ev.ts)].slice(-DELIVERIES_CAP),
           },
         },
       });
@@ -733,9 +741,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...get().lanes,
           [sessionId]: {
             ...lane,
-            artifacts: [...lane.artifacts, artifact].filter(
-              (a, i, arr) => arr.findIndex((x) => x.seq === a.seq) === i
-            ),
+            // Dedup first, cap second: slicing before the dedup could evict
+            // fresh entries in favour of duplicates that get dropped anyway.
+            artifacts: [...lane.artifacts, artifact]
+              .filter((a, i, arr) => arr.findIndex((x) => x.seq === a.seq) === i)
+              .slice(-ARTIFACTS_CAP),
           },
         },
       });
@@ -771,8 +781,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     for (const d of liveDeliveries) deliveryMap.set(d.seq, d);
     set({
       messages: [...msgs, ...live],
-      artifacts: [...restoredMap.values()].sort((a, b) => a.seq - b.seq),
-      deliveries: [...deliveryMap.values()].sort((a, b) => a.seq - b.seq),
+      // History replay goes through the same caps as live dispatch: without
+      // this a refresh would flood the collections back past their ceiling.
+      artifacts: [...restoredMap.values()].sort((a, b) => a.seq - b.seq).slice(-ARTIFACTS_CAP),
+      deliveries: [...deliveryMap.values()].sort((a, b) => a.seq - b.seq).slice(-DELIVERIES_CAP),
       hasMoreHistory: hasMore,
       activeLoaded: true,
     });
@@ -800,8 +812,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     ].sort((a, b) => a.seq - b.seq);
     set({
       messages: [...fresh, ...existing],
-      artifacts,
-      deliveries,
+      artifacts: artifacts.slice(-ARTIFACTS_CAP),
+      deliveries: deliveries.slice(-DELIVERIES_CAP),
       hasMoreHistory: hasMore,
       historyLoading: false,
     });
@@ -916,7 +928,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const artifact = toArtifact(p, ev.seq);
         if (!artifact.noteId || get().artifacts.some((a) => a.seq === artifact.seq)) break;
         set({
-          artifacts: [...get().artifacts, artifact],
+          artifacts: [...get().artifacts, artifact].slice(-ARTIFACTS_CAP),
         });
         break;
       }
@@ -983,7 +995,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const delivery = toDelivery(p, ev.seq, ev.ts);
         const prev = get().deliveries;
         if (prev.some((d) => d.seq === delivery.seq)) break;
-        set({ deliveries: [...prev, delivery] });
+        set({ deliveries: [...prev, delivery].slice(-DELIVERIES_CAP) });
         break;
       }
       case EventType.TASK_PROGRESS:
