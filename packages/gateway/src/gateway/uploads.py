@@ -130,7 +130,9 @@ def build_upload_router(workspace: Path) -> APIRouter:
             )
         return JSONResponse(
             status_code=201,
-            content={"file_path": str(dest), "filename": file.filename or safe_name, "size": total},
+            # Echo the sanitized name: clients use it as the display name and
+            # pass it onward, so it must match the file actually on disk.
+            content={"file_path": str(dest), "filename": safe_name, "size": total},
         )
 
     return router

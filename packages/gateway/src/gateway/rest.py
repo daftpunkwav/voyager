@@ -21,6 +21,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from platform_actor import is_public_path, resolve_http_actor
 from platform_contracts import (
@@ -136,6 +137,23 @@ def create_app(
     @app.exception_handler(ServiceError)
     async def _service_error(_req: Request, exc: ServiceError) -> JSONResponse:
         return JSONResponse(status_code=exc.http_status, content=exc.to_envelope())
+
+    @app.exception_handler(RequestValidationError)
+    async def _request_validation(_req: Request, exc: RequestValidationError) -> JSONResponse:
+        # Malformed query/path parameters must land in the same envelope as
+        # every other client error; the FastAPI default leaks a bare
+        # {"detail": [...]} that clients cannot branch on.
+        first = exc.errors()[0] if exc.errors() else {}
+        loc = ".".join(str(p) for p in first.get("loc", ()) if p != "query")
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "GATEWAY.INVALID_INPUT",
+                    "message": f"invalid parameter '{loc}': {first.get('msg', 'validation failed')}",
+                }
+            },
+        )
 
     @app.middleware("http")
     async def _actor_middleware(request: Request, call_next):
