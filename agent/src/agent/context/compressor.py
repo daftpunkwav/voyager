@@ -2,7 +2,7 @@
 first, then prune the oldest messages in pair-shaped units, when over budget.
 
 Token estimation lives in tokenizer.py (CJK-aware). This module performs no LLM work;
-LLM-based summary compaction is handled by compactor.py.
+LLM-based summary compaction is handled by editor.py.
 """
 
 from __future__ import annotations
