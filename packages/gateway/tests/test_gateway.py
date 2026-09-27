@@ -628,6 +628,27 @@ class TestHealth:
         types = [e.type for _, e in bus.log.read_after()]
         assert DomainEvent.SERVICE_HEALTH_CHANGED in types
 
+    def test_probe_error_text_stays_off_the_wire(
+        self, bus, tmp_path, echo_registry, caplog
+    ) -> None:
+        """/health is unauthenticated: the raw probe exception (paths, sqlite
+        text) must land in the log, never in the snapshot the wire returns."""
+        import json as _json
+
+        def probe():
+            raise FileNotFoundError("/very/secret/path/llm.db")
+
+        app = create_app(
+            [MountSpec(domain="echo", registry=echo_registry, probe=probe)],
+            bus=bus,
+            db_path=tmp_path / "gw.db",
+        )
+        with TestClient(app) as c, caplog.at_level("WARNING", logger="gateway.health"):
+            body = c.get("/health").json()
+        assert body["services"]["echo"]["status"] == "down"
+        assert "/very/secret/path" not in _json.dumps(body)
+        assert any("/very/secret/path" in rec.getMessage() for rec in caplog.records)
+
     def test_actor_middleware_defaults_local(self, client) -> None:
         """Without a token, requests default to the local single user."""
         assert LOCAL_USER.id == "local"

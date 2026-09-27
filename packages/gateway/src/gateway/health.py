@@ -9,6 +9,7 @@ health calls in the monolith; HTTP GET /health in a microservice setup).
 from __future__ import annotations
 
 import inspect
+import logging
 import time
 from collections.abc import Awaitable, Callable
 
@@ -17,6 +18,7 @@ from platform_eventbus import EventBus
 
 ProbeFn = Callable[[], dict | Awaitable[dict]]
 _ACTOR = ActorRef(kind=ActorKind.SYSTEM, id="gateway.health")
+log = logging.getLogger("gateway.health")
 
 
 class HealthProbe:
@@ -37,7 +39,11 @@ class HealthProbe:
             report = await out if inspect.isawaitable(out) else out
             status = str(report.get("status", HealthStatus.UP.value))
         except Exception as exc:  # noqa: BLE001 probes never take gateway down (isolation)
-            report = {"error": f"{type(exc).__name__}: {exc}"}
+            # Detail is for operators, not for the wire: /health is an
+            # unauthenticated path, so the raw exception text (absolute
+            # paths, sqlite messages) must never reach the snapshot.
+            log.warning("health probe failed for %s: %s", domain, exc, exc_info=True)
+            report = {"error": "probe raised an exception"}
             status = HealthStatus.DOWN.value
         await self._record(domain, status, report)
         return self._snapshot[domain]
