@@ -251,7 +251,6 @@ def build(
     """
     from gateway.mounts import MountSpec
     from gateway.rest import create_app as gateway_create
-    from gateway.uploads import build_upload_router
     from gateway.workspace import build_workspace_router
 
     data_root = Path(data_dir) if data_dir else ROOT / "data/runtime"
@@ -308,7 +307,6 @@ def build(
             for name, w in wirings.items()
         ]
         extra_routers = [
-            build_upload_router(workspace),
             build_workspace_router(workspace),
             build_switch_router(),
         ]
@@ -426,6 +424,7 @@ def build(
             audit=audit,
             extra_routers=extra_routers,
             trajectory=built.trajectory,  # /api/chat/trajectory reads the projection, not the log
+            uploads_workspace=workspace,  # /api/uploads shares the gateway limiter
             rate_limit_per_minute=_int_setting(
                 settings_store, "gateway.rate_limit.per_minute", 600
             ),

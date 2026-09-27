@@ -105,6 +105,7 @@ def create_app(
     trajectory_page_size: int = 500,
     extra_routers: list | None = None,
     trajectory=None,  # chat.TrajectoryReader: projection-backed /api/chat/trajectory
+    uploads_workspace: Path | None = None,  # mount /api/uploads with the shared limiter
 ) -> FastAPI:
     if bus is None:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -221,6 +222,13 @@ def create_app(
         )
     )
     app.include_router(build_activity_router(bus, limiter))
+    # Shared limiter on app.state: the workspace hot-swap path (agent_rebuild)
+    # re-mounts /api/uploads outside create_app and needs the same limiter.
+    app.state.limiter = limiter
+    if uploads_workspace is not None:
+        from .uploads import build_upload_router
+
+        app.include_router(build_upload_router(uploads_workspace, limiter))
 
     @app.get("/health")
     async def health() -> dict:

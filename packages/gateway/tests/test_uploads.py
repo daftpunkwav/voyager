@@ -11,13 +11,15 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from gateway.mounts import MountSpec
+from gateway.ratelimit import RateLimiter
 from gateway.uploads import build_upload_router
 
 
 @pytest.fixture()
 def client(tmp_path):
     app = FastAPI()
-    app.include_router(build_upload_router(tmp_path / "ws"))
+    app.include_router(build_upload_router(tmp_path / "ws", RateLimiter(600, 8)))
     return TestClient(app), tmp_path / "ws"
 
 
@@ -103,3 +105,28 @@ class TestUpload:
         )
         assert resp.status_code == 201
         assert resp.json()["size"] == 5
+
+
+class TestUploadRateLimit:
+    def test_rate_limited_before_body_is_read(self, tmp_path, echo_registry) -> None:
+        """Exhausting the limiter returns 429 through the unified envelope
+        and must not leave anything on disk: the check runs before the body
+        is read or spooled."""
+        from gateway.rest import create_app
+
+        app = create_app(
+            [MountSpec(domain="echo", registry=echo_registry)],
+            db_path=tmp_path / "gw.db",
+            rate_limit_per_minute=2,
+            uploads_workspace=tmp_path / "ws",
+        )
+        imports = tmp_path / "ws" / "imports"
+        with TestClient(app) as tc:
+            assert tc.post("/api/uploads", files={"file": ("a.txt", b"1")}).status_code == 201
+            assert tc.post("/api/uploads", files={"file": ("b.txt", b"2")}).status_code == 201
+            before = sorted(p.name for p in imports.rglob("*") if p.is_file())
+            r = tc.post("/api/uploads", files={"file": ("c.txt", b"3")})
+            assert r.status_code == 429
+            assert r.json()["error"]["code"] == "GATEWAY.RATE_LIMITED"
+        after = sorted(p.name for p in imports.rglob("*") if p.is_file())
+        assert after == before  # the throttled upload never touched the disk

@@ -241,7 +241,9 @@ def _swap_workspace_routes(
         ),
         prefix="/api/agent",
     )
-    app.include_router(build_upload_router(workspace))
+    # Same limiter instance as the initial mount (stashed by create_app):
+    # re-mounting with a fresh one would quietly reset the throttle.
+    app.include_router(build_upload_router(workspace, app.state.limiter))
     app.include_router(build_workspace_router(workspace))
     # The switch endpoint itself lives under /api/workspace/*, so it was
     # just removed with the old generation: re-mount it (stateless, reads
