@@ -284,15 +284,16 @@ async def run_react(
             )
         round_ms = (time.perf_counter() - round_start) * 1000
         tokens_used += reply.usage.input_tokens + reply.usage.output_tokens
-        if limits.max_tokens > 0 and tokens_used >= limits.max_tokens:
+        budget_hit = limits.max_tokens > 0 and tokens_used >= limits.max_tokens
+        if budget_hit:
             partial = (
                 render(P.modes.react.partial_result, text=reply.text)
                 if reply.text
                 else P.modes.react.no_final_text
             )
-            text = render(P.modes.react.token_budget, max_tokens=limits.max_tokens, partial=partial)
-            await _surrender_step(on_step, "token_budget", text)
-            return text
+            budget_text = render(
+                P.modes.react.token_budget, max_tokens=limits.max_tokens, partial=partial
+            )
         await on_event(
             RuntimeEvent.LLM_COMPLETED,
             round=round_n,
@@ -302,7 +303,10 @@ async def run_react(
             degraded=bool(reply.degraded),
             overflow=bool(reply.overflow),
         )
-        if reply.overflow:
+        # The budget-surrender return happens only after this round is fully
+        # accounted for (LLM_COMPLETED + llm step + raw log): the tokens were
+        # really spent, so the round must not vanish from the trajectory.
+        if not budget_hit and reply.overflow:
             if overflow_retried:
                 return P.modes.react.overflow
             overflow_retried = True
@@ -365,6 +369,12 @@ async def run_react(
             # Raw round log: the exact request transcript plus the response,
             # stored outside the display projection (capped by the store).
             await on_raw(round_n, messages, reply)
+        if budget_hit:
+            # Placed after the round's own accounting (LLM_COMPLETED / llm
+            # step / raw log above) so the spent round stays in the
+            # trajectory; the surrender note is the final step of the turn.
+            await _surrender_step(on_step, "token_budget", budget_text)
+            return budget_text
         if reply.truncated and reply.tool_calls:
             # Output-cap truncation with tool calls (fail-closed, the pi
             # agent-loop design): streamed arguments are finalized by a
