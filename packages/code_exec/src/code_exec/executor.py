@@ -18,14 +18,17 @@ before execution, preventing config from injecting execution parameters.
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import shutil
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from platform_contracts import ErrorSuffix, ServiceError
+
+log = logging.getLogger("code_exec.executor")
 
 _DOMAIN = "code-exec"
 
@@ -68,13 +71,19 @@ def _validate_runtime(runtime: dict[str, Any]) -> None:
 
 @dataclass
 class RunResult:
-    """Execution result: exit code, output streams, artifact directory."""
+    """Execution result: exit code, output streams, artifact directory.
+
+    isolation names what actually ran ("docker" | "none") and limits_applied
+    the sandbox limits that were truly enforced — so callers (agent, settings
+    page) can never mistake a host fallback for an isolated run."""
 
     status: str
     exit_code: int
     stdout: str
     stderr: str
     artifact_dir: str
+    isolation: str = "none"  # "docker" | "none"
+    limits_applied: dict[str, Any] = field(default_factory=dict)
 
 
 #: Per-stream retained output cap. Output past the cap is still drained
@@ -136,6 +145,8 @@ async def _execute(
     cwd: Path | None,
     timeout: int,
     stderr_prefix: str = "",
+    isolation: str = "none",
+    limits_applied: dict[str, Any] | None = None,
 ) -> RunResult:
     """Run one subprocess under the shared output/timeout discipline."""
     proc = await asyncio.create_subprocess_exec(
@@ -164,6 +175,8 @@ async def _execute(
         stdout=stdout_b.decode(errors="replace"),
         stderr=stderr_prefix + stderr_b.decode(errors="replace"),
         artifact_dir=str(artifact_dir),
+        isolation=isolation,
+        limits_applied=limits_applied or {},
     )
 
 
@@ -176,14 +189,19 @@ async def run_in_runtime(
     network: bool,
     use_host_fallback: bool,
     workspace: Path,
+    allow_unisolated: bool = False,
 ) -> RunResult:
     """Run a code snippet per the runtime config.
 
     The container sandbox is the intended final form. Current behavior:
-    - with docker available, run a one-shot container;
-    - otherwise, when use_host_fallback=True, spawn a restricted host
-      subprocess (meant for dev/test) and print a stderr warning that
-      production should enable containers.
+    - with docker available, run a one-shot container (memory_mb / network
+      enforced, isolation="docker");
+    - otherwise, when use_host_fallback=True: host mode cannot honour
+      memory_mb / network. Refusing is the only honest answer unless the
+      user explicitly accepted unisolated execution via
+      code_exec.allow_unisolated — in which case the run is tagged
+      isolation="none" so no consumer can mistake it for a sandbox;
+    - otherwise execution is refused outright.
     """
     _validate_runtime(runtime)
     exec_id = uuid.uuid4().hex[:12]
@@ -207,7 +225,14 @@ async def run_in_runtime(
             network=network,
         )
     if use_host_fallback:
-        return await _run_host(runtime, src, artifact_dir, timeout=timeout)
+        return await _run_host(
+            runtime,
+            src,
+            artifact_dir,
+            timeout=timeout,
+            allow_unisolated=allow_unisolated,
+            limits_requested={"memory_mb": memory_mb, "network": network},
+        )
     return RunResult(
         status="failed",
         exit_code=-1,
@@ -244,7 +269,14 @@ async def _run_docker(
         *cmd,
         "main" + src.suffix,
     ]
-    return await _execute(args, artifact_dir=artifact_dir, cwd=None, timeout=timeout)
+    return await _execute(
+        args,
+        artifact_dir=artifact_dir,
+        cwd=None,
+        timeout=timeout,
+        isolation="docker",
+        limits_applied={"memory_mb": memory_mb, "network": network},
+    )
 
 
 async def _run_host(
@@ -253,6 +285,8 @@ async def _run_host(
     artifact_dir: Path,
     *,
     timeout: int,
+    allow_unisolated: bool = False,
+    limits_requested: dict[str, Any] | None = None,
 ) -> RunResult:
     interpreter = str(runtime.get("id") or "")
     args = _HOST_INTERPRETERS.get(interpreter)
@@ -263,6 +297,23 @@ async def _run_host(
             f"Host fallback only supports {'/'.join(_HOST_INTERPRETERS)} runtimes"
             f"(custom runtimes require docker): {interpreter}",
         )
+    # Host mode cannot honour memory_mb / network limits. Refusing is the
+    # only honest answer unless the user explicitly accepted running
+    # generated code with full host privileges (code_exec.allow_unisolated).
+    if not allow_unisolated:
+        raise ServiceError(
+            _DOMAIN,
+            ErrorSuffix.UNAVAILABLE,
+            "code_exec is in host mode: memory_mb and network limits cannot be enforced",
+            hint="Install Docker, or set code_exec.allow_unisolated=true to run "
+            "generated code with full host privileges and network access",
+        )
+    log.warning(
+        "code_exec host fallback: running %s unisolated (no docker); "
+        "requested limits %s are NOT enforced",
+        interpreter,
+        limits_requested,
+    )
     args = [*args, str(src)]
     warning = (
         "WARN: currently executing via host-process fallback, container sandbox "
@@ -274,4 +325,6 @@ async def _run_host(
         cwd=artifact_dir,
         timeout=timeout,
         stderr_prefix=warning,
+        isolation="none",
+        limits_applied={},
     )

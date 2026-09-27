@@ -96,6 +96,7 @@ def _settings() -> dict[str, Any]:
         "memory_mb": s.get("code_exec.memory_mb"),
         "network": s.get("code_exec.network"),
         "use_host": s.get("code_exec.use_host"),
+        "allow_unisolated": s.get("code_exec.allow_unisolated"),
     }
 
 
@@ -150,7 +151,15 @@ async def _run_code(exec_id: str, runtime_id: str, code: str) -> dict[str, Any]:
             network=cfg["network"],
             use_host_fallback=cfg["use_host"],
             workspace=deps.workspace,
+            allow_unisolated=bool(cfg["allow_unisolated"]),
         )
+    except ServiceError as exc:
+        # A refusal (host mode without allow_unisolated) is the contract
+        # answer, not a bug: surface message + hint to the caller verbatim
+        error = exc.body.message + (f" — {exc.body.hint}" if exc.body.hint else "")
+        deps.store.finish(exec_id, "failed", -1, "", error[:500], "")
+        await _emit_failed(exec_id, error[:300])
+        raise
     except Exception as exc:  # noqa: BLE001  # background task: record errors, never silent
         error = f"{type(exc).__name__}: {exc}"
         deps.store.finish(exec_id, "failed", -1, "", error[:500], "")
@@ -180,6 +189,14 @@ async def _run_code(exec_id: str, runtime_id: str, code: str) -> dict[str, Any]:
         "stdout": result.stdout,
         "stderr": result.stderr,
         "artifact_dir": result.artifact_dir,
+        # What actually ran and which limits were truly enforced: a host
+        # fallback must never be presented as an isolated sandbox
+        "isolation": result.isolation,
+        "limits_applied": result.limits_applied,
+        "limits_requested": {
+            "memory_mb": cfg["memory_mb"],
+            "network": cfg["network"],
+        },
     }
     await _emit_progress(exec_id, 1.0)
     if result.status == "completed":

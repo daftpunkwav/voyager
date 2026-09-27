@@ -72,4 +72,15 @@ DEFS = [
         default=True,
         description="Fall back to host process when docker is missing (dev/test only)",
     ),
+    SettingDef(
+        key="code_exec.allow_unisolated",
+        module="code_exec",
+        type=SettingType.BOOL,
+        default=False,
+        description=(
+            "Explicitly accept running generated code with full host "
+            "privileges and network access when docker is missing (host "
+            "mode cannot enforce memory_mb / network limits)"
+        ),
+    ),
 ]

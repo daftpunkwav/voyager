@@ -120,6 +120,7 @@ class TestSecurity:
                 memory_mb=64,
                 network=False,
                 use_host_fallback=True,
+                allow_unisolated=True,
                 workspace=tmp_path,
             )
         poisoned_ext = {
@@ -136,6 +137,7 @@ class TestSecurity:
                 memory_mb=64,
                 network=False,
                 use_host_fallback=True,
+                allow_unisolated=True,
                 workspace=tmp_path,
             )
         poisoned_cmd = {
@@ -152,6 +154,7 @@ class TestSecurity:
                 memory_mb=64,
                 network=False,
                 use_host_fallback=True,
+                allow_unisolated=True,
                 workspace=tmp_path,
             )
 
@@ -170,6 +173,7 @@ class TestSecurity:
                 memory_mb=64,
                 network=False,
                 use_host_fallback=True,
+                allow_unisolated=True,
                 workspace=tmp_path,
             )
 
@@ -196,6 +200,7 @@ class TestExecutorDiscipline:
             memory_mb=256,
             network=False,
             use_host_fallback=True,
+            allow_unisolated=True,
             workspace=tmp_path,
         )
         assert result.status == "completed", result.stderr
@@ -217,6 +222,7 @@ class TestExecutorDiscipline:
             memory_mb=256,
             network=False,
             use_host_fallback=True,
+            allow_unisolated=True,
             workspace=tmp_path,
         )
         assert result.status == "timeout" and result.stdout == ""
@@ -237,6 +243,7 @@ class TestExecutorDiscipline:
             memory_mb=256,
             network=False,
             use_host_fallback=True,
+            allow_unisolated=True,
             workspace=tmp_path,
         )
         src = Path(result.artifact_dir) / "main.sh"
@@ -257,6 +264,92 @@ class TestExecutorDiscipline:
             memory_mb=256,
             network=False,
             use_host_fallback=True,
+            allow_unisolated=True,
             workspace=tmp_path,
         )
         assert result.status == "timeout"
+
+
+class TestUnisolatedGate:
+    """Host mode cannot honour memory_mb / network: the default answer is a
+    refusal; running requires code_exec.allow_unisolated=true and the result
+    then says so honestly (isolation="none", no limits applied)."""
+
+    @staticmethod
+    def _runtime() -> dict:
+        return {"id": "python", "image": "python:3.11-slim", "file_ext": ".py", "cmd": ["python"]}
+
+    async def test_default_refuses_without_executing(self, tmp_path, monkeypatch) -> None:
+        """Default config (no allow_unisolated) + host mode -> ServiceError
+        with the actionable hint, and the generated code never runs."""
+        from code_exec import executor
+
+        monkeypatch.setattr(executor.shutil, "which", lambda name: None)  # no docker
+        marker = tmp_path / "marker.txt"
+        code = f"open({marker!r}, 'w').write('pwned')"
+        with pytest.raises(ServiceError) as exc:
+            await run_in_runtime(
+                self._runtime(),
+                code,
+                timeout=10,
+                memory_mb=512,
+                network=False,
+                use_host_fallback=True,
+                workspace=tmp_path,
+            )
+        assert exc.value.body.code == "CODE_EXEC.UNAVAILABLE"
+        assert "allow_unisolated" in (exc.value.body.hint or "")
+        assert not marker.exists()  # the code really did not run
+
+    async def test_opt_in_runs_unisolated_and_says_so(self, tmp_path, monkeypatch) -> None:
+        """allow_unisolated=True + host mode executes, and the result carries
+        isolation="none" with an empty limits_applied."""
+        from code_exec import executor
+
+        monkeypatch.setattr(executor.shutil, "which", lambda name: None)  # no docker
+        result = await run_in_runtime(
+            self._runtime(),
+            "print('hi')",
+            timeout=10,
+            memory_mb=512,
+            network=False,
+            use_host_fallback=True,
+            workspace=tmp_path,
+            allow_unisolated=True,
+        )
+        assert result.status == "completed"
+        assert result.isolation == "none"
+        assert result.limits_applied == {}
+
+    async def test_docker_mode_reports_isolation_and_limits(self, tmp_path, monkeypatch) -> None:
+        """With docker present the result reports the container and the limits
+        that were actually applied."""
+        from code_exec import executor
+
+        captured: dict = {}
+
+        async def fake_execute(args, **kw):
+            captured.update(kw)
+            return executor.RunResult(
+                status="completed",
+                exit_code=0,
+                stdout="",
+                stderr="",
+                artifact_dir=str(kw["artifact_dir"]),
+                isolation=kw["isolation"],
+                limits_applied=kw["limits_applied"],
+            )
+
+        monkeypatch.setattr(executor.shutil, "which", lambda name: "/usr/bin/docker")
+        monkeypatch.setattr(executor, "_execute", fake_execute)
+        result = await run_in_runtime(
+            self._runtime(),
+            "print('hi')",
+            timeout=10,
+            memory_mb=256,
+            network=False,
+            use_host_fallback=True,
+            workspace=tmp_path,
+        )
+        assert result.isolation == "docker"
+        assert result.limits_applied == {"memory_mb": 256, "network": False}
