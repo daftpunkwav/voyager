@@ -168,6 +168,11 @@ async def _execute(
             stdout="",
             stderr="execution timed out",
             artifact_dir=str(artifact_dir),
+            # The sandbox that ran (and was killed) is still the caller's
+            # honest answer: a timed-out docker run must not degrade to
+            # isolation="none" / no limits
+            isolation=isolation,
+            limits_applied=limits_applied or {},
         )
     return RunResult(
         status="completed" if proc.returncode == 0 else "failed",

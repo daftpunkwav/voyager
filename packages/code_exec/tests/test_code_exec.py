@@ -228,6 +228,27 @@ class TestExecutorDiscipline:
         assert result.status == "timeout" and result.stdout == ""
         await asyncio.sleep(0.1)  # reap completes; the suite must not hang
 
+    async def test_timeout_keeps_isolation_and_limits(self, tmp_path) -> None:
+        """A timed-out run keeps the sandbox attribution: the timeout branch
+        must carry the same isolation/limits_applied the completed branch
+        does, or a timed-out docker run would degrade to isolation="none"
+        and read as an unisolated host fallback."""
+        import sys
+
+        from code_exec.executor import _execute
+
+        result = await _execute(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            artifact_dir=tmp_path,
+            cwd=None,
+            timeout=1,
+            isolation="docker",
+            limits_applied={"memory_mb": 256, "network": False},
+        )
+        assert result.status == "timeout"
+        assert result.isolation == "docker"
+        assert result.limits_applied == {"memory_mb": 256, "network": False}
+
     async def test_snippet_source_has_lf_newlines(self, tmp_path, monkeypatch) -> None:
         """The snippet source lands with LF line endings on every platform: a
         Windows text-mode write would translate \\n to \\r\\n, and a shell
