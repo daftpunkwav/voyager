@@ -6,9 +6,10 @@ Toolbelt.call reaching the Fake return value -> remove unmounting -> restart (mc
 auto-reconnect -> default empty pool without domain bridges -> invalid inputs.
 """
 
-from typing import ClassVar
+from typing import Any, ClassVar, cast
 
 import pytest
+from agent.app import AgentApp
 from agent.llm import FakeLLM, ToolCall
 from agent.main import build_agent
 from platform_actor import ActorContext
@@ -16,6 +17,12 @@ from platform_capability import execute
 from platform_contracts import LOCAL_USER, ServiceError
 
 USER_CTX = ActorContext(actor=LOCAL_USER)
+
+
+class McpTestApp(AgentApp):
+    """Test view carrying the handle to the in-memory MCP sessions dict."""
+
+    sessions: dict[str, Any]
 
 
 class FakeSession:
@@ -59,11 +66,14 @@ def fake_connect(sessions: dict[str, FakeSession], fail_ids: frozenset[str] = fr
 @pytest.fixture()
 def app(tmp_path):
     sessions: dict[str, FakeSession] = {}
-    app = build_agent(
-        data_dir=tmp_path / "rd",
-        workspace_dir=tmp_path / "ws",
-        llm=FakeLLM(),
-        mcp_connect=fake_connect(sessions),
+    app = cast(
+        McpTestApp,
+        build_agent(
+            data_dir=tmp_path / "rd",
+            workspace_dir=tmp_path / "ws",
+            llm=FakeLLM(),
+            mcp_connect=fake_connect(sessions),
+        ),
     )
     app.sessions = sessions  # test handle: assert on calls the Fake received
     yield app
@@ -624,11 +634,14 @@ class TestHotRefreshAndResources:
     @pytest.fixture()
     def rapp(self, tmp_path):
         sessions: dict[str, FakeSession] = {}
-        app = build_agent(
-            data_dir=tmp_path / "rd",
-            workspace_dir=tmp_path / "ws",
-            llm=FakeLLM(),
-            mcp_connect=resource_connect(sessions),
+        app = cast(
+            McpTestApp,
+            build_agent(
+                data_dir=tmp_path / "rd",
+                workspace_dir=tmp_path / "ws",
+                llm=FakeLLM(),
+                mcp_connect=resource_connect(sessions),
+            ),
         )
         app.sessions = sessions
         yield app

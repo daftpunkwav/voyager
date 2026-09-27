@@ -11,8 +11,9 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
+from typing import cast
 
-from agent.llm import LLMClient, LLMReply, StreamReply, Usage
+from agent.llm import LLMClient, LLMReply, StreamReply, StreamingLLClient, Usage
 from agent.runtime.meter import Meter, MeterRecord
 
 log = logging.getLogger("agent.quota")
@@ -123,10 +124,15 @@ def metered_llm(
             final: LLMReply | None = None
             ok = False  # success is recorded only after the stream ends; mid-stream errors fail
             try:
+                # The caller probed callable(getattr(llm, "complete_stream"))
+                # before entering this tier (protocol tiering, see
+                # StreamingLLClient): mypy cannot follow that getattr probe,
+                # so narrow explicitly here.
+                stream_llm = cast("StreamingLLClient", llm)
                 try:
-                    stream = llm.complete_stream(messages, tools, max_tokens=max_tokens)
+                    stream = stream_llm.complete_stream(messages, tools, max_tokens=max_tokens)
                 except TypeError:
-                    stream = llm.complete_stream(messages, tools)
+                    stream = stream_llm.complete_stream(messages, tools)
                 async for ev in stream:
                     if ev.final is not None:
                         final = ev.final

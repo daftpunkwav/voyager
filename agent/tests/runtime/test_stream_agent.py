@@ -7,12 +7,20 @@ protocol, automatically falls back to non-streaming).
 """
 
 import asyncio
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from agent.engine import Mode, ModeLimits, run_mode
 from agent.engine.instance import SubagentInstance, TaskBook
-from agent.llm import FakeLLM, LLMClient, LLMReply, StreamingLLClient, StreamReply, ToolCall
+from agent.llm import (
+    FakeLLM,
+    LLMClient,
+    LLMReply,
+    StreamingLLClient,
+    StreamReply,
+    ToolCall,
+    ToolSpec,
+)
 from agent.policy import PolicyEngine
 from agent.runtime import Meter, metered_llm
 from agent.runtime.events import RuntimeEvents
@@ -203,7 +211,15 @@ class TestMeteredStreaming:
         meter = self._meter()
 
         class BoomLLM(FakeLLM):
-            async def complete(self, messages, tools=None):
+            # Full FakeLLM/LLMClient signature: an overriding method must
+            # accept everything the base accepts.
+            async def complete(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[ToolSpec] | None = None,
+                response_format: dict[str, Any] | None = None,
+                max_tokens: int | None = None,
+            ) -> LLMReply:
                 raise RuntimeError("boom")
 
         wrapped = metered_llm(cast(LLMClient, BoomLLM()), meter, model="m1")

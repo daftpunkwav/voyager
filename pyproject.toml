@@ -143,6 +143,9 @@ mypy_path = [
     "packages/platform/secrets/src",
     "packages/platform/settings/src",
 ]
+# Function bodies without annotations are checked too: without this flag
+# mypy silently skips them, and "0 errors" covers only part of the code.
+check_untyped_defs = true
 # Vendored graph engines are not hand-written for this repo (see ruff per-file-ignores)
 exclude = ["packages/graph/src/graph/engines/"]
 

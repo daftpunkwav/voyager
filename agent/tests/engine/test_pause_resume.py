@@ -28,7 +28,10 @@ def pause_run(spawner, chat, id_or_name):
     return {"pausing": inst.id, "name": inst.name, "status": "pause-requested"}
 
 
-from agent.llm import LLMReply
+from typing import Any, cast
+
+from agent.app import AgentApp
+from agent.llm import LLMReply, ToolSpec
 from platform_contracts import RuntimeEvent
 
 
@@ -40,7 +43,13 @@ class PacedLLM:
         self.gate = asyncio.Event()
         self.stage = 0
 
-    async def complete(self, messages, tools=None):
+    async def complete(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[ToolSpec] | None = None,
+        response_format: dict[str, Any] | None = None,
+        max_tokens: int | None = None,
+    ) -> LLMReply:
         self.stage += 1
         if self.stage == 1:
             await self.gate.wait()
@@ -48,10 +57,18 @@ class PacedLLM:
         return LLMReply(text="all done")
 
 
+class PacedApp(AgentApp):
+    """Test view carrying the per-fixture handle to the pacing LLM."""
+
+    llm_paced: PacedLLM
+
+
 @pytest.fixture()
 def app(tmp_path):
     llm = PacedLLM()
-    app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=llm)
+    app = cast(
+        PacedApp, build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=llm)
+    )
     app.llm_paced = llm
     try:
         yield app
