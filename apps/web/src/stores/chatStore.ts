@@ -423,6 +423,11 @@ function upsertTrail(trails: TurnTrail[], trail: TurnTrail): TurnTrail[] {
  *  up unboundedly and the side panel would render hundreds of settled cards. */
 const CARD_CAP = 30;
 
+// Module-level, strictly decreasing: every system notice gets a fresh,
+// always-negative seq (-1, -2, ...), so notices can never collide nor ever
+// equal an SSE-assigned positive seq.
+let systemSeq = 0;
+
 /** Evict over-cap cards, oldest settled (completed/failed) first so running
  *  progress always survives; only when every card is still running does the
  *  eviction fall through to the front of the order. Mutates `cards`. */
@@ -1052,8 +1057,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   addSystem: (content) => {
+    // System notices carry a local, always-negative seq: they must sort
+    // before every SSE-assigned positive seq (applyHistory keeps live
+    // messages via `seq < 0`), and must never collide the way -Date.now()
+    // did when two notices landed in the same millisecond.
     set({
-      messages: [...get().messages, { seq: -Date.now(), role: 'system', content }],
+      messages: [...get().messages, { seq: --systemSeq, role: 'system', content }],
     });
   },
 
