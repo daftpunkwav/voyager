@@ -9,7 +9,7 @@
  *   dark-DOM / light-store dual-source drift);
  * - settings.changed (from user or agent) -> applyTheme + write back;
  * - system mode follows the OS prefers-color-scheme.
- * User toggles (Topbar / settings page) persist via set_theme first, then take
+ * User toggles (settings page) persist via set_theme first, then take
  * effect uniformly through this bridge.
  *
  * Responsibilities:

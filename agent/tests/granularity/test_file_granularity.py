@@ -1,7 +1,7 @@
 """File-granularity audit: one tool per file under tools/<group>/, one
 capability per file under capabilities/<group>/, file name = product name.
 
-This is the only cross-cutting test of the agent package (§4.4 F1-F9). It
+This is the only cross-cutting test of the agent package (F1-F9). It
 locks the shape of both projections so an asymmetry is visible from the
 directory listing alone:
 - tools/<group>/<name>.py exports exactly `<name>_tool` and constructs one

@@ -26,7 +26,7 @@
 
 ## platform_secrets
 
-`packages/platform/secrets/src/platform_secrets/` — 加密密钥存储。`SecretStore` 把值以 Fernet 加密存入 SQLite `secrets` 表;Fernet 密钥由环境提供的材料(`load_key_material`)经 PBKDF2-HMAC-SHA256 派生,每个 store 的随机 salt 持久化在同一数据库中——salt 用于对抗预计算,本身不保密,保密的是材料。旧的单次 SHA-256 派生加密的行在首次读取时就地重新加密。`SecretUnavailableError` 表示密钥缺失或不可解密。供应商的 API key 存放于此,不在供应商元数据里。
+`packages/platform/secrets/src/platform_secrets/` — 加密密钥存储。`SecretStore` 把值以 Fernet 加密存入 SQLite `secrets` 表;Fernet 密钥由环境提供的材料(`load_key_material`)经 PBKDF2-HMAC-SHA256 派生,每个 store 的随机 salt 持久化在同一数据库中——salt 用于对抗预计算,本身不保密,保密的是材料。旧的单次 SHA-256 派生加密的行在首次读取时就地重新加密。`SecretUnavailableError` 表示密钥材料缺失(无法解密的行按未设置读回)。供应商的 API key 存放于此,不在供应商元数据里。
 
 ## platform_health
 

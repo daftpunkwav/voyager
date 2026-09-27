@@ -26,8 +26,9 @@ log = logging.getLogger("llm.net_pin")
 
 async def pinned_ip(provider: dict[str, Any]) -> str:
     """Resolve the provider host once; return the validated IP the request
-    must connect to. Raises ServiceError when resolution fails or a public
-    endpoint resolves into private space (detail in the log only)."""
+    must connect to. Raises ServiceError when the base_url port is invalid,
+    when resolution fails, or when a public endpoint resolves into private
+    space (detail in the log only)."""
     url = str(provider.get("base_url") or "")
     parsed = urlparse(url)
     host = parsed.hostname or ""

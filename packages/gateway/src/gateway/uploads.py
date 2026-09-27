@@ -80,8 +80,10 @@ def build_upload_router(workspace: Path, limiter: RateLimiter) -> APIRouter:
         # spools the whole body to a temp file before returning, so a lying
         # (small) Content-Length or a chunked body would otherwise fill the
         # disk before any of our own checks ran. Counting inside receive
-        # stops the spool the moment the cap is crossed, and the async with
-        # below makes Starlette clean up whatever was spooled.
+        # stops the spool the moment the cap is crossed. The async with below
+        # closes Starlette's spool on the success path; an aborted parse
+        # never reaches that exit, and the abandoned spool is closed by
+        # garbage collection instead.
         bytes_seen = 0
         receive = request._receive
 

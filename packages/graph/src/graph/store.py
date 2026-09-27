@@ -217,8 +217,8 @@ class GraphStore:
         cannot drift apart again.
 
         `edge_filter` restricts the returned edges to one type; it never
-        restricts traversal — the walk follows all edges — matching the
-        pre-existing expand_neighbors behaviour.
+        restricts traversal — the walk follows all edges regardless of the
+        filter.
         """
         seen_nodes: dict[str, dict] = {}
         seen_edges: dict[str, dict] = {}

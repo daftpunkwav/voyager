@@ -26,9 +26,9 @@
 
 能力:`list_runtimes`;`run_snippet(runtime, code)` 与 `run_file(runtime, file_path)` — 均为 `long_running=True`:拉起后台工作并立即返回 `JobRef`。`run_file` 拒绝逃出 `workspace/sandbox/` 的路径。
 
-`executor.py` — `run_in_runtime(...)`:把代码写到 `workspace/sandbox/artifacts/<exec_id>/`,然后一次性运行 `docker run --rm --network none -m <memory> -v <artifact_dir>:/workspace`,镜像/命令/扩展名经白名单校验;无 Docker 时,宿主进程回退只对 `python`/`node`/`bash` 开放并发出警告。每路输出上限 1 MiB;超时杀死并回收。发出 `task.progress`/`task.completed`/`task.failed`。
+`executor.py` — `run_in_runtime(...)`:把代码写到 `workspace/sandbox/artifacts/<exec_id>/`,然后一次性运行 `docker run --rm -m <memory> -v <artifact_dir>:/workspace`(除 `code_exec.network` 开启外网络为 `none`),镜像/命令/扩展名经白名单校验。无 Docker 时,宿主回退(仅内置 `python`/`node`/`shell` 运行时)在 `code_exec.allow_unisolated` 未启用时直接拒绝:宿主模式无法落实内存/网络限制,启用后以完整宿主权限执行、发出警告,并在结果中标记 `isolation="none"`。每路输出上限 1 MiB;超时杀死并回收子进程,并保留实际执行的隔离归属。发出 `task.progress`/`task.completed`/`task.failed`。
 
-设置:`code_exec.runtimes`(`{id, image, cmd, file_ext}` 的 JSON 列表)、`code_exec.timeout_seconds`、`code_exec.memory_mb`、`code_exec.network`、`code_exec.use_host`。
+设置:`code_exec.runtimes`(`{id, image, cmd, file_ext}` 的 JSON 列表)、`code_exec.timeout_seconds`、`code_exec.memory_mb`、`code_exec.network`、`code_exec.use_host`、`code_exec.allow_unisolated`(仅用户可改,默认 `false`)。
 
 ## office 域
 

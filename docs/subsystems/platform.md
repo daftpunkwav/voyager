@@ -26,7 +26,7 @@ English | [中文](platform.zh.md)
 
 ## platform_secrets
 
-`packages/platform/secrets/src/platform_secrets/` — encrypted secret storage. `SecretStore` stores values Fernet-encrypted in a SQLite `secrets` table; the Fernet key is derived from the environment-provided material (`load_key_material`) with PBKDF2-HMAC-SHA256 (per-store random salt persisted in the same database — the salt defeats precomputation and is not secret; the material is). Rows encrypted under the retired single-SHA-256 derivation re-encrypt in place on first read. `SecretUnavailableError` signals a missing or undecryptable key. Providers hold API keys here, not in provider metadata.
+`packages/platform/secrets/src/platform_secrets/` — encrypted secret storage. `SecretStore` stores values Fernet-encrypted in a SQLite `secrets` table; the Fernet key is derived from the environment-provided material (`load_key_material`) with PBKDF2-HMAC-SHA256 (per-store random salt persisted in the same database — the salt defeats precomputation and is not secret; the material is). Rows encrypted under the retired single-SHA-256 derivation re-encrypt in place on first read. `SecretUnavailableError` signals missing key material (an undecryptable row reads back as unset). Providers hold API keys here, not in provider metadata.
 
 ## platform_health
 

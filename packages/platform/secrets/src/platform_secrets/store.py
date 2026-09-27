@@ -3,8 +3,8 @@ to in-process callers.
 
 - Storage is a dedicated secrets namespace table, independent of any
   settings JSON blob.
-- Only ciphertext is stored; `get` returns `None` instead of raising, which
-  makes "not configured" easy to express.
+- Only ciphertext is stored; `get` returns `None` for keys that were never
+  set (missing key material raises `SecretUnavailableError` instead).
 - Key material never enters the database or logs.
 - The key is derived with PBKDF2-HMAC-SHA256 (per-store random salt,
   persisted alongside the ciphertext) instead of a bare hash, so identical

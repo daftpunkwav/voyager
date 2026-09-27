@@ -26,9 +26,9 @@ Source: `packages/code_exec/src/code_exec/` — port 8050, **disabled by default
 
 Capabilities: `list_runtimes`; `run_snippet(runtime, code)` and `run_file(runtime, file_path)` — both `long_running=True`: they spawn background work and return a `JobRef` immediately. `run_file` rejects paths escaping `workspace/sandbox/`.
 
-`executor.py` — `run_in_runtime(...)`: writes the snippet to `workspace/sandbox/artifacts/<exec_id>/`, then runs one-shot `docker run --rm --network none -m <memory> -v <artifact_dir>:/workspace` with whitelist-validated image/cmd/extension; without Docker, a host-process fallback exists only for `python`/`node`/`bash` and emits a warning. Streams are capped at 1 MiB each; timeout kills and reaps. Emits `task.progress`/`task.completed`/`task.failed`.
+`executor.py` — `run_in_runtime(...)`: writes the snippet to `workspace/sandbox/artifacts/<exec_id>/`, then runs one-shot `docker run --rm -m <memory> -v <artifact_dir>:/workspace` (network `none` unless `code_exec.network` is on) with whitelist-validated image/cmd/extension. Without Docker, the host fallback (built-in `python`/`node`/`shell` runtimes only) refuses unless `code_exec.allow_unisolated` is enabled: host mode cannot honour memory/network limits, so an enabled run executes with full host privileges, emits a warning, and is tagged `isolation="none"` in the result. Streams are capped at 1 MiB each; timeout kills and reaps the child, keeping the isolation attribution of what actually ran. Emits `task.progress`/`task.completed`/`task.failed`.
 
-Settings: `code_exec.runtimes` (JSON list of `{id, image, cmd, file_ext}`), `code_exec.timeout_seconds`, `code_exec.memory_mb`, `code_exec.network`, `code_exec.use_host`.
+Settings: `code_exec.runtimes` (JSON list of `{id, image, cmd, file_ext}`), `code_exec.timeout_seconds`, `code_exec.memory_mb`, `code_exec.network`, `code_exec.use_host`, `code_exec.allow_unisolated` (user-only, default `false`).
 
 ## office domain
 

@@ -469,8 +469,8 @@ const RUN_STEPS_CAP = 800;
 const RUNS_CAP = 50;
 
 /** Trim each run's log to RUN_STEPS_CAP, then evict the runs whose earliest
- *  step is oldest until back under RUNS_CAP (an actively running run is
- *  always the newest and survives). */
+ *  step is oldest until back under RUNS_CAP. No running-run exemption here
+ *  (unlike pruneCards): a run survives only while it stays among the newest. */
 function pruneRunSteps(runSteps: Record<string, TurnStep[]>): Record<string, TurnStep[]> {
   const trimmed: Record<string, TurnStep[]> = {};
   for (const [id, steps] of Object.entries(runSteps)) {

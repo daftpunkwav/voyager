@@ -1,13 +1,14 @@
 """Coarse-grained graph read/maintenance operations.
 
 Responsibilities:
-- Neighbors traversal, shortest-path finding (find_path)
+- Shortest-path finding (find_path)
 - Node merging (merge_nodes) and subgraph export (export_subgraph)
 
 Functions here accept a GraphStore instance and reuse its connection, column
 constants, and row helpers (private, same-package convention); the same-named
 methods on the store are one-line delegates, keeping the public API intact.
-Read/write primitives (query/subgraph/upsert/drop) remain in store.py.
+Traversal and read/write primitives (query/subgraph/upsert/drop) remain in
+store.py.
 """
 
 from __future__ import annotations
