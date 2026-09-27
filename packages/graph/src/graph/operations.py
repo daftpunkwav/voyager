@@ -17,58 +17,7 @@ import time
 from collections import deque
 from typing import Any
 
-from .columns import _EDGE_COLS, _NODE_COLS, _edge_row, _node_row
-
-
-def neighbors(
-    store, project: str, node_id: str, *, depth: int = 1, edge_filter: str = ""
-) -> dict[str, Any]:
-    """Expand neighbors from node_id up to the given depth, with optional edge-type filter."""
-    seen_nodes: dict[str, dict] = {}
-    seen_edges: dict[str, dict] = {}
-    frontier = {node_id}
-    # Reads also hold the store lock (same-lock read/write discipline, as in
-    # store.py; the RLock allows nesting with writers).
-    with store._lock:
-        all_edges = [
-            _edge_row(r)
-            for r in store._conn.execute(
-                f"SELECT {','.join(_EDGE_COLS)} FROM edges WHERE project = ?", (project,)
-            )
-            if not edge_filter or r[4] == edge_filter
-        ]
-        for _ in range(max(depth, 0)):
-            if not frontier:
-                break
-            qmarks = ",".join("?" for _ in frontier)
-            for r in store._conn.execute(
-                f"SELECT {','.join(_NODE_COLS)} FROM nodes WHERE project = ? AND id IN ({qmarks})",
-                (project, *frontier),
-            ):
-                n = _node_row(r)
-                seen_nodes[n["id"]] = n
-            nxt = set()
-            for e in all_edges:
-                if e["src"] in frontier or e["dst"] in frontier:
-                    seen_edges[e["id"]] = e
-                    for end in (e["src"], e["dst"]):
-                        if end not in seen_nodes:
-                            nxt.add(end)
-            frontier = nxt
-        # Load nodes left in the final frontier as well.
-        if frontier:
-            qmarks = ",".join("?" for _ in frontier)
-            for r in store._conn.execute(
-                f"SELECT {','.join(_NODE_COLS)} FROM nodes WHERE project = ? AND id IN ({qmarks})",
-                (project, *frontier),
-            ):
-                n = _node_row(r)
-                seen_nodes[n["id"]] = n
-    return {
-        "project": project,
-        "nodes": list(seen_nodes.values()),
-        "edges": list(seen_edges.values()),
-    }
+from .columns import _EDGE_COLS, _edge_row
 
 
 def find_path(

@@ -287,3 +287,57 @@ class TestExport:
         assert "`Evil``Label`" in cy  # backticks doubled inside identifiers
         assert "[:`BAD``)-[:X]->(y`]" in cy  # relation type fully wrapped in backticks
         assert 'n\\"ame' in cy  # embedded double quote JSON-escaped, literal intact
+
+
+class TestUnifiedSubgraphSemantics:
+    """The single BFS lives in store.subgraph: expand_neighbors reuses it, so
+    both capabilities return the same induced subgraph at every depth (the
+    old star-expansion divergence is gone; owner decision 2026-09-28)."""
+
+    @pytest.fixture()
+    def store(self, tmp_path):
+        return GraphStore(tmp_path / "sub.db")
+
+    def _seed(self, store):
+        a = store.upsert_node("p", "Func", "a", "a")
+        b = store.upsert_node("p", "Func", "b", "b")
+        c = store.upsert_node("p", "Func", "c", "c")
+        d = store.upsert_node("p", "Func", "d", "d")
+        store.upsert_edge("p", a["id"], b["id"], "calls")  # a -> b
+        store.upsert_edge("p", b["id"], c["id"], "calls")  # b -> c
+        store.upsert_edge("p", c["id"], d["id"], "imports")  # c -> d (foreign type)
+        # outermost ring edge: between the depth-1 and depth-2 neighbours
+        store.upsert_edge("p", b["id"], d["id"], "calls")
+        return a
+
+    def test_depths_match_expand_neighbors(self, store) -> None:
+        a = self._seed(store)
+        for depth in (0, 1, 2):
+            sub = store.subgraph("p", a["id"], depth)
+            sub_ids = {n["id"] for n in sub["nodes"]} | {e["id"] for e in sub["edges"]}
+            expanded = store.subgraph("p", a["id"], depth, edge_filter="calls")
+            exp_ids = {n["id"] for n in expanded["nodes"]} | {e["id"] for e in expanded["edges"]}
+            assert sub_ids >= exp_ids  # same walk, filter only trims edges
+            assert a["id"] in sub_ids
+
+    def test_edge_filter_narrows_edges_not_traversal(self, store) -> None:
+        a = self._seed(store)
+        filtered = store.subgraph("p", a["id"], 2, edge_filter="calls")
+        # traversal is unaffected: the depth-2 node (d) still shows up...
+        names = {n["qualified_name"] for n in filtered["nodes"]}
+        assert {"a", "b", "c", "d"} <= names
+        # ...but the foreign-type edge is out of the returned edges
+        assert all(e["type"] == "calls" for e in filtered["edges"])
+        unfiltered = store.subgraph("p", a["id"], 2)
+        assert any(e["type"] == "imports" for e in unfiltered["edges"])
+
+    def test_outermost_ring_edges_are_returned(self, store) -> None:
+        """The owner-chosen semantic: edges hanging off the depth-limit ring
+        are part of the induced subgraph (star expansion dropped them)."""
+        a = self._seed(store)
+        sub = store.subgraph("p", a["id"], 1)
+        edge_pairs = {(e["src"], e["dst"]) for e in sub["edges"]}
+        # b sits on the depth-1 ring; its edge to d reaches beyond it
+        b = store.upsert_node("p", "Func", "b", "b")
+        d = store.upsert_node("p", "Func", "d", "d")
+        assert (b["id"], d["id"]) in edge_pairs

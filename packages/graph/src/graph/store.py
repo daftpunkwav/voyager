@@ -205,8 +205,20 @@ class GraphStore:
                     edges.append(e)
         return {"project": project, "nodes": nodes, "edges": edges}
 
-    def subgraph(self, project: str, node_id: str, depth: int = 1) -> dict[str, Any]:
-        """Expand neighbors from node_id up to the given depth (near-end of the two-level load)."""
+    def subgraph(
+        self, project: str, node_id: str, depth: int = 1, *, edge_filter: str = ""
+    ) -> dict[str, Any]:
+        """Induced subgraph around node_id up to `depth` hops: every node
+        within `depth` hops, plus every edge incident to those nodes (so the
+        outermost ring's own edges are included). This is the single BFS in
+        the store: expand_neighbors used to carry a second, divergent depth
+        semantics (star expansion, dropping the outermost ring's edges) and
+        was reconciled into this implementation (owner decision 2026-09-28).
+
+        `edge_filter` restricts the returned edges to one type; it never
+        restricts traversal — the walk follows all edges — matching the
+        pre-existing expand_neighbors behaviour.
+        """
         seen_nodes: dict[str, dict] = {}
         seen_edges: dict[str, dict] = {}
         frontier = {node_id}
@@ -231,7 +243,10 @@ class GraphStore:
                 nxt = set()
                 for e in all_edges:
                     if e["src"] in frontier or e["dst"] in frontier:
-                        seen_edges[e["id"]] = e
+                        if not (edge_filter and e["type"] != edge_filter):
+                            seen_edges[e["id"]] = e
+                        # Traversal follows every edge regardless of the
+                        # filter: the filter narrows the returned edges only.
                         for end in (e["src"], e["dst"]):
                             if end not in seen_nodes:
                                 nxt.add(end)
@@ -276,12 +291,6 @@ class GraphStore:
                     "SELECT DISTINCT project FROM nodes WHERE source = 'code'"
                 )
             ]
-
-    def neighbors(
-        self, project: str, node_id: str, *, depth: int = 1, edge_filter: str = ""
-    ) -> dict[str, Any]:
-        """Expand neighbors up to depth with optional edge-type filter (see operations)."""
-        return operations.neighbors(self, project, node_id, depth=depth, edge_filter=edge_filter)
 
     def find_path(
         self, project: str, a: str, b: str, *, max_hops: int = 4, edge_filter: str = ""

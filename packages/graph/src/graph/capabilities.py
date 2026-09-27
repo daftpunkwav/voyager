@@ -293,11 +293,12 @@ def drop_project_graph(project: str) -> dict:
 @capability(
     registry,
     name="expand_neighbors",
-    description="Neighbor expansion: grow edges from a node by depth, "
-    "with optional edge-type filter",
+    description="Incremental expansion around one node (grow the open "
+    "subgraph by depth hops), with optional edge-type filter; same induced "
+    "subgraph semantics as get_subgraph",
 )
 def expand_neighbors(project: str, node_id: str, depth: int = 1, edge_filter: str = "") -> dict:
-    return _require_deps().store.neighbors(project, node_id, depth=depth, edge_filter=edge_filter)
+    return _require_deps().store.subgraph(project, node_id, depth, edge_filter=edge_filter)
 
 
 @capability(
