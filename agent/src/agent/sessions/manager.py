@@ -306,14 +306,23 @@ class SessionManager:
                 ErrorSuffix.INVALID_INPUT,
                 f"session {sid} is running; cancel the turn before deleting",
             )
+        # Validate existence before dismantling anything: a NOT_FOUND raised
+        # after the teardown would already have dropped the in-memory instance
+        # (next resolve() silently rebuilds it from disk) and the queued
+        # messages the Master discards via on_delete.
+        known = (
+            self._store.get(sid) is not None
+            if self._store is not None
+            else sid in self._titles or sid in self._instances
+        )
+        if not known:
+            raise ServiceError("agent", ErrorSuffix.NOT_FOUND, f"session not found: {sid}")
         title = self._title_of(sid)
         self._instances.pop(sid, None)
         self._locks.pop(sid, None)
         if self._on_delete is not None:
             self._on_delete(sid)
         if self._store is not None:
-            if self._store.get(sid) is None:
-                raise ServiceError("agent", ErrorSuffix.NOT_FOUND, f"session not found: {sid}")
             self._store.delete(sid)
         else:
             self._titles.pop(sid, None)
