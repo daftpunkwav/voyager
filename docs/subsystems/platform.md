@@ -30,7 +30,7 @@ English | [中文](platform.zh.md)
 
 ## platform_health
 
-`packages/platform/health/src/platform_health/` — `HealthMonitor` aggregates `Probe` results into `HealthReport`s; the gateway exposes the aggregate at `GET /health`.
+`packages/platform/health/src/platform_health/` — `HealthMonitor`/`Probe` helper classes (currently not wired into the runtime: the gateway ships its own `HealthProbe`, which powers `GET /health`).
 
 ## platform_webguard
 

@@ -30,7 +30,7 @@
 
 ## platform_health
 
-`packages/platform/health/src/platform_health/` — `HealthMonitor` 把 `Probe` 结果聚合为 `HealthReport`;gateway 在 `GET /health` 暴露聚合结果。
+`packages/platform/health/src/platform_health/` — `HealthMonitor`/`Probe` 辅助类(当前未接入运行时:gateway 使用自己的 `HealthProbe` 支撑 `GET /health`)。
 
 ## platform_webguard
 

@@ -30,7 +30,7 @@ apps/web/src/
 │   └── types/          # 10 files by domain: agent/codeGraph/common/graph/llm/notes/settings/sources/system/usage
 │
 ├── bridge/             # ★ the only layer that talks to the backend
-│   ├── client.ts       # callCapability<T> + uploadFile + beaconCapability (unload fallback) + unwrapDataField (migration period)
+│   ├── client.ts       # callCapability<T> + uploadFile + beaconCapability (unload fallback)
 │   ├── chatSend.ts     # send messages / chat history / online events + cross-domain chat contract (sendUserTurn, etc.)
 │   ├── stream.ts       # shared SSE (resumes from after_seq after disconnects)
 │   ├── session.ts      # loopback bootstrap + /health liveness probe
@@ -49,7 +49,7 @@ apps/web/src/
 ├── pages/              # ★ pages as modules: activity chat code-graph graph health notes overview settings sources team usage
 │   └── notes/          # example: Page + provider + notesAutoSave/notesBatch/notesSplit* and other domain-internal slices
 │
-├── shell/              # app shell: AppShell, Sidebar/Topbar, ServiceBadge, pageProbes, themeBridge
+├── shell/              # app shell: AppShell, Sidebar, pageProbes, themeBridge
 ├── stores/             # zustand (0 cross-imports): auth chat codeGraph floating graph note project settings ui
 ├── styles/             # design-system.css as the single source + shell/global + pages/ page-private CSS
 ├── utils/              # cross-domain pure functions (one file, one responsibility; errorCodes aligned with the backend ErrorSuffix, locked by contract tests)
@@ -63,9 +63,7 @@ apps/web/src/
 - Data access chain: `hooks/components → api/<domain>.ts (per-domain thin layer, direct payload return) → bridge/client.callCapability → gateway`;
   the change surface for adding one capability = backend capability + one function in api/<domain> + call sites,
   with no intermediate registry;
-- There is no facade layer over the api modules; `bridge/client.unwrapDataField` is a value-extraction
-  helper (passes results through when they already carry a data key) used where a payload still needs
-  unwrapping;
+- There is no facade layer over the api modules; call sites consume the capability payload directly.
 - Exception: the settings form domain (settings/* components) calls callCapability directly to read and write setting
   keys — an established pattern, not a bypass; cross-domain chat interaction always goes through the `bridge/chatSend`
   contract (enforced by ESLint);

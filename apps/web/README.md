@@ -38,7 +38,7 @@ src/
 ├── lib/          # code-runner/: in-browser JavaScript, TypeScript and Python runners with a registry
 ├── pages/        # One directory per routed page (activity, chat, code-graph, graph, health,
 │                 #   notes, overview, settings, sources, team, usage); pages never import each other
-├── shell/        # App shell chrome (AppShell, Sidebar, ServiceBadge, Degraded, NotFound),
+├── shell/        # App shell chrome (AppShell, Sidebar, Degraded, NotFound),
 │                 #   theme/locale bridges, pageProbes
 ├── stores/       # Zustand stores (auth, chat, codeGraph, floating, graph, note, project,
 │                 #   settings, ui)
