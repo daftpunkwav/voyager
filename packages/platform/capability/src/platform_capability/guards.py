@@ -221,7 +221,9 @@ def _run_guards(
 ) -> None:
     """Guard phase: auth (LocalAuth by default) then quota; failures reject
     with ServiceError."""
-    auth_hooks = [LocalAuth()] if auth is None else auth
+    # An empty list is treated like None: passing a nominally-empty collection
+    # must not silently disable authentication (fail-open).
+    auth_hooks = [LocalAuth()] if not auth else auth
     for hook in auth_hooks:
         hook(req)
     for hook in quota or ():
