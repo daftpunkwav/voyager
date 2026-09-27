@@ -73,7 +73,8 @@ def _safe_arguments(raw: str) -> dict[str, Any]:
 def _is_complete_json(text: str) -> bool:
     """True when `text` parses as a complete JSON value (a tool call's
     arguments close exactly once, which is how an un-indexed stream reveals
-    that a new call has started)."""
+    that a new call has started). Hand-mirrored by the same-named helper in
+    agent.llm_http (the host parity suite locks the pair)."""
     try:
         json.loads(text)
     except ValueError:
@@ -225,7 +226,10 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
                 # heuristic cannot remove: a stream whose first call carries
                 # index=0 and whose later un-indexed fragments interleave
                 # with the previous call's parameters is un-attributable at
-                # the protocol level.
+                # the protocol level. This allocator is hand-mirrored by
+                # agent.llm_http.HttpLLM._merge_tool_fragment; identical SSE
+                # fixtures are pushed through both parsers by the host
+                # parity suite (packages/host/tests/test_llm_stream_parity.py).
                 raw_index = tc.get("index")
                 if raw_index is None:
                     prior = frags.get(in_flight) if in_flight is not None else None

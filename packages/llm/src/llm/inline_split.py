@@ -50,7 +50,9 @@ class InlineTagSplitter:
 
     ``feed`` returns ``(answer_delta, reasoning_delta)``; tool-call block
     content never surfaces as text — it accumulates on the splitter and is
-    read from :attr:`tool_blocks` after :meth:`flush`.
+    read from :attr:`tool_blocks` after :meth:`flush`. Hand-mirrored by
+    agent.llm_http._InlineTagSplitter (agent -> packages imports are
+    forbidden; the host parity suite locks the pair).
     """
 
     def __init__(self) -> None:
