@@ -188,7 +188,7 @@ class TestResumeRun:
         finally:
             app.memory.close()
 
-    async def test_resume_continue_completes_task(self, tmp_path) -> None:
+    async def test_resume_continue_completes_task(self, tmp_path, wait_until) -> None:
         rd = tmp_path / "rd"
         state = _seed_checkpoint(rd, _snapshot())
         app = _build(tmp_path)
@@ -200,11 +200,18 @@ class TestResumeRun:
                 {"action": "resume", "run_id": state.run_id, "continue_run": True},
             )
             assert out["continuing"] is True
-            await asyncio.sleep(0.1)
             inst = app.spawner.instances["instabcd"]
+            await wait_until(lambda: inst.status is RunStatus.COMPLETED)
             assert inst.status is RunStatus.COMPLETED
             assert inst.state.result
             # After the continued run the checkpoint is rewritten: terminal state, gone from the resume list
+            store = CheckpointStore(rd / "checkpoints")
+            await wait_until(
+                lambda: (
+                    (rewritten := store.load(state.run_id)) is not None
+                    and rewritten.status is RunStatus.COMPLETED
+                )
+            )
             listed = await execute(
                 app.registry, "agent_instance", USER_CTX, {"action": "checkpoints"}
             )
@@ -216,7 +223,9 @@ class TestResumeRun:
 class TestMidTurnCheckpoint:
     """Mid-ReAct incremental saves -> boot to PAUSED -> resume continues from mid-turn."""
 
-    async def test_mid_turn_save_and_resume_continues_without_redo(self, tmp_path) -> None:
+    async def test_mid_turn_save_and_resume_continues_without_redo(
+        self, tmp_path, wait_until
+    ) -> None:
         """round-1 calls a tool, crash before round-2 -> resume finishes the run with the tool called only once."""
         rd = tmp_path / "rd"
         hang = asyncio.Event()
@@ -288,8 +297,8 @@ class TestMidTurnCheckpoint:
                 {"action": "resume", "run_id": inst.state.run_id, "continue_run": True},
             )
             assert out["continuing"] is True
-            await asyncio.sleep(0.1)
             inst2 = app2.spawner.instances[inst.id]
+            await wait_until(lambda: inst2.status is RunStatus.COMPLETED)
             assert inst2.status is RunStatus.COMPLETED
             assert inst2.state.result == "directory listing done."
             # The continued run performs exactly one complete (the round after the crash point);
@@ -305,7 +314,15 @@ class TestMidTurnCheckpoint:
             assert msgs[2]["content"] == pending[2]["content"]
             assert msgs[3]["content"] == pending[3]["content"]
             # After the run, the turn-boundary snapshot replaces the mid-turn one: in_turn reset, terminal status
-            final = CheckpointStore(rd / "checkpoints").load(inst.state.run_id)
+            final_store = CheckpointStore(rd / "checkpoints")
+            await wait_until(
+                lambda: (
+                    (final := final_store.load(inst.state.run_id)) is not None
+                    and final.resume is not None
+                    and final.status is RunStatus.COMPLETED
+                )
+            )
+            final = final_store.load(inst.state.run_id)
             assert final is not None and final.resume is not None
             assert final.status is RunStatus.COMPLETED
             assert final.resume["in_turn"] is False
@@ -338,7 +355,9 @@ class TestMidTurnCheckpoint:
         finally:
             app.memory.close()
 
-    async def test_in_turn_without_pending_falls_back_to_turn_boundary(self, tmp_path) -> None:
+    async def test_in_turn_without_pending_falls_back_to_turn_boundary(
+        self, tmp_path, wait_until
+    ) -> None:
         """in_turn=True with missing pending_messages: falls back to plain history rebuild plus a fresh turn."""
         rd = tmp_path / "rd"
         state = _seed_checkpoint(rd, _snapshot(in_turn=True))
@@ -350,8 +369,8 @@ class TestMidTurnCheckpoint:
                 USER_CTX,
                 {"action": "resume", "run_id": state.run_id, "continue_run": True},
             )
-            await asyncio.sleep(0.1)
             inst = app.spawner.instances["instabcd"]
+            await wait_until(lambda: inst.status is RunStatus.COMPLETED)
             assert inst.status is RunStatus.COMPLETED
             assert inst.history[-1] == {"role": "assistant", "content": "Got it."}
         finally:
@@ -642,6 +661,7 @@ class TestResumeContinueFailureVisible:
     async def test_continue_failure_emits_task_failed_and_persists_failed(
         self,
         tmp_path,
+        wait_until,
     ) -> None:
         rd = tmp_path / "rd"
 
@@ -662,9 +682,13 @@ class TestResumeContinueFailureVisible:
                 {"action": "resume", "run_id": state.run_id, "continue_run": True},
             )
             assert out["continuing"] is True
-            await asyncio.sleep(0.2)
-
             store = CheckpointStore(rd / "checkpoints")
+            await wait_until(
+                lambda: (
+                    (loaded := store.load(state.run_id)) is not None
+                    and loaded.status is RunStatus.FAILED
+                )
+            )
             loaded = store.load(state.run_id)
             assert loaded.status is RunStatus.FAILED
             assert "RuntimeError" in loaded.error
@@ -687,7 +711,7 @@ class TestResumeContinueFailureVisible:
         finally:
             app.memory.close()
 
-    async def test_success_path_still_completes_and_clears(self, tmp_path) -> None:
+    async def test_success_path_still_completes_and_clears(self, tmp_path, wait_until) -> None:
         """Success-path regression: a finished continuation -> checkpoint COMPLETED and gone from the resume list."""
         rd = tmp_path / "rd"
         state = _seed_checkpoint(rd, _snapshot())
@@ -703,8 +727,13 @@ class TestResumeContinueFailureVisible:
                 USER_CTX,
                 {"action": "resume", "run_id": state.run_id, "continue_run": True},
             )
-            await asyncio.sleep(0.2)
             store = CheckpointStore(rd / "checkpoints")
+            await wait_until(
+                lambda: (
+                    (loaded := store.load(state.run_id)) is not None
+                    and loaded.status is RunStatus.COMPLETED
+                )
+            )
             assert store.load(state.run_id).status is RunStatus.COMPLETED
             listed = await execute(
                 app.registry, "agent_instance", USER_CTX, {"action": "checkpoints"}
