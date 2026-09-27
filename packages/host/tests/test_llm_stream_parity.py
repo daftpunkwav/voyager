@@ -290,3 +290,37 @@ async def test_parallel_unindexed_calls_get_separate_slots_parity(
     assert agent.tool_calls == (("a", {"x": 1}), ("b", {"y": 2}))
     assert llm.tool_calls == (("a", {"x": 1}), ("b", {"y": 2}))
     assert agent == llm
+
+
+async def test_non_string_arguments_fragment_never_crashes_parity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A broken gateway sending a non-string arguments fragment (a dict) must
+    not kill the round with a TypeError after deltas were already emitted: the
+    accumulator coerces via str(), the arguments fail to parse as JSON and
+    degrade to an empty dict — identically on both mirrors."""
+    sse = _sse(
+        {"choices": [{"delta": {"content": "working…"}}]},
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "c1",
+                                "function": {"name": "f", "arguments": {"raw": True}},
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        "[DONE]",
+    )
+    agent = _agent_semantics(await _run_agent(sse))
+    llm = _llm_semantics(await _run_llm(monkeypatch, sse))
+    assert agent.tool_calls == (("f", {}),)
+    assert llm.tool_calls == (("f", {}),)
+    assert agent == llm
+    assert agent.text == "working…"

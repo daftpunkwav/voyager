@@ -821,7 +821,11 @@ class HttpLLM:
         if fn.get("name"):
             slot["name"] = str(fn["name"])
         if fn.get("arguments"):
-            slot["arguments"] += fn["arguments"]
+            # str(): a broken gateway may send a non-string fragment (a dict
+            # etc.); += on a str accumulator would raise TypeError mid-stream
+            # and kill the round after deltas were already emitted (mirror of
+            # llm.stream's parser, which wraps str() here).
+            slot["arguments"] += str(fn["arguments"])
 
 
 def _is_complete_json(text: str) -> bool:
