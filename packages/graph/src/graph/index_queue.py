@@ -128,6 +128,25 @@ class IndexQueue:
             self._conn.commit()
         return cur.rowcount > 0
 
+    def recover_stale_running(self, max_attempts: int) -> int:
+        """Startup crash recovery: a 'running' row can only survive a hard kill
+        (graceful stop finishes its jobs), and without this it would sit in
+        'running' forever — never rerun, never listed as failed. Jobs still
+        under the attempts cap requeue; exhausted ones fail with a note."""
+        with self._lock:
+            cur = self._conn.execute(
+                "UPDATE index_jobs SET status='queued', updated_ts=?"
+                " WHERE status='running' AND attempts < ?",
+                (time.time(), max_attempts),
+            )
+            self._conn.execute(
+                "UPDATE index_jobs SET status='failed', error='interrupted by restart',"
+                " updated_ts=? WHERE status='running'",
+                (time.time(),),
+            )
+            self._conn.commit()
+        return cur.rowcount
+
     def next(self) -> dict[str, Any] | None:
         """Dequeue the highest-priority queued job and mark it running (single scheduler)."""
         with self._lock:

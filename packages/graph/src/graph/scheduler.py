@@ -14,6 +14,7 @@ When the queue is empty the loop simply idles.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -21,6 +22,8 @@ from platform_contracts import ActorKind, ActorRef, DomainEvent, Event
 from platform_eventbus import EventBus
 
 from .index_queue import IndexQueue
+
+log = logging.getLogger("graph.scheduler")
 
 _ACTOR = ActorRef(kind=ActorKind.SYSTEM, id="graph.scheduler")
 
@@ -51,6 +54,12 @@ class IndexScheduler:
         self._running: set[asyncio.Task] = set()
 
     async def start(self) -> None:
+        # Crash recovery first: rows left in 'running' by a hard kill must be
+        # requeued (or failed) before the loop starts polling, or they would
+        # sit there forever.
+        recovered = self._queue.recover_stale_running(self._max_attempts)
+        if recovered:
+            log.warning("recovered %d stale running index job(s) from a previous run", recovered)
         self._task = asyncio.create_task(self._loop())
 
     async def stop(self) -> None:
