@@ -147,10 +147,10 @@ class TestSessionManager:
             assert mgr.active_id() == first.session
             mgr.set_active(created["session_id"])
             assert mgr.active_id() == created["session_id"]
-            # Listing marks the active row
-            assert [r["active"] for r in mgr.list()] == [True, False] or any(
-                r["active"] and r["session_id"] == created["session_id"] for r in mgr.list()
-            )
+            # Listing marks exactly the active row (order-independent)
+            rows = {r["session_id"]: r for r in mgr.list()}
+            assert rows[created["session_id"]]["active"] is True
+            assert rows[first.session]["active"] is False
         finally:
             app.close()
 
