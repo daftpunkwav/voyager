@@ -393,6 +393,11 @@ async def run_react(
             }
             if reply.thinking_blocks:
                 truncated_entry["thinking_blocks"] = [dict(b) for b in reply.thinking_blocks]
+                # Which model produced these blocks: unsigned blocks from a
+                # lenient endpoint would 400 a strict one, so the llm layer
+                # only echoes blocks back to the model that issued them.
+                if reply.model:
+                    truncated_entry["thinking_source"] = reply.model
             messages.append(truncated_entry)
             for call in reply.tool_calls:
                 messages.append(
@@ -496,6 +501,9 @@ async def run_react(
         }
         if reply.thinking_blocks:
             assistant_entry["thinking_blocks"] = [dict(b) for b in reply.thinking_blocks]
+            # Same provenance stamp as the truncated-calls path above
+            if reply.model:
+                assistant_entry["thinking_source"] = reply.model
         messages.append(assistant_entry)
         tool_calls_used += len(executable)
         # Consecutive-safe partitioning (claude-code style): runs of

@@ -348,7 +348,9 @@ def _chat_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def _anthropic_messages(rest: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _anthropic_messages(
+    rest: list[dict[str, Any]], *, current_model: str = ""
+) -> list[dict[str, Any]]:
     """Non-system history -> Anthropic wire format (content blocks, no longer
     collapsed into a plain string).
 
@@ -373,7 +375,7 @@ def _anthropic_messages(rest: list[dict[str, Any]]) -> list[dict[str, Any]]:
             # Echo stored thinking blocks first and verbatim: with extended
             # thinking enabled the provider requires the exact blocks back
             # while tool use continues the conversation.
-            blocks.extend(_echoable_thinking_blocks(m))
+            blocks.extend(_echoable_thinking_blocks(m, current_model=current_model))
             if text:
                 blocks.append({"type": "text", "text": text})
             for tc in m.get("tool_calls") or ():
@@ -713,7 +715,7 @@ def _wire_request(
         headers = {"Authorization": f"Bearer {api_key}"}
     elif fmt == "anthropic":
         system, rest = _split_system(messages)
-        encoded = _anthropic_messages(rest)
+        encoded = _anthropic_messages(rest, current_model=model)
         if encoded and encoded[0].get("role") == "assistant":
             # Task-mode subagents carry the goal in system, so round 2+ opens
             # with the assistant's tool_use. The official API allows that
@@ -774,14 +776,29 @@ def _wire_request(
     return url, headers, body
 
 
-def _echoable_thinking_blocks(message: dict[str, Any]) -> list[dict[str, Any]]:
+def _echoable_thinking_blocks(
+    message: dict[str, Any], *, current_model: str = ""
+) -> list[dict[str, Any]]:
     """Stored thinking blocks of one neutral assistant message, sanitized for
     the wire: only well-formed thinking/redacted_thinking dicts pass, so a
-    poisoned history entry can never inject arbitrary content blocks. Empty
-    signatures and dataless redacted blocks are dropped rather than echoed:
-    strict endpoints reject signature-less thinking replays."""
+    poisoned history entry can never inject arbitrary content blocks.
+
+    Provenance filter: a thinking block is echoed only to the model that
+    produced it (``thinking_source`` on the message, stamped by the engine).
+    A strict endpoint rejects unsigned thinking replays, and blocks issued by
+    a lenient endpoint may well be unsigned — replaying them to a different,
+    strict model would hard-fail the turn. Blocks written before the stamp
+    existed (no ``thinking_source``) keep the legacy echo-anywhere behaviour:
+    a bounded, aging window rather than a silent one-time history rewrite.
+    Dataless redacted blocks are always dropped."""
     stored = message.get("thinking_blocks") or ()
     if not isinstance(stored, (list, tuple)):
+        return []
+    source = message.get("thinking_source")
+    # Legacy rows carry no stamp: echo them as before (no silent rewrite).
+    # Stamped rows from another model are dropped — an unsigned block from a
+    # lenient endpoint would hard-fail a strict one.
+    if source is not None and current_model and source != current_model:
         return []
     out = []
     for block in stored:

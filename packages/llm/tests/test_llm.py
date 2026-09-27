@@ -1268,9 +1268,10 @@ class TestMessageTranslation:
         await client_mod.complete(self._CHAT, api_key="sk", model="m", messages=history)
         assert "thinking_blocks" not in json.dumps(seen["body"])
 
-    async def test_anthropic_echo_drops_unsigned_and_dataless(self, monkeypatch) -> None:
-        """Echo sanitizer: unsigned thinking replays without the signature
-        key and dataless redacted blocks are dropped rather than echoed."""
+    async def test_anthropic_echo_legacy_unsigned_stays_dataless_dropped(self, monkeypatch) -> None:
+        """Legacy rows (no thinking_source stamp) keep the echo-anywhere
+        behaviour — no silent history rewrite — while dataless redacted
+        blocks are still dropped."""
         seen = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -1305,6 +1306,53 @@ class TestMessageTranslation:
             {"type": "redacted_thinking", "data": "opaque"},
             {"type": "tool_use", "id": "call_1", "name": "echo_tool", "input": {}},
         ]
+
+    async def test_anthropic_echo_source_filter(self, monkeypatch) -> None:
+        """Stamped blocks echo only to the model that issued them: same-model
+        unsigned blocks pass (continuity on lenient endpoints), blocks from
+        another model are dropped (a strict endpoint 400s on unsigned
+        thinking replays)."""
+        seen = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "content": [{"type": "text", "text": "ok"}],
+                    "usage": {"input_tokens": 1, "output_tokens": 1},
+                    "model": "m",
+                },
+            )
+
+        self._patch(monkeypatch, handler)
+
+        def _entry(source: str | None) -> dict[str, Any]:
+            entry: dict[str, Any] = {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{"id": "call_1", "name": "echo_tool", "arguments": {}}],
+                "thinking_blocks": [{"type": "thinking", "thinking": "unsigned"}],
+            }
+            if source is not None:
+                entry["thinking_source"] = source
+            return entry
+
+        # same model as the current request ("m"): echoed
+        history = [_entry("m"), {"role": "tool", "tool_call_id": "call_1", "content": "x"}]
+        await client_mod.complete(self._ANTHROPIC, api_key="sk", model="m", messages=history)
+        kinds = [b["type"] for b in seen["body"]["messages"][1]["content"]]
+        assert "thinking" in kinds
+
+        # a different model: dropped
+        history = [
+            _entry("other-model"),
+            {"role": "tool", "tool_call_id": "call_1", "content": "x"},
+        ]
+        await client_mod.complete(self._ANTHROPIC, api_key="sk", model="m", messages=history)
+        kinds = [b["type"] for b in seen["body"]["messages"][1]["content"]]
+        assert "thinking" not in kinds
+        assert any(b["type"] == "tool_use" for b in seen["body"]["messages"][1]["content"])
 
     async def test_orphan_tool_flattens_alongside_paired(self, monkeypatch) -> None:
         """Mixed paired + orphan history: pairs keep native shapes while
