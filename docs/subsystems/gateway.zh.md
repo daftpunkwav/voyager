@@ -27,7 +27,7 @@
 | `workspace.py` | `GET /api/workspace/list`、`GET /api/workspace/read`、`GET /api/workspace/pick` | `read` 预览上限 256 KiB / 400 行;`pick` 只读浏览任意目录 |
 | `health.py` | `GET /health` | 聚合各 `HealthProbe` |
 
-host 在其上追加额外路由(`build_upload_router`、`build_workspace_router`、`build_switch_router`、jobs 路由),并把 agent registry 挂载为 `MountSpec(domain="agent", ...)`。
+host 在其上追加额外路由(`build_workspace_router`、`build_switch_router`),并把 agent registry 挂载为 `MountSpec(domain="agent", ...)`。`build_upload_router` 不在其中:`uploads_workspace` 非空时由 `create_app` 自行挂载;job 取消/重排路由是传入 agent 的 host 侧可调用,并非 HTTP 路由。
 
 ## 限流与 SSE 容量
 

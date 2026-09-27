@@ -27,7 +27,7 @@ Source: `packages/gateway/src/gateway/`
 | `workspace.py` | `GET /api/workspace/list`, `GET /api/workspace/read`, `GET /api/workspace/pick` | `read` caps previews at 256 KiB / 400 lines; `pick` browses any directory read-only |
 | `health.py` | `GET /health` | aggregates `HealthProbe`s |
 
-Host adds extra routers on top (`build_upload_router`, `build_workspace_router`, `build_switch_router`, jobs routers) and mounts the agent registry as `MountSpec(domain="agent", ...)`.
+Host adds extra routers on top (`build_workspace_router`, `build_switch_router`) and mounts the agent registry as `MountSpec(domain="agent", ...)`. `build_upload_router` is not one of them: `create_app` mounts it itself when `uploads_workspace` is set, and the job cancel/reorder routing is host-provided callables passed into the agent, not HTTP routes.
 
 ## Rate limiting and SSE capacity
 
