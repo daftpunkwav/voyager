@@ -117,3 +117,65 @@ class TestKeyMaterial:
             material = load_key_material(env_file=tmp_path / "absent.env")
         assert material == "short"
         assert any("only 5 characters" in r.message for r in caplog.records)
+
+
+class TestKdfMigration:
+    """PBKDF2-derived key with a per-store salt: identical material no longer
+    yields identical keys across installs, and legacy single-SHA-256 rows are
+    re-encrypted in place on first read (kdf1: prefix, no downtime window)."""
+
+    @staticmethod
+    def _legacy_row(store: SecretStore, key: str, plain: str) -> None:
+        """Write a row exactly as the pre-migration store would have."""
+        import base64
+        import hashlib
+
+        from cryptography.fernet import Fernet
+
+        digest = hashlib.sha256(b"old-material").digest()
+        fernet = Fernet(base64.urlsafe_b64encode(digest))
+        token = fernet.encrypt(plain.encode()).decode("ascii")
+        with store._lock:
+            store._conn.execute(
+                "INSERT INTO secrets (key, ciphertext, updated_ts)"
+                " VALUES (?, ?, strftime('%s','now'))",
+                (key, token),
+            )
+            store._conn.commit()
+
+    def test_new_write_uses_kdf1_prefix(self, tmp_path) -> None:
+        store = SecretStore(tmp_path / "s.db", key_material="new-material")
+        store.set("k", "v")
+        raw = store._conn.execute("SELECT ciphertext FROM secrets WHERE key='k'").fetchone()[0]
+        assert raw.startswith("kdf1:")
+        store.close()
+
+    def test_legacy_row_reads_and_migrates_in_place(self, tmp_path) -> None:
+        store = SecretStore(tmp_path / "s.db", key_material="old-material")
+        self._legacy_row(store, "k", "legacy-secret")
+        assert store.get("k") == "legacy-secret"
+        raw = store._conn.execute("SELECT ciphertext FROM secrets WHERE key='k'").fetchone()[0]
+        assert raw.startswith("kdf1:")  # transparent rewrite happened
+        assert store.get("k") == "legacy-secret"  # and still reads under the new KDF
+        store.close()
+
+    def test_legacy_row_wrong_material_reads_as_unset(self, tmp_path) -> None:
+        store = SecretStore(tmp_path / "s.db", key_material="old-material")
+        self._legacy_row(store, "k", "legacy-secret")
+        store.close()
+        other = SecretStore(tmp_path / "s.db", key_material="different")
+        assert other.get("k") is None
+        other.close()
+
+    def test_same_material_different_stores_derive_different_keys(self, tmp_path) -> None:
+        """The whole point of the salt: identical material on two installs
+        produces ciphertext unreadable across stores."""
+        a = SecretStore(tmp_path / "a.db", key_material="same")
+        b = SecretStore(tmp_path / "b.db", key_material="same")
+        a.set("k", "v")
+        b.set("k", "v")
+        raw_a = a._conn.execute("SELECT ciphertext FROM secrets WHERE key='k'").fetchone()[0]
+        raw_b = b._conn.execute("SELECT ciphertext FROM secrets WHERE key='k'").fetchone()[0]
+        assert raw_a != raw_b
+        a.close()
+        b.close()
