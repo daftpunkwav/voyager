@@ -19,7 +19,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from platform_contracts import LOCAL_USER, ActorRef
 from starlette.datastructures import UploadFile
-from starlette.types import Message, Receive
+from starlette.types import Message
 
 from .ratelimit import RateLimiter
 

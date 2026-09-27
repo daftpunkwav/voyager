@@ -965,6 +965,7 @@ dependencies = [
     { name = "platform-contracts" },
     { name = "platform-secrets" },
     { name = "platform-settings" },
+    { name = "platform-webguard" },
 ]
 
 [package.metadata]
@@ -974,6 +975,7 @@ requires-dist = [
     { name = "platform-contracts", editable = "packages/platform/contracts" },
     { name = "platform-secrets", editable = "packages/platform/secrets" },
     { name = "platform-settings", editable = "packages/platform/settings" },
+    { name = "platform-webguard", editable = "packages/platform/webguard" },
 ]
 
 [[package]]

@@ -43,7 +43,7 @@ async def _git_clone(owner: str, name: str, dest: Path) -> None:
     )
     try:
         _, stderr = await asyncio.wait_for(proc.communicate(), timeout=_CLONE_TIMEOUT_S)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         # Kill and reap, or the orphaned git keeps running past the timeout.
         proc.kill()
         await proc.communicate()
