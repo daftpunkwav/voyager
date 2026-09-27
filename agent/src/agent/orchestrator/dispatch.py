@@ -133,7 +133,7 @@ async def dispatch_task(
         max_tool_calls=custom.max_tool_calls if custom is not None else None,
     )
     try:
-        plan_mode = Mode(mode) if mode else None
+        task_mode = Mode(mode) if mode else None
     except ValueError:
         # Fail loud with an actionable error instead of a bare ValueError that
         # surfaces as "[工具失败] ValueError: ..." downstream
@@ -192,7 +192,7 @@ async def dispatch_task(
         constraints=constraints,
         depends_on=tuple(depends_on or ()),
         board_task_id=board_task_id,
-        mode=plan_mode,
+        mode=task_mode,
         allowed_tools=allowed_tools,
         readonly=readonly,
         limits=limits,
