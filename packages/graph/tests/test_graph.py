@@ -3,6 +3,8 @@ validation, queue, scheduler retries, engine fallback, Python-engine end-to-end 
 of a tiny repo, and repo relation analysis.
 """
 
+import sqlite3
+
 import pytest
 from graph.capabilities import Deps, init_deps, registry
 from graph.engines.adapter import EngineAdapter
@@ -195,6 +197,37 @@ class TestScheduler:
         await sched.stop()
         job = d.queue.get(jid)
         assert job["status"] == "failed" and job["attempts"] == 2
+
+    async def test_loop_survives_store_errors(self, deps, monkeypatch) -> None:
+        """A transient store failure inside the poll loop must not kill the
+        scheduler: later jobs still run (the loop dies silently otherwise)."""
+        d, _ = deps
+        real_next = d.queue.next
+        calls = {"n": 0}
+
+        def flaky_next():
+            calls["n"] += 1
+            if calls["n"] <= 2:
+                raise sqlite3.OperationalError("database is locked")
+            return real_next()
+
+        monkeypatch.setattr(d.queue, "next", flaky_next)
+
+        async def run(job) -> None:
+            pass
+
+        sched = IndexScheduler(d.queue, run, None, idle_poll_s=0.01)
+        jid = d.queue.enqueue("p", "/x")
+        await sched.start()
+        try:
+            for _ in range(100):
+                if d.queue.get(jid)["status"] == "done":
+                    break
+                await asyncio_sleep()
+            assert d.queue.get(jid)["status"] == "done"
+            assert calls["n"] >= 3  # the loop retried past the store errors
+        finally:
+            await sched.stop()
 
 
 async def asyncio_sleep() -> None:

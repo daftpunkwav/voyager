@@ -74,13 +74,28 @@ class IndexScheduler:
 
     async def _loop(self) -> None:
         while True:
-            job = self._queue.next()
-            if job is None:
-                await asyncio.sleep(self._poll)  # idle while the queue is empty
-                continue
-            task = asyncio.create_task(self._run_guarded(job))
-            self._running.add(task)
-            task.add_done_callback(self._running.discard)
+            try:
+                job = self._queue.next()
+                if job is None:
+                    await asyncio.sleep(self._poll)  # idle while the queue is empty
+                    continue
+                task = asyncio.create_task(self._run_guarded(job))
+                self._running.add(task)
+                task.add_done_callback(self._on_job_done)
+            except Exception:  # a transient store error must not kill the scheduler
+                # queue.next() hits sqlite (disk I/O, lock timeout): dying here
+                # would stop every future job with no signal. Log and keep
+                # polling; CancelledError (BaseException) still propagates.
+                log.exception("index scheduler poll failed; retrying in %ss", self._poll)
+                await asyncio.sleep(self._poll)
+
+    def _on_job_done(self, task: asyncio.Task[None]) -> None:
+        self._running.discard(task)
+        # Retrieve the exception so an escaped crash (e.g. finish() failing
+        # mid-error-handling) is logged instead of surfacing only as
+        # "Task exception was never retrieved" noise at GC time.
+        if not task.cancelled() and task.exception() is not None:
+            log.error("index job task crashed", exc_info=task.exception())
 
     async def _run_guarded(self, job: dict[str, Any]) -> None:
         async with self._sem:
