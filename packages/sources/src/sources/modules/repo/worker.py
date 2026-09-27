@@ -23,6 +23,11 @@ _ACTOR = ActorRef(kind=ActorKind.SYSTEM, id="sources.repo.worker")
 #: (owner, name, dest) -> None; default implementation is git clone --depth 1
 CloneFn = Callable[[str, str, Path], Awaitable[None]]
 
+#: Hard ceiling on one git clone. Without it a hung network / credential
+#: prompt blocks communicate() forever, and with a single consumer and an
+#: unbounded queue that stalls the whole repo import/remove pipeline.
+_CLONE_TIMEOUT_S = 600.0
+
 
 async def _git_clone(owner: str, name: str, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -36,7 +41,15 @@ async def _git_clone(owner: str, name: str, dest: Path) -> None:
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.PIPE,
     )
-    _, stderr = await proc.communicate()
+    try:
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=_CLONE_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        # Kill and reap, or the orphaned git keeps running past the timeout.
+        proc.kill()
+        await proc.communicate()
+        raise RuntimeError(
+            f"git clone timed out after {int(_CLONE_TIMEOUT_S)}s (possible network hang)"
+        ) from None
     if proc.returncode != 0:
         raise RuntimeError(f"git clone failed: {stderr.decode(errors='replace')[:300]}")
 
@@ -71,17 +84,31 @@ class RepoWorker:
         while True:
             item = await self._queue.get()
             # Clone jobs are str(rid); removal jobs are ("remove", rid, local_path)
-            if isinstance(item, tuple) and item[0] == "remove":
-                await self._run_remove(item[2])
-            else:
-                await self._run_one(item)
+            try:
+                if isinstance(item, tuple) and item[0] == "remove":
+                    await self._run_remove(item[2])
+                else:
+                    await self._run_one(item)
+            except Exception as exc:  # the worker must not die on a single bad job
+                import logging
+
+                logging.getLogger("sources.repo.worker").warning(
+                    "worker task failed: item=%r error=%s", item, exc, exc_info=True
+                )
 
     async def _run_remove(self, local_path: str) -> None:
         """Delete the local clone directory (queued by remove_repo after the
         DB row is gone).
         """
-        if local_path:
+        if not local_path:
+            return
+
+        def _remove() -> None:
             shutil.rmtree(local_path, ignore_errors=True)
+
+        # Disk deletion off the event loop: syncing rmtree on a cloned repo
+        # (thousands of files) would stall the worker's loop, as in doc/worker
+        await asyncio.to_thread(_remove)
 
     async def _run_one(self, rid: str) -> None:
         repo = self._store.get(rid, with_readme=False)
@@ -91,7 +118,8 @@ class RepoWorker:
         try:
             dest = self._root / f"{repo['owner']}__{repo['name']}"
             if dest.exists():  # re-import: clear the old directory first
-                shutil.rmtree(dest, ignore_errors=True)
+                # Off the event loop, same as _run_remove
+                await asyncio.to_thread(shutil.rmtree, dest, True)
             await self._clone(repo["owner"], repo["name"], dest)
             self._store.set_status(rid, "ready", local_path=str(dest))
             await self._emit(DomainEvent.TASK_PROGRESS, rid, progress=1.0, stage="done")
