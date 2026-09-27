@@ -1073,3 +1073,29 @@ class TestRequestValidationEnvelope:
         # same request without the session filter walks the same direction
         rows_all = client.get("/api/chat/messages", params={"before_seq": 4}).json()["messages"]
         assert [m["seq"] for m in rows_all][-1] <= 3
+
+    def test_trajectory_dual_cursor_prefers_before_seq(self, client, bus) -> None:
+        """The trajectory fallback page follows the same trim rule as history:
+        with both cursors given, before_seq wins and the over-page trim keeps
+        the rows nearest the cursor (the ascending window's tail), not the
+        head a forward read would keep."""
+        import asyncio
+
+        from platform_contracts import LOCAL_USER, DomainEvent, Event
+
+        for i in range(4):
+            asyncio.run(
+                bus.publish(
+                    Event(
+                        type=DomainEvent.AGENT_STEP,
+                        actor=LOCAL_USER,
+                        payload={"name": f"step{i}", "session": "s-dual"},
+                    )
+                )
+            )
+        body = client.get(
+            "/api/chat/trajectory", params={"before_seq": 5, "after_seq": 1, "limit": 2}
+        ).json()
+        assert body["has_more"] is True
+        seqs = [s["seq"] for s in body["steps"]]
+        assert seqs == [3, 4]  # nearest the cursor, ascending

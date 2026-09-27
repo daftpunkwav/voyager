@@ -346,7 +346,12 @@ def build_chat_router(
         )
         has_more = len(rows) > max_rows
         if has_more:
-            rows = rows[-max_rows:] if after_seq <= 0 else rows[:max_rows]
+            # Same direction rule as get_messages (before_seq wins): backward
+            # reads keep the rows nearest the cursor (the ascending window's
+            # tail), forward reads the head
+            rows = (
+                rows[-max_rows:] if (before_seq is not None or after_seq <= 0) else rows[:max_rows]
+            )
         return {
             "has_more": has_more,
             "steps": [{"seq": seq, **e.to_dict()} for seq, e in rows],
