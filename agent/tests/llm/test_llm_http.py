@@ -117,6 +117,33 @@ class TestComplete:
         call = reply.tool_calls[0]
         assert (call.id, call.name, call.arguments) == ("c1", "t", {"a": 2})
 
+    async def test_malformed_tool_arguments_degrade_to_empty(self) -> None:
+        """Garbled argument JSON from a provider degrades to an empty argument
+        dict (the loop surfaces a tool error) instead of losing the whole
+        reply with its remaining valid tool calls."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": None,
+                                "tool_calls": [
+                                    {"id": "c1", "function": {"name": "t", "arguments": "{oops"}},
+                                ],
+                            }
+                        }
+                    ]
+                },
+            )
+
+        reply = await _client(handler).complete(MSGS)
+        assert reply.final is False  # the call itself survives
+        assert reply.tool_calls[0].id == "c1"
+        assert reply.tool_calls[0].arguments == {}
+
     async def test_duplicate_tool_call_ids_made_unique(self) -> None:
         """A compat provider echoing the same id on two calls would replay
         duplicate tool_call ids in the history, which strict endpoints reject
@@ -661,6 +688,51 @@ class TestTransientRetry:
             if ev.final is not None:
                 final = ev.final
         assert final is not None and final.degraded and "authentication" in (final.text or "")
+        assert calls["n"] == 1 and sleeps == []
+
+    async def test_stream_read_timeout_mid_stream_never_retried(self, monkeypatch) -> None:
+        """ReadTimeout after the connection was established is terminal on the
+        stream path (same no-retry law as complete): the request may already
+        have been accepted, so a retry would duplicate the shown deltas."""
+        self._zero_backoff(monkeypatch)
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+
+            async def stream():
+                yield b'data: {"choices": [{"delta": {"content": "partial"}}]}\n\n'
+                raise httpx.ReadTimeout("stalled mid-stream", request=request)
+
+            return httpx.Response(200, content=stream())
+
+        deltas: list[str] = []
+        final = None
+        async for ev in _client(handler).complete_stream(MSGS):
+            if ev.final is not None:
+                final = ev.final
+            else:
+                deltas.append(ev.text_delta)
+        assert deltas == ["partial"]  # what the user saw stays theirs
+        assert final is not None and final.degraded and "timed out" in (final.text or "")
+        assert calls["n"] == 1  # never retried, no duplicate emission
+
+    async def test_stream_nontransport_http_error_folds_immediately(self, monkeypatch) -> None:
+        """HTTP-level but non-transient failures must not burn the stream
+        retry budget either (mirrors the one-shot complete path)."""
+        sleeps = self._zero_backoff(monkeypatch)
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            raise httpx.TooManyRedirects("loop", request=request)
+
+        final = None
+        async for ev in _client(handler).complete_stream(MSGS):
+            if ev.final is not None:
+                final = ev.final
+        assert final is not None and final.degraded
+        assert "connection failed: TooManyRedirects" in (final.text or "")
         assert calls["n"] == 1 and sleeps == []
 
     async def test_stream_retry_resets_inline_splitter(self, monkeypatch) -> None:
