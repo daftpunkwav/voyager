@@ -6,7 +6,7 @@
  * follows i18n.resolvedLanguage — never hardcode a locale here.
  *
  * Responsibilities:
- * - Format ISO 8601 timestamps as localized date/time and message times,
+ * - Format ISO 8601 timestamps as localized date/time,
  *   with defined placeholders for null/invalid input
  * - Provide relative-time formatting for list rows
  *
@@ -17,7 +17,6 @@ import {
   formatDate as formatLocalizedDate,
   formatDateTime as formatLocalizedDateTime,
   formatRelativeTime as formatLocalizedRelativeTime,
-  formatTime as formatLocalizedTime,
 } from '@/i18n';
 
 /** ISO 8601 -> localized date and time; null/undefined renders as "-". */
@@ -30,13 +29,6 @@ export function formatDateTime(iso: string | null | undefined): string {
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return '-';
   return formatLocalizedDate(iso);
-}
-
-/** Message timestamp (HH:mm); invalid input renders as empty. */
-export function formatMessageTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return formatLocalizedTime(d);
 }
 
 /** ISO 8601 -> relative time (e.g. "3 days ago"); invalid input passes through. */

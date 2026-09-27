@@ -7,7 +7,7 @@
  * - Define the canonical persona duty ids
  * - Canonicalize legacy aliases to duty ids; unknown ids pass through so
  *   custom subagents are never misattributed
- * - Map ids to display names and agent CSS classes
+ * - Map ids to display names
  *
  * This module must not depend on UI-layer components.
  */
@@ -46,14 +46,6 @@ export function canonicalPersonaId(id: string | null | undefined): string {
   // Return unknown ids as-is (custom subagents); never collapse them to
   // orchestrator, or SSE speaker switches would be misattributed to Lucien
   return ALIASES[id] ?? id;
-}
-
-export function isOrchestrator(id: string | null | undefined): boolean {
-  return canonicalPersonaId(id) === 'orchestrator';
-}
-
-export function personaCssClass(id: string | null | undefined): string {
-  return `agent-${canonicalPersonaId(id)}`;
 }
 
 /** Duty id / legacy alias -> display name (data layer). */

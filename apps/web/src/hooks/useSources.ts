@@ -19,12 +19,10 @@ import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   listSources,
-  sourcesStats,
   getDocument,
   getDocSection,
   setDocumentMeta,
   removeDocument,
-  saveUrl,
   getPage,
   setPageMeta,
   removePage,
@@ -47,15 +45,7 @@ export interface SourceSummary {
   match?: { section_no: number; snippet: string };
 }
 
-export interface SourceStats {
-  repo: number;
-  doc: number;
-  web: number;
-  importing: number;
-  failed: number;
-}
-
-const SOURCES_KEYS = ['sourcesStream', 'sourcesStats', 'documents', 'webpages'] as const;
+const SOURCES_KEYS = ['sourcesStream', 'documents', 'webpages'] as const;
 
 export function useSourceStream(
   params: {
@@ -69,13 +59,6 @@ export function useSourceStream(
     queryFn: async () => {
       return ((await listSources(params)) ?? []) as SourceSummary[];
     },
-  });
-}
-
-export function useSourcesStats() {
-  return useQuery({
-    queryKey: ['sourcesStats'],
-    queryFn: async () => (await sourcesStats()) as unknown as SourceStats,
   });
 }
 
@@ -221,20 +204,6 @@ export function useWebPage(pageId: string | undefined) {
       return (await getPage(pageId)) as unknown as WebPage;
     },
     enabled: Boolean(pageId),
-  });
-}
-
-export function useSaveUrl() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: { url: string; title?: string; tags?: string[] }) => {
-      await saveUrl(input.url, input);
-    },
-    onSuccess: () => {
-      for (const key of SOURCES_KEYS) {
-        void qc.invalidateQueries({ queryKey: [key] });
-      }
-    },
   });
 }
 
