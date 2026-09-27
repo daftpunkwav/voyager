@@ -362,15 +362,17 @@ class TestDefaultModelRetired:
 
     async def test_default_model_input_is_rejected(self, deps) -> None:
         """The retired default_model input no longer binds — stale callers fail
-        loudly instead of the flag being silently ignored."""
+        loudly (now a 400 envelope via signature binding, formerly a bare
+        TypeError 500) instead of the flag being silently ignored."""
         pid = await _add_sample()
-        with pytest.raises(TypeError, match="default_model"):
+        with pytest.raises(ServiceError, match="default_model") as exc:
             await execute(
                 registry,
                 "update_provider",
                 USER_CTX,
                 {"provider_id": pid, "default_model": "m1"},
             )
+        assert exc.value.body.code.endswith("INVALID_INPUT")
 
     async def test_complete_without_model_uses_first_enabled(self, deps, monkeypatch) -> None:
         import types

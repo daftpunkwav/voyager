@@ -402,16 +402,18 @@ class TestCapabilityContract:
     async def test_no_path_parameter_accepted(self, tmp_path) -> None:
         """The hook reload action takes no path parameter: the hooks directory
         is pinned at assembly time, so no arbitrary-path loading channel
-        exists (unknown kinds/actions are rejected by the dispatch)."""
+        exists (unknown kinds/actions are rejected by the dispatch). The
+        unknown key is rejected as a 400 INVALID_INPUT, not a bare TypeError."""
         app = self._build(tmp_path)
         try:
-            with pytest.raises(TypeError):
+            with pytest.raises(ServiceError) as exc:
                 await execute(
                     app.registry,
                     "extension",
                     USER_CTX,
                     {"kind": "hook", "action": "reload", "path": str(tmp_path / "elsewhere")},
                 )
+            assert "path" in exc.value.body.message
         finally:
             app.memory.close()
 

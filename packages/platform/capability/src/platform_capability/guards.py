@@ -16,7 +16,8 @@ import asyncio
 import inspect
 import threading
 import time
-from collections.abc import Callable, Mapping
+import typing
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -230,30 +231,6 @@ def _run_guards(
         hook(req)
 
 
-def _check_required_params(
-    domain: str,
-    params: Mapping[str, inspect.Parameter],
-    args: dict[str, Any],
-) -> None:
-    """Reject a keyword call that would miss required handler parameters with
-    INVALID_INPUT: without an input_model there is no coerce step, so a
-    missing argument would otherwise surface as a TypeError (500)."""
-    missing = [
-        p.name
-        for p in params.values()
-        if p.name != "_actor"
-        and p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
-        and p.default is inspect.Parameter.empty
-        and p.name not in args
-    ]
-    if missing:
-        raise ServiceError(
-            domain,
-            ErrorSuffix.INVALID_INPUT,
-            f"missing required inputs: {', '.join(missing)}",
-        )
-
-
 async def _invoke(
     registry: Registry,
     cap,
@@ -262,18 +239,49 @@ async def _invoke(
     *,
     name: str,
 ) -> Any:
-    """Invoke phase: input validation (coerce) -> _actor injection -> handler
-    -> long-running return contract."""
-    from platform_capability.define import coerce_input
+    """Invoke phase: input validation (coerce) -> signature binding -> _actor
+    injection -> handler -> long-running return contract."""
+    from platform_capability.define import _check_shallow, coerce_input
 
     input_obj = coerce_input(cap.input_model, args, domain=registry.domain)
     # Convention: when the handler declares an _actor parameter, the caller's
     # ActorRef is injected (operations like writing secrets need to know who
     # is calling); handlers that do not declare it never see it.
-    params = inspect.signature(cap.handler).parameters
-    if cap.input_model is None:
-        _check_required_params(registry.domain, params, args)
+    sig = inspect.signature(cap.handler)
+    params = sig.parameters
     inject = {"_actor": actor.actor} if (actor is not None and "_actor" in params) else {}
+
+    # Signature binding is the contract enforcement: `bind` rejects unknown
+    # keys and missing arguments with exactly the TypeError a real call would
+    # raise, but without entering the handler body - so a genuine TypeError
+    # raised *inside* a handler still propagates untouched. This is what
+    # makes the GET /capabilities broadcast schema true at runtime.
+    try:
+        if cap.input_model is None:
+            sig.bind(**args, **inject)
+        else:
+            sig.bind(input_obj, **inject)
+    except TypeError as exc:
+        raise ServiceError(
+            registry.domain,
+            ErrorSuffix.INVALID_INPUT,
+            f"invalid inputs: {exc}",
+            hint=f"signature is ({', '.join(sorted(params))})",
+        ) from None
+
+    # Shallow primitive-type checks for un-modelled handlers: the broadcast
+    # schema claims `limit: int`, so a string must not reach the handler.
+    # Best-effort by contract: unresolvable forward refs skip the check, and
+    # _check_shallow itself leaves composite/Optional/Any types to the handler.
+    if cap.input_model is None:
+        try:
+            hints = typing.get_type_hints(cap.handler)
+        except Exception:  # noqa: BLE001  # unresolvable forward refs: type check is best-effort
+            hints = {}
+        for pname, expected in hints.items():
+            if pname in ("self", "_actor") or pname not in args:
+                continue
+            _check_shallow(registry.domain, pname, args[pname], expected)
 
     def _call() -> Any:
         if cap.input_model is not None:

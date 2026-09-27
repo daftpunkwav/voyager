@@ -1,6 +1,7 @@
 """Tests for guards: auth, quota, audit, and the long-running contract."""
 
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
 from platform_actor import ActorContext
@@ -177,3 +178,75 @@ class TestRequiredParamsWithoutModel:
             return {"text": f"hi {name}"}
 
         assert await execute(reg, "greet2", USER_CTX, {"name": "x"}) == {"text": "hi x"}
+
+
+class TestSignatureBinding:
+    """Signature.bind is the contract enforcement for un-modelled handlers:
+    unknown keys and missing arguments become INVALID_INPUT (the broadcast
+    schema is true at runtime), while a TypeError raised *inside* the handler
+    body still propagates untouched."""
+
+    async def test_unknown_key_is_invalid_input_not_typeerror(self) -> None:
+        reg = Registry("agent")
+
+        @capability(reg, name="greet3", description="needs a name")
+        async def greet(name: str) -> dict:
+            return {"text": f"hi {name}"}
+
+        with pytest.raises(ServiceError) as exc:
+            await execute(reg, "greet3", USER_CTX, {"name": "x", "bogus": 1})
+        assert exc.value.body.code == "AGENT.INVALID_INPUT"
+        assert "bogus" in exc.value.body.message
+
+    async def test_shallow_type_mismatch_is_invalid_input(self) -> None:
+        reg = Registry("notes")
+
+        @capability(reg, name="page", description="list with a limit")
+        async def page(limit: int = 10) -> dict:
+            return {"limit": limit}
+
+        with pytest.raises(ServiceError) as exc:
+            await execute(reg, "page", USER_CTX, {"limit": "abc"})
+        assert exc.value.body.code == "NOTES.INVALID_INPUT"
+
+    async def test_shallow_check_skips_unannotated_and_injected(self) -> None:
+        reg = Registry("agent")
+
+        @capability(reg, name="flex", description="untyped params pass through")
+        async def flex(value) -> dict:  # no annotation: left to the handler
+            return {"value": value}
+
+        assert await execute(reg, "flex", USER_CTX, {"value": "abc"}) == {"value": "abc"}
+
+    async def test_typeerror_inside_handler_propagates(self) -> None:
+        """A genuine bug inside the handler must NOT be masked as a client
+        error: the bind check never enters the handler body."""
+        reg = Registry("agent")
+
+        @capability(reg, name="buggy", description="raises TypeError inside")
+        async def buggy(name: str) -> dict:
+            sneak: Any = name  # hides the operand from mypy; runtime still str + int
+            return {"text": sneak + 1}
+
+        with pytest.raises(TypeError):
+            await execute(reg, "buggy", USER_CTX, {"name": "x"})
+
+    async def test_missing_param_error_carries_signature_hint(self) -> None:
+        reg = Registry("agent")
+
+        @capability(reg, name="greet4", description="needs a name")
+        async def greet(name: str, greeting: str = "hi") -> dict:
+            return {"text": f"{greeting} {name}"}
+
+        with pytest.raises(ServiceError) as exc:
+            await execute(reg, "greet4", USER_CTX, {})
+        assert "missing a required argument" in exc.value.body.message
+        # The hint names the full handler signature so the caller can fix
+        # the input in one round trip
+        assert "greeting" in (exc.value.body.hint or "")
+        assert "name" in (exc.value.body.hint or "")
+
+    async def test_modelled_capability_unchanged(self) -> None:
+        reg = _registry()
+        out = await execute(reg, "do_thing", AGENT_CTX, {"text": "hello"})
+        assert out == {"ok": "hello"}
