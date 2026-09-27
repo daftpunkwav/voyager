@@ -70,6 +70,15 @@ def _ensure_node_id(store: GraphStore, project: str, qn: str, *, source: str, ac
     return node["id"]
 
 
+def _provenance(actor: ActorRef | None) -> tuple[str, str]:
+    """Derive the write provenance ``(source, actor_id)`` from the caller.
+    Single rule for every write capability: never hardcode it, or a caller's
+    real identity is lost and source-based cleanup misfires."""
+    if actor is None:
+        return "manual", ""
+    return ("ai" if actor.kind.value == "agent" else "manual"), actor.id
+
+
 def _within(path: Path, root: Path) -> bool:
     try:
         path.resolve().relative_to(Path(root).resolve())
@@ -189,8 +198,7 @@ def set_node(
 ) -> dict:
     ai_guide.validate_node(project, label, name)
     deps = _require_deps()
-    actor_id = _actor.id if _actor else ""
-    source = "ai" if (_actor and _actor.kind.value == "agent") else "manual"
+    source, actor_id = _provenance(_actor)
     return deps.store.upsert_node(
         project, label, name, qualified_name, attrs, source=source, actor=actor_id
     )
@@ -214,8 +222,7 @@ def set_relationship(
 ) -> dict:
     ai_guide.validate_relation(project, src, dst, type)
     deps = _require_deps()
-    actor_id = _actor.id if _actor else ""
-    source = "ai" if (_actor and _actor.kind.value == "agent") else "manual"
+    source, actor_id = _provenance(_actor)
 
     return deps.store.upsert_edge(
         project,
@@ -318,10 +325,7 @@ def find_path(project: str, a: str, b: str, max_hops: int = 4, edge_filter: str 
 def set_nodes(project: str, nodes: list[dict], _actor: ActorRef | None = None) -> dict:
     ai_guide.validate_nodes_batch(project, nodes)
     deps = _require_deps()
-    # Same provenance rule as the single write path: never hardcode it, or a
-    # caller's real identity is lost and source-based cleanup misfires.
-    actor_id = _actor.id if _actor else ""
-    source = "ai" if (_actor and _actor.kind.value == "agent") else "manual"
+    source, actor_id = _provenance(_actor)
     out = []
     for n in nodes:
         out.append(
@@ -346,8 +350,7 @@ def set_nodes(project: str, nodes: list[dict], _actor: ActorRef | None = None) -
 def set_relationships(project: str, relations: list[dict], _actor: ActorRef | None = None) -> dict:
     ai_guide.validate_relations_batch(project, relations)
     deps = _require_deps()
-    actor_id = _actor.id if _actor else ""
-    source = "ai" if (_actor and _actor.kind.value == "agent") else "manual"
+    source, actor_id = _provenance(_actor)
     out = []
     for r in relations:
         src = r["src"]
