@@ -174,7 +174,9 @@ def build_activity_router(bus: EventBus, limiter: RateLimiter) -> APIRouter:
             sql_types = type_list
             if (agent or session) and sql_types is None:
                 sql_types = tuple(sorted(_OPERATION_TYPES))
-            before = bus.log.latest_seq() + 1
+            # Same off-loop discipline as the reads below: latest_seq holds
+            # the EventLog lock and fetches synchronously.
+            before = (await asyncio.to_thread(bus.log.latest_seq)) + 1
             kept: list[tuple[int, Event]] = []
             for _round in range(6):
                 # EventLog reads hold a lock and fetchall synchronously: run
