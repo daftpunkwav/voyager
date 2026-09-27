@@ -112,13 +112,25 @@ export function useNotesAutoSave(options: { newProjectId: string }) {
         title: t,
         content: c,
       });
-      lastPersistedRef.current = {
+      const saved = {
         id: created.id,
         title: created.title ?? t,
         content: created.content ?? c,
       };
-      dirtyRef.current = false;
-      setSaveState('saved');
+      lastPersistedRef.current = saved;
+      // Same in-flight guard as the update path: keystrokes that landed while
+      // the create request was running must stay dirty (and re-arm), or the
+      // note=<id> promotion below would silently mark them saved behind a
+      // clean dirty flag — including on beforeunload, which reads the same
+      // flag. The editor id has not switched yet at this point (the URL sync
+      // happens after setSearchParams), so title/content decide.
+      const cur = useNoteStore.getState();
+      const clean = cur.editorTitle === saved.title && cur.editorContent === saved.content;
+      dirtyRef.current = !clean;
+      setSaveState(clean ? 'saved' : 'unsaved');
+      if (!clean && !timerRef.current) {
+        timerRef.current = setTimeout(() => void flushRef.current(), 5000);
+      }
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -128,7 +140,7 @@ export function useNotesAutoSave(options: { newProjectId: string }) {
         },
         { replace: true }
       );
-      return true;
+      return clean;
     } catch (err) {
       setSaveState('unsaved');
       addToast({
