@@ -12,13 +12,12 @@ from agent.build import build_agent
 from agent.contracts import Purpose
 from agent.llm import FakeLLM
 from agent.runtime import current_instance
-from agent.settings import OVERRIDES_KEY, STYLE_OVERRIDES_KEY
+from agent.settings import OVERRIDES_KEY
 from host.llm_adapter import NO_PROVIDER_TEXT
 from host.llm_routing import (
     ROUTING_KEY,
     PersonaRoutingServiceLLM,
     RoutingServiceLLM,
-    persona_style_for,
     resolve_chain,
 )
 from platform_contracts import DomainEvent, ErrorSuffix, ServiceError
@@ -475,24 +474,3 @@ class TestPersonaRouting:
             current_instance.reset(token)
         assert reply.text == "from p-main/m-main"
         assert calls == [{"provider": "p-main", "model": "m-main"}]
-
-
-class TestPersonaStyle:
-    def test_override_wins_and_falls_back(self) -> None:
-        settings = _Settings(
-            {
-                STYLE_OVERRIDES_KEY: {"orchestrator": "毒舌"},
-                "agent.style": "热心",
-            }
-        )
-        assert persona_style_for(settings, "orchestrator") == "毒舌"
-        assert persona_style_for(settings, "scout") == ""
-        broken = _Settings(fail=True)
-        assert persona_style_for(broken, "orchestrator") == ""
-        assert persona_style_for(None, "orchestrator") == ""
-
-    def test_non_dict_style_overrides_degrade_to_empty(self) -> None:
-        """A corrupt style table (string instead of object) yields no style
-        instead of raising or leaking the raw value."""
-        settings = _Settings({STYLE_OVERRIDES_KEY: "not-a-table"})
-        assert persona_style_for(settings, "orchestrator") == ""

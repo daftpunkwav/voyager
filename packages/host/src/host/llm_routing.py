@@ -20,7 +20,7 @@ from agent.contracts import Purpose
 from agent.llm import LLMReply, StreamReply, ToolSpec
 from agent.personas import canonical_persona_key
 from agent.runtime import current_instance
-from agent.settings import OVERRIDES_KEY, ROUTING_KEY, STYLE_OVERRIDES_KEY
+from agent.settings import OVERRIDES_KEY, ROUTING_KEY
 from platform_contracts import ActorKind, ActorRef, DomainEvent, Event, ServiceError
 
 from .llm_adapter import NO_PROVIDER_TEXT, LateBoundCall, ServiceLLM
@@ -241,20 +241,6 @@ class RoutingServiceLLM(ServiceLLM):
         )
 
 
-def persona_style_for(settings: Any, persona_key: str) -> str:
-    """Speaking style for one persona: agent.style.overrides[<key>] wins over
-    the global agent.style; unreadable/missing entries degrade to ""."""
-    if settings is None or not persona_key:
-        return ""
-    try:
-        overrides = settings.get(STYLE_OVERRIDES_KEY)
-    except Exception:  # noqa: BLE001  # settings trouble must not block the default style
-        return ""
-    if isinstance(overrides, dict):
-        return str(overrides.get(persona_key) or "")
-    return ""
-
-
 class PersonaRoutingServiceLLM(RoutingServiceLLM):
     """Chat transport that consults the per-persona override table
     (agent.llm.overrides) for the persona of the turn currently running.
@@ -289,11 +275,7 @@ class PersonaRoutingServiceLLM(RoutingServiceLLM):
 
 
 __all__ = [
-    "OVERRIDES_KEY",
-    "ROUTING_KEY",
-    "STYLE_OVERRIDES_KEY",
     "PersonaRoutingServiceLLM",
     "RoutingServiceLLM",
-    "persona_style_for",
     "resolve_chain",
 ]
