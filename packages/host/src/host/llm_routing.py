@@ -1,4 +1,4 @@
-"""Purpose-based model routing and fallback chains (phase 18).
+"""Purpose-based model routing and fallback chains.
 
 Resolution order for one call: the routing table entry for the purpose
 (agent.llm.routing: provider / model / fallbacks) wins; an explicitly

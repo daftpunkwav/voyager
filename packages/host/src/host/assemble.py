@@ -327,7 +327,7 @@ def build(
             job_reorder=make_job_reorder_router(call, JobsView(event_log)),
             audit=audit,  # the agent's own governance tools audit as actor=agent into the same sinks
             embedder=ServiceEmbedder(call_sync, settings_store),  # vector recall via llm.embed
-            # Purpose routing (phase 18): arbiter/distill/planner transports read
+            # Purpose routing: arbiter/distill/planner transports read
             # agent.llm.routing and fall back along the chain; unpurposed calls
             # stay on the default chat model
             purpose_llms={

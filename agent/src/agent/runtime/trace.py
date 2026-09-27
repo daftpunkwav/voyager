@@ -6,7 +6,7 @@ agent's cross-service calls and the user.message they trigger share one chain --
 debugging can replay the whole chain. asyncio.create_task copies the current context, so
 background dispatched tasks inherit it automatically.
 
-Spans (phase 17): start_span/end_span around LLM and tool calls record
+Spans: start_span/end_span around LLM and tool calls record
 (name, trace_id, start/end, attrs, ok) into a bounded in-process buffer —
 local output first, with optional asynchronous export to OTLP/Langfuse via
 agent.runtime.exporters.TraceDispatcher (best effort, never raises).

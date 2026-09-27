@@ -118,7 +118,7 @@ from agent.tools.workspace.write_journal import WriteJournal
 #: reconnects can replay, then reclaim the rows; message-level events are
 #: never purged. Defined here because both assembly roots (standalone agent
 #: and host aggregate) construct the log, and agent.delta is an agent-owned
-#: event type (review F-103).
+#: event type.
 EVENTS_RETENTION = Retention(types=(DomainEvent.AGENT_DELTA,), max_age_s=24 * 3600.0)
 
 #: Raw LLM round log retention (days): full request/response bodies per

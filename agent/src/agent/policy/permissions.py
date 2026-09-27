@@ -198,8 +198,7 @@ class ToolPermissions:
         # Legacy merge (replaces a write-migration): pre-modes installs could
         # store `agent.shell.denied` command prefixes; they apply as bash argv
         # deny prefixes in every mode, merged at read time so the effect is
-        # identical to having migrated the entries into the deny list. The
-        # legacy key retires with the confirm-era plumbing (cleanup phase).
+        # identical to having migrated the entries into the deny list.
         try:
             legacy = self._settings.get("agent.shell.denied")
         except Exception:  # noqa: BLE001  # unregistered (NOT_FOUND) or store failure
