@@ -73,3 +73,33 @@ class TestUpload:
         )
         assert resp.status_code == 413
         assert resp.json()["error"]["code"] == "GATEWAY.PAYLOAD_TOO_LARGE"
+
+    def test_lying_content_length_hits_the_streamed_cap(self, client, monkeypatch) -> None:
+        """A small (lying) Content-Length passes the pre-check: the streamed
+        cap is the fallback. The partial spool file must not survive on disk."""
+        import gateway.uploads as uploads_mod
+
+        monkeypatch.setattr(uploads_mod, "_MAX_BYTES", 8)
+        tc, ws = client
+        # content-length overridden below the cap: only the streamed cap can stop this body
+        resp = tc.post(
+            "/api/uploads",
+            files={"file": ("big.bin", b"x" * 100)},
+            headers={"content-length": "4"},
+        )
+        assert resp.status_code == 413
+        assert resp.json()["error"]["code"] == "GATEWAY.PAYLOAD_TOO_LARGE"
+        leftovers = [f for d in (ws / "imports").iterdir() for f in d.iterdir()]
+        assert leftovers == []  # the partial body is unlinked
+
+    def test_garbage_content_length_is_tolerated(self, client) -> None:
+        """An unparseable Content-Length must not crash the endpoint: the
+        ValueError is swallowed and the streamed cap remains the only limit."""
+        tc, _ = client
+        resp = tc.post(
+            "/api/uploads",
+            files={"file": ("a.txt", b"hello")},
+            headers={"content-length": "not-a-number"},
+        )
+        assert resp.status_code == 201
+        assert resp.json()["size"] == 5
