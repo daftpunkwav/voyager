@@ -76,14 +76,15 @@ class TestUpload:
         assert resp.status_code == 413
         assert resp.json()["error"]["code"] == "GATEWAY.PAYLOAD_TOO_LARGE"
 
-    def test_lying_content_length_hits_the_streamed_cap(self, client, monkeypatch) -> None:
-        """A small (lying) Content-Length passes the pre-check: the streamed
-        cap is the fallback. The partial spool file must not survive on disk."""
+    def test_lying_content_length_rejected_at_spool(self, client, monkeypatch) -> None:
+        """A small (lying) Content-Length passes the pre-check: the receive
+        boundary cap stops the body while Starlette is still spooling it, so
+        no destination directory is even created."""
         import gateway.uploads as uploads_mod
 
         monkeypatch.setattr(uploads_mod, "_MAX_BYTES", 8)
         tc, ws = client
-        # content-length overridden below the cap: only the streamed cap can stop this body
+        # content-length overridden below the cap: only the receive cap can stop this body
         resp = tc.post(
             "/api/uploads",
             files={"file": ("big.bin", b"x" * 100)},
@@ -91,8 +92,48 @@ class TestUpload:
         )
         assert resp.status_code == 413
         assert resp.json()["error"]["code"] == "GATEWAY.PAYLOAD_TOO_LARGE"
-        leftovers = [f for d in (ws / "imports").iterdir() for f in d.iterdir()]
-        assert leftovers == []  # the partial body is unlinked
+        assert not (ws / "imports").exists()  # rejected before any landing
+
+    def test_chunked_oversize_rejected_without_content_length(self, client, monkeypatch) -> None:
+        """A chunked body carries no Content-Length at all: the receive
+        boundary cap is still enforced."""
+        import gateway.uploads as uploads_mod
+
+        monkeypatch.setattr(uploads_mod, "_MAX_BYTES", 8)
+        tc, ws = client
+        resp = tc.post(
+            "/api/uploads",
+            files={"file": ("big.bin", b"x" * 100)},
+            headers={"Transfer-Encoding": "chunked"},
+        )
+        assert resp.status_code == 413
+        assert resp.json()["error"]["code"] == "GATEWAY.PAYLOAD_TOO_LARGE"
+        assert not (ws / "imports").exists()
+
+    def test_normal_upload_leaves_no_spool_leftovers(self, client) -> None:
+        """A successful upload works as before; the async-with form parse
+        must not leave spool temp files behind in the system temp dir."""
+        import tempfile
+        from pathlib import Path
+
+        tmp = Path(tempfile.gettempdir())
+        tempfile_before = set(tmp.iterdir())
+        tc, _ = client
+        resp = tc.post("/api/uploads", files={"file": ("ok.bin", b"y" * 4096)})
+        assert resp.status_code == 201
+        assert resp.json()["size"] == 4096
+        tempfile_after = set(tmp.iterdir())
+        assert not (tempfile_after - tempfile_before)  # no spool residue
+
+    def test_extra_file_fields_rejected(self, client) -> None:
+        """max_files=1 at the multipart parser: one request cannot smuggle a
+        second file field."""
+        tc, _ = client
+        resp = tc.post(
+            "/api/uploads",
+            files=[("file", ("a.txt", b"x")), ("extra", ("b.txt", b"y"))],
+        )
+        assert resp.status_code in (400, 413)  # rejected either way
 
     def test_garbage_content_length_is_tolerated(self, client) -> None:
         """An unparseable Content-Length must not crash the endpoint: the

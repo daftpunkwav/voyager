@@ -19,6 +19,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from platform_contracts import LOCAL_USER, ActorRef
 from starlette.datastructures import UploadFile
+from starlette.types import Message, Receive
 
 from .ratelimit import RateLimiter
 
@@ -53,61 +54,8 @@ def build_upload_router(workspace: Path, limiter: RateLimiter) -> APIRouter:
                     }
                 },
             )
-        # Reject an honest oversized upload before the multipart parser spools
-        # the whole body to a temp file: request.form() buffers first, so the
-        # streamed cap below only runs after the disk copy. A lying (small)
-        # Content-Length still hits the streamed cap.
-        declared = request.headers.get("content-length")
-        try:
-            if declared is not None and int(declared) > _MAX_BYTES:
-                return JSONResponse(
-                    status_code=413,
-                    content={
-                        "error": {
-                            "code": "GATEWAY.PAYLOAD_TOO_LARGE",
-                            "message": "file exceeds the 1GB transport limit",
-                        }
-                    },
-                )
-        except ValueError:
-            pass
-        form = await request.form()
-        file = form.get("file")
-        if not isinstance(file, UploadFile):
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": {"code": "GATEWAY.INVALID_INPUT", "message": "missing the file field"}
-                },
-            )
 
-        import uuid
-        from datetime import datetime
-
-        safe_name = _UNSAFE_FILENAME_RE.sub("_", file.filename or "upload")
-        safe_name = safe_name.replace("..", "_").strip(" .")[:120] or "upload"
-        month_dir = datetime.now(UTC).strftime("%Y%m")
-        dest_dir = Path(workspace) / "imports" / month_dir
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest = dest_dir / f"{uuid.uuid4().hex[:12]}__{safe_name}"
-
-        class _TooLarge(Exception):
-            pass
-
-        # Stream in chunks so concurrent uploads never load whole files in memory
-        total = 0
-        try:
-            with dest.open("wb") as f:
-                while True:
-                    chunk = await file.read(_CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    total += len(chunk)
-                    if total > _MAX_BYTES:
-                        raise _TooLarge
-                    f.write(chunk)
-        except _TooLarge:
-            dest.unlink(missing_ok=True)
+        def _too_large() -> JSONResponse:
             return JSONResponse(
                 status_code=413,
                 content={
@@ -117,11 +65,97 @@ def build_upload_router(workspace: Path, limiter: RateLimiter) -> APIRouter:
                     }
                 },
             )
+
+        declared = request.headers.get("content-length")
+        try:
+            if declared is not None and int(declared) > _MAX_BYTES:
+                return _too_large()
+        except ValueError:
+            pass
+
+        class _TooLarge(Exception):
+            pass
+
+        # Enforce the byte cap at the ASGI receive boundary: request.form()
+        # spools the whole body to a temp file before returning, so a lying
+        # (small) Content-Length or a chunked body would otherwise fill the
+        # disk before any of our own checks ran. Counting inside receive
+        # stops the spool the moment the cap is crossed, and the async with
+        # below makes Starlette clean up whatever was spooled.
+        seen = 0
+        receive = request._receive
+
+        async def _capped_receive() -> Message:
+            nonlocal seen
+            message = await receive()
+            if message["type"] == "http.request":
+                seen += len(message.get("body", b""))
+                if seen > _MAX_BYTES:
+                    raise _TooLarge
+            return message
+
+        request._receive = _capped_receive
+        try:
+            async with request.form(max_files=1, max_fields=4) as form:
+                file = form.get("file")
+                if not isinstance(file, UploadFile):
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "error": {
+                                "code": "GATEWAY.INVALID_INPUT",
+                                "message": "missing the file field",
+                            }
+                        },
+                    )
+
+                import uuid
+                from datetime import datetime
+
+                safe_name = _UNSAFE_FILENAME_RE.sub("_", file.filename or "upload")
+                safe_name = safe_name.replace("..", "_").strip(" .")[:120] or "upload"
+                month_dir = datetime.now(UTC).strftime("%Y%m")
+                dest_dir = Path(workspace) / "imports" / month_dir
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                dest = dest_dir / f"{uuid.uuid4().hex[:12]}__{safe_name}"
+
+                # Stream in chunks so concurrent uploads never load whole
+                # files in memory. The copy must stay inside the with block:
+                # exiting it closes the spooled temp file behind UploadFile.
+                total = 0
+                try:
+                    with dest.open("wb") as f:
+                        while True:
+                            chunk = await file.read(_CHUNK_SIZE)
+                            if not chunk:
+                                break
+                            total += len(chunk)
+                            if total > _MAX_BYTES:
+                                raise _TooLarge
+                            f.write(chunk)
+                except _TooLarge:
+                    dest.unlink(missing_ok=True)
+                    return _too_large()
+                except Exception as exc:
+                    dest.unlink(missing_ok=True)
+                    # Exception detail (paths, permission errors) goes to the
+                    # server log only; the client gets a generic message
+                    log.warning("upload stream failed: %s", exc, exc_info=True)
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "error": {
+                                "code": "GATEWAY.INVALID_INPUT",
+                                "message": "failed to read the upload stream",
+                            }
+                        },
+                    )
+        except _TooLarge:
+            return _too_large()
         except Exception as exc:
-            dest.unlink(missing_ok=True)
-            # Exception detail (paths, permission errors) goes to the server
-            # log only; the client gets a generic message
-            log.warning("upload stream failed: %s", exc, exc_info=True)
+            # Multipart parse failures (malformed bodies) surface as 400;
+            # detail goes to the server log only
+            log.warning("upload parse failed: %s", exc, exc_info=True)
             return JSONResponse(
                 status_code=400,
                 content={
