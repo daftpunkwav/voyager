@@ -80,9 +80,22 @@ export function useNotesAutoSave(options: { newProjectId: string }) {
       try {
         await updateNote.mutateAsync({ id, title: t, content: c });
         lastPersistedRef.current = { id, title: t, content: c };
-        dirtyRef.current = false;
-        setSaveState('saved');
-        return true;
+        // Clear dirty only when the editor still holds exactly what was just
+        // persisted. Keystrokes that landed during the in-flight save must
+        // stay dirty (and re-arm), or they would be silently dropped behind
+        // a "saved" indicator — including on beforeunload, which reads the
+        // same dirty flag.
+        const cur = useNoteStore.getState();
+        if (cur.editingNoteId === id && cur.editorTitle === t && cur.editorContent === c) {
+          dirtyRef.current = false;
+          setSaveState('saved');
+          return true;
+        }
+        setSaveState('unsaved');
+        if (!timerRef.current) {
+          timerRef.current = setTimeout(() => void flushRef.current(), 5000);
+        }
+        return false;
       } catch (err) {
         setSaveState('unsaved');
         addToast({
