@@ -68,6 +68,17 @@ def _safe_arguments(raw: str) -> dict[str, Any]:
     return args if isinstance(args, dict) else {}
 
 
+def _is_complete_json(text: str) -> bool:
+    """True when `text` parses as a complete JSON value (a tool call's
+    arguments close exactly once, which is how an un-indexed stream reveals
+    that a new call has started)."""
+    try:
+        json.loads(text)
+    except ValueError:
+        return False
+    return True
+
+
 async def complete_stream(
     provider: dict[str, Any],
     *,
@@ -149,6 +160,8 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
     service_tier = ""
     created = 0
     request_id = _request_id_from(resp)
+    next_slot = 0
+    in_flight: int | None = None
     async for line in resp.aiter_lines():
         if not line.startswith("data:"):
             continue
@@ -193,7 +206,34 @@ async def _chat_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
                 reasoning_parts.append(str(reasoning_content))
                 yield {"type": "reasoning", "text": str(reasoning_content)}
             for tc in delta.get("tool_calls") or []:
-                idx = int(tc.get("index") or 0)
+                # Non-conforming streams omit `index`. Never collapse those
+                # fragments onto slot 0: that silently concatenates two
+                # parallel tool calls into one dict with mangled arguments.
+                # An index-less fragment belongs to the call currently in
+                # flight; a stream that never indexes at all gets a fresh
+                # slot per call (detected by the previous call's arguments
+                # having closed into complete JSON). Residual ambiguity a
+                # heuristic cannot remove: a stream whose first call carries
+                # index=0 and whose later un-indexed fragments interleave
+                # with the previous call's parameters is un-attributable at
+                # the protocol level.
+                raw_index = tc.get("index")
+                if raw_index is None:
+                    prior = frags.get(in_flight) if in_flight is not None else None
+                    closed = bool(
+                        prior
+                        and prior["id"]
+                        and prior["arguments"]
+                        and _is_complete_json(prior["arguments"])
+                    )
+                    if in_flight is None or closed:
+                        in_flight = next_slot
+                        next_slot += 1
+                    idx = in_flight
+                else:
+                    idx = int(raw_index)
+                    next_slot = max(next_slot, idx + 1)
+                    in_flight = idx
                 acc = frags.setdefault(idx, {"id": "", "name": "", "arguments": ""})
                 # Some endpoints resend the full id/name on every fragment:
                 # overwrite the whole value (idempotent) instead of appending;

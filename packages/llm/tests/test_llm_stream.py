@@ -933,3 +933,125 @@ class TestStreamBoundary:
         deltas = [c for c in chunks if c["type"] == "text"]
         assert len(deltas) == n
         assert chunks[-1]["text"] == "x" * n
+
+
+class TestUnindexedToolCallStream:
+    """Non-conforming streams that omit `index`: fragments must never
+    collapse onto slot 0 (that concatenates two parallel calls' arguments
+    into one mangled dict); conforming streams keep byte-identical behaviour."""
+
+    async def test_conforming_stream_unchanged(self, monkeypatch) -> None:
+        """Every fragment carries its index: results identical to the
+        pre-slot-allocator parser."""
+        sse = _sse(
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "c1",
+                                    "function": {"name": "a", "arguments": '{"x":1}'},
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": 1,
+                                    "id": "c2",
+                                    "function": {"name": "b", "arguments": '{"y":2}'},
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            "[DONE]",
+        )
+        _patch(monkeypatch, lambda req: httpx.Response(200, text=sse))
+        chunks = await _collect(_CHAT)
+        final = chunks[-1]
+        by_name = {c["name"]: c["arguments"] for c in final["tool_calls"]}
+        assert by_name == {"a": {"x": 1}, "b": {"y": 2}}
+
+    async def test_never_indexed_two_calls_get_separate_slots(self, monkeypatch) -> None:
+        """A stream with no index at all: the second call starts once the
+        first call's arguments have closed into complete JSON."""
+        sse = _sse(
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {"id": "c1", "function": {"name": "a", "arguments": '{"x":1}'}}
+                            ]
+                        }
+                    }
+                ]
+            },
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {"id": "c2", "function": {"name": "b", "arguments": '{"y":2}'}}
+                            ]
+                        }
+                    }
+                ]
+            },
+            "[DONE]",
+        )
+        _patch(monkeypatch, lambda req: httpx.Response(200, text=sse))
+        chunks = await _collect(_CHAT)
+        final = chunks[-1]
+        assert len(final["tool_calls"]) == 2
+        by_name = {c["name"]: c["arguments"] for c in final["tool_calls"]}
+        assert by_name == {"a": {"x": 1}, "b": {"y": 2}}
+
+    async def test_first_indexed_then_unindexed_stays_separate(self, monkeypatch) -> None:
+        """First call carries index=0, the second call drops index: the
+        second call's arguments must not glue onto the first call's."""
+        sse = _sse(
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "c1",
+                                    "function": {"name": "a", "arguments": '{"x":1}'},
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {"id": "c2", "function": {"name": "b", "arguments": '{"y":2}'}}
+                            ]
+                        }
+                    }
+                ]
+            },
+            "[DONE]",
+        )
+        _patch(monkeypatch, lambda req: httpx.Response(200, text=sse))
+        chunks = await _collect(_CHAT)
+        final = chunks[-1]
+        assert len(final["tool_calls"]) == 2
+        by_name = {c["name"]: c["arguments"] for c in final["tool_calls"]}
+        assert by_name == {"a": {"x": 1}, "b": {"y": 2}}
