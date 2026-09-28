@@ -115,7 +115,7 @@ class Toolbelt:
                 "name": t.name,
                 "description": t.description,
                 "dimension": t.dimension,
-                "write": bool(t.write or t.irreversible),
+                "write": t.is_write,
                 "class": tool_class(t.name),
             }
             for t in (self._tools[n] for n in names)
@@ -132,10 +132,22 @@ class Toolbelt:
             "name": tool.name,
             "description": tool.description,
             "dimension": tool.dimension,
-            "write": bool(tool.write or tool.irreversible),
+            "write": tool.is_write,
             "class": tool_class(tool.name),
             "parameters": dict(tool.schema),
         }
+
+    def step_stamp(self, name: str) -> dict[str, Any]:
+        """Classification metadata stamped onto one tool-call step event (the
+        agent.step payload): the tool's dimension and write class, so
+        downstream attribution (the gateway activity feed) reads the stamp
+        instead of matching tool names. Known read-class tools stamp
+        write=False, so the field's presence is meaningful; unknown names
+        stamp nothing."""
+        tool = self._tools.get(name)
+        if tool is None:
+            return {}
+        return {"dimension": tool.dimension, "write": tool.is_write}
 
     def trimmed(self, allow: Iterable[str] | None) -> Toolbelt:
         """Capability-surface trimming: allow=None returns self unchanged;

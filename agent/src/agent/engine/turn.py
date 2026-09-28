@@ -582,16 +582,22 @@ async def on_step(
     # Steps go into the event stream (gateway _STREAM_TYPES agent.step) so
     # Chat can see which tool is being called; not part of history rebuild,
     # just live progress.
-    await inst.events.emit(
-        DomainEvent.AGENT_STEP,
-        run_id=inst.state.run_id,
-        subagent=_speaker_label(inst),
-        session=inst.session,
-        name=name,
-        kind=kind,
-        summary=(summary or "")[:120],
-        detail=detail or {},
-    )
+    payload: dict[str, Any] = {
+        "run_id": inst.state.run_id,
+        "subagent": _speaker_label(inst),
+        "session": inst.session,
+        "name": name,
+        "kind": kind,
+        "summary": (summary or "")[:120],
+        "detail": detail or {},
+    }
+    if kind == "tool":
+        # Tool steps carry the tool's own classification (dimension/write, the
+        # same vocabulary the roster publishes): downstream attribution reads
+        # the stamp so renaming or adding tools cannot silently drop events.
+        # Additive payload fields — older consumers ignore them.
+        payload.update(inst.toolbelt.step_stamp(name))
+    await inst.events.emit(DomainEvent.AGENT_STEP, **payload)
     # Refresh the DigestStore so the master's global layer render stays current.
     if inst.sync_digest is not None:
         inst.sync_digest(inst)

@@ -87,6 +87,52 @@ class TestStatusLineInjection:
         steps = [e for _, e in log.read_after(types=[DomainEvent.AGENT_STEP])]
         assert steps and all(s.payload.get("session") == "sess0001" for s in steps)
 
+    async def test_tool_steps_stamp_dimension_and_write(self, tmp_path) -> None:
+        """Tool steps carry the tool's own classification (dimension / write,
+        the roster vocabulary) in the agent.step payload: downstream
+        attribution reads the stamp instead of matching tool names. LLM-round
+        steps stay unstamped."""
+
+        async def echo(x: str = "") -> str:
+            return f"echo:{x}"
+
+        async def scribble(text: str = "") -> str:
+            return "ok"
+
+        belt = Toolbelt(
+            {
+                "echo_tool": AgentTool(name="echo_tool", description="t", handler=echo),
+                "scribble": AgentTool(
+                    name="scribble",
+                    description="t",
+                    handler=scribble,
+                    dimension="fs",
+                    write=True,
+                ),
+            },
+            PolicyEngine(),
+        )
+        llm = FakeLLM(
+            [
+                LLMReply(tool_calls=(ToolCall("c1", "scribble", {"text": "hi"}),)),
+                LLMReply(tool_calls=(ToolCall("c2", "echo_tool", {"x": "a"}),)),
+                LLMReply(text="done"),
+            ]
+        )
+        log_path = tmp_path / "events.db"
+        inst = _instance(llm, log_path, toolbelt=belt)
+        await inst.run_turn("hello")
+        steps = [e for _, e in EventLog(log_path).read_after(types=[DomainEvent.AGENT_STEP])]
+        tools = {s.payload["name"]: s.payload for s in steps if s.payload.get("kind") == "tool"}
+        assert tools["scribble"]["dimension"] == "fs"
+        assert tools["scribble"]["write"] is True
+        # A known read-class tool stamps write=False: the field's presence is
+        # meaningful for consumers
+        assert tools["echo_tool"]["dimension"] == "none"
+        assert tools["echo_tool"]["write"] is False
+        rounds = [s for s in steps if s.payload.get("kind") == "llm"]
+        assert rounds and all("dimension" not in s.payload for s in rounds)
+
 
 class TestSurrenderResetPerTurn:
     async def test_previous_turn_surrender_does_not_leak(self, tmp_path) -> None:

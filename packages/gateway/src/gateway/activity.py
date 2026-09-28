@@ -58,6 +58,11 @@ _OPERATION_TYPES = frozenset(
         DomainEvent.AGENT_STEP,
     }
 )
+#: Legacy-only fallback for agent.step rows written before the agent stamped
+#: its tool classification onto the payload (the event log is append-only, so
+#: old rows never grow the field): the file-writing tool names at that time.
+#: Live events are attributed via payload.dimension/payload.write instead —
+#: never by name — so agent-side tool renames cannot silently drop operations.
 _WRITE_TOOLS = frozenset({"write", "edit"})
 
 
@@ -76,11 +81,18 @@ def _is_agent_operation(ev: Event) -> bool:
         return False
     payload = _payload_dict(ev)
     if ev.type == DomainEvent.AGENT_STEP:
-        return (
-            str(payload.get("kind") or "") == "tool"
-            and str(payload.get("name") or "") in _WRITE_TOOLS
-            and bool(str(payload.get("session") or ""))
-        )
+        if str(payload.get("kind") or "") != "tool" or not str(payload.get("session") or ""):
+            return False
+        # Preferred attribution: the agent stamps its own tool classification
+        # onto tool-step payloads (dimension / write, additive fields; "fs" is
+        # the dimension vocabulary the agent's tool roster already publishes).
+        # A stamped row is decided by the stamp alone, so agent-side tool
+        # renames and additions never require changes here. Name matching is
+        # the legacy fallback for rows written before the stamp existed.
+        dimension = payload.get("dimension")
+        if isinstance(dimension, str) and dimension:
+            return dimension == "fs" and bool(payload.get("write"))
+        return str(payload.get("name") or "") in _WRITE_TOOLS
     if ev.type == DomainEvent.SETTINGS_CHANGED:
         # The store stamps the real caller: agent turns publish with the AGENT
         # actor, the settings UI with LOCAL_USER.

@@ -43,6 +43,13 @@ class AgentTool:
     timeout_s: float | None = None  # per-call cap; None = rely on the handler's own limits
     concurrent_safe: bool = False  # read-only by nature: same-round calls may run in parallel
 
+    @property
+    def is_write(self) -> bool:
+        """Write-class flag for rosters and step stamps: irreversible tools
+        count as writes too. Single definition behind roster() / describe()
+        and the agent.step stamp, so the classification cannot drift."""
+        return bool(self.write or self.irreversible)
+
 
 @dataclass(frozen=True)
 class ToolbeltView:

@@ -567,6 +567,36 @@ class TestActivity:
             e["payload"].get("session") == "s1" for e in scoped if e["type"] != "settings.changed"
         )
 
+    def test_feed_agent_step_attribution_reads_the_stamp(self, client, bus) -> None:
+        """Tool steps stamped by the agent (dimension / write payload fields)
+        are attributed by the stamp, not by tool name: a renamed or new
+        file-writing tool counts without a gateway change, and a write-class
+        non-fs tool (bash) stays out. Unstamped rows keep the legacy name
+        fallback (the event log is append-only)."""
+        import asyncio
+
+        def _publish(payload: dict) -> None:
+            asyncio.run(
+                bus.publish(
+                    Event(
+                        type=DomainEvent.AGENT_STEP,
+                        actor=ActorRef(kind=ActorKind.AGENT, id="agent.main"),
+                        payload=payload,
+                    )
+                )
+            )
+
+        base = {"kind": "tool", "session": "s1"}
+        _publish({**base, "name": "totally_new_tool", "dimension": "fs", "write": True})
+        _publish({**base, "name": "read", "dimension": "fs", "write": False})
+        _publish({**base, "name": "bash", "dimension": "shell", "write": True})
+        _publish({**base, "name": "write", "dimension": "", "write": True})  # blank -> legacy
+        _publish({**base, "name": "write"})  # unstamped -> legacy name fallback
+        _publish({**base, "name": "grep"})  # unstamped read tool
+        ops = client.get("/api/activity/feed?agent=true&recent=true").json()["events"]
+        names = [e["payload"]["name"] for e in ops if e["type"] == "agent.step"]
+        assert names == ["totally_new_tool", "write", "write"]
+
     def test_feed_recent_agent_backfills_past_starved_windows(self, client, bus) -> None:
         """recent+agent must keep walking backward while the in-memory
         attribution filter starves the newest window: operations attributed to
