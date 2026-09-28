@@ -13,8 +13,11 @@
  * - While the agent is running the button morphs into stop (interrupt)
  * - Model picker writes llm.default_provider + llm.default_model so the next
  *   turn routes to the selection; grouped by provider with a settings entry
- * - Reasoning picker writes llm.reasoning_effort (off/low/medium/high); the
- *   backend injects it into supported wire formats. Disabled unless the
+ * - Reasoning picker: the level list comes from the selected model's
+ *   configured thinking_variants (settings page = single source of truth),
+ *   displayed verbatim (low / high / max...); "off" is the explicit disable.
+ *   The choice writes llm.reasoning_effort (off / variant name); an empty
+ *   setting follows the model's thinking_default. Disabled unless the
  *   selected model declares thinking support in its models_meta
  * - ContextRing shows the active session's window usage (own polling)
  */
@@ -22,7 +25,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { callCapability } from '@/bridge/client';
-import type { LlmProvider } from '@/api/types';
+import type { LlmModelMeta, LlmProvider } from '@/api/types';
 import { listProviders, firstEnabledModel } from '@/api/llm';
 import { LLM_MODEL_KEY, LLM_PROVIDER_KEY, LLM_REASONING_EFFORT_KEY } from '@/api/settings';
 import type { UseChatSendReturn } from '@/hooks/useChatSend';
@@ -102,13 +105,30 @@ function BarDropdown({
   );
 }
 
-/** Reasoning levels (stored value -> label key); "" means do not send. */
-const THINKING_LEVELS: Array<{ value: string; labelKey: string }> = [
-  { value: '', labelKey: 'chat:thinking.off' },
-  { value: 'low', labelKey: 'chat:thinking.low' },
-  { value: 'medium', labelKey: 'chat:thinking.medium' },
-  { value: 'high', labelKey: 'chat:thinking.high' },
-];
+/** Explicit-disable sentinel stored in llm.reasoning_effort ("" means the
+ *  opposite: follow the model's configured thinking_default). */
+const EFFORT_OFF = 'off';
+
+/** Variants for models that declare thinking support without a configured
+ *  variant list (legacy configs): the pre-variants canonical set. */
+const FALLBACK_VARIANTS = ['low', 'medium', 'high'];
+
+/** Mirror of the backend resolution (llm resolve_reasoning_effort): what the
+ *  stored override actually means for this model. The displayed level and
+ *  the wire value must agree, so both sides resolve the same way — "" follows
+ *  the model's thinking_default, "off" disables, anything else must be one
+ *  of the model's thinking_variants (stale values from a previous model fall
+ *  back to the default); models without variants keep the canonical set. */
+function resolveEffort(setting: string, meta: LlmModelMeta | undefined): string {
+  if (setting === EFFORT_OFF) return '';
+  const variants = meta?.thinking_variants ?? [];
+  const fallback = meta?.thinking_default ?? '';
+  if (setting) {
+    if (variants.length) return variants.includes(setting) ? setting : fallback;
+    return FALLBACK_VARIANTS.includes(setting) ? setting : '';
+  }
+  return variants.length || meta?.thinking === true ? fallback : '';
+}
 
 function SparklesIcon() {
   return (
@@ -180,6 +200,15 @@ export function ChatComposer({
   const selectedModel = model || firstEnabledModel(currentProvider);
   const meta = currentProvider?.models_meta?.[selectedModel];
   const thinkingSupported = meta ? meta.thinking === true : false;
+  // The menu lists the model's configured variants verbatim (settings page =
+  // single source); the checkmark and the trigger label show the RESOLVED
+  // level, so what the user sees always matches what the backend will send.
+  const variants = thinkingSupported
+    ? meta?.thinking_variants?.length
+      ? meta.thinking_variants
+      : FALLBACK_VARIANTS
+    : [];
+  const effectiveEffort = resolveEffort(reasoning, meta);
 
   const pickModel = (p: LlmProvider, m: string) => {
     setProviderId(p.id);
@@ -197,9 +226,6 @@ export function ChatComposer({
       value,
     }).catch(() => {});
   };
-
-  const reasoningLabel =
-    THINKING_LEVELS.find((l) => l.value === reasoning)?.labelKey ?? 'chat:thinking.off';
 
   return (
     <div className={className}>
@@ -275,7 +301,7 @@ export function ChatComposer({
           label={
             <>
               <SparklesIcon />
-              <span className="composer-dd__text">{t(reasoningLabel)}</span>
+              <span className="composer-dd__text">{effectiveEffort || t('chat:thinking.off')}</span>
             </>
           }
           ariaLabel={t('chat:thinking.aria')}
@@ -283,20 +309,33 @@ export function ChatComposer({
         >
           {(close) => (
             <>
-              {THINKING_LEVELS.map((level) => (
+              <button
+                type="button"
+                role="option"
+                aria-selected={effectiveEffort === ''}
+                className="composer-dd__item"
+                onClick={() => {
+                  pickReasoning(EFFORT_OFF);
+                  close();
+                }}
+              >
+                {t('chat:thinking.off')}
+                {effectiveEffort === '' ? <span aria-hidden>✓</span> : null}
+              </button>
+              {variants.map((variant) => (
                 <button
-                  key={level.value}
+                  key={variant}
                   type="button"
                   role="option"
-                  aria-selected={level.value === reasoning}
+                  aria-selected={variant === effectiveEffort}
                   className="composer-dd__item"
                   onClick={() => {
-                    pickReasoning(level.value);
+                    pickReasoning(variant);
                     close();
                   }}
                 >
-                  {t(level.labelKey)}
-                  {level.value === reasoning ? <span aria-hidden>✓</span> : null}
+                  {variant}
+                  {variant === effectiveEffort ? <span aria-hidden>✓</span> : null}
                 </button>
               ))}
             </>

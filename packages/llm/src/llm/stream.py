@@ -24,7 +24,7 @@ message_delta events.
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 import httpx
@@ -94,6 +94,7 @@ async def complete_stream(
     temperature: float = 0.7,
     tools: list[dict[str, Any]] | None = None,
     reasoning_effort: str = "",
+    reasoning_variants: Sequence[str] = (),
 ) -> AsyncIterator[dict[str, Any]]:
     """Streaming completion: yields text deltas and a final aggregate chunk."""
     fmt = provider["api_format"]
@@ -108,6 +109,7 @@ async def complete_stream(
         temperature=temperature,
         tools=tools,
         reasoning_effort=reasoning_effort,
+        reasoning_variants=reasoning_variants,
         stream=True,
     )
     if fmt == "responses":

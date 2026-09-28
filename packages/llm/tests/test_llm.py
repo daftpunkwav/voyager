@@ -997,6 +997,157 @@ class TestCompleteWithTools:
         assert [c["name"] for c in out.tool_calls] == ["a", "b"]
 
 
+class TestReasoningEffortResolution:
+    """llm.reasoning_effort resolves against the serving model's configured
+    thinking variants (the settings page is the single source of truth): the
+    empty setting follows the model's thinking_default, "off" disables, an
+    override must be one of the model's variants. Models without a variants
+    list keep the legacy canonical-only pass-through. The wire accepts any
+    resolved value verbatim on chat/responses; anthropic maps only the
+    canonical names (they carry budgets)."""
+
+    VARIANTS_META: ClassVar[dict] = {
+        "thinking": True,
+        "thinking_variants": ["low", "high", "max"],
+        "thinking_default": "max",
+    }
+    # Bind the real constructor at class definition time (same trick as
+    # TestCompleteWithTools: the deps fixture already patched httpx).
+    _real_client: ClassVar[type] = httpx.AsyncClient
+
+    def _patch(self, monkeypatch, handler) -> None:
+        real = self._real_client
+        monkeypatch.setattr(
+            client_mod.httpx,
+            "AsyncClient",
+            lambda **kw: real(transport=httpx.MockTransport(handler)),
+        )
+
+    def test_off_sentinel_disables(self) -> None:
+        from llm.capabilities.complete import OFF_SENTINEL, resolve_reasoning_effort
+
+        assert resolve_reasoning_effort(OFF_SENTINEL, self.VARIANTS_META) == ""
+        assert resolve_reasoning_effort(OFF_SENTINEL, {}) == ""
+
+    def test_variants_model_follows_default_when_unset(self) -> None:
+        from llm.capabilities.complete import resolve_reasoning_effort
+
+        assert resolve_reasoning_effort("", self.VARIANTS_META) == "max"
+        # declared thinking without a default -> nothing to follow
+        assert resolve_reasoning_effort("", {"thinking": True}) == ""
+
+    def test_variants_model_validates_override(self) -> None:
+        from llm.capabilities.complete import resolve_reasoning_effort
+
+        assert resolve_reasoning_effort("high", self.VARIANTS_META) == "high"
+        # stale value from a previous model (or a typo) falls back to the default
+        assert resolve_reasoning_effort("medium", self.VARIANTS_META) == "max"
+        assert resolve_reasoning_effort("xhigh", self.VARIANTS_META) == "max"
+
+    def test_legacy_model_keeps_canonical_pass_through(self) -> None:
+        from llm.capabilities.complete import resolve_reasoning_effort
+
+        # no variants list: canonical names pass, unknown names stay unset
+        assert resolve_reasoning_effort("low", {}) == "low"
+        assert resolve_reasoning_effort("max", {}) == ""
+        assert resolve_reasoning_effort("", {}) == ""
+
+    def test_wire_passes_resolved_value_verbatim(self) -> None:
+        from llm.client import reasoning_fields
+
+        assert reasoning_fields("chat", "max", max_tokens=4096) == {"reasoning_effort": "max"}
+        assert reasoning_fields("responses", "max", max_tokens=4096) == {
+            "reasoning": {"effort": "max"}
+        }
+        assert reasoning_fields("chat", "", max_tokens=4096) == {}
+
+    def test_anthropic_variant_without_budget_stays_unset(self) -> None:
+        from llm.client import reasoning_fields
+
+        # not in the model's variants list: nothing derivable, stays unset
+        assert reasoning_fields("anthropic", "max", max_tokens=4096) == {}
+        assert reasoning_fields("anthropic", "low", max_tokens=2048) == {
+            "thinking": {"type": "enabled", "budget_tokens": 2048},
+            "max_tokens": 2048 + 1024,  # raised above the budget
+        }
+
+    def test_anthropic_interpolates_variant_budget_by_position(self) -> None:
+        from llm.client import reasoning_fields
+
+        variants = ["low", "medium", "high", "xhigh", "max"]
+        out = reasoning_fields("anthropic", "max", max_tokens=4096, variants=variants)
+        assert out["thinking"] == {"type": "enabled", "budget_tokens": 16384}
+        # xhigh sits between high and max on the declared list
+        assert reasoning_fields("anthropic", "xhigh", max_tokens=4096, variants=variants)[
+            "thinking"
+        ] == {"type": "enabled", "budget_tokens": 12800}
+        # canonical names keep their exact budgets even when listed
+        assert reasoning_fields("anthropic", "high", max_tokens=4096, variants=variants)[
+            "thinking"
+        ] == {"type": "enabled", "budget_tokens": 16384}
+        assert reasoning_fields("anthropic", "low", max_tokens=4096, variants=variants)[
+            "thinking"
+        ] == {"type": "enabled", "budget_tokens": 2048}
+        # a name outside the list has no position to interpolate from
+        assert reasoning_fields("anthropic", "turbo", max_tokens=4096, variants=variants) == {}
+
+    async def test_complete_resolves_default_from_model_meta(self, tmp_path, monkeypatch) -> None:
+        """End to end: empty override + a configured thinking_default -> the
+        default variant lands on the wire verbatim (settings page decides)."""
+        seen = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [{"message": {"content": "pong"}}],
+                    "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+                    "model": "m1",
+                },
+            )
+
+        self._patch(monkeypatch, handler)
+        from llm.capabilities import Deps, init_deps
+        from llm.capabilities.complete import OFF_SENTINEL
+        from llm.settings import DEFS
+        from platform_settings import SettingsStore
+
+        settings = SettingsStore(tmp_path / "settings.db")
+        settings.register_fresh(DEFS)
+        init_deps(
+            Deps(
+                store=ProviderStore(tmp_path / "llm2.db"),
+                secrets=SecretStore(tmp_path / "secrets2.db", key_material="test"),
+                settings=settings,
+            )
+        )
+        out = await execute(
+            registry,
+            "add_provider",
+            USER_CTX,
+            {
+                "display_name": "Test Provider",
+                "base_url": "https://api.test/v1",
+                "api_format": "chat",
+                "models": ["m1"],
+                "models_meta": {"m1": self.VARIANTS_META},
+            },
+        )
+        await execute(
+            registry, "set_api_key", USER_CTX, {"provider_id": out["id"], "api_key": "sk-x"}
+        )
+        call = {"provider_id": out["id"], "messages": [{"role": "user", "content": "hi"}]}
+        await execute(registry, "complete", AGENT_CTX, call)
+        assert seen["body"]["reasoning_effort"] == "max"  # the configured default
+        await settings.set("llm.reasoning_effort", OFF_SENTINEL, LOCAL_USER)
+        await execute(registry, "complete", AGENT_CTX, call)
+        assert "reasoning_effort" not in seen["body"]  # explicit off wins
+        await settings.set("llm.reasoning_effort", "low", LOCAL_USER)
+        await execute(registry, "complete", AGENT_CTX, call)
+        assert seen["body"]["reasoning_effort"] == "low"  # validated override
+
+
 class TestMessageTranslation:
     """Neutral history -> provider request bodies: paired history uses native
     tool protocols, orphans are downgraded, errors carry the response body.

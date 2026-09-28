@@ -26,7 +26,7 @@ import json
 import logging
 import os
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -630,19 +630,35 @@ def _dump_rejected_request(url: str, body: dict[str, Any], status: int, response
 
 
 #: Reasoning-effort names and their Anthropic thinking budgets (tokens).
-#: OpenAI-compatible endpoints take the effort value verbatim as
-#: reasoning_effort; unknown values degrade to unset.
+#: These are also the canonical names a model without a thinking_variants
+#: list accepts (the legacy typo-safety set); models WITH a variants list
+#: accept any declared name — resolve_reasoning_effort in the capability
+#: layer owns that validation, the wire pass-through itself only requires a
+#: non-empty value.
 REASONING_EFFORTS = {"low": 2048, "medium": 8192, "high": 16384}
 
 
-def reasoning_fields(fmt: str, reasoning_effort: str, *, max_tokens: int) -> dict[str, Any]:
+def reasoning_fields(
+    fmt: str,
+    reasoning_effort: str,
+    *,
+    max_tokens: int,
+    variants: Sequence[str] = (),
+) -> dict[str, Any]:
     """Extra request-body fields for the configured reasoning effort; empty
-    when the effort is unset or unknown so nothing is injected by default.
+    when the effort is unset so nothing is injected by default. The value is
+    whatever the resolution layer resolved for this model — a canonical name
+    or a model-declared variant ("max", "xhigh", ...).
 
     chat (OpenAI-compatible): reasoning_effort passes through verbatim.
-    anthropic: a thinking block with a token budget; Anthropic requires
-    max_tokens above the budget and no temperature, so max_tokens is raised
-    and the caller must drop temperature when the returned dict has thinking.
+    anthropic: a thinking block with a token budget — the canonical names map
+    to fixed budgets; a non-canonical variant interpolates one from its
+    position in the model's declared variants list (first = lowest budget,
+    last = highest), so freely-named levels stay expressible on this format;
+    a name not in the list has no derivation and stays unset. Anthropic
+    requires max_tokens above the budget and no temperature, so max_tokens is
+    raised and the caller must drop temperature when the returned dict has
+    thinking.
     responses (OpenAI Responses): reasoning.effort, matching that API's
     request field.
 
@@ -654,10 +670,14 @@ def reasoning_fields(fmt: str, reasoning_effort: str, *, max_tokens: int) -> dic
     _anthropic_messages (which echoes a stored "thinking_blocks" entry first
     in each assistant message).
     """
-    if reasoning_effort not in REASONING_EFFORTS:
+    if not reasoning_effort:
         return {}
     if fmt == "anthropic":
-        budget = REASONING_EFFORTS[reasoning_effort]
+        budget = REASONING_EFFORTS.get(reasoning_effort)
+        if budget is None:
+            budget = _variant_budget(reasoning_effort, variants)
+        if budget is None:
+            return {}
         return {
             "thinking": {"type": "enabled", "budget_tokens": budget},
             "max_tokens": max(max_tokens, budget + 1024),
@@ -665,6 +685,20 @@ def reasoning_fields(fmt: str, reasoning_effort: str, *, max_tokens: int) -> dic
     if fmt == "responses":
         return {"reasoning": {"effort": reasoning_effort}}
     return {"reasoning_effort": reasoning_effort}
+
+
+def _variant_budget(name: str, variants: Sequence[str]) -> int | None:
+    """Thinking budget for a non-canonical effort name, interpolated from its
+    position in the model's declared variants list (first entry = lowest
+    canonical budget, last = highest); None when the name is not in the list
+    (nothing derivable — stay unset rather than guess)."""
+    if not variants or name not in variants:
+        return None
+    if len(variants) == 1:
+        return max(REASONING_EFFORTS.values())
+    lo, hi = min(REASONING_EFFORTS.values()), max(REASONING_EFFORTS.values())
+    position = variants.index(name) / (len(variants) - 1)
+    return int(lo + (hi - lo) * position)
 
 
 #: Content-block types echoed back verbatim for extended thinking.
@@ -682,13 +716,16 @@ def _wire_request(
     temperature: float,
     tools: list[dict[str, Any]] | None,
     reasoning_effort: str,
+    reasoning_variants: Sequence[str] = (),
     stream: bool,
 ) -> tuple[str, dict[str, str], dict[str, Any]]:
     """Build one provider request (url, headers, body), shared by complete and
     complete_stream: the two entry points differ only in the stream flag (and
     chat streaming's include_usage), so the per-format encoding lives here —
     duplicating it would mean every new request field is written twice.
-    Orphan tool results are resolved inside (_resolve_tool_messages)."""
+    Orphan tool results are resolved inside (_resolve_tool_messages).
+    reasoning_variants carries the model's declared thinking levels so the
+    anthropic format can derive budgets for non-canonical effort names."""
     messages = _resolve_tool_messages(messages)
     if fmt == "responses":
         instructions, inp = responses_input(messages)
@@ -710,7 +747,11 @@ def _wire_request(
         }
         if tools:
             body["tools"] = responses_tools(tools)
-        body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
+        body.update(
+            reasoning_fields(
+                fmt, reasoning_effort, max_tokens=max_tokens, variants=reasoning_variants
+            )
+        )
         url = f"{base}/responses"
         headers = {"Authorization": f"Bearer {api_key}"}
     elif fmt == "anthropic":
@@ -740,7 +781,11 @@ def _wire_request(
         }
         if tools:
             body["tools"] = _anthropic_tools(tools)
-        body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
+        body.update(
+            reasoning_fields(
+                fmt, reasoning_effort, max_tokens=max_tokens, variants=reasoning_variants
+            )
+        )
         # Anthropic forbids temperature when extended thinking is enabled.
         # Thinking and tool use coexist (interleaved thinking); the echo of
         # stored thinking blocks happens in _anthropic_messages.
@@ -764,7 +809,11 @@ def _wire_request(
         }
         if tools:
             body["tools"] = _chat_tools(tools)
-        body.update(reasoning_fields(fmt, reasoning_effort, max_tokens=max_tokens))
+        body.update(
+            reasoning_fields(
+                fmt, reasoning_effort, max_tokens=max_tokens, variants=reasoning_variants
+            )
+        )
         url = f"{base}/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}"}
     if stream:
@@ -826,6 +875,7 @@ async def complete(
     temperature: float = 0.7,
     tools: list[dict[str, Any]] | None = None,
     reasoning_effort: str = "",
+    reasoning_variants: Sequence[str] = (),
 ) -> CompleteResult:
     fmt = provider["api_format"]
     base = provider["base_url"].rstrip("/")
@@ -839,6 +889,7 @@ async def complete(
         temperature=temperature,
         tools=tools,
         reasoning_effort=reasoning_effort,
+        reasoning_variants=reasoning_variants,
         stream=False,
     )
     # Resolve-and-pin before anything is sent: the connection targets the

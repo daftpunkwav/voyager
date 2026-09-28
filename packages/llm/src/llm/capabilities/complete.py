@@ -15,23 +15,71 @@ from llm.capabilities.common import (
     require_provider,
     service_error_for,
 )
-from llm.client import REASONING_EFFORTS, ProviderError
+from llm.client import ProviderError
 from llm.client import complete as llm_complete
 
-#: Valid values for llm.reasoning_effort; anything else degrades to unset so a
-#: typo never silently rewrites every request. The canonical set is the key
-#: set of REASONING_EFFORTS (low/medium/high), plus the empty string meaning
-#: "use the provider default / off".
-_REASONING_EFFORTS = ("", *REASONING_EFFORTS.keys())
+#: Canonical reasoning-effort names with an Anthropic budget mapping; other
+#: names a model declares in thinking_variants pass through verbatim on
+#: chat/responses formats and stay unset on anthropic (no expressible budget).
+_CANONICAL_EFFORTS = ("low", "medium", "high")
+
+#: Sentinel stored in llm.reasoning_effort meaning "explicitly off" — the
+#: empty string means the opposite ("follow the model's configured default").
+OFF_SENTINEL = "off"
 
 
-def configured_reasoning_effort() -> str:
-    """Hot-read llm.reasoning_effort; unknown/missing values mean unset."""
+def resolve_reasoning_effort(setting: str, model_meta: dict) -> str:
+    """One llm.reasoning_effort value -> the effort actually put on the wire
+    for a model with this models_meta entry. The model configuration (the
+    settings page's thinking variants/default) is the single source of truth;
+    the setting is only a per-session override on top of it:
+
+    - "off" -> "" (explicitly disabled)
+    - a configured thinking model: a value inside thinking_variants passes
+      through, anything else (unset, stale from a previous model, typo)
+      follows thinking_default
+    - a model without a variants list (legacy config): canonical names pass
+      through unchanged, anything else stays unset — the pre-variants
+      typo-safety, kept for backward compatibility
+    """
+    if setting == OFF_SENTINEL:
+        return ""
+    variants = model_meta.get("thinking_variants")
+    variant_list = [str(v) for v in variants] if isinstance(variants, list) else []
+    default = str(model_meta.get("thinking_default") or "")
+    if setting:
+        if variant_list:
+            return setting if setting in variant_list else default
+        return setting if setting in _CANONICAL_EFFORTS else ""
+    if variant_list or model_meta.get("thinking") is True:
+        return default
+    return ""
+
+
+def configured_reasoning_effort(provider: dict, model: str) -> str:
+    """Hot-read llm.reasoning_effort and resolve it against the serving
+    provider/model's models_meta (see resolve_reasoning_effort); unknown
+    shapes degrade to unset, never raise."""
     deps = require_deps()
     if deps.settings is None:
         return ""
-    value = str(deps.settings.get("llm.reasoning_effort") or "")
-    return value if value in _REASONING_EFFORTS else ""
+    setting = str(deps.settings.get("llm.reasoning_effort") or "")
+    meta_raw = provider.get("models_meta")
+    meta = meta_raw.get(model) if isinstance(meta_raw, dict) else None
+    return resolve_reasoning_effort(setting, meta if isinstance(meta, dict) else {})
+
+
+def configured_reasoning_variants(provider: dict, model: str) -> tuple[str, ...]:
+    """The serving model's declared thinking variants, for the anthropic
+    format's budget interpolation of non-canonical effort names."""
+    meta_raw = provider.get("models_meta")
+    meta = meta_raw.get(model) if isinstance(meta_raw, dict) else None
+    if not isinstance(meta, dict):
+        return ()
+    variants = meta.get("thinking_variants")
+    if not isinstance(variants, list):
+        return ()
+    return tuple(str(v) for v in variants)
 
 
 @capability(
@@ -70,7 +118,8 @@ async def complete(
             max_tokens=wire_max_tokens,
             temperature=temperature,
             tools=tools,
-            reasoning_effort=configured_reasoning_effort(),
+            reasoning_effort=configured_reasoning_effort(p, use_model),
+            reasoning_variants=configured_reasoning_variants(p, use_model),
         )
     except ProviderError as exc:  # classified mapping; still metered on failure (ok=0)
         deps.store.record_usage(

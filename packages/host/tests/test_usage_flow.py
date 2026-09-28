@@ -48,6 +48,7 @@ def stub_llm_client(monkeypatch):
         temperature=0.7,
         tools=None,
         reasoning_effort="",
+        reasoning_variants=(),
     ):
         hits.append(model)
         return CompleteResult(
@@ -64,6 +65,7 @@ def stub_llm_client(monkeypatch):
         temperature=0.7,
         tools=None,
         reasoning_effort="",
+        reasoning_variants=(),
     ):
         async def _gen():
             hits.append(model)

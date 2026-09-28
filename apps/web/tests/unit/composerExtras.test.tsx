@@ -1,10 +1,12 @@
 /**
  * @file composerExtras
  * @description Composer bottom-bar extras: the model picker writes
- * llm.default_provider + llm.default_model, the reasoning picker writes
- * llm.reasoning_effort and stays disabled unless the selected model declares
- * thinking support, and the context ring renders the usage popover (empty
- * state when no live context exists).
+ * llm.default_provider + llm.default_model, the reasoning picker lists the
+ * selected model's configured thinking variants verbatim (fallback canonical
+ * set for models without a variants list) and writes llm.reasoning_effort
+ * (off / variant name; "" follows the model's thinking_default), staying
+ * disabled unless the selected model declares thinking support; the context
+ * ring renders the usage popover (empty state when no live context exists).
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -38,8 +40,15 @@ const PROVIDERS = [
     display_name: '智谱',
     enabled: true,
     has_api_key: true,
-    models: ['glm-think', 'glm-plain'],
-    models_meta: { 'glm-think': { thinking: true, image_input: true } },
+    models: ['glm-think', 'glm-plain', 'glm-max'],
+    models_meta: {
+      'glm-think': { thinking: true, image_input: true },
+      'glm-max': {
+        thinking: true,
+        thinking_variants: ['low', 'max'],
+        thinking_default: 'max',
+      },
+    },
   },
 ] as unknown as LlmProvider[];
 
@@ -105,16 +114,38 @@ describe('ChatComposer extras', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '思考强度' })).toHaveProperty('disabled', true)
     );
-    // switch back to the thinking-capable model and pick 高
+    // switch to the thinking-capable model without variants: the fallback
+    // canonical set shows verbatim, picking "high" writes "high"
     fireEvent.click(screen.getByRole('button', { name: '选择模型' }));
     fireEvent.click(screen.getByText('glm-think'));
     const trigger = screen.getByRole('button', { name: '思考强度' });
     await waitFor(() => expect(trigger).toHaveProperty('disabled', false));
     fireEvent.click(trigger);
-    fireEvent.click(screen.getByText('高'));
+    fireEvent.click(screen.getByRole('option', { name: 'high' }));
     await waitFor(() => {
       const entry = setCalls.find((c) => c.key === 'llm.reasoning_effort');
-      expect(entry?.value).toBe('medium');
+      expect(entry?.value).toBe('high');
+    });
+  });
+
+  it('variants model follows the configured default and writes verbatim/off', async () => {
+    renderComposer();
+    fireEvent.click(screen.getByRole('button', { name: '选择模型' }));
+    fireEvent.click(screen.getByText('glm-max'));
+    const trigger = screen.getByRole('button', { name: '思考强度' });
+    await waitFor(() => expect(trigger).toHaveProperty('disabled', false));
+    // stored override is empty: the trigger shows the model's thinking_default
+    expect(trigger.textContent).toContain('max');
+    fireEvent.click(trigger);
+    // the menu lists only the configured variants (verbatim) plus 关闭
+    expect(screen.getByRole('option', { name: 'low' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'max' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: '关闭' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: 'medium' })).toBeNull();
+    fireEvent.click(screen.getByRole('option', { name: '关闭' }));
+    await waitFor(() => {
+      const entry = setCalls.find((c) => c.key === 'llm.reasoning_effort');
+      expect(entry?.value).toBe('off');
     });
   });
 

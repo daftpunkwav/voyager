@@ -45,9 +45,12 @@ DEFS = [
         type=SettingType.STR,
         default="",
         description=(
-            "Reasoning effort injected into supported wire formats "
-            "(empty = not sent; low / medium / high). chat maps to "
-            "reasoning_effort, anthropic maps to a thinking budget."
+            "Reasoning-effort override resolved against the serving model's "
+            "configured thinking variants (empty = follow the model's "
+            "thinking_default; off = explicitly disabled; otherwise a variant "
+            "name). chat/responses pass it verbatim; anthropic maps the "
+            "canonical low/medium/high to thinking budgets and derives other "
+            "variants' budgets from their position in the variants list."
         ),
     ),
     SettingDef(
