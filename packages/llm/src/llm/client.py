@@ -871,6 +871,20 @@ def _echoable_thinking_blocks(
     return out
 
 
+def _wire_base(provider: dict[str, Any]) -> tuple[str, str]:
+    """(api_format, base_url) of one provider dict, classified when a key is
+    missing. Provider rows come from the store (NOT NULL columns), so a
+    missing key means a hand-built dict reached the wire layer; raising
+    ProviderError (not a bare KeyError) keeps the failure inside the
+    capability layer's classified mapping, with a message naming the keys."""
+    fmt = provider.get("api_format")
+    base = provider.get("base_url")
+    if not fmt or not base:
+        missing = ", ".join(k for k in ("api_format", "base_url") if not provider.get(k))
+        raise ProviderError(f"provider config missing: {missing}", status=0)
+    return str(fmt), str(base).rstrip("/")
+
+
 async def complete(
     provider: dict[str, Any],
     *,
@@ -885,8 +899,7 @@ async def complete(
     reasoning_effort: str = "",
     reasoning_variants: Sequence[str] = (),
 ) -> CompleteResult:
-    fmt = provider["api_format"]
-    base = provider["base_url"].rstrip("/")
+    fmt, base = _wire_base(provider)
     url, headers, body = _wire_request(
         fmt,
         base,

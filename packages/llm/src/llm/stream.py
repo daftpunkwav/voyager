@@ -38,6 +38,7 @@ from .client import (
     _parse_tool_calls,
     _raise_typed_text,
     _request_id_from,
+    _wire_base,
     _wire_request,
 )
 from .inline_split import InlineTagSplitter, parse_tool_blocks
@@ -97,8 +98,7 @@ async def complete_stream(
     reasoning_variants: Sequence[str] = (),
 ) -> AsyncIterator[dict[str, Any]]:
     """Streaming completion: yields text deltas and a final aggregate chunk."""
-    fmt = provider["api_format"]
-    base = provider["base_url"].rstrip("/")
+    fmt, base = _wire_base(provider)
     url, headers, body = _wire_request(
         fmt,
         base,

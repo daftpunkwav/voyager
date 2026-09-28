@@ -8,6 +8,7 @@ real waiting happens.
 import httpx
 import pytest
 from llm import client as client_mod
+from llm import stream as stream_mod
 from llm.capabilities import Deps, init_deps, registry
 from llm.capabilities import common as caps
 from llm.client import (
@@ -71,6 +72,20 @@ def _patch(monkeypatch, handler) -> None:
 
 
 class TestClassification:
+    async def test_missing_provider_keys_classify_as_provider_error(self) -> None:
+        """A hand-built provider dict missing api_format/base_url raises the
+        classified ProviderError (capability layer -> UNAVAILABLE with the
+        keys named), never a bare KeyError."""
+        with pytest.raises(ProviderError) as exc:
+            await client_mod.complete({"id": "p1"}, api_key="k", model="m", messages=[])
+        assert "api_format" in str(exc.value) and "base_url" in str(exc.value)
+        with pytest.raises(ProviderError) as exc:
+            async for _ in stream_mod.complete_stream(
+                {"api_format": "chat"}, api_key="k", model="m", messages=[]
+            ):
+                pass
+        assert "base_url" in str(exc.value)
+
     async def test_429_becomes_rate_limit_error(self, monkeypatch) -> None:
         calls = {"n": 0}
 

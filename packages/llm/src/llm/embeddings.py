@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from llm.client import _TIMEOUT, ProviderError, _post, _send_with_retry
+from llm.client import _TIMEOUT, ProviderError, _post, _send_with_retry, _wire_base
 from llm.net_pin import pinned_ip
 
 
@@ -34,7 +34,7 @@ async def embed(
             f"provider format {provider.get('api_format')!r} has no embeddings endpoint",
             status=0,
         )
-    base = provider["base_url"].rstrip("/")
+    base = _wire_base(provider)[1]  # classified lookup: a missing key is not a KeyError
     body = {"model": model, "input": list(texts)}
     chosen_ip = await pinned_ip(provider)  # resolve-and-pin before anything is sent
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:

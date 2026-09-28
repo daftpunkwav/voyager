@@ -41,7 +41,8 @@ import type { ChatSessionRow } from '@/api/agent';
 import { EventType } from '@/bridge/events';
 
 /** Vocabulary of the backend agent.message `kind` field (agent/master:
- *  default "message", turn failures "error", task receipts "notice"). */
+ *  default "message", turn failures "error", harness wind-downs "warning",
+ *  task receipts "notice"). */
 export type ChatMessageKind = 'message' | 'error' | 'notice' | 'warning';
 
 /** agent.delivery payload -> a dispatched teammate's structured delivery:

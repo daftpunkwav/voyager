@@ -67,6 +67,16 @@ def build_router(
 
     @router.post(prefix + "/{name}")
     async def call_capability(name: str, request: Request):
+        """Invoke one capability with a JSON object body.
+
+        Success envelope: {"result": <return value>} — dataclass returns are
+        flattened to dicts, and a long_running capability answers
+        202 {"job": {...}} instead. Output shapes have no schema
+        registration face (inputs only, see capability_input_schema), so
+        consumers normalize per capability (e.g. the web apps' api/ facades);
+        a capability that changes its return shape owns updating those
+        consumers. Failures use the ServiceError envelope with the mapped
+        HTTP status."""
         try:
             try:
                 body = await request.json()
