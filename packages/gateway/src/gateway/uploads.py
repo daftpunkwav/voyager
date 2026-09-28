@@ -17,10 +17,10 @@ from pathlib import Path
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from platform_contracts import LOCAL_USER, ActorRef
 from starlette.datastructures import UploadFile
 from starlette.types import Message
 
+from .common import actor_of
 from .ratelimit import RateLimiter
 
 log = logging.getLogger("gateway.uploads")
@@ -35,14 +35,11 @@ _UNSAFE_FILENAME_RE = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 def build_upload_router(workspace: Path, limiter: RateLimiter) -> APIRouter:
     router = APIRouter()
 
-    def _actor(request: Request) -> ActorRef:
-        return getattr(request.state, "actor", None) or LOCAL_USER
-
     @router.post("/api/uploads")
     async def upload(request: Request) -> JSONResponse:
         # Throttled before any byte of the body is read, same as every other
         # gateway route: an upload is the cheapest way to flood the process.
-        limiter.check(_actor(request).id)
+        limiter.check(actor_of(request).id)
         content_type = request.headers.get("content-type", "")
         if "multipart/form-data" not in content_type:
             return JSONResponse(

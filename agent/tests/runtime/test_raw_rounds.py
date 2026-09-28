@@ -43,6 +43,20 @@ class TestRawRoundsTable:
         assert store.raw_rounds("missing") == []
         store.close()
 
+    def test_run_index_limit_keeps_newest_rounds_ascending(self, tmp_path) -> None:
+        """limit bounds the run's round index to the newest rounds, still
+        ascending (the gateway's run_id mode bounds its non-pageable
+        response this way); limit=None stays unbounded."""
+        store = _store(tmp_path)
+        for i in range(4):
+            store.record_raw_round(
+                run_id="r1", session="chat", round=i + 1, request=str(i), response=str(i)
+            )
+        rounds = store.raw_rounds("r1", limit=2)
+        assert [r["round"] for r in rounds] == [3, 4]
+        assert len(store.raw_rounds("r1")) == 4
+        store.close()
+
     def test_overwrite_same_round_and_cap(self, tmp_path) -> None:
         store = _store(tmp_path)
         store.record_raw_round(run_id="r", session="", round=1, request="first", response="x")

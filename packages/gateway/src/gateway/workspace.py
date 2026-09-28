@@ -14,6 +14,14 @@ All endpoints are read-only; switching the workspace root goes through
 POST /api/workspace/switch (host-owned router: validates, rebuilds the
 agent around the new root without a service restart, and persists
 agent.workspace.dir itself).
+
+Error semantics (deliberate exception to the global ServiceError envelope):
+the three read endpoints answer request-scoped failures with HTTP 200 and a
+body {"error": {"code": "WORKSPACE.*" | "GATEWAY.INVALID_INPUT",
+"message"}} instead of a 4xx status — this response shape is frozen (the
+web file tree / picker render these results inline), so callers must branch
+on body.error, never on the status code alone. POST /api/workspace/switch
+uses the standard ServiceError envelope.
 """
 
 from __future__ import annotations

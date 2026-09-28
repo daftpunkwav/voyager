@@ -14,12 +14,11 @@ Responsibilities:
 from __future__ import annotations
 
 import asyncio
+import json
 
 from fastapi import APIRouter, Request
 from platform_contracts import (
-    LOCAL_USER,
     ActorKind,
-    ActorRef,
     DomainEvent,
     ErrorSuffix,
     Event,
@@ -27,10 +26,18 @@ from platform_contracts import (
 )
 from platform_eventbus import EventBus
 
+from .common import actor_of, json_body, session_or_400
 from .ratelimit import RateLimiter
 
 _DOMAIN = "gateway"
 _ACTIVITY_KINDS = ("page_view", "pointer", "selection", "manual")  # initial kinds
+#: Report body bounds: a page identifier is a route path and detail is a
+#: small structured object. The event log is append-only, so unbounded
+#: fields would grow it forever; oversized reports are a client bug and get
+#: a 400 (the browser reporter swallows failures either way). `page` is
+#: truncated instead of rejected: keeping the prefix preserves the signal.
+_PAGE_MAX_CHARS = 128
+_DETAIL_MAX_JSON_CHARS = 4096
 
 #: The agent-operations scope (`agent=true`): event types that record a change
 #: to the system, plus agent.step narrowed further to the file-writing tools
@@ -84,26 +91,13 @@ def _is_agent_operation(ev: Event) -> bool:
 def build_activity_router(bus: EventBus, limiter: RateLimiter) -> APIRouter:
     router = APIRouter()
 
-    def _actor(request: Request) -> ActorRef:
-        return getattr(request.state, "actor", None) or LOCAL_USER
-
-    async def _json_body(request: Request) -> dict:
-        """Parse and validate the request body: bad JSON / non-object -> 400, not 500."""
-        try:
-            body = await request.json()
-        except Exception as exc:
-            raise ServiceError(
-                _DOMAIN, ErrorSuffix.INVALID_INPUT, "Request body must be valid JSON"
-            ) from exc
-        if not isinstance(body, dict):
-            raise ServiceError(
-                _DOMAIN, ErrorSuffix.INVALID_INPUT, "Request body must be a JSON object"
-            )
-        return body
-
     @router.post("/api/activity")
     async def report_activity(request: Request) -> dict:
-        body = await _json_body(request)
+        """Publish one user.activity event. Input contract: `kind` is
+        whitelisted, `page` is truncated to 128 chars, `detail` must be a
+        JSON object of at most 4KB (400 otherwise) — the log is append-only,
+        so report fields must not grow it without bound."""
+        body = await json_body(request)
         kind = str(body.get("kind") or "")
         if kind not in _ACTIVITY_KINDS:
             raise ServiceError(
@@ -119,7 +113,13 @@ def build_activity_router(bus: EventBus, limiter: RateLimiter) -> APIRouter:
             # dict() over a string/number/list raises TypeError -> unhandled 500;
             # a malformed shape is a client bug and gets a 400 instead
             raise ServiceError(_DOMAIN, ErrorSuffix.INVALID_INPUT, "detail must be a JSON object")
-        actor = _actor(request)
+        if len(json.dumps(detail, ensure_ascii=False)) > _DETAIL_MAX_JSON_CHARS:
+            raise ServiceError(
+                _DOMAIN,
+                ErrorSuffix.INVALID_INPUT,
+                "detail must not exceed 4KB of JSON",
+            )
+        actor = actor_of(request)
         limiter.check(actor.id)
         seq = await bus.publish(
             Event(
@@ -127,7 +127,7 @@ def build_activity_router(bus: EventBus, limiter: RateLimiter) -> APIRouter:
                 actor=actor,
                 payload={
                     "kind": kind,
-                    "page": str(body.get("page") or ""),
+                    "page": str(body.get("page") or "")[:_PAGE_MAX_CHARS],
                     "detail": detail,
                 },
             )
@@ -150,7 +150,9 @@ def build_activity_router(bus: EventBus, limiter: RateLimiter) -> APIRouter:
         `session=<id>` narrows to one session's operations (implies agent).
         The type filter still narrows the SQL read; attribution filters in
         memory afterwards, so a heavily filtered page may return fewer rows
-        than `limit`."""
+        than `limit`. `session` carries the same validation as the chat
+        routes (malformed id -> 400, not a silently empty filter)."""
+        sid = session_or_400(session)
         type_list = tuple(t for t in types.split(",") if t) or None
         cap = max(1, min(limit, 1000))
 
@@ -158,10 +160,10 @@ def build_activity_router(bus: EventBus, limiter: RateLimiter) -> APIRouter:
             # session implies agent: a session-scoped read is an operations
             # read by contract (the docstring), so conversation traffic never
             # leaks through a session-only query either.
-            if (agent or session) and not _is_agent_operation(ev):
+            if (agent or sid) and not _is_agent_operation(ev):
                 return False
-            if session:
-                return str(_payload_dict(ev).get("session") or "") == session
+            if sid:
+                return str(_payload_dict(ev).get("session") or "") == sid
             return True
 
         if recent and after_seq <= 0:

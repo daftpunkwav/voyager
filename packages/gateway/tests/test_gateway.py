@@ -404,14 +404,17 @@ class TestTrajectory:
         assert body["steps"][0]["payload"]["detail"]["tool_call_id"] == "c-1"
 
     def test_run_id_mode_routes_to_the_run_steps_reader(self, bus, tmp_path, echo_registry) -> None:
-        """run_id selects the run-scoped read of one subagent's full step list:
-        cursor parameters are ignored and has_more stays False (the subagent
-        execution view's data source)."""
-        calls: list[str] = []
+        """run_id selects the run-scoped read of one subagent's step list:
+        cursor parameters are ignored, has_more stays False (the subagent
+        execution view's data source), and the read is bounded by the
+        module's newest-window cap (the mode is not pageable)."""
+        from gateway.chat import _RUN_ROWS_MAX
+
+        calls: list[tuple[str, int]] = []
 
         class _Reader:
-            def run_steps(self, run_id: str):
-                calls.append(run_id)
+            def run_steps(self, run_id: str, *, limit: int):
+                calls.append((run_id, limit))
                 return [{"seq": 7, "type": "agent.step", "payload": {"run_id": run_id}, "ts": 1.0}]
 
         app = create_app(
@@ -422,7 +425,7 @@ class TestTrajectory:
         )
         with TestClient(app) as c:
             body = c.get("/api/chat/trajectory?run_id=r1&after_seq=99&limit=5").json()
-        assert calls == ["r1"]
+        assert calls == [("r1", _RUN_ROWS_MAX)]
         assert body["has_more"] is False
         assert body["steps"][0]["payload"]["run_id"] == "r1"
 
@@ -492,6 +495,26 @@ class TestActivity:
         assert r.status_code == 200
         feed = client.get("/api/activity/feed?types=user.activity").json()["events"]
         assert feed[-1]["payload"]["page"] == "notes"
+
+    def test_report_bounds_page_and_detail(self, client, bus) -> None:
+        """page is truncated to 128 chars; detail over 4KB of JSON is a 400
+        (the append-only log must not grow without bound)."""
+        r = client.post("/api/activity", json={"kind": "page_view", "page": "p" * 300})
+        assert r.status_code == 200
+        rows = bus.log.read_after(types=["user.activity"])
+        assert len(rows[-1][1].payload["page"]) == 128
+        r = client.post(
+            "/api/activity", json={"kind": "manual", "page": "x", "detail": {"k": "v" * 5000}}
+        )
+        assert r.status_code == 400
+        assert r.json()["error"]["code"] == "GATEWAY.INVALID_INPUT"
+
+    def test_feed_rejects_malformed_session(self, client) -> None:
+        """The feed's session parameter carries the chat routes' validation:
+        a malformed id is a 400, not a silently empty filter."""
+        r = client.get("/api/activity/feed?session=../evil")
+        assert r.status_code == 400
+        assert r.json()["error"]["code"] == "GATEWAY.INVALID_INPUT"
 
     def test_feed_agent_and_session_attribution_filters(self, client, bus) -> None:
         """agent=true keeps only agent operations: domain events stamped with
@@ -762,6 +785,13 @@ class TestChatSessions:
         r = client.post("/api/chat/messages", json={"content": "hi", "session": "../evil"})
         assert r.status_code == 400
 
+    def test_post_rejects_non_string_session(self, client) -> None:
+        """A non-string session value is invalid input (400), not an unhandled
+        500: the field's contract is one string matching the session id shape."""
+        r = client.post("/api/chat/messages", json={"content": "hi", "session": {"id": "s1"}})
+        assert r.status_code == 400
+        assert r.json()["error"]["code"] == "GATEWAY.INVALID_INPUT"
+
     def test_history_session_filter(self, client, bus) -> None:
         from platform_contracts import DomainEvent, Event
 
@@ -855,8 +885,8 @@ class _FakeTrajectory:
 
     def __init__(self) -> None:
         self.steps_page_calls: list[dict] = []
-        self.run_steps_calls: list[str] = []
-        self.rounds_calls: list[str] = []
+        self.run_steps_calls: list[tuple[str, int]] = []
+        self.rounds_calls: list[tuple[str, int]] = []
         self.session_calls: list[tuple[str, int]] = []
         self.round_calls: list[tuple[str, int]] = []
 
@@ -866,12 +896,12 @@ class _FakeTrajectory:
         )
         return [{"seq": 5, "type": "agent.step", "payload": {}, "ts": 1.0}], True
 
-    def run_steps(self, run_id: str):
-        self.run_steps_calls.append(run_id)
+    def run_steps(self, run_id: str, *, limit: int):
+        self.run_steps_calls.append((run_id, limit))
         return [{"seq": 7, "type": "agent.step", "payload": {"run_id": run_id}, "ts": 1.0}]
 
-    def raw_rounds(self, run_id: str):
-        self.rounds_calls.append(run_id)
+    def raw_rounds(self, run_id: str, *, limit: int):
+        self.rounds_calls.append((run_id, limit))
         return [{"run_id": run_id, "round": 0, "bodies": []}]
 
     def raw_rounds_for_session(self, session: str, *, limit: int = 200):
@@ -911,10 +941,14 @@ class TestRawLlm:
         assert reader.session_calls == [("s1", 1000)]
 
     def test_run_rounds_mode(self, bus, tmp_path, echo_registry) -> None:
+        from gateway.chat import _RUN_ROWS_MAX
+
         reader = _FakeTrajectory()
         with TestClient(self._app(bus, tmp_path, echo_registry, reader)) as c:
             body = c.get("/api/chat/rawllm?run_id=r1").json()
-        assert reader.rounds_calls == ["r1"]
+        # The run rounds index is bounded by the same newest-window cap as the
+        # run_id step list (the mode answers one non-pageable object)
+        assert reader.rounds_calls == [("r1", _RUN_ROWS_MAX)]
         assert body["rounds"][0]["run_id"] == "r1" and body["round"] is None
 
     def test_single_round_mode_with_missing_round(self, bus, tmp_path, echo_registry) -> None:

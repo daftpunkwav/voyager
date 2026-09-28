@@ -9,9 +9,11 @@ Responsibilities:
   `session` filter over the event payload)
 - GET /api/chat/trajectory: step rows (agent.step) for rebuilding the
   execution trajectory after a refresh; same paging cursors as history,
-  plus a run_id mode returning one run's full step list
+  plus a run_id mode returning one run's step list (non-pageable, so the
+  newest-window cap _RUN_ROWS_MAX bounds the response instead)
 - GET /api/chat/rawllm: raw LLM round log served from the trajectory
-  projection (session page with full bodies; run rounds / one round)
+  projection (session page with full bodies; run rounds / one round; the
+  run rounds index is bounded like the run_id step list)
 - GET /api/chat/stream: SSE delivery with after_seq resume (optional
   `session` filter)
 
@@ -40,15 +42,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from typing import Any, Protocol
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from platform_contracts import (
-    LOCAL_USER,
-    ActorRef,
     DomainEvent,
     ErrorSuffix,
     Event,
@@ -56,13 +55,10 @@ from platform_contracts import (
 )
 from platform_eventbus import EventBus, EventLog
 
+from .common import actor_of, json_body, session_or_400
 from .ratelimit import RateLimiter
 
 _DOMAIN = "gateway"
-#: Session ids ride event payloads; the same strict shape the agent store
-#: enforces, validated here so a malformed id is a 400 instead of a stranded
-#: message the agent cannot route
-_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 #: Event types relevant to the human timeline (chat + progress + popups +
 #: navigation commands + artifact cards + settings hot-reload + L1 permission
 #: prompts + streaming deltas + service health transitions). note.* lifecycle
@@ -117,6 +113,13 @@ _REPLAY_PAGE = 500
 #: matching the rawllm endpoint's min(limit, 1000) convention: callers page
 #: with cursors, and an unbounded limit would read the whole log into memory
 _MAX_PAGE = 1000
+#: Ceiling for the run-scoped reads (trajectory run_id step list, rawllm run
+#: rounds index): those modes answer one non-pageable object, so the newest
+#: _RUN_ROWS_MAX rows bound the response instead of a cursor — the same
+#: newest-window direction the session pages and the UI's own per-run trim
+#: keep. Steps/round indexes of one run stay far below this in practice; the
+#: cap exists so a pathological run cannot grow one response without bound.
+_RUN_ROWS_MAX = 5000
 #: Idle seconds before a live SSE stream emits a keep-alive comment line
 _SSE_IDLE_PING_S = 15.0
 
@@ -142,9 +145,9 @@ class TrajectoryReader(Protocol):
         self, *, session: str, after_seq: int, before_seq: int | None, limit: int
     ) -> tuple[list[dict], bool]: ...
 
-    def run_steps(self, run_id: str) -> list[dict[str, Any]]: ...
+    def run_steps(self, run_id: str, *, limit: int) -> list[dict[str, Any]]: ...
 
-    def raw_rounds(self, run_id: str) -> list[dict[str, Any]]: ...
+    def raw_rounds(self, run_id: str, *, limit: int) -> list[dict[str, Any]]: ...
 
     def raw_rounds_for_session(
         self, session: str, *, limit: int = 200
@@ -164,9 +167,6 @@ def build_chat_router(
     log: EventLog = bus.log
     router = APIRouter()
 
-    def _actor(request: Request) -> ActorRef:
-        return getattr(request.state, "actor", None) or LOCAL_USER
-
     def _read(**kw):
         """Log page in the direction the cursor names: before_seq reads
         backward, after_seq reads forward (the one dispatch `_page`'s read
@@ -174,30 +174,6 @@ def build_chat_router(
         if "before_seq" in kw:
             return log.read_before(**kw)
         return log.read_after(**kw)
-
-    async def _json_body(request: Request) -> dict:
-        """Parse and validate the request body: bad JSON / non-object -> 400, not 500."""
-        try:
-            body = await request.json()
-        except Exception as exc:
-            raise ServiceError(
-                _DOMAIN, ErrorSuffix.INVALID_INPUT, "Request body must be valid JSON"
-            ) from exc
-        if not isinstance(body, dict):
-            raise ServiceError(
-                _DOMAIN, ErrorSuffix.INVALID_INPUT, "Request body must be a JSON object"
-            )
-        return body
-
-    def _session_or_400(session: str | None) -> str:
-        sid = (session or "").strip()
-        if sid and not _SESSION_ID_RE.match(sid):
-            raise ServiceError(
-                _DOMAIN,
-                ErrorSuffix.INVALID_INPUT,
-                "session must match [A-Za-z0-9_-]{1,64}",
-            )
-        return sid
 
     def _page(
         read: Callable[..., list],
@@ -253,14 +229,14 @@ def build_chat_router(
 
     @router.post("/api/chat/messages")
     async def post_message(request: Request) -> dict:
-        body = await _json_body(request)
+        body = await json_body(request)
         content = str(body.get("content") or "").strip()
         if not content:
             raise ServiceError(
                 _DOMAIN, ErrorSuffix.INVALID_INPUT, "Message content must not be empty"
             )
-        session = _session_or_400(body.get("session"))
-        actor = _actor(request)
+        session = session_or_400(body.get("session"))
+        actor = actor_of(request)
         limiter.check(actor.id)
         seq = await bus.publish(
             Event(
@@ -287,7 +263,7 @@ def build_chat_router(
         has_more tells whether paging further in the same direction can
         return more rows. `session` narrows the page to one chat session's
         rows (payload filter; the gateway keeps storing zero business data)."""
-        sid = _session_or_400(session)
+        sid = session_or_400(session)
         max_rows = max(1, min(limit, _MAX_PAGE))
         rows = await asyncio.to_thread(
             _page,
@@ -321,14 +297,18 @@ def build_chat_router(
     ) -> dict:
         """Step page with the same three cursor modes and session filter as
         history, over agent.step rows only (see the module contract for
-        regrouping). With `run_id`: the full step list of one run (a subagent
-        view), cursor parameters ignored."""
-        sid = _session_or_400(session)
+        regrouping). With `run_id`: one run's step list, newest
+        _RUN_ROWS_MAX rows (a subagent view; not pageable, so cursor
+        parameters are ignored and has_more stays False)."""
+        sid = session_or_400(session)
         max_rows = max(1, min(limit, _MAX_PAGE))
         if run_id:
             if trajectory is None:
                 return {"has_more": False, "steps": []}
-            return {"has_more": False, "steps": trajectory.run_steps(run_id)}
+            # Off the event loop: one indexed SQLite read, same discipline as
+            # the projection path below.
+            steps = await asyncio.to_thread(trajectory.run_steps, run_id, limit=_RUN_ROWS_MAX)
+            return {"has_more": False, "steps": steps}
         if trajectory is not None:
             # Projection path: same cursor contract, no log scan
             steps, more = trajectory.steps_page(
@@ -363,9 +343,9 @@ def build_chat_router(
     ) -> dict:
         """Raw LLM round log. With `session`: the newest `limit` rounds with
         full bodies (the chat log page) plus the session's total count. With
-        `run_id` (+ optional `round`): the run's round index or one round's
-        bodies."""
-        sid = _session_or_400(session)
+        `run_id` (+ optional `round`): the run's round index (newest
+        _RUN_ROWS_MAX rounds, no bodies) or one round's bodies."""
+        sid = session_or_400(session)
         if trajectory is None:
             return {"rounds": [], "total": 0, "round": None}
         if sid and not run_id:
@@ -382,7 +362,11 @@ def build_chat_router(
         if round >= 0:
             row = trajectory.raw_round(run_id, round)
             return {"rounds": [], "total": 0, "round": row}
-        return {"rounds": trajectory.raw_rounds(run_id), "total": 0, "round": None}
+        return {
+            "rounds": trajectory.raw_rounds(run_id, limit=_RUN_ROWS_MAX),
+            "total": 0,
+            "round": None,
+        }
 
     @router.get("/api/chat/stream")
     async def stream(
@@ -390,8 +374,8 @@ def build_chat_router(
     ) -> StreamingResponse:
         """once=true: replay backlog after after_seq, then close (no long-lived stream).
         `session` filters frames to one chat session (empty = all frames)."""
-        sid = _session_or_400(session)
-        actor = _actor(request)
+        sid = session_or_400(session)
+        actor = actor_of(request)
         limiter.check(actor.id)
         # No explicit after_seq -> start from the current tail (history is
         # served by GET /api/chat/messages, not replayed here). latest_seq

@@ -46,6 +46,20 @@ class TestRunStepsProjection:
         store.close()
         log.close()
 
+    def test_run_steps_limit_keeps_newest_window_ascending(self, tmp_path) -> None:
+        """limit bounds the read to the NEWEST rows, still ascending — the
+        newest-window direction the gateway's non-pageable run_id mode
+        relies on; limit=None (the default) stays unbounded."""
+        store, log = _store(tmp_path)
+        for i in range(5):
+            log.append(_step("r1", f"s{i}"))
+        store.catch_up()
+        rows = store.run_steps("r1", limit=2)
+        assert [r["payload"]["name"] for r in rows] == ["s3", "s4"]
+        assert len(store.run_steps("r1")) == 5
+        store.close()
+        log.close()
+
     def test_unknown_run_has_no_rows_and_runs_table_tracks_lifecycle(self, tmp_path) -> None:
         """An unknown run_id reads empty; the runs table reflects lifecycle
         events (run.failed -> status 'failed'), the list the panel polls."""

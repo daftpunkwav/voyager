@@ -295,13 +295,27 @@ class TrajectoryStore:
             rows.reverse()
         return [_step_row(r) for r in rows], has_more
 
-    def run_steps(self, run_id: str) -> list[dict[str, Any]]:
+    def run_steps(self, run_id: str, *, limit: int | None = None) -> list[dict[str, Any]]:
+        """One run's step rows ascending. `limit=None` keeps every row
+        (in-process diagnostics); an int keeps the NEWEST `limit` rows — the
+        same newest-window direction the session pages use — so the gateway's
+        non-pageable run_id mode can bound its response."""
+        sql = (
+            "SELECT seq, run_id, session, subagent, ts, trace_id, actor, kind, name, summary, detail"
+            " FROM steps WHERE run_id = ?"
+        )
+        params: list[Any] = [run_id]
+        reverse = False
+        if limit is not None:
+            sql += " ORDER BY seq DESC LIMIT ?"
+            params.append(max(1, int(limit)))
+            reverse = True
+        else:
+            sql += " ORDER BY seq ASC"
         with self._lock:
-            rows = self._conn.execute(
-                "SELECT seq, run_id, session, subagent, ts, trace_id, actor, kind, name, summary, detail"
-                " FROM steps WHERE run_id = ? ORDER BY seq ASC",
-                (run_id,),
-            ).fetchall()
+            rows = self._conn.execute(sql, params).fetchall()
+        if reverse:
+            rows.reverse()
         return [_step_row(r) for r in rows]
 
     def list_runs(self, *, session: str = "", limit: int = 50) -> list[dict[str, Any]]:
@@ -384,15 +398,24 @@ class TrajectoryStore:
             )
             self._conn.commit()
 
-    def raw_rounds(self, run_id: str) -> list[dict[str, Any]]:
+    def raw_rounds(self, run_id: str, *, limit: int | None = None) -> list[dict[str, Any]]:
         """Round index for one run: round numbers, timestamps and body sizes —
-        no bodies, so listing stays cheap."""
+        no bodies, so listing stays cheap. `limit=None` keeps every round
+        (in-process diagnostics); an int keeps the newest `limit` rounds,
+        still returned ascending."""
+        sql = "SELECT round, ts, length(request), length(response) FROM raw_rounds WHERE run_id = ?"
+        params: list[Any] = [run_id]
+        reverse = False
+        if limit is not None:
+            sql += " ORDER BY round DESC LIMIT ?"
+            params.append(max(1, int(limit)))
+            reverse = True
+        else:
+            sql += " ORDER BY round ASC"
         with self._lock:
-            rows = self._conn.execute(
-                "SELECT round, ts, length(request), length(response)"
-                " FROM raw_rounds WHERE run_id = ? ORDER BY round ASC",
-                (run_id,),
-            ).fetchall()
+            rows = self._conn.execute(sql, params).fetchall()
+        if reverse:
+            rows.reverse()
         return [
             {"round": r[0], "ts": r[1], "request_bytes": r[2], "response_bytes": r[3]} for r in rows
         ]
