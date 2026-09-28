@@ -380,9 +380,9 @@ class TestStream:
         assert final.tool_calls[0].arguments == {"a": 1}
 
     async def test_stream_tool_fragment_null_index_degrades_to_zero(self) -> None:
-        """A gateway emitting "index": null must degrade to the first
-        fragment slot (packages/llm's ``or 0`` semantics), not raise
-        int(None) TypeError mid-stream."""
+        """A gateway emitting "index": null must not raise int(None) mid-stream:
+        the fragment lands in the slot allocator's current call slot (slot 0
+        for the first call, mirroring packages/llm's stream parser)."""
 
         def handler(request: httpx.Request) -> httpx.Response:
             chunks = [
