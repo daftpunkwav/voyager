@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import json
 import logging
+import platform
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -51,7 +53,7 @@ from agent.personas import canonical_persona_key, resolve_persona
 from agent.plugins import PluginManager
 from agent.policy import AppPolicy, FsPolicy, NetworkPolicy, PolicyEngine
 from agent.policy.permissions import ToolPermissions
-from agent.prompts import P
+from agent.prompts import P, render
 from agent.runtime import (
     EventLoop,
     LangfuseSpanExporter,
@@ -73,7 +75,7 @@ from agent.runtime.trajectory import TrajectoryStore
 from agent.runtime.wire import bind_event_loop
 from agent.sessions import SessionStore
 from agent.settings import DEFS as AGENT_SETTING_DEFS
-from agent.settings import STYLE_OVERRIDES_KEY, WORKSPACE_DIR_KEY
+from agent.settings import OVERRIDES_KEY, STYLE_OVERRIDES_KEY, WORKSPACE_DIR_KEY
 from agent.skills import SkillLoader
 from agent.skills.organizer import SkillOrganizer
 from agent.tools import (
@@ -124,6 +126,46 @@ EVENTS_RETENTION = Retention(types=(DomainEvent.AGENT_DELTA,), max_age_s=24 * 36
 #: Raw LLM round log retention (days): full request/response bodies per
 #: round are the largest unbounded artifact in the runtime data directory.
 RAW_LOG_RETENTION_DAYS = 7
+
+#: Weekday names for the environment clock line, locale-independent on
+#: purpose: strftime's %A would follow whatever locale the process happens
+#: to run under.
+_WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+
+def resolve_env_model(llm: Any, settings: Any, persona_key: str) -> str:
+    """Identity of the model configured to serve this persona's chat turns,
+    for the system head's environment layer. Resolution mirrors the wire:
+    the client's own model attr first, then the per-persona routing override
+    (agent.llm.overrides — the primary hop PersonaRoutingServiceLLM actually
+    consults), then the standalone/composer chain (agent.llm.model ->
+    llm.default_model). Best-effort by design: llm-domain keys are
+    unregistered in agent-only builds and those reads degrade to empty, an
+    empty result just omits the model line, and a routing fallback serving a
+    different model mid-turn is accepted drift (the served name lands in the
+    trajectory's per-round reply.model)."""
+    model = str(getattr(llm, "model", "") or "")
+    provider = ""
+    if not model:
+        key = canonical_persona_key(persona_key) if persona_key else ""
+        try:
+            overrides = settings.get(OVERRIDES_KEY)
+        except ServiceError:  # unregistered reads raise NOT_FOUND
+            overrides = None
+        entry = overrides.get(key) if key and isinstance(overrides, dict) else None
+        if isinstance(entry, dict):
+            model = str(entry.get("model") or "")
+            provider = str(entry.get("provider") or "")
+    for name in ("agent.llm.model", "llm.default_model"):
+        if model:
+            break
+        try:
+            model = str(settings.get(name) or "")
+        except ServiceError:
+            model = ""
+    if not model:
+        return ""
+    return f"{provider}/{model}" if provider else model
 
 
 def _build_policy(
@@ -555,11 +597,12 @@ def build_agent(
         return "\n\n".join(blocks)
 
     def _build_system(task, persona_key: str, query: str = "") -> str:
-        """Stable system head: rules, scoped rules, conduct, persona layers,
-        style, skill index, profile, task brief, MCP instructions. `query` is
-        accepted for signature compatibility (the spawner passes it) but no
-        longer shapes the prompt: per-turn volatile content lives in
-        _build_turn_context so the system bytes stay prefix-cache stable."""
+        """Stable system head: environment, rules, scoped rules, conduct,
+        persona layers, style, skill index, profile, task brief, MCP
+        instructions. `query` is accepted for signature compatibility (the
+        spawner passes it) but no longer shapes the prompt: per-turn volatile
+        content lives in _build_turn_context so the system bytes stay
+        prefix-cache stable."""
         persona = resolve_persona(persona_key) if persona_key else None
         # Guidelines are hot-read each turn like style: settings changes apply
         # on the next turn
@@ -583,6 +626,7 @@ def build_agent(
         ) or str(settings.get("agent.style") or "")
         cards = budget_from_settings(settings)
         return builder.system(
+            env=_env_section(persona_key),
             persona=persona,
             task=task,
             style=style,
@@ -598,8 +642,9 @@ def build_agent(
 
     def _build_turn_context(task, persona_key: str, query: str = "") -> str:
         """The per-turn volatile block, rendered into one trailing user-role
-        row by engine.turn: recent memory cards, relevance recall for this
-        input, subagent digests, the user's current page, the plan gate.
+        row by engine.turn: the clock line, recent memory cards, relevance
+        recall for this input, subagent digests, the user's current page, the
+        plan gate.
         Rendered per turn so state is never stale; kept OUT of the system
         prompt because providers cache the request byte-prefix and any
         per-turn change in the head re-bills the whole history."""
@@ -631,8 +676,37 @@ def build_agent(
             memory_card_chars=cards.memory_card_chars,
             plan_section=plan_gates.section_for(getattr(task, "session", "")),
             recall_section=recall,
+            time_section=_time_section(),
             digest_chars=cards.digest_chars,
             page_chars=cards.page_chars,
+        )
+
+    def _env_section(persona_key: str) -> str:
+        """The stable environment layer (first system layer): who/where the
+        agent is. Rendered here because the runtime facts (model settings,
+        OS, workspace path) are assembly-root state; the bytes change only
+        when the model configuration or the workspace moves — the same
+        volatility class as the other settings-sourced layers."""
+        model = resolve_env_model(llm, settings, persona_key)
+        return render(
+            P.context.environment.body,
+            model_line=render(P.context.environment.model_line, model=model) if model else "",
+            os=f"{platform.system()} {platform.machine()}".strip(),
+            workspace=str(workspace),
+        )
+
+    def _time_section() -> str:
+        """Current local date/time for the trailing turn-context row: the
+        clock is per-turn volatile, so it rides the row (re-rendered every
+        turn at the tail, where changes only re-bill themselves) instead of
+        the system head, where any byte change would re-bill the whole
+        cached history."""
+        now = datetime.now().astimezone()
+        offset = now.strftime("%z")
+        return render(
+            P.context.environment.time_line,
+            now=f"{now:%Y-%m-%d} ({_WEEKDAYS[now.weekday()]}) {now:%H:%M}"
+            f" UTC{offset[:3]}:{offset[3:]}",
         )
 
     def _budget_model_name() -> str:

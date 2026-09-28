@@ -1,16 +1,17 @@
 """Context assembly, split by cache stability:
 
-- ContextBuilder.system(): the stable head — rules, scoped rules, conduct,
-  persona, guideline, style, skill index, profile, task brief, MCP
-  instructions. Byte-stable across turns unless a real source (settings,
-  skills on disk, distillation) changed.
-- ContextBuilder.turn_context(): the per-turn volatile block — recent memory
-  cards, relevance recall, subagent digests, current page, plan gate. The
-  caller (engine.turn) renders it into ONE trailing user-role row appended
-  after the full history, so the request prefix (system + history) stays
-  byte-identical across turns and the provider prefix cache survives: any
-  per-turn change inside the system message would re-bill the whole history,
-  because a provider cache is a byte-prefix of the entire request.
+- ContextBuilder.system(): the stable head — environment, rules, scoped
+  rules, conduct, persona, guideline, style, skill index, profile, task
+  brief, MCP instructions. Byte-stable across turns unless a real source
+  (settings, skills on disk, distillation) changed.
+- ContextBuilder.turn_context(): the per-turn volatile block — clock line,
+  recent memory cards, relevance recall, subagent digests, current page,
+  plan gate. The caller (engine.turn) renders it into ONE trailing user-role
+  row appended after the full history, so the request prefix (system +
+  history) stays byte-identical across turns and the provider prefix cache
+  survives: any per-turn change inside the system message would re-bill the
+  whole history, because a provider cache is a byte-prefix of the entire
+  request.
 
 Each layer is injected as a summary; full content is loaded on demand via
 OnDemandLoader. Layers carry their own character caps (plus an entry cap for
@@ -106,6 +107,7 @@ class ContextBuilder:
         conduct: str = "",
         guideline: str = "",
         mcp_section: str = "",
+        env: str = "",
         skill_max: int = SKILL_MAX,
         skill_chars: int = SKILL_CHARS,
         profile_chars: int = PROFILE_CHARS,
@@ -115,8 +117,13 @@ class ContextBuilder:
         """The stable head of the request. Only layers whose source changes
         rarely (settings, skills on disk, distillation, MCP mounts) live here:
         the profile rides along because distillation cadence is low, while the
-        per-turn volatile layers are rendered by turn_context() instead."""
+        per-turn volatile layers are rendered by turn_context() instead. `env`
+        is the pre-rendered environment layer (harness identity, configured
+        model, OS, workspace — session-stable facts) and opens the head when
+        non-empty."""
         layers: list[str] = []
+        if env:
+            layers.append(env)
         if self._rules:
             layers.append("【全局规则】\n" + "\n".join(f"- {r}" for r in self._rules))
         if self._scoped_rules is not None:
@@ -174,6 +181,7 @@ class ContextBuilder:
         memory_card_chars: int = 0,
         plan_section: str = "",
         recall_section: str = "",
+        time_section: str = "",
         digest_chars: int = DIGEST_CHARS,
         page_chars: int = PAGE_CHARS,
     ) -> str:
@@ -181,11 +189,14 @@ class ContextBuilder:
         row by the caller. Returns "" when no layer has content, in which case
         no context row is appended at all.
 
-        Layer order inside the block follows attention value: recent memory
-        and relevance hits carry the most per-turn signal and come first;
-        digests, the current page and the plan gate follow.
+        Layer order inside the block follows attention value: the clock line
+        (`time_section`, framing meta like the caller's status line) and the
+        recent memory / relevance hits carry the most per-turn signal and come
+        first; digests, the current page and the plan gate follow.
         """
         layers: list[str] = []
+        if time_section:
+            layers.append(time_section)
         if self._memory is not None and memory_card_chars > 0:
             cards = render_memory_cards(
                 self._memory, count=memory_cards, max_chars=memory_card_chars

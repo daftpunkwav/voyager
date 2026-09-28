@@ -51,3 +51,17 @@ class TestBuilder:
         assert ctx_a != ctx_b  # the volatile row carries the change
         assert "【最近记忆】" in ctx_b
         memory.close()
+
+    def test_env_layer_opens_head_and_time_opens_turn_context(self, tmp_path) -> None:
+        """The environment layer (harness/model/OS/workspace facts) leads the
+        stable head; the clock line leads the volatile row; both are optional
+        so callers without them keep the previous shape."""
+        builder = ContextBuilder(rules=["honesty first"])
+        system = builder.system(env="【运行环境】\nYou are running inside Voyager.")
+        assert system.startswith("【运行环境】")
+        assert system.index("【运行环境】") < system.index("【全局规则】")
+        assert "【运行环境】" not in builder.system()
+        clock = "【当前时刻】2026-09-28 (Monday) 10:00 UTC+08:00"
+        row = builder.turn_context(time_section=clock)
+        assert row.startswith(clock)
+        assert "【当前时刻】" not in builder.turn_context()

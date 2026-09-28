@@ -5,6 +5,7 @@ and domain tool injection.
 import asyncio
 import json
 
+from agent.build import resolve_env_model
 from agent.engine import Mode, TaskBook
 from agent.llm import FakeLLM, LLMReply
 from agent.main import build_agent
@@ -154,6 +155,68 @@ class TestConductInSystem:
             assert "【人格准则】" not in recon.system_prompt
         finally:
             app.close()
+
+
+class TestEnvInSystem:
+    """The environment layer opens the system prompt: harness identity plus
+    the configured chat model (per-persona override wins), OS and workspace;
+    the clock rides the trailing turn-context row instead of the head."""
+
+    def _spawn(self, app, persona: str = "orchestrator"):
+        return app.spawner.spawn(TaskBook(goal="test", mode=Mode.REACT), persona=persona)
+
+    async def test_env_layer_reaches_spawned_system(self, tmp_path) -> None:
+        app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
+        try:
+            inst = self._spawn(app)
+            assert inst.system_prompt.startswith("【运行环境】")
+            assert "You are running inside Voyager" in inst.system_prompt
+            assert str(tmp_path / "ws") in inst.system_prompt  # the workspace path
+            assert "Windows" in inst.system_prompt or "Linux" in inst.system_prompt
+        finally:
+            app.close()
+
+    async def test_override_model_reaches_env_layer(self, tmp_path) -> None:
+        app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
+        try:
+            await app.settings.set(
+                "agent.llm.overrides",
+                {"orchestrator": {"provider": "prov-a", "model": "model-x"}},
+                LOCAL_USER,
+            )
+            inst = self._spawn(app)
+            assert "Current model: prov-a/model-x" in inst.system_prompt
+        finally:
+            app.close()
+
+    async def test_no_model_config_omits_model_line(self, tmp_path) -> None:
+        # FakeLLM carries no model attr and the llm-domain keys are
+        # unregistered in an agent-only build: the line degrades away.
+        app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
+        try:
+            inst = self._spawn(app)
+            assert "Current model:" not in inst.system_prompt
+            assert "You are running inside Voyager" in inst.system_prompt
+        finally:
+            app.close()
+
+    async def test_time_rides_turn_context_row(self, tmp_path) -> None:
+        app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
+        try:
+            inst = self._spawn(app)
+            built = inst.build_turn_context(inst.task, "orchestrator", "")
+            assert built.startswith("【当前时刻】")
+            assert "UTC" in built
+        finally:
+            app.close()
+
+    def test_resolve_env_model_prefers_client_attr(self, tmp_path) -> None:
+        class _Client:
+            model = "direct-model"
+
+        settings = SettingsStore(tmp_path / "s.db")
+        assert resolve_env_model(_Client(), settings, "orchestrator") == "direct-model"
+        assert resolve_env_model(FakeLLM(), settings, "") == ""
 
 
 class TestPurposeRouting:
