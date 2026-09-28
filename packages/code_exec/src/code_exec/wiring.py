@@ -26,7 +26,12 @@ def wire(
     owns_settings = settings_store is None
     settings_store = settings_store or SettingsStore(data_dir / "settings.db", bus)
     settings_store.register_fresh(DEFS)
-    store = ExecutionStore(data_dir / "code-exec.db")
+    store = ExecutionStore(
+        data_dir / "code-exec.db",
+        # Retention prunes artifact dirs together with their rows; the dirs
+        # live under the workspace sandbox, not beside the db
+        artifact_root=workspace / "sandbox" / "artifacts",
+    )
     init_deps(Deps(store=store, settings=settings_store, bus=bus, workspace=workspace))
 
     def close() -> None:

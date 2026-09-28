@@ -86,6 +86,11 @@ class RunResult:
     limits_applied: dict[str, Any] = field(default_factory=dict)
 
 
+#: Seconds the timeout-side cleanup command (docker kill) may take before it
+#: is itself killed: the cleanup must never outlive the execution envelope it
+#: serves by much.
+_KILL_TIMEOUT_S = 10.0
+
 #: Per-stream retained output cap. Output past the cap is still drained
 #: (and discarded) so a chatty child never blocks on a full pipe; only what
 #: is kept -- and later stored / emitted -- is bounded.
@@ -138,6 +143,33 @@ async def _finish(proc: asyncio.subprocess.Process) -> tuple[bytes, bytes]:
     return out, err
 
 
+async def _timeout_kill(kill_args: list[str]) -> None:
+    """Run the timeout-side cleanup command, bounded and best-effort.
+
+    Killing the `docker run` CLI does not stop the container it created: the
+    daemon keeps it running (a `while true` workload then runs until the
+    daemon restarts). The caller names the container (`--name`), and this
+    `docker kill` targets it directly. Failure is tolerated — the container
+    may have already exited by itself — but the cleanup itself is bounded so
+    a wedged daemon cannot hang the timeout path.
+    """
+    try:
+        killer = await asyncio.create_subprocess_exec(
+            *kill_args,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+    except OSError:
+        log.warning("timeout cleanup could not start: %s", kill_args, exc_info=True)
+        return
+    try:
+        await asyncio.wait_for(killer.wait(), timeout=_KILL_TIMEOUT_S)
+    except TimeoutError:
+        killer.kill()
+        await killer.wait()
+        log.warning("timeout cleanup command itself timed out: %s", kill_args)
+
+
 async def _execute(
     args: list[str],
     *,
@@ -147,8 +179,14 @@ async def _execute(
     stderr_prefix: str = "",
     isolation: str = "none",
     limits_applied: dict[str, Any] | None = None,
+    timeout_kill: list[str] | None = None,
 ) -> RunResult:
-    """Run one subprocess under the shared output/timeout discipline."""
+    """Run one subprocess under the shared output/timeout discipline.
+
+    `timeout_kill` names an optional cleanup command (e.g. ["docker", "kill",
+    "<container>"]) run after a timeout kill of the child itself, for children
+    (the docker CLI) whose work outlives their process.
+    """
     proc = await asyncio.create_subprocess_exec(
         *args,
         stdout=asyncio.subprocess.PIPE,
@@ -162,6 +200,8 @@ async def _execute(
         # Reap the killed child; without this the process handle lingers
         # until garbage collection
         await proc.wait()
+        if timeout_kill:
+            await _timeout_kill(timeout_kill)
         return RunResult(
             status="timeout",
             exit_code=-1,
@@ -225,6 +265,7 @@ async def run_in_runtime(
             runtime,
             src,
             artifact_dir,
+            exec_id=exec_id,
             timeout=timeout,
             memory_mb=memory_mb,
             network=network,
@@ -252,16 +293,23 @@ async def _run_docker(
     src: Path,
     artifact_dir: Path,
     *,
+    exec_id: str,
     timeout: int,
     memory_mb: int,
     network: bool,
 ) -> RunResult:
     image = runtime["image"]
     cmd = runtime.get("cmd", [])
+    # A named container is the timeout-path kill target: killing the docker
+    # CLI alone would leave the container running on the daemon. The exec_id
+    # suffix keeps concurrent runs collision-free.
+    container = f"code_exec_{exec_id}"
     args = [
         "docker",
         "run",
         "--rm",
+        "--name",
+        container,
         "--network",
         "host" if network else "none",
         "-m",
@@ -281,6 +329,7 @@ async def _run_docker(
         timeout=timeout,
         isolation="docker",
         limits_applied={"memory_mb": memory_mb, "network": network},
+        timeout_kill=["docker", "kill", container],
     )
 
 

@@ -42,6 +42,21 @@ _DOMAIN = "code-exec"
 _ACTOR = ActorRef(kind=ActorKind.SYSTEM, id="code-exec.service")
 registry = Registry(_DOMAIN)
 
+#: Concurrent-execution cap: every run pulls a container or a host process;
+#: without a bound a burst of concurrent subtasks (or a REST caller looping
+#: run_snippet) piles up processes until the machine starves. Over-limit
+#: callers get QUEUE_FULL (retry when a slot frees) instead of an unbounded
+#: pending queue.
+DEFAULT_MAX_CONCURRENT_EXECUTIONS = 4
+
+#: Source size cap for executed code: the snippet rides the capability body
+#: and is written into the artifact dir; a cap keeps a single absurd call from
+#: dominating the executor and the store (same rationale as the queue's
+#: payload cap). Far above any real program.
+_MAX_CODE_CHARS = 256 * 1024
+
+_active_executions = 0
+
 
 @dataclass
 class Deps:
@@ -51,6 +66,7 @@ class Deps:
     settings: SettingsStore
     bus: EventBus | None
     workspace: Path
+    max_concurrent_executions: int = DEFAULT_MAX_CONCURRENT_EXECUTIONS
 
 
 _deps: Deps | None = None
@@ -67,9 +83,43 @@ def _spawn(coro) -> asyncio.Task:
     return task
 
 
+def _reserve_slot() -> None:
+    """Claim one execution slot or reject with QUEUE_FULL.
+
+    Runs synchronously on the event loop before the task is spawned, so the
+    check-and-increment cannot race; the slot is released in _run_code's
+    finally block (success, failure and cancellation alike).
+    """
+    global _active_executions
+    limit = max(1, int(_require_deps().max_concurrent_executions))
+    if _active_executions >= limit:
+        raise ServiceError(
+            _DOMAIN,
+            ErrorSuffix.QUEUE_FULL,
+            f"concurrent execution limit reached ({limit} running)",
+            hint="wait for running executions to finish and retry",
+        )
+    _active_executions += 1
+
+
+def _release_slot() -> None:
+    global _active_executions
+    _active_executions = max(0, _active_executions - 1)
+
+
+def _check_code(code: str) -> None:
+    if len(code) > _MAX_CODE_CHARS:
+        raise ServiceError(
+            _DOMAIN,
+            ErrorSuffix.INVALID_INPUT,
+            f"code is {len(code)} chars, over the {_MAX_CODE_CHARS}-char execution limit",
+        )
+
+
 def init_deps(deps: Deps) -> None:
-    global _deps
+    global _deps, _active_executions
     _deps = deps
+    _active_executions = 0  # fresh wiring owns the counter (tests re-wire)
 
 
 def _require_deps() -> Deps:
@@ -137,6 +187,16 @@ async def _emit_failed(exec_id: str, error: str) -> None:
 
 
 async def _run_code(exec_id: str, runtime_id: str, code: str) -> dict[str, Any]:
+    # The slot was reserved by the caller before spawning; it is released on
+    # every exit path below (store failure, refusal, crash, success), so a
+    # dead execution never leaks capacity.
+    try:
+        return await _run_code_inner(exec_id, runtime_id, code)
+    finally:
+        _release_slot()
+
+
+async def _run_code_inner(exec_id: str, runtime_id: str, code: str) -> dict[str, Any]:
     deps = _require_deps()
     cfg = _settings()
     runtime = _find_runtime(runtime_id)
@@ -237,7 +297,12 @@ async def run_snippet(runtime: str, code: str, _actor: ActorRef | None = None) -
     # immediately, not die silently inside the fire-and-forget task (which
     # would leave the JobRef waiting for an event that never arrives)
     _find_runtime(runtime)
+    _check_code(code)
     exec_id = uuid.uuid4().hex[:12]
+    # Reserve before spawning: over-limit callers are rejected here (the
+    # event loop makes the check-and-increment atomic), never queued without
+    # bound. The slot is released by _run_code's finally.
+    _reserve_slot()
     # Kick off async execution immediately so the caller is not blocked; the
     # strong ref prevents silent GC collection
     _spawn(_run_code(exec_id, runtime, code))
@@ -279,7 +344,9 @@ async def run_file(runtime: str, file_path: str, _actor: ActorRef | None = None)
             ErrorSuffix.INVALID_INPUT,
             "file must be UTF-8 text; binary or other-encoding files are not executable",
         ) from exc
+    _check_code(code)
     exec_id = uuid.uuid4().hex[:12]
+    _reserve_slot()
     _spawn(_run_code(exec_id, runtime, code))
     return JobRef(job_id=exec_id)
 
