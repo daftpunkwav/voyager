@@ -10,17 +10,18 @@
 
 `builder.py` — `ContextBuilder.system(...)` 以固定、字节稳定的顺序组装系统提示(对前缀缓存友好):
 
-1. `【全局规则】` — `prompts/definitions/common.toml` (`common.global_rules`)
-2. 作用域规则 — `workspace/AGENTS.md`
-3. `【用户准则】` — 设置 `agent.conduct`
-4. 人格 system prompt
-5. `【人格准则】` — `agent.guidelines[persona]`
-6. `【风格】` — `agent.style` / 按人格 `agent.style.overrides`
-7. `【可用 skill】` — 只放名称 + 一行简介(正文按需加载)
+1. `【运行环境】` — 环境披露层(`prompts/definitions/context.toml` 的 `context.environment`):宿主身份(Voyager)、当前配置的聊天模型(由 `build.resolve_env_model` 解析:client attr → `agent.llm.overrides[persona]` → `agent.llm.model` / `llm.default_model`)、操作系统与 workspace 路径——全部是会话级稳定事实,让模型无需"法医式查表"就知道自己是谁、在哪里
+2. `【全局规则】` — `prompts/definitions/common.toml` (`common.global_rules`)
+3. 作用域规则 — `workspace/AGENTS.md`
+4. `【用户准则】` — 设置 `agent.conduct`
+5. 人格 system prompt
+6. `【人格准则】` — `agent.guidelines[persona]`
+7. `【风格】` — `agent.style` / 按人格 `agent.style.overrides`
+8. `【可用 skill】` — 只放名称 + 一行简介(正文按需加载)
 
 稳定尾部到此结束:用户画像、任务书(goal/constraints/done_when)、MCP 指引。
 
-逐 turn 的易变层——近期记忆卡、相关度召回节(`read_policy.py`)、进行中子代理摘要、用户当前页面上下文、计划评审态(`plan_gate.py`)——不进系统提示:`ContextBuilder.turn_context()` 将它们渲染为追加在全部历史之后的一条尾部 user 消息(以 `【会话状态】` 开头)。provider 缓存是整个请求的字节前缀,系统提示跨 turn 字节稳定才能让历史前缀命中缓存;用量状态行也搭同一条消息。
+逐 turn 的易变层——时钟行(`【当前时刻】`,本地日期/星期/时间/UTC 偏移;刻意不进头部:头部里的日期在跨午夜的长会话中会悄悄变成过期信息)、近期记忆卡、相关度召回节(`read_policy.py`)、进行中子代理摘要、用户当前页面上下文、计划评审态(`plan_gate.py`)——不进系统提示:`ContextBuilder.turn_context()` 将它们渲染为追加在全部历史之后的一条尾部 user 消息(以 `【会话状态】` 开头)。provider 缓存是整个请求的字节前缀,系统提示跨 turn 字节稳定才能让历史前缀命中缓存;用量状态行也搭同一条消息。
 
 每个 turn 由 `engine/turn.py:run_turn` 重建系统提示(除非设置/磁盘上的 skill/蒸馏/MCP 挂载等源变化,字节不变)并重渲染上下文行;回合中恢复时快照中的该行原位刷新。历史由 `ContextBudget` 约束。
 

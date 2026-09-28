@@ -13,7 +13,7 @@ One file per domain, one top-level table per file (the domain name):
 
 - `common.toml` — base-layer blocks any domain may compose from (`@common.<key>`)
 - `modes.toml` — subagent execution modes (react / cot / tot / got / plan_execute / reflexion)
-- `context.toml` — compaction planning, plan review gate, context status line
+- `context.toml` — compaction planning, plan review gate, context status line, environment disclosure (system head) and the per-turn clock line
 - `memory.toml` — long-term distillation
 - `orchestrator.toml` — arbitration, synthesis, proactive outreach, chat goal, task-completion evaluation, notice bodies
 - `runtime.toml` — loop advisory, structured-output instruction

@@ -10,17 +10,18 @@ Source: `agent/src/agent/context/`
 
 `builder.py` — `ContextBuilder.system(...)` composes the system prompt in a fixed, byte-stable order (prefix-cache friendly):
 
-1. `【全局规则】` — `prompts/definitions/common.toml` (`common.global_rules`)
-2. Scoped rules — `workspace/AGENTS.md`
-3. `【用户准则】` — setting `agent.conduct`
-4. Persona system prompt
-5. `【人格准则】` — `agent.guidelines[persona]`
-6. `【风格】` — `agent.style` / per-persona `agent.style.overrides`
-7. `【可用 skill】` — name + one-line index only (texts load on demand)
+1. `【运行环境】` — environment disclosure (`prompts/definitions/context.toml` `context.environment`): harness identity (Voyager), the configured chat model (resolved by `build.resolve_env_model`: client attr → `agent.llm.overrides[persona]` → `agent.llm.model` / `llm.default_model`), OS, and the workspace path — session-stable facts, so the model knows who/where it is without forensic guesswork
+2. `【全局规则】` — `prompts/definitions/common.toml` (`common.global_rules`)
+3. Scoped rules — `workspace/AGENTS.md`
+4. `【用户准则】` — setting `agent.conduct`
+5. Persona system prompt
+6. `【人格准则】` — `agent.guidelines[persona]`
+7. `【风格】` — `agent.style` / per-persona `agent.style.overrides`
+8. `【可用 skill】` — name + one-line index only (texts load on demand)
 
 The head ends with the stable tail: user profile, task book (goal/constraints/done_when), and MCP instructions.
 
-The per-turn volatile layers — recent memory cards, the relevance-recall section (`read_policy.py`), in-flight subagent digests, the user's current page context, and plan review-phase state (`plan_gate.py`) — do not live in the system prompt: `ContextBuilder.turn_context()` renders them into ONE trailing user-role row (marked `【会话状态】`) appended after the full history. Providers cache the byte-prefix of the whole request, so keeping the system prompt byte-stable across turns is what makes the history prefix cacheable; the usage status line rides the same row.
+The per-turn volatile layers — the clock line (`【当前时刻】`, local date/weekday/time/UTC offset; deliberately kept out of the head, where a date would silently go stale in a session crossing midnight), recent memory cards, the relevance-recall section (`read_policy.py`), in-flight subagent digests, the user's current page context, and plan review-phase state (`plan_gate.py`) — do not live in the system prompt: `ContextBuilder.turn_context()` renders them into ONE trailing user-role row (marked `【会话状态】`) appended after the full history. Providers cache the byte-prefix of the whole request, so keeping the system prompt byte-stable across turns is what makes the history prefix cacheable; the usage status line rides the same row.
 
 Each turn, `engine/turn.py:run_turn` rebuilds the system prompt (byte-stable unless a source changed) and re-renders the context row; on a mid-turn resume the snapshot's row is refreshed in place. History is bounded by `ContextBudget`.
 
