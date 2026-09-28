@@ -69,37 +69,38 @@ def test_normal_turn_marked_message(tmp_path) -> None:
     finally:
         app.close()
 
-    def test_conversational_delivery_joins_lead_ins(tmp_path) -> None:
-        """A chat turn whose first round streamed text and then called a tool
-        delivers lead-in + final answer as ONE message (the final round only
-        writes the continuation), and the model-facing history carries the flow
-        once — no duplicated lead-in entry."""
 
-        seen = {"n": 0}
+def test_conversational_delivery_joins_lead_ins(tmp_path) -> None:
+    """A chat turn whose first round streamed text and then called a tool
+    delivers lead-in + final answer as ONE message (the final round only
+    writes the continuation), and the model-facing history carries the flow
+    once — no duplicated lead-in entry."""
 
-        def _sequenced(_messages, _tools=None):
-            seen["n"] += 1
-            if seen["n"] == 1:
-                return LLMReply(
-                    text="我先查一下 usage。",
-                    tool_calls=(ToolCall(id="t1", name="read", arguments={"path": "x"}),),
-                )
-            return LLMReply(text="查完了,结果是这样。")
+    seen = {"n": 0}
 
-        app = build_agent(
-            data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM(dynamic=_sequenced)
-        )
-        try:
-            asyncio.run(_drive(app, "hi"))
-            full = "我先查一下 usage。\n\n查完了,结果是这样。"
-            messages = [e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_MESSAGE])]
-            assert messages[-1]["content"] == full
-            chat = app.master.chat
-            assert chat is not None
-            history = [m.get("content", "") for m in chat.history if m.get("role") == "assistant"]
-            assert history == [full]  # the lead-in is carried once, by the closing
-        finally:
-            app.close()
+    def _sequenced(_messages, _tools=None):
+        seen["n"] += 1
+        if seen["n"] == 1:
+            return LLMReply(
+                text="我先查一下 usage。",
+                tool_calls=(ToolCall(id="t1", name="read", arguments={"path": "x"}),),
+            )
+        return LLMReply(text="查完了,结果是这样。")
+
+    app = build_agent(
+        data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM(dynamic=_sequenced)
+    )
+    try:
+        asyncio.run(_drive(app, "hi"))
+        full = "我先查一下 usage。\n\n查完了,结果是这样。"
+        messages = [e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_MESSAGE])]
+        assert messages[-1]["content"] == full
+        chat = app.master.chat
+        assert chat is not None
+        history = [m.get("content", "") for m in chat.history if m.get("role") == "assistant"]
+        assert history == [full]  # the lead-in is carried once, by the closing
+    finally:
+        app.close()
 
 
 def test_rounds_cap_winddown_marked_warning(tmp_path) -> None:
@@ -186,3 +187,56 @@ def test_normal_task_turn_completes() -> None:
     assert asyncio.run(inst.run_turn("do it")) == "done"
     assert inst.state.status is RunStatus.COMPLETED
     assert not [1 for t, _ in events.emitted if t == RuntimeEvent.RUN_FAILED]
+
+
+class _SummarizingGovernor:
+    """One-shot compaction stub: replaces the transcript the way the editor
+    does (a SUMMARY_MARK row stands in for the condensed span) so run_turn's
+    history write-back branch executes."""
+
+    def __init__(self) -> None:
+        self.armed = True
+
+    async def enforce(self, messages: list[dict]) -> dict | None:
+        if not self.armed:
+            return None
+        self.armed = False
+        messages[:] = [
+            messages[0],
+            {"role": "user", "content": "[历史压缩]\n更早的轮次已压缩为摘要。"},
+            *messages[2:],
+        ]
+        return {"mode": "llm"}
+
+    def target_tokens(self) -> int:
+        return 1000
+
+    async def compact(self, messages: list[dict], target: int | None = None) -> None:
+        return None
+
+
+def test_compaction_writeback_keeps_substring_but_unequal_entries() -> None:
+    """The compaction write-back dedup compares whole delivered segments, not
+    substrings: an older assistant entry that merely appears inside the result
+    ("回答" inside "新的回答") must survive the rebuild — containment matching
+    would silently drop it from the model-facing history."""
+    events = _RecordingEvents()
+    inst = SubagentInstance(
+        task=TaskBook(goal="g"),
+        toolbelt=Toolbelt({}, PolicyEngine()),
+        llm=FakeLLM(default="新的回答"),
+        system_prompt="s",
+        events=events,  # type: ignore[arg-type]  # duck-typed event stub
+        state=RunState(task="g"),
+    )
+    inst.history.extend(
+        [
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "回答"},
+        ]
+    )
+    inst.governor = lambda: _SummarizingGovernor()  # type: ignore[assignment,return-value]
+    result = asyncio.run(inst.run_turn("q2"))
+    assert result == "新的回答"
+    assistant = [m["content"] for m in inst.history if m.get("role") == "assistant"]
+    assert assistant == ["回答", "新的回答"]

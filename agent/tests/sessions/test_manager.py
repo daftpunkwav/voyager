@@ -301,6 +301,33 @@ class TestSessionConcurrencyEdges:
         finally:
             app.close()
 
+    def test_fork_with_odd_keep_messages_floors_to_a_pair_boundary(self, tmp_path) -> None:
+        """An odd keep_messages floors to the even pair boundary: a branch
+        opened mid-pair would end on a user row and start its next turn with
+        two consecutive user messages (a strict anthropic-format endpoint
+        rejects the adjacency)."""
+        app = _app(tmp_path, FakeLLM(default="Got it."))
+        try:
+            mgr = app.master.sessions
+            source = mgr.resolve("")
+            source.history.extend(
+                [
+                    {"role": "user", "content": "t1"},
+                    {"role": "assistant", "content": "a1"},
+                    {"role": "user", "content": "t2"},
+                    {"role": "assistant", "content": "a2"},
+                ]
+            )
+            mgr.persist(source.session)
+            created = mgr.fork("", title="odd cut", keep_messages=3)
+            forked = mgr.instance_for(created["session_id"])
+            assert forked is not None
+            roles = [m["role"] for m in forked.history]
+            assert roles == ["user", "assistant"]  # floors 3 -> 2
+            assert [m["content"] for m in forked.history] == ["t1", "a1"]
+        finally:
+            app.close()
+
     def test_rename_survives_the_racing_turn_end_persist(self, tmp_path) -> None:
         """The turn-end snapshot rewrites the row after the user renamed the
         session: the rename must win, not be clobbered by a stale title."""

@@ -73,9 +73,13 @@ def _parse_best(text: str, width: int) -> int:
     plan = parse_plan(text or "")
     letter = plan.get("best") if isinstance(plan, dict) else None
     if isinstance(letter, str):
-        idx = ord(letter.strip().upper()[:1]) - ord("A")
-        if 0 <= idx < width:
-            return idx
+        # isalpha gate (same as _parse_ranking): an empty or non-letter value
+        # must degrade to the default pick, not raise on ord("")
+        first = letter.strip().upper()[:1]
+        if first.isalpha():
+            idx = ord(first) - ord("A")
+            if 0 <= idx < width:
+                return idx
     return 0
 
 

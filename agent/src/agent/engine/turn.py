@@ -421,6 +421,12 @@ async def _run_turn(
             # will not re-summarize the same span; without the write-back every
             # turn would re-condense the same history.
             rebuilt: list[dict[str, Any]] = []
+            # The delivery joins the visible texts with "\n\n", so an entry is
+            # already carried by the closing message exactly when it IS one of
+            # those segments. Substring containment would also drop any entry
+            # that merely happens to appear inside the result (a short "好"
+            # inside "好的,这是答案") — a silent history hole.
+            delivered_segments = result.split("\n\n") if result else []
             # _transcript_view folds a teammate's speaker into a leading
             # 【display name】 prefix and keeps the wire view key-clean, so
             # the key never survives onto these messages: recover it here
@@ -445,7 +451,7 @@ async def _run_turn(
                     # (the closing message joins the visible round texts into
                     # one self-contained message) would duplicate in the
                     # model-facing history
-                    if text and result and text in result:
+                    if text and text in delivered_segments:
                         continue
                     if text:
                         entry = {"role": "assistant", "content": text}

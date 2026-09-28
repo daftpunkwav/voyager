@@ -251,8 +251,12 @@ class SessionManager:
         history = [dict(m) for m in source.history]
         if keep_messages > 0:
             # Message-level fork: only the first N entries (user/assistant
-            # pairs), so the branch resumes from a chosen point in time.
-            history = history[:keep_messages]
+            # pairs), so the branch resumes from a chosen point in time. An
+            # odd count floors to the pair boundary: history stays user-led
+            # and assistant-tailed, so the branch's next turn cannot open
+            # with two consecutive user rows (strict anthropic-format
+            # endpoints reject the adjacency).
+            history = history[: keep_messages // 2 * 2]
         inst.history = history
         if source.active:
             inst.active = set(source.active)

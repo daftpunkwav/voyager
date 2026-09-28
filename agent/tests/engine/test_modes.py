@@ -139,6 +139,45 @@ class TestReAct:
         )
         assert result == "我先自我介绍一下。\n\n查完了,这是结论。"
 
+    async def test_lead_in_kept_when_final_merely_contains_it(self) -> None:
+        """Drop-from-flow matching is equality, not containment: a short
+        lead-in that merely appears inside the final ("好" inside "好的…")
+        must still be delivered — the user saw it stream, dropping it would
+        silently cut the opening line from the message."""
+        result = await run_mode(
+            Mode.REACT,
+            llm=FakeLLM(
+                [
+                    LLMReply(text="好", tool_calls=(ToolCall("1", "echo_tool", {}),)),
+                    LLMReply(text="好的,这是结论。"),
+                ]
+            ),
+            toolbelt=_belt(),
+            messages=_msgs(),
+            limits=ModeLimits(),
+            conversational=True,
+        )
+        assert result == "好\n\n好的,这是结论。"
+
+    async def test_blank_final_joins_no_trailing_separator(self) -> None:
+        """A final round with empty text must not leave a trailing "\n\n" on
+        the joined delivery: the join filters the blank segment out."""
+        result = await run_mode(
+            Mode.REACT,
+            llm=FakeLLM(
+                [
+                    LLMReply(text="先看一下。", tool_calls=(ToolCall("1", "echo_tool", {}),)),
+                    LLMReply(text=""),
+                ]
+            ),
+            toolbelt=_belt(),
+            messages=_msgs(),
+            limits=ModeLimits(),
+            conversational=True,
+        )
+        assert result == "先看一下。"
+        assert not result.endswith("\n\n")
+
     async def test_task_turn_keeps_final_text_only(self) -> None:
         """Task reports stay final-text-only: the master reads work products,
         not conversation flow, so lead-in chatter must not pollute them."""
@@ -1202,3 +1241,23 @@ class TestBudgetSlice:
         assert budget.slice(rounds=0).max_rounds == 0
         # no explicit tool preference -> the DEFAULT_TOOL_ROOM fallback
         assert budget.slice(rounds=4).max_tool_calls == DEFAULT_TOOL_ROOM
+
+
+class TestTotJudgeParsing:
+    """The tot judge replies are model output, not trusted data: a malformed
+    best/ranking value degrades to the default pick, never a crash."""
+
+    def test_empty_best_letter_degrades_to_default(self) -> None:
+        from agent.engine.modes.tot import _parse_best
+
+        assert _parse_best('{"best": ""}', 3) == 0
+        assert _parse_best('{"best": "  "}', 3) == 0
+        assert _parse_best('{"best": "Z"}', 3) == 0  # out of range
+        assert _parse_best('{"best": "B"}', 3) == 1
+        assert _parse_best("not json at all", 3) == 0
+
+    def test_ranking_garbage_entries_are_skipped(self) -> None:
+        from agent.engine.modes.tot import _parse_ranking
+
+        assert _parse_ranking('{"ranking": ["", "B", 5, "A"]}', 3) == [1, 0, 2]
+        assert _parse_ranking('{"ranking": "nope"}', 3) == [0, 1, 2]

@@ -505,11 +505,14 @@ async def run_react(
                 # Whole visible flow: lead-ins + the answer, so the delivered
                 # message is self-contained (task reports stay final-text-only
                 # — the master reads work products, not conversation flow).
-                # Entries the final already carries (e.g. the nudge's own
-                # pending_answer) are dropped, not repeated.
-                flow = [t for t in lead_ins if t and t not in final]
+                # Only the entry IDENTICAL to the final is dropped (the nudge's
+                # own pending_answer): containment matching would also delete a
+                # short lead-in that merely appears inside the final, losing
+                # the opening line the user already saw. A blank final joins
+                # nothing — appending it would leave a trailing "\n\n".
+                flow = [t for t in lead_ins if t and t != final]
                 if flow:
-                    return "\n\n".join([*flow, final])
+                    return "\n\n".join([*flow, final] if final else flow)
             return final
         if toolbelt is None:
             return reply.text or "[无工具可用] LLM 请求了工具但未授予"
