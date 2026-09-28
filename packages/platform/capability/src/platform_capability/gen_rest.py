@@ -9,14 +9,24 @@ POST {prefix}/{name} invokes one with a JSON object; JobRef maps to
 from __future__ import annotations
 
 import dataclasses
+import json
 from collections.abc import Callable
 from typing import Any
 
 from platform_actor import ActorContext, LocalTokenIssuer, resolve_http_actor
-from platform_contracts import JobRef, ServiceError
+from platform_contracts import ErrorSuffix, JobRef, ServiceError
 
 from platform_capability.guards import AuditSink, CallRequest, execute
 from platform_capability.registry import Registry
+
+#: Aggregate request-body cap for the generated JSON routes: the body is read
+#: fully into memory before the guard chain runs and JSON has no natural size
+#: bound (file uploads ride the multipart transport, not this router). 10MB
+#: is far above any legitimate structured call. Oversize is a 400-class
+#: INVALID_INPUT rejection: the ErrorSuffix vocabulary is synced with the web
+#: client (errorCodes.ts + locales), so no dedicated 413 suffix is added for
+#: a loopback-bound transport bound.
+_MAX_BODY_BYTES = 10 * 1024 * 1024
 
 
 def _spec(cap) -> dict[str, Any]:
@@ -41,6 +51,7 @@ def build_router(
     quota: list[Callable[[CallRequest], None]] | None = None,
     audit: list[AuditSink | Callable] | None = None,
     prefix: str = "/capabilities",
+    max_body_bytes: int = _MAX_BODY_BYTES,
 ):
     """Generate a FastAPI router from the registry. Raises RuntimeError when
     fastapi is not installed."""
@@ -61,6 +72,14 @@ def build_router(
 
     router = APIRouter()
 
+    def _too_large() -> ServiceError:
+        return ServiceError(
+            registry.domain,
+            ErrorSuffix.INVALID_INPUT,
+            f"request body exceeds the {max_body_bytes}-byte transport cap",
+            hint="send a smaller payload; file uploads go through the multipart transport",
+        )
+
     @router.get(prefix)
     async def list_capabilities() -> dict[str, Any]:
         return {"capabilities": [_spec(c) for c in registry.all()]}
@@ -79,7 +98,26 @@ def build_router(
         HTTP status."""
         try:
             try:
-                body = await request.json()
+                # Read with a hard byte cap instead of request.json(): the
+                # honest Content-Length pre-check rejects declared oversize
+                # before a byte is read, and the chunked read keeps a lying
+                # (small) header or a chunked body from filling memory
+                # behind it.
+                declared = request.headers.get("content-length")
+                if declared is not None:
+                    try:
+                        if int(declared) > max_body_bytes:
+                            raise _too_large()
+                    except ValueError:
+                        pass  # garbage header: fall through to the streamed cap
+                raw = bytearray()
+                async for chunk in request.stream():
+                    raw.extend(chunk)
+                    if len(raw) > max_body_bytes:
+                        raise _too_large()
+                body = json.loads(bytes(raw))
+            except ServiceError:
+                raise
             except Exception as exc:  # unparseable body is a 400, not a silent {}
                 from platform_contracts import ErrorSuffix
 

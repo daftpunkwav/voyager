@@ -10,6 +10,7 @@ sources.add_document, notes.add_asset) inside their guard chains.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from datetime import UTC
@@ -28,6 +29,13 @@ log = logging.getLogger("gateway.uploads")
 #: Hard cap of 1GB (transport-level limit; domains enforce smaller limits)
 _MAX_BYTES = 1024 * 1024 * 1024
 _CHUNK_SIZE = 1024 * 1024  # read in 1MB chunks to bound concurrent memory use
+#: Idle seconds between received body chunks before the upload is abandoned:
+#: a client that stalls mid-body would otherwise pin a connection and
+#: Starlette's spool temp file indefinitely. Generous on purpose — this is a
+#: stall detector, not a speed limit; the multipart parse consumes the whole
+#: body through the receive boundary below, so this single timeout covers the
+#: entire network-transfer phase.
+_IDLE_TIMEOUT_S = 30.0
 
 _UNSAFE_FILENAME_RE = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 
@@ -73,20 +81,28 @@ def build_upload_router(workspace: Path, limiter: RateLimiter) -> APIRouter:
         class _TooLarge(Exception):
             pass
 
+        class _Stalled(Exception):
+            pass
+
         # Enforce the byte cap at the ASGI receive boundary: request.form()
         # spools the whole body to a temp file before returning, so a lying
         # (small) Content-Length or a chunked body would otherwise fill the
         # disk before any of our own checks ran. Counting inside receive
-        # stops the spool the moment the cap is crossed. The async with below
-        # closes Starlette's spool on the success path; an aborted parse
-        # never reaches that exit, and the abandoned spool is closed by
-        # garbage collection instead.
+        # stops the spool the moment the cap is crossed; the same boundary
+        # carries the idle timeout, so a client that stops sending mid-body
+        # cannot hold the connection and its spool temp file forever. The
+        # async with below closes Starlette's spool on the success path; an
+        # aborted parse never reaches that exit, and the abandoned spool is
+        # closed by garbage collection instead.
         bytes_seen = 0
         receive = request._receive
 
         async def _capped_receive() -> Message:
             nonlocal bytes_seen
-            message = await receive()
+            try:
+                message = await asyncio.wait_for(receive(), timeout=_IDLE_TIMEOUT_S)
+            except TimeoutError:
+                raise _Stalled from None
             if message["type"] == "http.request":
                 bytes_seen += len(message.get("body", b""))
                 if bytes_seen > _MAX_BYTES:
@@ -121,6 +137,8 @@ def build_upload_router(workspace: Path, limiter: RateLimiter) -> APIRouter:
                 # Stream in chunks so concurrent uploads never load whole
                 # files in memory. The copy must stay inside the with block:
                 # exiting it closes the spooled temp file behind UploadFile.
+                # (The copy reads the local spool, not the network — the idle
+                # timeout above already covered the transfer phase.)
                 total = 0
                 try:
                     with dest.open("wb") as f:
@@ -149,6 +167,19 @@ def build_upload_router(workspace: Path, limiter: RateLimiter) -> APIRouter:
                             }
                         },
                     )
+        except _Stalled:
+            # Nothing landed (the destination is created only after a
+            # successful parse), so there is no half-written file to clean.
+            log.warning("upload stalled: no body data for %ss", _IDLE_TIMEOUT_S)
+            return JSONResponse(
+                status_code=408,
+                content={
+                    "error": {
+                        "code": "GATEWAY.UPLOAD_TIMEOUT",
+                        "message": f"upload stalled: no data received for {_IDLE_TIMEOUT_S:.0f}s",
+                    }
+                },
+            )
         except _TooLarge:
             return _too_large()
         except Exception as exc:

@@ -115,13 +115,21 @@ from agent.tools.core.result_budget import (
 from agent.tools.core.self_capability import AuditSinks
 from agent.tools.workspace.write_journal import WriteJournal
 
-#: Retention for the shared event log: streaming deltas (one row per text
-#: chunk) are an ephemeral display stream - keep them for a day so brief SSE
-#: reconnects can replay, then reclaim the rows; message-level events are
-#: never purged. Defined here because both assembly roots (standalone agent
-#: and host aggregate) construct the log, and agent.delta is an agent-owned
-#: event type.
-EVENTS_RETENTION = Retention(types=(DomainEvent.AGENT_DELTA,), max_age_s=24 * 3600.0)
+#: Retention for the shared event log: high-churn display streams are
+#: ephemeral — keep them for a day so brief SSE reconnects can replay, then
+#: reclaim the rows. agent.delta is the per-chunk streaming feed; agent.step
+#: is the per-round execution feed (durable copies live in the trajectory.db
+#: and session_index.db projections, which fold events as they arrive);
+#: task.progress holds live progress ticks only. Everything that carries
+#: durable meaning is never purged: conversation messages, task.completed /
+#: task.failed (the jobs view' final states), note.*/agent.delivery (the
+#: chat history lanes rebuild deliverable receipts from them). Defined here
+#: because both assembly roots (standalone agent and host aggregate)
+#: construct the log, and these are agent-owned event types.
+EVENTS_RETENTION = Retention(
+    types=(DomainEvent.AGENT_DELTA, DomainEvent.AGENT_STEP, DomainEvent.TASK_PROGRESS),
+    max_age_s=24 * 3600.0,
+)
 
 #: Raw LLM round log retention (days): full request/response bodies per
 #: round are the largest unbounded artifact in the runtime data directory.

@@ -149,6 +149,42 @@ class TestUpload:
         assert resp.json()["size"] == 5
 
 
+class TestUploadStall:
+    async def test_stalled_body_times_out(self, tmp_path, monkeypatch) -> None:
+        """A client that stops sending mid-body must not pin the connection
+        (and Starlette's spool temp file) forever: the receive boundary
+        carries an idle timeout and answers 408. Nothing lands on disk — the
+        destination file is only created after a successful parse."""
+        import asyncio
+
+        import gateway.uploads as uploads_mod
+        from fastapi import Request
+
+        monkeypatch.setattr(uploads_mod, "_IDLE_TIMEOUT_S", 0.05)
+        router = build_upload_router(tmp_path / "ws", RateLimiter(600, 8))
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/uploads",
+            "query_string": b"",
+            "headers": [(b"content-type", b"multipart/form-data; boundary=stalled")],
+        }
+
+        async def stall_receive():
+            await asyncio.sleep(3600)
+
+        request = Request(scope, receive=stall_receive)
+        # The upload router's only route is the endpoint under test
+        from fastapi.routing import APIRoute
+
+        route = router.routes[0]
+        assert isinstance(route, APIRoute)
+        resp = await route.endpoint(request)
+        assert resp.status_code == 408
+        assert resp.body is not None and b"UPLOAD_TIMEOUT" in resp.body
+        assert not (tmp_path / "ws" / "imports").exists()
+
+
 class TestUploadRateLimit:
     def test_rate_limited_before_body_is_read(self, tmp_path, echo_registry) -> None:
         """Exhausting the limiter returns 429 through the unified envelope

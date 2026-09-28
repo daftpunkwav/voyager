@@ -115,3 +115,49 @@ class TestRest:
         )
         assert resp.status_code == 400
         assert resp.json()["error"]["code"] == "NOTES.INVALID_INPUT"
+
+
+class TestBodyCap:
+    """The generated routes read the body under a hard byte cap: a JSON body
+    has no natural size bound and is fully buffered before the guard chain
+    runs, so an oversized call must be rejected at the transport instead of
+    filling memory."""
+
+    @staticmethod
+    def _client(max_body_bytes: int):
+        reg = Registry("notes")
+
+        @capability(reg, name="echo", description="echo")
+        def echo(text: str) -> dict:
+            return {"echo": text}
+
+        app = FastAPI()
+        app.include_router(build_router(reg, max_body_bytes=max_body_bytes))
+        return TestClient(app)
+
+    def test_oversize_body_rejected(self) -> None:
+        client = self._client(64)
+        resp = client.post("/capabilities/echo", json={"text": "x" * 200})
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body["error"]["code"] == "NOTES.INVALID_INPUT"
+        assert "exceeds" in body["error"]["message"]
+
+    def test_body_under_cap_still_works(self) -> None:
+        client = self._client(64)
+        resp = client.post("/capabilities/echo", json={"text": "hi"})
+        assert resp.status_code == 200
+        assert resp.json() == {"result": {"echo": "hi"}}
+
+    def test_garbage_content_length_tolerated(self) -> None:
+        """An unparseable Content-Length must not crash the route: the
+        ValueError is swallowed and the streamed cap remains the only limit
+        (same discipline as the gateway upload endpoint)."""
+        client = self._client(64)
+        resp = client.post(
+            "/capabilities/echo",
+            content=b'{"text": "hi"}',
+            headers={"Content-Type": "application/json", "Content-Length": "not-a-number"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"result": {"echo": "hi"}}
