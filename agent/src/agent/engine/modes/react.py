@@ -476,7 +476,14 @@ async def run_react(
                 and (limits.max_rounds <= 0 or round_n < limits.max_rounds)
                 and _should_continue_react(messages, tool_calls_used, nudged=nudged)
             ):
-                if text:
+                # Degraded harness text must not park here either: as a
+                # pending_answer it would be delivered as a normal message
+                # while bypassing turn._turn_degraded (that check reads the
+                # LAST llm step, not the round the text came from), and as a
+                # lead-in it would join the conversational flow. Both stay
+                # unset; the post-nudge round's own text (or its degraded
+                # classification at the turn layer) speaks instead.
+                if text and not reply.degraded:
                     pending_answer = text
                     lead_ins.append(text)
                 messages.append({"role": "assistant", "content": text})

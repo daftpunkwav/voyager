@@ -188,6 +188,32 @@ class TestReAct:
         assert result == "查完了,一切正常。\n\n结论:没问题。"
         assert "LLM call failed" not in result
 
+    async def test_degraded_final_round_never_becomes_pending_answer(self) -> None:
+        """A degraded round that ended without tool calls is a failure
+        placeholder, not a pre-nudge answer: parking it as pending_answer
+        would deliver it as a normal message and bypass turn._turn_degraded
+        (which reads the LAST llm step, not the round the text came from).
+        The post-nudge round's own text is delivered instead."""
+        seen = {"n": 0}
+
+        def _flaky(_messages, _tools=None):
+            seen["n"] += 1
+            if seen["n"] == 1:
+                return LLMReply(text="(LLM call failed: Timeout)", degraded=True)
+            return LLMReply(text="恢复后的结论。")
+
+        result = await run_mode(
+            Mode.REACT,
+            llm=FakeLLM(dynamic=_flaky),
+            toolbelt=_belt(),
+            messages=_msgs(),
+            limits=ModeLimits(),
+            continue_if_idle=True,
+            conversational=True,
+        )
+        assert result == "恢复后的结论。"
+        assert "LLM call failed" not in result
+
     async def test_surrender_not_prefixed_with_lead_ins(self) -> None:
         """The caps' voice ([中断]...) must stay a pure harness text: the
         warning-kind detection keys on the prefix, and a lead-in ahead of it
