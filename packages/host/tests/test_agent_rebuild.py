@@ -192,3 +192,42 @@ class TestSwitchEndpoint:
         app.include_router(build_switch_router())
         with TestClient(app, raise_server_exceptions=False) as client:
             assert client.post("/api/workspace/switch", json={"dir": "/tmp/x"}).status_code == 503
+
+    def test_switch_preserves_rate_limit_budget(self, tmp_path) -> None:
+        """The post-switch remount must reuse app.state.limiter: budget spent
+        before the switch still throttles uploads after it. Re-mounting with a
+        fresh RateLimiter would silently reset the throttle on every switch."""
+        import os
+
+        from platform_contracts import LOCAL_USER
+
+        ws_old = ROOT / "data" / f".test-ws-lim-{os.getpid()}"
+        ws_new = ROOT / "data" / f".test-ws-lim-new-{os.getpid()}"
+        ws_old.mkdir(parents=True, exist_ok=True)
+        ws_new.mkdir(parents=True, exist_ok=True)
+        try:
+            app = build(tmp_path / "data", ws_old)
+            with TestClient(app) as client:
+                limiter = app.state.limiter
+                # Spend the whole window for the local user in memory (the
+                # limiter is the 600/min default; no HTTP round trips needed).
+                spent = 0
+                try:
+                    while True:
+                        limiter.check(LOCAL_USER.id)
+                        spent += 1
+                except ServiceError:
+                    assert spent > 0  # the window really filled up
+
+                resp = client.post("/api/workspace/switch", json={"dir": str(ws_new)})
+                assert resp.status_code == 200, resp.text
+
+                # One upload after the switch: still throttled proves the
+                # remounted /api/uploads shares the exhausted limiter instead
+                # of a fresh counter (a fresh one would answer 201 here).
+                r = client.post("/api/uploads", files={"file": ("late.txt", b"x")})
+                assert r.status_code == 429
+                assert r.json()["error"]["code"] == "GATEWAY.RATE_LIMITED"
+        finally:
+            shutil.rmtree(ws_old, ignore_errors=True)
+            shutil.rmtree(ws_new, ignore_errors=True)
