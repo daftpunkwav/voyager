@@ -249,14 +249,20 @@ def _from_docx(path: Path) -> list[Section]:
         raise ExtractError(f"Failed to open DOCX: {exc}") from exc
     sections: list[Section] = []
     buf: list[str] = []
+    # Running total of len() over buf: re-summing the buffer per paragraph is
+    # O(n^2) per chapter, and on a document without any heading it is O(n^2)
+    # over the WHOLE document (the target check below never fires without a
+    # title, so buf grows unbounded).
+    buf_size = 0
     title = ""
 
     def flush() -> None:
-        nonlocal buf
+        nonlocal buf, buf_size
         text = "\n".join(buf).strip()
         if text:
             sections.append(Section(len(sections) + 1, title, 0, 0, text))
         buf = []
+        buf_size = 0
 
     for para in document.paragraphs:
         style = (para.style.name or "") if para.style is not None else ""
@@ -265,9 +271,11 @@ def _from_docx(path: Path) -> list[Section]:
             flush()
             title = para.text.strip()[:100]
             buf = [para.text]
+            buf_size = len(para.text)
         else:
             buf.append(para.text)
-        if sum(len(b) for b in buf) > _CHAPTER_TARGET and title:
+            buf_size += len(para.text)
+        if buf_size > _CHAPTER_TARGET and title:
             flush()
             title = ""
     flush()
