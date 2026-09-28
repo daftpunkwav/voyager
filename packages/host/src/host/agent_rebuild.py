@@ -60,8 +60,17 @@ log = logging.getLogger("host.agent_rebuild")
 
 SYSTEM_HOST = ActorRef(kind=ActorKind.SYSTEM, id="host.workspace")
 
-#: Route prefixes rebound to the new workspace/agent on switch.
-_SWITCH_PREFIXES = ("/api/agent", "/api/workspace", "/api/uploads")
+#: Prefix of the agent REST capability mount (gateway.mounts serves each
+#: domain under /api/<domain>; the swap re-mounts the fresh registry here).
+_AGENT_MOUNT_PREFIX = "/api/agent"
+#: Route prefixes rebound to the new workspace/agent generation on switch —
+#: exactly the routers _swap_workspace_routes re-mounts below (the agent REST
+#: mount plus the uploads and workspace pick/switch routers). Kept beside the
+#: remount calls so the removal scope and the re-mounts cannot drift silently;
+#: tests/test_agent_rebuild.py additionally locks this table against the real
+#: app (every prefix must exist pre-switch, and the switch-scoped route set
+#: must survive a switch unchanged).
+_SWITCH_PREFIXES = (_AGENT_MOUNT_PREFIX, "/api/workspace", "/api/uploads")
 
 
 def resolve_candidate_dir(raw: str, root: Path) -> Path:
@@ -238,7 +247,7 @@ def _swap_workspace_routes(
             quota=rebuilder.quota,
             audit=rebuilder.audit,
         ),
-        prefix="/api/agent",
+        prefix=_AGENT_MOUNT_PREFIX,
     )
     # Same limiter instance as the initial mount (stashed by create_app):
     # re-mounting with a fresh one would quietly reset the throttle.

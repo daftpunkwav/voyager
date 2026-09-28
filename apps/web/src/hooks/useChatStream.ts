@@ -18,6 +18,7 @@
 
 import { useEffect } from 'react';
 import { fetchChatHistory, fetchTrajectory, loadChatSessions } from '@/bridge/chatSend';
+import { consumeWorkspaceSwitchMarker } from '@/bridge/workspaceSwitch';
 import { subscribe } from '@/bridge/stream';
 import { EventType } from '@/bridge/events';
 import { safeInternalPath } from '@/utils/safeUrl';
@@ -123,12 +124,10 @@ export function useChatStream(onNavigate: (path: string) => void) {
         // bump drive workspace views to refetch (no timeline entry). The
         // broadcast reaches the initiating tab too; its own marker means the
         // "switched elsewhere" copy would be wrong, so skip the toast (the
-        // revision bump below still refreshes the views).
+        // revision bump below still refreshes the views). Both halves of the
+        // marker handshake live in bridge/workspaceSwitch.
         const marker = typeof ev.payload?.marker === 'string' ? ev.payload.marker : '';
-        const mine = marker !== '' && marker === useChatStore.getState().workspaceSwitchMarker;
-        if (mine) {
-          useChatStore.setState({ workspaceSwitchMarker: null });
-        } else {
+        if (!consumeWorkspaceSwitchMarker(marker)) {
           const dir = String(ev.payload?.workspace ?? '').trim();
           if (dir) {
             useUIStore.getState().addToast({

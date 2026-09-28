@@ -193,6 +193,42 @@ class TestSwitchEndpoint:
         with TestClient(app, raise_server_exceptions=False) as client:
             assert client.post("/api/workspace/switch", json={"dir": "/tmp/x"}).status_code == 503
 
+    def test_switch_scope_covers_exactly_the_remounted_routes(self, tmp_path) -> None:
+        """_SWITCH_PREFIXES is the removal scope of _swap_workspace_routes and
+        must match the real mount table: every prefix exists in the built app,
+        and after a switch the switch-scoped route set is identical (no lost
+        mounts, no stale survivors of the old generation)."""
+        import os
+
+        from host.agent_rebuild import _SWITCH_PREFIXES, _in_switch_scope, _route_paths
+
+        def scoped_paths(target) -> set[str]:
+            return {
+                p
+                for entry in target.router.routes
+                for p in _route_paths(entry)
+                if _in_switch_scope(p)
+            }
+
+        ws_old = ROOT / "data" / f".test-ws-parity-{os.getpid()}"
+        ws_new = ROOT / "data" / f".test-ws-parity-new-{os.getpid()}"
+        ws_old.mkdir(parents=True, exist_ok=True)
+        ws_new.mkdir(parents=True, exist_ok=True)
+        try:
+            app = build(tmp_path / "data", ws_old)
+            all_paths = {p for entry in app.router.routes for p in _route_paths(entry)}
+            for prefix in _SWITCH_PREFIXES:
+                assert any(p == prefix or p.startswith(prefix + "/") for p in all_paths), prefix
+            before = scoped_paths(app)
+            assert before
+            with TestClient(app) as client:
+                resp = client.post("/api/workspace/switch", json={"dir": str(ws_new)})
+                assert resp.status_code == 200, resp.text
+            assert scoped_paths(app) == before
+        finally:
+            shutil.rmtree(ws_old, ignore_errors=True)
+            shutil.rmtree(ws_new, ignore_errors=True)
+
     def test_switch_preserves_rate_limit_budget(self, tmp_path) -> None:
         """The post-switch remount must reuse app.state.limiter: budget spent
         before the switch still throttles uploads after it. Re-mounting with a

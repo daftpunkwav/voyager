@@ -57,11 +57,11 @@ export interface SwitchResult {
  *  new root, persists agent.workspace.dir and rebinds workspace routes.
  *  `marker` (optional request id) is echoed on the workspace.switched event
  *  so the initiating tab can recognize its own broadcast; omitted from the
- *  wire when unset. Caller contract: a surface whose tab subscribes to SSE
- *  (useChatStream is mounted, e.g. via FloatingChat) must generate a marker
- *  and stash it in chatStore.workspaceSwitchMarker BEFORE calling — the
- *  broadcast races the HTTP response, and an unstashed marker means the
- *  initiating tab sees the misleading "switched elsewhere" toast. Throws the
+ *  wire when unset. SSE-subscribed tabs must not call this directly: the
+ *  marker handshake (stash before POST, recognize the echo) lives in
+ *  bridge/workspaceSwitch — its switchWorkspaceWithMarker is the only caller
+ *  that should pass a marker, because an unstashed marker makes the
+ *  initiating tab see the misleading "switched elsewhere" toast. Throws the
  *  backend message on failure (validation / rebuild errors). */
 export async function switchWorkspace(dir: string, marker = ''): Promise<SwitchResult> {
   const resp = await fetch('/api/workspace/switch', {
