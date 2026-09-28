@@ -37,11 +37,29 @@ def deps(tmp_path):
 
 
 class TestCapabilities:
-    async def test_navigate(self, deps) -> None:
-        result = await execute(registry, "navigate", USER_CTX, {"url": "https://example.com"})
-        assert result["ok"] is True
+    async def test_commands_refused_until_ipc_lands(self, deps) -> None:
+        """The desktop/browser-host IPC channel is not wired yet: every command
+        is refused with BROWSER.UNAVAILABLE. Fabricating ok=True with
+        placeholder content would let callers mistake a no-op for a real
+        navigation/click/read."""
+        from platform_contracts import ErrorSuffix, ServiceError
+
+        commands = [
+            ("navigate", {"url": "https://example.com"}),
+            ("click", {"session_id": "s1", "selector": "#btn"}),
+            ("type", {"session_id": "s1", "selector": "#box", "text": "hi"}),
+            ("read", {"session_id": "s1"}),
+            ("screenshot", {"session_id": "s1"}),
+        ]
+        for name, inputs in commands:
+            with pytest.raises(ServiceError) as exc:
+                await execute(registry, name, USER_CTX, inputs)
+            assert exc.value.body.code == f"BROWSER.{ErrorSuffix.UNAVAILABLE.value}"
+            assert "not wired" in exc.value.body.message
 
     async def test_domain_block(self, deps) -> None:
+        """The allowlist still rejects before the unavailable refusal: the
+        FORBIDDEN contract on navigate holds regardless of host wiring."""
         settings_store = deps.state.settings_store
         await settings_store.set("browser.allowed_domains", ["github.com"], actor=USER_CTX.actor)
         with pytest.raises(Exception) as exc:

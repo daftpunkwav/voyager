@@ -8,7 +8,7 @@ Implementation of the browser domain: a capability registry that dispatches five
 | --- | --- |
 | `__init__.py` | Package docstring (capability registry, REST entry point, MCP server). |
 | `capabilities.py` | Capability registry exposing `navigate` / `click` / `type` / `read` / `screenshot`; touches session metadata on every command and passes settings (headless mode, allowed domains) to the host adapter — plus the workspace directory on `screenshot`. |
-| `host.py` | Host adapter: validates commands (domain allowlist on `navigate`, `FORBIDDEN` otherwise) and returns a uniform `BrowserResult`; a skeleton that records calls and returns placeholder results — the docstring places the real browser in an external `desktop/browser-host` process. |
+| `host.py` | Host adapter: validates commands (domain allowlist on `navigate`, `FORBIDDEN` otherwise) and returns a uniform `BrowserResult`; until the `desktop/browser-host` IPC channel is wired, every command is refused with `BROWSER.UNAVAILABLE` instead of returning placeholder content. |
 | `settings.py` | `browser.*` setting definitions: `browser.headless` (default true) and `browser.allowed_domains` (empty = inherit agent network permissions). |
 | `store.py` | `BrowserStore`: SQLite `sessions` table holding session metadata only (id, url, timestamps) for debugging and auditing, not business data. |
 | `wiring.py` | `wire(data_dir, workspace, ...) -> Wiring` shared by standalone and aggregate deployment: registers `DEFS`, creates the store, injects `Deps`, returns registry / probe / close handles. |
