@@ -410,11 +410,12 @@ class TestExactNodeLookupAndStaleRecovery:
         # crash leftover past the cap: failed, not requeued forever
         job = queue.next()
         assert job is not None
-        queue._conn.execute("UPDATE index_jobs SET attempts = 5 WHERE id = ?", (job["id"],))
+        exhausted_id, other_id = job["id"], (j2 if job["id"] == j1 else j1)
+        queue._conn.execute("UPDATE index_jobs SET attempts = 5 WHERE id = ?", (exhausted_id,))
         queue._conn.commit()
         queue.recover_stale_running(max_attempts=3)
-        row1 = queue.get(j1)
-        row2 = queue.get(j2)
-        assert row1 is not None and row2 is not None
-        statuses = {row1["status"], row2["status"]}
-        assert "failed" in statuses or all(s in ("queued", "failed") for s in statuses)
+        exhausted_row = queue.get(exhausted_id)
+        other_row = queue.get(other_id)
+        assert exhausted_row is not None and other_row is not None
+        assert exhausted_row["status"] == "failed"  # past the cap: failed, never requeued
+        assert other_row["status"] == "queued"  # still under the cap: requeued
