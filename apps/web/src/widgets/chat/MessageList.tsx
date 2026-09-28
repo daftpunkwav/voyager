@@ -329,6 +329,39 @@ export function MessageList() {
   );
 }
 
+/** Harness-voice note card: degraded provider text (error) and turn wind-downs
+ *  ([中断]/[预算] — the caps spoke, not the model; warning) must read as
+ *  system output, never as a Lucien answer. Tinted card, alert icon, no
+ *  avatar, no action bar, no rating. */
+function SystemNote({ tone, content }: { tone: 'error' | 'warning'; content: string }) {
+  return (
+    <div
+      className={`chat-sysnote chat-sysnote--${tone}`}
+      role={tone === 'error' ? 'alert' : 'status'}
+    >
+      <svg
+        className="chat-sysnote__icon"
+        width={15}
+        height={15}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+        <line x1="12" y1="9" x2="12" y2="13" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+      <div className="chat-sysnote__body chat-md">
+        <ChatMarkdown content={content} />
+      </div>
+    </div>
+  );
+}
+
 function Bubble({
   msg,
   subject,
@@ -345,7 +378,13 @@ function Bubble({
   if (msg.role === 'system') {
     return <div className="chat-system">{msg.content}</div>;
   }
-  const error = msg.role === 'agent' && msg.kind === 'error';
+  // Harness voice, not the agent speaking: degraded LLM text (provider
+  // failures) is an error, wind-down notices ([中断]/[预算] — the caps spoke)
+  // are a warning. Both render as system note cards so they can never be
+  // mistaken for Lucien's answer.
+  if (msg.role === 'agent' && (msg.kind === 'warning' || msg.kind === 'error')) {
+    return <SystemNote tone={msg.kind === 'error' ? 'error' : 'warning'} content={msg.content} />;
+  }
   // Background-task notifications ([done]/[failed]/...) are not conversation
   // turns: light notice styling, no action bar / rating / trace attachment.
   if (msg.role === 'agent' && msg.kind === 'notice') {
@@ -358,9 +397,7 @@ function Bubble({
     );
   }
   const cls =
-    msg.role === 'user'
-      ? 'chat-bubble chat-bubble--user'
-      : `chat-bubble chat-bubble--agent${error ? ' chat-bubble--error' : ''}`;
+    msg.role === 'user' ? 'chat-bubble chat-bubble--user' : 'chat-bubble chat-bubble--agent';
 
   const onCopy = async () => {
     try {
@@ -391,7 +428,7 @@ function Bubble({
           <span className="chat-speaker__name">{speakerName}</span>
         </div>
       ) : null}
-      <div className={cls} role={error ? 'alert' : undefined}>
+      <div className={cls}>
         <div className="chat-md">
           <ChatMarkdown content={msg.content} />
         </div>
@@ -401,13 +438,13 @@ function Bubble({
           {copied ? t('chat:msg.copied') : t('chat:msg.copy')}
         </button>
         <MessageForkButton msg={msg} />
-        {msg.role === 'agent' && !error ? (
+        {msg.role === 'agent' ? (
           <button type="button" aria-expanded={rateOpen} onClick={() => setRateOpen(!rateOpen)}>
             {t('chat:rate.open')}
           </button>
         ) : null}
       </div>
-      {msg.role === 'agent' && !error && rateOpen ? (
+      {msg.role === 'agent' && rateOpen ? (
         <RateBar subject={subject} onDone={() => setRateOpen(false)} />
       ) : null}
     </div>

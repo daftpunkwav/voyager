@@ -20,7 +20,7 @@ from platform_contracts import DomainEvent, RuntimeEvent
 
 from agent.context.builder import TURN_CONTEXT_HEADER
 from agent.context.editor import SUMMARY_MARK
-from agent.engine.modes import Mode, ModeLimits, run_mode
+from agent.engine.modes import ABORT_PREFIXES, Mode, ModeLimits, run_mode
 from agent.personas import PERSONAS, Persona, resolve_persona
 from agent.runtime.current import current_instance
 from agent.runtime.state import RunStatus
@@ -465,13 +465,23 @@ async def _run_turn(
         if inst.task.conversational:
             inst.state.status = RunStatus.WAITING_INPUT
             if inst.reply_sink is not None:
-                # Degraded LLM text (quota / provider failure placeholders) must
-                # not masquerade as a normal answer: the latest llm step carries
-                # the degraded flag, so read it back instead of sniffing prefixes.
+                # Three delivery kinds, decided by what the turn actually was:
+                # degraded LLM text (quota / provider failure placeholders) is
+                # an error, a harness wind-down ([中断]/[预算]/[无工具可用] —
+                # the caps spoke, not the model) is a system warning, and
+                # everything else is a normal answer. The latest llm step
+                # carries the degraded flag, so read it back instead of
+                # sniffing prefixes for that one.
+                if _turn_degraded(inst):
+                    kind = "error"
+                elif result.startswith(ABORT_PREFIXES):
+                    kind = "warning"
+                else:
+                    kind = "message"
                 try:
                     await inst.reply_sink(
                         result,
-                        "error" if _turn_degraded(inst) else "message",
+                        kind,
                         speaker=view.key if view is not None else "",
                     )
                 except Exception:  # best effort: the turn result is already in

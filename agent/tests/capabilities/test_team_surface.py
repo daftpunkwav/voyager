@@ -283,8 +283,8 @@ class TestTeamSurface:
         )
         tight = await app.master.dispatch_task("run one", persona="tight")
         loose = await app.master.dispatch_task("run one", persona="loose")
-        assert tight.task.limits.max_rounds == 5  # global 20, custom 5 -> 5
-        assert loose.task.limits.max_rounds == 20  # custom 99 -> global 20
+        assert tight.task.limits.max_rounds == 5  # global 50, custom 5 -> 5
+        assert loose.task.limits.max_rounds == 50  # custom 99 -> global 50
 
     async def test_dispatch_custom_network_copy(self, app) -> None:
         """Network copy semantics: global whitelist + custom all -> the instance still decides with whitelist

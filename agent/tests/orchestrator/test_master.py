@@ -170,21 +170,21 @@ class TestLimitsFromSettings:
         assert (limits.max_rounds, limits.max_tool_calls) == (7, 9)
 
     def test_override_stricter_wins_looser_capped(self) -> None:
-        s = _FakeSettings({"agent.rounds.max": 20, "agent.rounds.tool_max": 40})
+        s = _FakeSettings({"agent.rounds.max": 50, "agent.rounds.tool_max": 100})
         assert limits_from_settings(s, max_rounds=5).max_rounds == 5
         assert (
-            limits_from_settings(s, max_rounds=99).max_rounds == 20
+            limits_from_settings(s, max_rounds=99).max_rounds == 50
         )  # looser than global -> clamped back
 
     def test_invalid_override_treated_as_unset(self) -> None:
-        s = _FakeSettings({"agent.rounds.max": 20, "agent.rounds.tool_max": 40})
-        assert limits_from_settings(s, max_rounds=0).max_rounds == 20
-        assert limits_from_settings(s, max_rounds=-3).max_rounds == 20
-        assert limits_from_settings(s, max_tool_calls=None).max_tool_calls == 40
+        s = _FakeSettings({"agent.rounds.max": 50, "agent.rounds.tool_max": 100})
+        assert limits_from_settings(s, max_rounds=0).max_rounds == 50
+        assert limits_from_settings(s, max_rounds=-3).max_rounds == 50
+        assert limits_from_settings(s, max_tool_calls=None).max_tool_calls == 100
 
     def test_missing_global_falls_back_to_dataclass_default(self) -> None:
         limits = limits_from_settings(_FakeSettings({}))
-        assert (limits.max_rounds, limits.max_tool_calls) == (20, 40)
+        assert (limits.max_rounds, limits.max_tool_calls) == (50, 100)
 
 
 class TestChatLimitsRefresh:
@@ -194,7 +194,7 @@ class TestChatLimitsRefresh:
         await app.master.handle_user_message("hello")
         await settle(app)
         chat = app.master.chat
-        assert chat is not None and chat.task.limits.max_rounds == 20
+        assert chat is not None and chat.task.limits.max_rounds == 50
         await app.settings.set("agent.rounds.max", 5, LOCAL_USER)
         await app.master.handle_user_message("continue")
         await settle(app)
@@ -263,19 +263,19 @@ class TestLimitsDirtyGlobalsAndTokens:
     def test_dirty_global_values_fall_back_to_defaults(self) -> None:
         s = _FakeSettings({"agent.rounds.max": "not-a-number", "agent.rounds.tool_max": ""})
         limits = limits_from_settings(s)
-        assert (limits.max_rounds, limits.max_tool_calls) == (20, 40)
+        assert (limits.max_rounds, limits.max_tool_calls) == (50, 100)
 
     def test_non_positive_global_values_fall_back_to_defaults(self) -> None:
         s = _FakeSettings({"agent.rounds.max": 0, "agent.rounds.tool_max": -1})
         limits = limits_from_settings(s)
-        assert (limits.max_rounds, limits.max_tool_calls) == (20, 40)
+        assert (limits.max_rounds, limits.max_tool_calls) == (50, 100)
 
     def test_stricter_override_beats_dirty_global_default(self) -> None:
         """The global is dirty (fallback 20); a dispatch tier of 5 stays 5,
         one of 99 is clamped back to the fallback."""
         s = _FakeSettings({})
         assert limits_from_settings(s, max_rounds=5).max_rounds == 5
-        assert limits_from_settings(s, max_rounds=99).max_rounds == 20
+        assert limits_from_settings(s, max_rounds=99).max_rounds == 50
 
     def test_token_budget_global_only(self) -> None:
         s = _FakeSettings({"agent.rounds.max_tokens": 8000})

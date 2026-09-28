@@ -44,8 +44,11 @@ class Mode(str, Enum):
 
 @dataclass(frozen=True)
 class ModeLimits:
-    max_rounds: int = 20
-    max_tool_calls: int = 40
+    #: Floor when settings are unconfigured (agent.rounds.max / tool_max
+    #: mirror these defaults); generous enough for long autonomous runs —
+    #: context growth is the compaction governor's job, not the round cap's.
+    max_rounds: int = 50
+    max_tool_calls: int = 100
     #: Per-invocation token budget (input+output); 0 = unlimited. Hitting it
     #: winds the mode down with a partial-result report, like the round cap.
     max_tokens: int = 0

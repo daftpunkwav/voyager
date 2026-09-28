@@ -7,7 +7,7 @@ import asyncio
 
 from agent.build import build_agent
 from agent.engine.instance import SubagentInstance, TaskBook
-from agent.llm import FakeLLM, LLMReply
+from agent.llm import FakeLLM, LLMReply, ToolCall
 from agent.policy import PolicyEngine
 from agent.runtime.state import RunState, RunStatus
 from agent.tools import Toolbelt
@@ -66,6 +66,37 @@ def test_normal_turn_marked_message(tmp_path) -> None:
         asyncio.run(_drive(app, "hi"))
         kinds = _message_kinds(app)
         assert kinds and kinds[-1] == "message"
+    finally:
+        app.close()
+
+
+def test_rounds_cap_winddown_marked_warning(tmp_path) -> None:
+    """A rounds-cap wind-down ([中断] ...) is the caps speaking, not the
+    model: the message carries kind=warning so the UI renders it as a system
+    note instead of a Lucien answer bubble."""
+
+    def _tool_loop(_messages, _tools=None):
+        # A tool call every round: the loop only ends at the rounds cap
+        return LLMReply(
+            tool_calls=(ToolCall(id="t1", name="read", arguments={"path": "x"}),),
+        )
+
+    app = build_agent(
+        data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM(dynamic=_tool_loop)
+    )
+    try:
+
+        async def _drive_capped() -> None:
+            from platform_contracts import LOCAL_USER
+
+            await app.settings.set("agent.rounds.max", 1, LOCAL_USER)
+            await _drive(app, "go")
+
+        asyncio.run(_drive_capped())
+        kinds = _message_kinds(app)
+        assert kinds and kinds[-1] == "warning"
+        messages = [e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_MESSAGE])]
+        assert messages[-1]["content"].startswith("[中断]")
     finally:
         app.close()
 

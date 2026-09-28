@@ -42,7 +42,7 @@ import { EventType } from '@/bridge/events';
 
 /** Vocabulary of the backend agent.message `kind` field (agent/master:
  *  default "message", turn failures "error", task receipts "notice"). */
-export type ChatMessageKind = 'message' | 'error' | 'notice';
+export type ChatMessageKind = 'message' | 'error' | 'notice' | 'warning';
 
 /** agent.delivery payload -> a dispatched teammate's structured delivery:
  *  the full answer (never truncated), status, and the run pointer for the

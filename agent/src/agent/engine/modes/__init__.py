@@ -14,6 +14,7 @@ from agent.engine.modes import (  # noqa: F401  # imported for runner registrati
     tot,
 )
 from agent.engine.modes.base import (
+    ABORT_PREFIXES,
     DeltaCb,
     EventCb,
     Mode,
@@ -22,4 +23,4 @@ from agent.engine.modes.base import (
     run_mode,
 )
 
-__all__ = ["DeltaCb", "EventCb", "Mode", "ModeLimits", "StepCb", "run_mode"]
+__all__ = ["ABORT_PREFIXES", "DeltaCb", "EventCb", "Mode", "ModeLimits", "StepCb", "run_mode"]
