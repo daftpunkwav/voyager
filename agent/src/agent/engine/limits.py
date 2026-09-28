@@ -1,8 +1,8 @@
 """Round-limit assembly: settings -> ModeLimits.
 
 Same domain as ModeLimits; overrides can only be stricter than the global
-default (min wins), and a dirty/unset global value falls back to the
-built-in defaults.
+default, and 0 / unset means unlimited (same sentinel as
+agent.rounds.max_tokens) — a long task may run as long as its rounds do.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 from agent.contracts import SettingsReader
 from agent.engine.modes import ModeLimits
 
-#: Built-in defaults (the floor when settings are unconfigured)
+#: Built-in defaults (the floor when settings are unconfigured): no cap.
 DEFAULT_LIMITS = ModeLimits()
 
 
@@ -21,25 +21,23 @@ def limits_from_settings(
     max_tool_calls: int | None = None,
     max_tokens: int | None = None,
 ) -> ModeLimits:
-    """Assemble round limits: global defaults are read fresh from settings each
-    call; invalid/non-positive overrides count as unset; the effective value is
-    min(override, global) - a dispatch tier can only be stricter than global."""
-    defaults = (DEFAULT_LIMITS.max_rounds, DEFAULT_LIMITS.max_tool_calls)
+    """Assemble round limits: globals read fresh from settings each call;
+    0 / negative / unset means unlimited (never falls back to a built-in cap);
+    a positive dispatch override tightens (min) but never introduces a cap
+    when the global is unlimited."""
 
-    def _cap(override: int | None, key: str, fallback: int) -> int:
+    def _cap(override: int | None, key: str) -> int:
         try:
             global_v = int(settings.get(key))
         except (TypeError, ValueError):
             global_v = 0
-        if global_v <= 0:
-            global_v = fallback
+        global_v = max(0, global_v)
         if override is None or override <= 0:
             return global_v
-        return min(override, global_v)
+        return min(override, global_v) if global_v > 0 else override
 
     def _tokens() -> int:
-        """Token budget: only a positive global counts; a dispatch override
-        can only tighten it. 0 = unlimited."""
+        """Token budget: only a positive global counts; 0 = unlimited."""
         try:
             global_v = int(settings.get("agent.rounds.max_tokens"))
         except (TypeError, ValueError):
@@ -49,8 +47,8 @@ def limits_from_settings(
         return max(0, global_v)
 
     return ModeLimits(
-        max_rounds=_cap(max_rounds, "agent.rounds.max", defaults[0]),
-        max_tool_calls=_cap(max_tool_calls, "agent.rounds.tool_max", defaults[1]),
+        max_rounds=_cap(max_rounds, "agent.rounds.max"),
+        max_tool_calls=_cap(max_tool_calls, "agent.rounds.tool_max"),
         max_tokens=_tokens(),
     )
 

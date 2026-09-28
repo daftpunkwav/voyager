@@ -174,7 +174,12 @@ class TestLimitsFromSettings:
         assert limits_from_settings(s, max_rounds=5).max_rounds == 5
         assert (
             limits_from_settings(s, max_rounds=99).max_rounds == 50
-        )  # looser than global -> clamped back
+        )  # looser than a finite global -> clamped back
+
+    def test_unlimited_global_lets_a_finite_override_apply(self) -> None:
+        s = _FakeSettings({})
+        assert limits_from_settings(s, max_rounds=5).max_rounds == 5
+        assert limits_from_settings(s, max_tool_calls=9).max_tool_calls == 9
 
     def test_invalid_override_treated_as_unset(self) -> None:
         s = _FakeSettings({"agent.rounds.max": 50, "agent.rounds.tool_max": 100})
@@ -182,9 +187,14 @@ class TestLimitsFromSettings:
         assert limits_from_settings(s, max_rounds=-3).max_rounds == 50
         assert limits_from_settings(s, max_tool_calls=None).max_tool_calls == 100
 
-    def test_missing_global_falls_back_to_dataclass_default(self) -> None:
+    def test_missing_or_zero_global_means_unlimited(self) -> None:
+        """0 / unset = unlimited (the max_tokens sentinel): no built-in cap
+        kicks in, so a task may run as long as its rounds do."""
         limits = limits_from_settings(_FakeSettings({}))
-        assert (limits.max_rounds, limits.max_tool_calls) == (50, 100)
+        assert (limits.max_rounds, limits.max_tool_calls) == (0, 0)
+        zero = _FakeSettings({"agent.rounds.max": 0, "agent.rounds.tool_max": 0})
+        assert (zero_limits := limits_from_settings(zero)).max_rounds == 0
+        assert zero_limits.max_tool_calls == 0
 
 
 class TestChatLimitsRefresh:
@@ -194,7 +204,7 @@ class TestChatLimitsRefresh:
         await app.master.handle_user_message("hello")
         await settle(app)
         chat = app.master.chat
-        assert chat is not None and chat.task.limits.max_rounds == 50
+        assert chat is not None and chat.task.limits.max_rounds == 0  # default: unlimited
         await app.settings.set("agent.rounds.max", 5, LOCAL_USER)
         await app.master.handle_user_message("continue")
         await settle(app)
@@ -257,25 +267,25 @@ class TestHistoryBound:
 
 
 class TestLimitsDirtyGlobalsAndTokens:
-    """Dirty global settings fall back to the defaults; the token budget only
-    tightens and 0 means unlimited."""
+    """Dirty global settings read as unset = unlimited (no hidden built-in
+    cap); the token budget only tightens and 0 means unlimited."""
 
-    def test_dirty_global_values_fall_back_to_defaults(self) -> None:
+    def test_dirty_global_values_read_as_unlimited(self) -> None:
         s = _FakeSettings({"agent.rounds.max": "not-a-number", "agent.rounds.tool_max": ""})
         limits = limits_from_settings(s)
-        assert (limits.max_rounds, limits.max_tool_calls) == (50, 100)
+        assert (limits.max_rounds, limits.max_tool_calls) == (0, 0)
 
-    def test_non_positive_global_values_fall_back_to_defaults(self) -> None:
+    def test_non_positive_global_values_read_as_unlimited(self) -> None:
         s = _FakeSettings({"agent.rounds.max": 0, "agent.rounds.tool_max": -1})
         limits = limits_from_settings(s)
-        assert (limits.max_rounds, limits.max_tool_calls) == (50, 100)
+        assert (limits.max_rounds, limits.max_tool_calls) == (0, 0)
 
-    def test_stricter_override_beats_dirty_global_default(self) -> None:
-        """The global is dirty (fallback 20); a dispatch tier of 5 stays 5,
-        one of 99 is clamped back to the fallback."""
+    def test_finite_override_applies_over_dirty_global(self) -> None:
+        """The global is dirty (unlimited); a dispatch tier of 5 stays 5, one
+        of 99 stays 99 — an override may tighten, never loosen into a cap."""
         s = _FakeSettings({})
         assert limits_from_settings(s, max_rounds=5).max_rounds == 5
-        assert limits_from_settings(s, max_rounds=99).max_rounds == 50
+        assert limits_from_settings(s, max_rounds=99).max_rounds == 99
 
     def test_token_budget_global_only(self) -> None:
         s = _FakeSettings({"agent.rounds.max_tokens": 8000})

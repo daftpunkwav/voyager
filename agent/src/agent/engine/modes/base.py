@@ -44,11 +44,12 @@ class Mode(str, Enum):
 
 @dataclass(frozen=True)
 class ModeLimits:
-    #: Floor when settings are unconfigured (agent.rounds.max / tool_max
-    #: mirror these defaults); generous enough for long autonomous runs —
-    #: context growth is the compaction governor's job, not the round cap's.
-    max_rounds: int = 50
-    max_tool_calls: int = 100
+    #: 0 = unlimited (rounds and tool calls alike, mirroring the
+    #: agent.rounds.* settings' sentinel): a task may run as long as its
+    #: rounds do — context growth is the compaction governor's job, runaway
+    #: repetition is the loop detector's.
+    max_rounds: int = 0
+    max_tool_calls: int = 0
     #: Per-invocation token budget (input+output); 0 = unlimited. Hitting it
     #: winds the mode down with a partial-result report, like the round cap.
     max_tokens: int = 0
@@ -197,12 +198,22 @@ class ModeBudget:
         """A per-phase ModeLimits bounded by what the invocation has left.
 
         rounds is the phase's own preference (e.g. a small per-step cap);
-        the effective value never exceeds the invocation remainder. Token
-        caps are deliberately NOT propagated: a slice would read the
-        invocation remainder as its own fresh cap and abort a single
-        oversized-but-legitimate round; the invocation token budget is
-        enforced by the mode between phases (over_token_budget) instead.
+        with a finite invocation cap the effective value never exceeds the
+        remainder; with an unlimited cap (0) the phase preference IS the cap,
+        and a non-positive preference is unlimited too. Token caps are
+        deliberately NOT propagated: a slice would read the invocation
+        remainder as its own fresh cap and abort a single oversized-but-
+        legitimate round; the invocation token budget is enforced by the mode
+        between phases (over_token_budget) instead.
         """
+        if self._limits.max_rounds > 0:
+            # Finite invocation cap: the slice shrinks toward the remainder
+            # and always keeps at least one round (phases gate on
+            # rounds_exhausted, so the invocation cap is still honored).
+            round_room = min(rounds, max(1, self._limits.max_rounds - self.rounds_used))
+            slice_rounds = max(1, round_room)
+        else:
+            slice_rounds = max(0, rounds)
         if self._limits.max_tool_calls > 0:
             tool_room = max(0, self._limits.max_tool_calls - self.tool_calls_used)
             if tools is not None:
@@ -211,9 +222,8 @@ class ModeBudget:
             # Unlimited invocation cap: a slice is bounded only by its own
             # preference (a literal 0 would read as a zero-call cap)
             tool_room = tools if tools is not None else DEFAULT_TOOL_ROOM
-        round_room = min(rounds, max(1, self._limits.max_rounds - self.rounds_used))
         return ModeLimits(
-            max_rounds=max(1, round_room),
+            max_rounds=slice_rounds,
             max_tool_calls=max(0, tool_room),
             max_tokens=0,
         )

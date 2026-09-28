@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 from agent.engine import Mode, ModeLimits, run_mode
+from agent.engine.modes.base import DEFAULT_TOOL_ROOM, ModeBudget
 from agent.llm import FakeLLM, LLMReply, ToolCall, Usage
 from agent.policy import PolicyEngine
 from agent.runtime.events import RuntimeEvent
@@ -974,3 +975,26 @@ class TestTokenBudgetAccountingOrder:
         assert "step:round-2" in timeline
         assert "raw:2" in timeline
         assert timeline.index("event:2") < len(timeline) - 1  # surrender comes after
+
+
+class TestBudgetSlice:
+    """ModeBudget.slice under the 0 = unlimited sentinel: an unlimited
+    invocation lets the phase preference (or unlimited) through; a finite
+    invocation clamps to the remainder exactly as before."""
+
+    def test_finite_invocation_clamps_to_remainder(self) -> None:
+        budget = ModeBudget(ModeLimits(max_rounds=10, max_tool_calls=20))
+        s = budget.slice(rounds=4, tools=5)
+        assert (s.max_rounds, s.max_tool_calls) == (4, 5)
+        assert budget.slice(rounds=99).max_rounds == 10  # clamped to the cap
+        budget.add_rounds(9)
+        assert budget.slice(rounds=4).max_rounds == 1  # shrinks toward one
+
+    def test_unlimited_invocation_passes_preference_through(self) -> None:
+        budget = ModeBudget(ModeLimits())  # 0/0 = unlimited
+        s = budget.slice(rounds=4, tools=10)
+        assert (s.max_rounds, s.max_tool_calls) == (4, 10)
+        # a non-positive phase preference reads as unlimited too
+        assert budget.slice(rounds=0).max_rounds == 0
+        # no explicit tool preference -> the DEFAULT_TOOL_ROOM fallback
+        assert budget.slice(rounds=4).max_tool_calls == DEFAULT_TOOL_ROOM

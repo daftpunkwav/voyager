@@ -71,6 +71,12 @@ async def run_reflexion(
     budget = ModeBudget(limits)
     belt = CountingToolbelt(toolbelt) if toolbelt is not None else None
     draft = ""
+    # Per-attempt round share: an unlimited invocation (0) passes 0 through —
+    # run_step's slice reads a non-positive preference as unlimited too — so
+    # attempts are uncapped exactly when the invocation is.
+    attempt_rounds = (
+        max(1, limits.max_rounds // REFLEXION_MAX_ATTEMPTS) if limits.max_rounds > 0 else 0
+    )
     for attempt in range(1, REFLEXION_MAX_ATTEMPTS + 1):
         # Attempt: one bounded ReAct slice on the shared transcript (the
         # previous attempt's transcript and lessons stay visible)
@@ -86,7 +92,7 @@ async def run_reflexion(
             deadline=deadline,
             budget=budget,
             belt=belt,
-            rounds=max(1, limits.max_rounds // REFLEXION_MAX_ATTEMPTS),
+            rounds=attempt_rounds,
         )
         await on_step(
             "llm",

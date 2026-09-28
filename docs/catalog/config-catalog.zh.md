@@ -10,8 +10,8 @@
 
 | 键 | 类型 | 默认 |
 |---|---|---|
-| `agent.rounds.max` | INT | 50 |
-| `agent.rounds.tool_max` | INT | 100 |
+| `agent.rounds.max` | INT | 0(不限) |
+| `agent.rounds.tool_max` | INT | 0(不限) |
 | `agent.rounds.max_tokens` | INT | 0(不限) |
 | `agent.execution.tool_deadline_s` | FLOAT | 90 |
 | `agent.execution.round_deadline_s` | FLOAT | 240 |

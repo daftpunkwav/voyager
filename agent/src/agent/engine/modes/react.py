@@ -19,6 +19,7 @@ completion and tool call; the step trail (on_step) stays the UI contract.
 from __future__ import annotations
 
 import asyncio
+import itertools
 import re
 import time
 from typing import Any
@@ -235,7 +236,10 @@ async def run_react(
     # overflow means even the compressed transcript cannot fit and the turn
     # ends with an actionable message instead of a raw provider error
     overflow_retried = False
-    for round_n in range(1, limits.max_rounds + 1):
+    # max_rounds <= 0 = unlimited: the loop only ends through a Final Answer,
+    # a surrender (tool cap / token budget), an abort, or loop detection
+    rounds_iter = itertools.count(1) if limits.max_rounds <= 0 else range(1, limits.max_rounds + 1)
+    for round_n in rounds_iter:
         specs = toolbelt.specs() if toolbelt is not None else None
         if governor is not None:
             report = await governor.enforce(messages)
@@ -434,7 +438,7 @@ async def run_react(
             # an ending: write the text back as a Thought and complete again.
             if (
                 continue_if_idle
-                and round_n < limits.max_rounds
+                and (limits.max_rounds <= 0 or round_n < limits.max_rounds)
                 and _should_continue_react(messages, tool_calls_used, nudged=nudged)
             ):
                 if text:
@@ -459,7 +463,7 @@ async def run_react(
         # so "call without result" never triggers an endpoint 400
         truncated = False
         pending = list(reply.tool_calls)
-        if tool_calls_used + len(pending) > limits.max_tool_calls:
+        if limits.max_tool_calls > 0 and tool_calls_used + len(pending) > limits.max_tool_calls:
             pending = pending[: limits.max_tool_calls - tool_calls_used]
             truncated = True
         if not pending:
