@@ -394,6 +394,31 @@ async def run_react(
             # Echo the calls back with error results so the assistant/tool
             # pairing holds, and let the model re-issue them whole.
             notice = P.modes.react.truncated_calls
+            # Skipped calls still count toward loop detection: a model stuck
+            # re-issuing the same oversized call is exactly the repetition the
+            # detector exists for (rejected calls count), and this retry
+            # continue is the one path the round budget no longer bounds now
+            # that max_rounds 0 = unlimited. Same two-level consequence as the
+            # executed path: the first trip nudges, the next one aborts.
+            skipped_trip: ToolCall | None = None
+            skipped_reminder: str | None = None
+            for call in reply.tool_calls:
+                if loops.record(call.name, call.arguments):
+                    skipped_trip = call
+                    break
+            if skipped_trip is not None:
+                skipped_reminder = advisory.on_trip(
+                    tool=skipped_trip.name, threshold=loops.threshold, window=loops.window
+                )
+                if skipped_reminder is None:
+                    text = render(
+                        P.modes.loop_abort,
+                        tool=skipped_trip.name,
+                        window=loops.window,
+                        threshold=loops.threshold,
+                    )
+                    await _surrender_step(on_step, "loop_abort", text)
+                    return text
             truncated_entry: dict[str, Any] = {
                 "role": "assistant",
                 "content": reply.text or "",
@@ -425,6 +450,9 @@ async def run_react(
                 notice[:120],
                 {"truncated": True, "skipped": [call.name for call in reply.tool_calls]},
             )
+            if skipped_reminder is not None:
+                messages.append({"role": "user", "content": skipped_reminder})
+                await on_step("llm", "loop-advisory", skipped_reminder[:120], {"advisory": True})
             continue
         if reply.final:
             text = reply.text or ""

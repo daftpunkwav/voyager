@@ -972,6 +972,39 @@ class TestTruncatedToolCalls:
         assert "[未执行]" in messages[2]["content"]
         assert len(llm.calls) == 2  # the loop continued so the model could re-issue
 
+    async def test_repeated_truncated_calls_cannot_spin_unlimited(self) -> None:
+        """Skipped truncated calls count toward loop detection: a model stuck
+        re-issuing the same oversized call trips the two-level guard and ends
+        the turn instead of spinning forever under max_rounds 0 = unlimited."""
+        llm = FakeLLM(
+            [
+                LLMReply(
+                    tool_calls=(ToolCall(str(i), "echo_tool", {"x": "a"}),),
+                    meta={"finish_reason": "length"},
+                )
+                for i in range(1, 5)
+            ]
+        )
+        executed: list[str] = []
+
+        async def echo_tool(x: str = "") -> str:
+            executed.append(x)
+            return f"echo:{x}"
+
+        belt = Toolbelt(
+            {"echo_tool": AgentTool(name="echo_tool", description="测试工具", handler=echo_tool)},
+            PolicyEngine(),
+        )
+        messages = _msgs()
+        result = await run_mode(
+            Mode.REACT, llm=llm, toolbelt=belt, messages=messages, limits=ModeLimits()
+        )
+        # Round 3 reaches the threshold and earns one advisory nudge; the
+        # round-4 re-issue trips again -> loop abort
+        assert result.startswith("[中断] 疑似死循环")
+        assert executed == []  # truncated calls never execute
+        assert len(llm.calls) == 4
+
     async def test_truncated_plain_reply_unchanged(self) -> None:
         """No tool calls: the existing truncation marker path is untouched."""
         llm = FakeLLM([LLMReply(text="回答前半", meta={"finish_reason": "length"})])
