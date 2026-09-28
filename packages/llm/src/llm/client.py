@@ -599,7 +599,12 @@ def _dump_rejected_request(url: str, body: dict[str, Any], status: int, response
     error body rarely names the parameter). The response text comes in from the
     caller: a streaming response has no readable .text before aread() (httpx
     raises ResponseNotRead), so the stream path reads first and passes it here.
-    Headers are never written (the api key must not land on disk). Returns the
+
+    Sensitive by design: the request body carries the conversation plaintext,
+    so every dump file is user-confidential material on disk. Headers are
+    never written (the api key must not land on disk), the feature stays
+    opt-in behind the env var, and files are created 0o600 (Unix; Windows
+    relies on the profile ACL, same as the session-token secret). Returns the
     dump file path (empty when dumping is off or the write failed) so callers
     can reference it in user-facing error details."""
     dump_dir = os.environ.get("LLM_DEBUG_DUMP_DIR")
@@ -610,19 +615,22 @@ def _dump_rejected_request(url: str, body: dict[str, Any], status: int, response
         path.mkdir(parents=True, exist_ok=True)
         # time_ns: retries can hit several rejections within one millisecond
         dump_path = path / f"llm-{time.time_ns()}.json"
-        dump_path.write_text(
-            json.dumps(
-                {
-                    "url": url,
-                    "request": body,
-                    "status": status,
-                    "response": response_text[:4000],
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
+        payload = json.dumps(
+            {
+                "url": url,
+                "request": body,
+                "status": status,
+                "response": response_text[:4000],
+            },
+            ensure_ascii=False,
+            indent=2,
         )
+        # O_EXCL + 0o600: the dump holds conversation plaintext, so it must not
+        # be world-readable (0o600 takes effect on Unix only; Windows ignores
+        # the mode - known platform limitation, see LocalTokenIssuer).
+        fd = os.open(dump_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(payload)
         return str(dump_path)
     except Exception as exc:  # noqa: BLE001 - diagnostics never break the call path
         log.debug("llm debug dump failed: %s", exc)
