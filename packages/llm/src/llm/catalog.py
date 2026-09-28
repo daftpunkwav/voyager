@@ -4,6 +4,11 @@ Three API formats: `chat` (OpenAI-compatible /chat/completions), `anthropic`
 (Anthropic Messages /v1/messages) and `responses` (OpenAI Responses
 /v1/responses). Custom providers are stored through add_provider and are not
 registered in this file.
+
+The per-preset `models` lists are EXAMPLES to prefill the settings form, not
+a maintained catalog: they go stale as vendors rename models. They are never
+validated against the provider and the model id is free-typed (or fetched
+live via list_remote_models) on the settings page.
 """
 
 from __future__ import annotations

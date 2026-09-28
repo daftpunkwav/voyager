@@ -237,6 +237,41 @@ class TestUrlSession:
         # the initialized notification carried no id and got its 202
         assert "id" not in seen[1]["payload"]
 
+    async def test_session_id_header_is_echoed_once_assigned(self, patch_client) -> None:
+        """Streamable-HTTP servers assign Mcp-Session-Id at initialize and
+        reject later POSTs that omit it: once assigned, every later request
+        carries it back."""
+        import json as _json
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            payload = _json.loads(request.content.decode())
+            if payload["method"] == "initialize":
+                assert not request.headers.get("mcp-session-id")
+                return httpx.Response(
+                    200,
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": payload["id"],
+                        "result": {"capabilities": {}},
+                    },
+                    headers={"mcp-session-id": "sid-1"},
+                )
+            assert request.headers.get("mcp-session-id") == "sid-1"
+            if "id" not in payload:
+                return httpx.Response(202)  # notifications/initialized
+            return httpx.Response(
+                200, json={"jsonrpc": "2.0", "id": payload["id"], "result": {"tools": []}}
+            )
+
+        patch_client(handler)
+        session = UrlMcpSession("https://mcp.example.test/rpc")
+        await session.connect()
+        try:
+            await session.initialize()
+            assert await session.list_remote_tools() == []
+        finally:
+            await session.aclose()
+
     async def test_sse_response_is_parsed_from_data_lines(self, patch_client) -> None:
         import json as _json
 

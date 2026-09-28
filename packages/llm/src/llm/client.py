@@ -40,6 +40,26 @@ from .wire_responses import content_text, parse_response_output, responses_input
 
 _TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
 
+#: Read cap for NON-STREAMING completions. A non-stream response only arrives
+#: once the whole generation is ready (thinking tokens included), so the cap
+#: must cover the full server-side generation time, not an inter-chunk gap.
+#: Derived from the request's max_tokens: tolerate providers sustaining
+#: ~8 tok/s at the cap, bounded at 480s so a hung connection still fails in
+#: bounded time. Streaming keeps _TIMEOUT: there the read cap is only the
+#: gap between SSE chunks.
+_COMPLETE_READ_CAP_S = 480.0
+
+
+def _complete_timeout(max_tokens: int) -> httpx.Timeout:
+    """Per-request timeout for the non-streaming path; read scales with the
+    output cap (long-thinking calls legitimately exceed 60s before the first
+    response byte). Below ~480 output tokens this is identical to _TIMEOUT."""
+    read = max(_TIMEOUT.read or 0.0, min(max_tokens / 8.0, _COMPLETE_READ_CAP_S))
+    return httpx.Timeout(
+        connect=_TIMEOUT.connect, read=read, write=_TIMEOUT.write, pool=_TIMEOUT.pool
+    )
+
+
 #: Transient retry parameters: exponential backoff for 5xx / network blips /
 #: 429. Module-level constants so tests can zero them out. Retry-After is
 #: capped at 5s to avoid stalling agent loops.
@@ -195,6 +215,15 @@ class ResponseMeta:
             if getattr(self, f)
         }
 
+
+#: Required version header for the Anthropic Messages wire format. This is
+#: currently the only version Anthropic's API accepts, and every compat layer
+#: riding this format (Volcengine Ark, MiniMax) mirrors it, so a per-provider
+#: override would have nothing to vary — if Anthropic ever ships a new
+#: version, this single constant is the upgrade point (compat layers typically
+#: keep accepting the old one for a deprecation window). Shared by
+#: list_remote_models so the two call sites cannot drift.
+ANTHROPIC_VERSION = "2023-06-01"
 
 #: Response headers that may carry the provider's request id, first match
 #: wins (case-insensitive per httpx).
@@ -802,7 +831,7 @@ def _wire_request(
         url = f"{base}/v1/messages"
         headers = {
             "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
+            "anthropic-version": ANTHROPIC_VERSION,
             "content-type": "application/json",
         }
     else:
@@ -916,7 +945,9 @@ async def complete(
     # Resolve-and-pin before anything is sent: the connection targets the
     # validated IP, so DNS rebinding cannot retarget the request.
     chosen_ip = await pinned_ip(provider)
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    # Non-stream: the read cap covers the whole generation (see
+    # _complete_timeout), derived from this request's output budget.
+    async with httpx.AsyncClient(timeout=_complete_timeout(max_tokens)) as client:
         if fmt == "responses":
             resp = await _send_with_retry(
                 lambda: _post(client, url, headers=headers, body=body, chosen_ip=chosen_ip)

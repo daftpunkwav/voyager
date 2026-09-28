@@ -22,7 +22,7 @@ from llm.capabilities.common import (
     registry,
     require_provider,
 )
-from llm.client import _TIMEOUT
+from llm.client import _TIMEOUT, ANTHROPIC_VERSION
 from llm.net_pin import pinned_ip
 
 
@@ -30,7 +30,7 @@ def _models_headers(api_format: str, api_key: str) -> dict[str, str]:
     if api_format == "anthropic":
         return {
             "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
+            "anthropic-version": ANTHROPIC_VERSION,
         }
     return {"Authorization": f"Bearer {api_key}"}
 

@@ -8,6 +8,21 @@ inject fakes through the pool's connect and never exercise this module.
 Framing: the MCP stdio spec (since 2024-11-05) frames by **newline**, one
 JSON-RPC message per line - not LSP Content-Length. Non-JSON lines (logs from
 some servers) are ignored.
+
+Transport scope (declared on purpose so gaps stay visible):
+
+- stdio: newline-framed JSON-RPC over the subprocess pipes, per spec.
+- url: streamable-HTTP POST-only client. Every message is POSTed to the one
+  configured endpoint; responses may be application/json or an SSE event
+  stream, and an assigned Mcp-Session-Id is echoed back on every later
+  request (spec-compliant streamable-HTTP servers reject later POSTs that
+  omit it).
+- NOT supported: the server-initiated GET SSE channel of streamable HTTP
+  (fine for the client-to-server tool calls this client makes; server-pushed
+  requests like sampling are ignored anyway), and the legacy 2024-11-05
+  dual-endpoint HTTP+SSE transport (GET /sse handshake + POSTed messages
+  endpoint) - a server speaking only that legacy transport fails at
+  initialize with a readable HTTP error from the pool.
 """
 
 from __future__ import annotations
@@ -252,11 +267,14 @@ def _sse_result(text: str) -> Any:
 
 class UrlMcpSession(_McpProtocol):
     """HTTP session: each JSON-RPC message is POSTed to the configured URL
-    (simplest form, no session headers).
-
-    Responses come in two shapes: application/json read directly;
-    text/event-stream parsed from data: lines. Notifications
+    (simplest form). Responses come in two shapes: application/json read
+    directly; text/event-stream parsed from data: lines. Notifications
     (notifications/initialized etc.) treat 202/empty body as success.
+
+    Sessions: a Mcp-Session-Id assigned by the server (response header on any
+    reply, in practice initialize) is stored and echoed on every later
+    request, as the streamable-HTTP spec requires - servers that assign one
+    answer 400 to a session-less POST.
     """
 
     def __init__(self, url: str, timeout: float = CALL_TIMEOUT) -> None:
@@ -264,6 +282,7 @@ class UrlMcpSession(_McpProtocol):
         self._url = url
         self._timeout = timeout
         self._client: httpx.AsyncClient | None = None
+        self._session_id = ""  # Mcp-Session-Id echoed back once the server assigns one
 
     async def connect(self) -> None:
         self._client = httpx.AsyncClient(timeout=self._timeout)
@@ -272,12 +291,14 @@ class UrlMcpSession(_McpProtocol):
         client = self._client
         if client is None:
             raise RuntimeError("MCP HTTP session not connected")
-        resp = await client.post(
-            self._url,
-            json=payload,
-            headers={"Accept": "application/json, text/event-stream"},
-        )
+        headers = {"Accept": "application/json, text/event-stream"}
+        if self._session_id:
+            headers["Mcp-Session-Id"] = self._session_id
+        resp = await client.post(self._url, json=payload, headers=headers)
         resp.raise_for_status()
+        assigned = resp.headers.get("mcp-session-id")
+        if assigned:
+            self._session_id = assigned
         if resp.status_code == 202 or not resp.content.strip():
             return None
         if "text/event-stream" in resp.headers.get("content-type", ""):
