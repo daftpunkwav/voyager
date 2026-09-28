@@ -12,7 +12,7 @@
  * - Own GitHub binding and data-export flows; delegated blocks own their state
  */
 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettings } from '@/hooks/useSettings';
@@ -106,6 +106,10 @@ const NAV_GROUPS: {
   },
 ];
 
+const NAV_SECTIONS: ReadonlySet<string> = new Set(
+  NAV_GROUPS.flatMap((group) => group.items.map((item) => item.id))
+);
+
 export function SettingsPage() {
   const { t } = useTranslation('settings');
   const navigate = useNavigate();
@@ -119,7 +123,19 @@ export function SettingsPage() {
   const llmAvailability = useLlmAvailable();
   const { data: accounts = [], refetch: refetchAccounts } = useGithubAccounts();
   const addToast = useUIStore((s) => s.addToast);
-  const [section, setSection] = useState<Section>('appearance');
+  // Deep-linkable section: ?section=llm opens the model config directly (the
+  // composer's 管理模型 entry jumps here); unknown values degrade to the
+  // appearance default. Section changes rewrite the query (replace) so a
+  // refresh keeps the active section.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const querySection = searchParams.get('section') as Section | null;
+  const [section, setSectionState] = useState<Section>(
+    querySection && NAV_SECTIONS.has(querySection) ? querySection : 'appearance'
+  );
+  const setSection = (next: Section) => {
+    setSectionState(next);
+    setSearchParams(next === 'appearance' ? {} : { section: next }, { replace: true });
+  };
   const [activityKind, setActivityKind] = useState('');
   const [ghPat, setGhPat] = useState('');
   const [unbindId, setUnbindId] = useState<string | null>(null);
