@@ -7,7 +7,14 @@ from typing import Any
 
 import pytest
 from agent.engine import Mode, ModeLimits, run_mode
-from agent.engine.modes.base import DEFAULT_TOOL_ROOM, ModeBudget
+from agent.engine.modes.base import (
+    DEFAULT_TOOL_ROOM,
+    CountingToolbelt,
+    ModeBudget,
+    noop_event,
+    noop_step,
+)
+from agent.engine.modes.react import run_step
 from agent.llm import FakeLLM, LLMReply, ToolCall, Usage
 from agent.policy import PolicyEngine
 from agent.runtime.events import RuntimeEvent
@@ -235,6 +242,56 @@ class TestReAct:
             Mode.REACT, llm=llm, toolbelt=None, messages=_msgs(), limits=ModeLimits()
         )
         assert "无工具可用" in result
+
+    async def test_spent_tool_room_gates_the_slice_dispatch(self) -> None:
+        """react reads a 0 tool cap as unlimited, so a spent invocation room
+        can no longer be enforced by handing the slice a 0 cap: run_step
+        refuses the dispatch with the same tool-cap report an in-slice
+        surrender produces, spending no LLM call."""
+        budget = ModeBudget(ModeLimits(max_rounds=0, max_tool_calls=1))
+        budget.tool_calls_used = 1
+        llm = FakeLLM(default="should never be reached")
+        result = await run_step(
+            llm=llm,
+            toolbelt=_belt(),
+            messages=_msgs(),
+            on_step=noop_step,
+            on_event=noop_event,
+            continue_if_idle=False,
+            compress_budget=4000,
+            governor=None,
+            deadline=None,
+            budget=budget,
+            belt=CountingToolbelt(_belt()),
+        )
+        assert result.startswith("[中断] 已达工具调用上限(1)")
+        assert llm.calls == []
+
+    async def test_available_tool_room_still_dispatches(self) -> None:
+        """The spent-room gate does not over-fire: with room remaining the
+        slice runs normally and its calls fold into the invocation budget."""
+        budget = ModeBudget(ModeLimits(max_rounds=0, max_tool_calls=3))
+        llm = FakeLLM(
+            [
+                LLMReply(tool_calls=(ToolCall("1", "echo_tool", {"x": "a"}),)),
+                LLMReply(text="完成"),
+            ]
+        )
+        result = await run_step(
+            llm=llm,
+            toolbelt=_belt(),
+            messages=_msgs(),
+            on_step=noop_step,
+            on_event=noop_event,
+            continue_if_idle=False,
+            compress_budget=4000,
+            governor=None,
+            deadline=None,
+            budget=budget,
+            belt=CountingToolbelt(_belt()),
+        )
+        assert result == "完成"
+        assert budget.tool_calls_used == 1
 
     async def test_zero_tool_final_continues_react_loop(self) -> None:
         """Non-small-talk text with zero tool calls is not final: the same loop completes again instead of scanning for agreement."""

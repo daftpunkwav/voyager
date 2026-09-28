@@ -655,6 +655,13 @@ async def run_step(
             summary, detail = _context_step(report)
             await on_step("system", "compact", summary, detail)
     if toolbelt is not None and belt is not None:
+        if budget.tools_exhausted():
+            # A spent room can no longer ride the slice cap: react reads a 0
+            # tool cap as unlimited, so handing the exhausted remainder down
+            # would run the slice unbounded instead of stopping the invocation.
+            # Refuse with the same report an in-slice surrender produces, so
+            # callers treat the step as a limit ending (no LLM spend).
+            return render(P.modes.react.tool_cap, max_tool_calls=budget.limits.max_tool_calls)
         before_calls = belt.calls
         result = await run_react(
             llm,

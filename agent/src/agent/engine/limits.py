@@ -23,8 +23,8 @@ def limits_from_settings(
 ) -> ModeLimits:
     """Assemble round limits: globals read fresh from settings each call;
     0 / negative / unset means unlimited (never falls back to a built-in cap);
-    a positive dispatch override tightens (min) but never introduces a cap
-    when the global is unlimited."""
+    a positive dispatch override applies as-is when the global is unlimited
+    and only tightens (min) when it is finite."""
 
     def _cap(override: int | None, key: str) -> int:
         try:
