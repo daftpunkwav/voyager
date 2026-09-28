@@ -10,23 +10,38 @@ matching the capability layer's CostQuota semantics.
 from __future__ import annotations
 
 import time
-from collections import deque
+from collections import OrderedDict, deque
 
 from platform_contracts import ErrorSuffix, ServiceError
 
 _DOMAIN = "gateway"
+
+#: Tracked-actor cap for the sliding-window map. Actor ids are deployment
+#: facts (user, agent, system services), so in practice this is never hit; it
+#: exists so a caller able to mint arbitrary ids cannot grow the process
+#: without bound. Eviction is least-recently-seen: a flood of distinct ids
+#: recycles entries among themselves, which only weakens throttle accuracy
+#: under that flood (throttling is load control here, not an auth boundary).
+_MAX_TRACKED_ACTORS = 1024
 
 
 class RateLimiter:
     def __init__(self, per_minute: int = 600, sse_max: int = 8) -> None:
         self._per_minute = per_minute
         self._sse_max = sse_max
-        self._hits: dict[str, deque[float]] = {}
+        self._hits: OrderedDict[str, deque[float]] = OrderedDict()
         self._sse_open = 0
 
     def check(self, actor_id: str) -> None:
         now = time.time()
-        hits = self._hits.setdefault(actor_id, deque())
+        hits = self._hits.get(actor_id)
+        if hits is None:
+            if len(self._hits) >= _MAX_TRACKED_ACTORS:
+                self._hits.popitem(last=False)  # least-recently-seen actor
+            hits = deque()
+            self._hits[actor_id] = hits
+        else:
+            self._hits.move_to_end(actor_id)
         while hits and now - hits[0] > 60.0:
             hits.popleft()
         if len(hits) >= self._per_minute:

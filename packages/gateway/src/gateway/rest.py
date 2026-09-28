@@ -126,10 +126,13 @@ def create_app(
         # Mirrors the index.html meta CSP: 'unsafe-eval' + blob: are required
         # by the fenced-code runner (skulpt eval; js/ts snippets in a blob
         # worker). Injection stays guarded by the markdown sanitize allowlist.
+        # object-src 'none' + base-uri 'self' cost the runner nothing (no
+        # object/embed/base usage) and close the plugin/document-base fallbacks.
         response.headers.setdefault(
             "Content-Security-Policy",
             "frame-ancestors 'none'; default-src 'self'; "
-            "script-src 'self' 'unsafe-eval' blob:; worker-src 'self' blob:",
+            "script-src 'self' 'unsafe-eval' blob:; worker-src 'self' blob:; "
+            "object-src 'none'; base-uri 'self'",
         )
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         return response

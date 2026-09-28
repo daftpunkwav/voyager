@@ -66,6 +66,7 @@
       - font-src 'self' data:   self-hosted woff2 + embedded fonts
       - img-src 'self' data: https:   avatars/icons/external images
       - connect-src 'self' ws: wss: http://127.0.0.1:8000   same-origin + WebSocket (SSE) + dev backend
+      - object-src 'none'   no plugin content anywhere in the app
       - base-uri 'self'   prevents base href hijacking
       - form-action 'self'   prevents cross-origin form submission
       - frame-ancestors must be set via an HTTP header (browsers ignore the meta tag, per the W3C spec);
@@ -78,6 +79,7 @@
         default-src 'self';
         script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:;
         worker-src 'self' blob:;
+        object-src 'none';
         style-src 'self' 'unsafe-inline';
         font-src 'self' data:;
         img-src 'self' data: https:;

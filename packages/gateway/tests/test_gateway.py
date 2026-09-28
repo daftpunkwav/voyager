@@ -468,6 +468,21 @@ class TestRateLimit:
             assert r.json()["error"]["code"] == "GATEWAY.RATE_LIMITED"
 
 
+class TestSecurityHeaders:
+    def test_csp_and_nosniff_set_on_every_response(self, client) -> None:
+        r = client.get("/health")
+        csp = r.headers["Content-Security-Policy"]
+        # Runner requirements stay allowed; the injection defense remains the
+        # markdown sanitize allowlist (see rest.py _security_headers)
+        assert "script-src 'self' 'unsafe-eval' blob:" in csp
+        assert "worker-src 'self' blob:" in csp
+        # Plugin content and document-base fallbacks are closed
+        assert "object-src 'none'" in csp
+        assert "base-uri 'self'" in csp
+        assert "frame-ancestors 'none'" in csp
+        assert r.headers["X-Content-Type-Options"] == "nosniff"
+
+
 class TestActivity:
     def test_report_and_feed(self, client) -> None:
         r = client.post(
