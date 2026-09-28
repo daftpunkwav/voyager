@@ -10,8 +10,8 @@ Every registered settings key, grouped by owner. Keys register through `platform
 
 | Key | Type | Default |
 |---|---|---|
-| `agent.rounds.max` | INT | 20 |
-| `agent.rounds.tool_max` | INT | 40 |
+| `agent.rounds.max` | INT | 50 |
+| `agent.rounds.tool_max` | INT | 100 |
 | `agent.rounds.max_tokens` | INT | 0 (unlimited) |
 | `agent.execution.tool_deadline_s` | FLOAT | 90 |
 | `agent.execution.round_deadline_s` | FLOAT | 240 |
