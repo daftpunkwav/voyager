@@ -342,7 +342,7 @@ interface RoundBlock {
   reasoningTruncated: boolean;
   /** The provider cut this round off at the output cap (finish_reason). */
   truncated: boolean;
-  /** Lead-in text identical to the closing message: hidden, not repeated. */
+  /** Lead-in text carried by the closing message: hidden, not repeated. */
   dup: boolean;
   /** The turn still streaming this round: shows the live pulse. */
   live: boolean;
@@ -400,7 +400,10 @@ function buildBlocks(
         // Backend sets `truncated` when the provider's finish_reason was
         // length/max_tokens (output-cap cut), so the UI flags the round.
         truncated: s.truncated === true,
-        dup: !!finalText && !!persisted && persisted === finalText,
+        // Containment, not equality: the conversational delivery joins the
+        // visible lead-in texts with the final answer into one message, so
+        // any round text carried by it must not render twice.
+        dup: !!finalText && !!persisted && finalText.includes(persisted),
         // Ops emitted before this round's marker (backend compaction runs at
         // the round boundary, i.e. BEFORE round 1's llm step) attach to the
         // block they precede; without this the pre-round-1 op row is dropped.

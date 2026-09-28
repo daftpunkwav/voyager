@@ -441,6 +441,12 @@ async def _run_turn(
                     rebuilt.append({"role": "user", "content": text})
                 elif role == "assistant":
                     text = str(m.get("content", ""))
+                    # A lead-in the conversational delivery already carries
+                    # (the closing message joins the visible round texts into
+                    # one self-contained message) would duplicate in the
+                    # model-facing history
+                    if text and result and text in result:
+                        continue
                     if text:
                         entry = {"role": "assistant", "content": text}
                         speaker = str(m.get("speaker") or "")

@@ -112,6 +112,94 @@ class TestReAct:
         ]
         assert [m["tool_call_id"] for m in messages[2:]] == ["1", "2"]
 
+    async def test_conversational_delivery_joins_lead_ins(self) -> None:
+        """Chat turns deliver the whole visible flow: a round that streamed
+        text and kept working via tools contributes its text ahead of the
+        final answer, so the message never opens mid-thought."""
+        llm = FakeLLM(
+            [
+                LLMReply(text="我先自我介绍一下。", tool_calls=(ToolCall("1", "echo_tool", {}),)),
+                LLMReply(text="查完了,这是结论。"),
+            ]
+        )
+        result = await run_mode(
+            Mode.REACT,
+            llm=llm,
+            toolbelt=_belt(),
+            messages=_msgs(),
+            limits=ModeLimits(),
+            conversational=True,
+        )
+        assert result == "我先自我介绍一下。\n\n查完了,这是结论。"
+
+    async def test_task_turn_keeps_final_text_only(self) -> None:
+        """Task reports stay final-text-only: the master reads work products,
+        not conversation flow, so lead-in chatter must not pollute them."""
+        llm = FakeLLM(
+            [
+                LLMReply(text="我先查一下。", tool_calls=(ToolCall("1", "echo_tool", {}),)),
+                LLMReply(text="查完了,这是结论。"),
+            ]
+        )
+        result = await run_mode(
+            Mode.REACT,
+            llm=llm,
+            toolbelt=_belt(),
+            messages=_msgs(),
+            limits=ModeLimits(),
+        )
+        assert result == "查完了,这是结论。"
+
+    async def test_degraded_round_text_never_joins_the_delivery(self) -> None:
+        """A provider-failure round's harness text ("(LLM call failed: ...)")
+        is plumbing, not a visible lead-in: the recovery round's answer is
+        delivered alone, without the failure placeholder ahead of it."""
+        seen = {"n": 0}
+
+        def _flaky(_messages, _tools=None):
+            seen["n"] += 1
+            if seen["n"] == 1:
+                return LLMReply(
+                    text="(LLM call failed: ConnectTimeout)",
+                    degraded=True,
+                    tool_calls=(ToolCall("1", "echo_tool", {}),),
+                )
+            if seen["n"] == 2:
+                return LLMReply(
+                    text="查完了,一切正常。", tool_calls=(ToolCall("2", "echo_tool", {}),)
+                )
+            return LLMReply(text="结论:没问题。")
+
+        result = await run_mode(
+            Mode.REACT,
+            llm=FakeLLM(dynamic=_flaky),
+            toolbelt=_belt(),
+            messages=_msgs(),
+            limits=ModeLimits(),
+            conversational=True,
+        )
+        assert result == "查完了,一切正常。\n\n结论:没问题。"
+        assert "LLM call failed" not in result
+
+    async def test_surrender_not_prefixed_with_lead_ins(self) -> None:
+        """The caps' voice ([中断]...) must stay a pure harness text: the
+        warning-kind detection keys on the prefix, and a lead-in ahead of it
+        would disguise the wind-down as a model answer."""
+        llm = FakeLLM(
+            dynamic=lambda _m, _t: LLMReply(
+                text="引子。", tool_calls=(ToolCall("1", "echo_tool", {}),)
+            )
+        )
+        result = await run_mode(
+            Mode.REACT,
+            llm=llm,
+            toolbelt=_belt(),
+            messages=_msgs(),
+            limits=ModeLimits(max_rounds=1),
+            conversational=True,
+        )
+        assert result.startswith("[中断]")
+
     async def test_rounds_limit(self) -> None:
         llm = FakeLLM(dynamic=lambda _m, _t: LLMReply(tool_calls=(ToolCall("1", "echo_tool", {}),)))
         result = await run_mode(

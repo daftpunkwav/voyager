@@ -69,6 +69,38 @@ def test_normal_turn_marked_message(tmp_path) -> None:
     finally:
         app.close()
 
+    def test_conversational_delivery_joins_lead_ins(tmp_path) -> None:
+        """A chat turn whose first round streamed text and then called a tool
+        delivers lead-in + final answer as ONE message (the final round only
+        writes the continuation), and the model-facing history carries the flow
+        once — no duplicated lead-in entry."""
+
+        seen = {"n": 0}
+
+        def _sequenced(_messages, _tools=None):
+            seen["n"] += 1
+            if seen["n"] == 1:
+                return LLMReply(
+                    text="我先查一下 usage。",
+                    tool_calls=(ToolCall(id="t1", name="read", arguments={"path": "x"}),),
+                )
+            return LLMReply(text="查完了,结果是这样。")
+
+        app = build_agent(
+            data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM(dynamic=_sequenced)
+        )
+        try:
+            asyncio.run(_drive(app, "hi"))
+            full = "我先查一下 usage。\n\n查完了,结果是这样。"
+            messages = [e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_MESSAGE])]
+            assert messages[-1]["content"] == full
+            chat = app.master.chat
+            assert chat is not None
+            history = [m.get("content", "") for m in chat.history if m.get("role") == "assistant"]
+            assert history == [full]  # the lead-in is carried once, by the closing
+        finally:
+            app.close()
+
 
 def test_rounds_cap_winddown_marked_warning(tmp_path) -> None:
     """A rounds-cap wind-down ([中断] ...) is the caps speaking, not the
