@@ -393,10 +393,15 @@ def build_chat_router(
         sid = _session_or_400(session)
         actor = _actor(request)
         limiter.check(actor.id)
-        limiter.acquire_sse()
         # No explicit after_seq -> start from the current tail (history is
-        # served by GET /api/chat/messages, not replayed here)
-        start_seq = log.latest_seq() if after_seq < 0 else after_seq
+        # served by GET /api/chat/messages, not replayed here). latest_seq
+        # holds the EventLog lock and fetches synchronously: off the event
+        # loop, same discipline as the replay reads below (and activity.py).
+        # Read BEFORE acquire_sse: a failure here must not leak an SSE slot
+        # (the slot releases in gen()'s finally, which never runs when the
+        # response never starts).
+        start_seq = await asyncio.to_thread(log.latest_seq) if after_seq < 0 else after_seq
+        limiter.acquire_sse()
 
         def _wanted(event: Event) -> bool:
             return not sid or _in_session(event, sid)

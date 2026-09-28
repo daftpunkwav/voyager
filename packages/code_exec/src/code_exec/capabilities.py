@@ -268,8 +268,17 @@ async def run_file(runtime: str, file_path: str, _actor: ActorRef | None = None)
     # spawning so the failure reaches the caller, not the void
     _find_runtime(runtime)
     # Read off the event loop: file size is user-controlled, a sync
-    # read_text would stall the whole loop
-    code = await asyncio.to_thread(target.read_text, encoding="utf-8")
+    # read_text would stall the whole loop. A non-UTF-8 file (a binary
+    # picked by mistake) is a caller error with a readable 400, not a raw
+    # UnicodeDecodeError escaping the capability frame.
+    try:
+        code = await asyncio.to_thread(target.read_text, encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise ServiceError(
+            _DOMAIN,
+            ErrorSuffix.INVALID_INPUT,
+            "file must be UTF-8 text; binary or other-encoding files are not executable",
+        ) from exc
     exec_id = uuid.uuid4().hex[:12]
     _spawn(_run_code(exec_id, runtime, code))
     return JobRef(job_id=exec_id)

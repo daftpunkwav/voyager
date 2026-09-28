@@ -13,7 +13,7 @@
  */
 
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettings } from '@/hooks/useSettings';
 import { useTheme } from '@/hooks/useTheme';
@@ -132,6 +132,17 @@ export function SettingsPage() {
   const [section, setSectionState] = useState<Section>(
     querySection && NAV_SECTIONS.has(querySection) ? querySection : 'appearance'
   );
+  // The query syncs while mounted, not only at mount: a navigate() to this
+  // same route re-renders without remounting, so an in-page deep link would
+  // otherwise never land. An illegal value is scrubbed from the query instead
+  // of lingering next to a default section.
+  useEffect(() => {
+    if (querySection && NAV_SECTIONS.has(querySection)) {
+      setSectionState(querySection);
+    } else if (querySection !== null) {
+      setSearchParams({}, { replace: true });
+    }
+  }, [querySection, setSearchParams]);
   const setSection = (next: Section) => {
     setSectionState(next);
     setSearchParams(next === 'appearance' ? {} : { section: next }, { replace: true });

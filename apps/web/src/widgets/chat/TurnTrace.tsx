@@ -400,10 +400,12 @@ function buildBlocks(
         // Backend sets `truncated` when the provider's finish_reason was
         // length/max_tokens (output-cap cut), so the UI flags the round.
         truncated: s.truncated === true,
-        // Containment, not equality: the conversational delivery joins the
-        // visible lead-in texts with the final answer into one message, so
-        // any round text carried by it must not render twice.
-        dup: !!finalText && !!persisted && finalText.includes(persisted),
+        // Segment equality, not containment: the conversational delivery joins
+        // the visible lead-in texts with the final answer using "\n\n" (the
+        // backend join), so a round text is carried — and must be hidden —
+        // exactly when it IS one joined segment. Containment would also hide
+        // a short round whose text merely appears somewhere inside the final.
+        dup: !!finalText && !!persisted && finalText.split('\n\n').includes(persisted),
         // Ops emitted before this round's marker (backend compaction runs at
         // the round boundary, i.e. BEFORE round 1's llm step) attach to the
         // block they precede; without this the pre-round-1 op row is dropped.

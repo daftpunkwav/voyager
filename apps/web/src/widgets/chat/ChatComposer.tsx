@@ -121,7 +121,10 @@ const FALLBACK_VARIANTS = ['low', 'medium', 'high'];
  *  back to the default); models without variants keep the canonical set. */
 function resolveEffort(setting: string, meta: LlmModelMeta | undefined): string {
   if (setting === EFFORT_OFF) return '';
-  const variants = meta?.thinking_variants ?? [];
+  // Array.isArray: the store read path tolerates an externally corrupted
+  // models_meta down to the object level only, so a non-array value must not
+  // reach .length / .includes as (say) a string.
+  const variants = Array.isArray(meta?.thinking_variants) ? meta.thinking_variants : [];
   const fallback = meta?.thinking_default ?? '';
   if (setting) {
     if (variants.length) return variants.includes(setting) ? setting : fallback;
@@ -203,9 +206,10 @@ export function ChatComposer({
   // The menu lists the model's configured variants verbatim (settings page =
   // single source); the checkmark and the trigger label show the RESOLVED
   // level, so what the user sees always matches what the backend will send.
+  const declaredVariants = Array.isArray(meta?.thinking_variants) ? meta.thinking_variants : [];
   const variants = thinkingSupported
-    ? meta?.thinking_variants?.length
-      ? meta.thinking_variants
+    ? declaredVariants.length
+      ? declaredVariants
       : FALLBACK_VARIANTS
     : [];
   const effectiveEffort = resolveEffort(reasoning, meta);
