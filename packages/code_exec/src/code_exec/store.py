@@ -172,8 +172,12 @@ class ExecutionStore:
 
     def list_recent(self, limit: int = 100) -> list[dict[str, Any]]:
         with self._lock:
+            # rowid DESC breaks created_ts ties (a burst of creates inside one
+            # clock tick): "newest" must match prune's row selection, which
+            # already tiebreaks by rowid, or the history order is arbitrary.
             rows = self._conn.execute(
-                f"SELECT {','.join(_COLS)} FROM executions ORDER BY created_ts DESC LIMIT ?",
+                f"SELECT {','.join(_COLS)} FROM executions"
+                " ORDER BY created_ts DESC, rowid DESC LIMIT ?",
                 (limit,),
             ).fetchall()
         return [_row(_COLS, r) for r in rows]
