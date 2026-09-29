@@ -155,6 +155,41 @@ class TestSwitchEndpoint:
             shutil.rmtree(ws, ignore_errors=True)
             shutil.rmtree(ROOT / "data" / f".test-ws-rb-new-{os.getpid()}", ignore_errors=True)
 
+    def test_switch_settings_write_failure_rolls_back(self, tmp_path) -> None:
+        """A settings-write failure after a successful build must roll back to
+        a live previous generation, not strand the process half-switched (new
+        routes mounted, tasks never started)."""
+        import os
+
+        ws = ROOT / "data" / f".test-ws-setrb-{os.getpid()}"
+        ws.mkdir(parents=True, exist_ok=True)
+        try:
+            app = build(tmp_path / "data", ws)
+            with TestClient(app) as client:
+                rb = app.state.agent_rebuilder
+                store = rb.settings_store
+                orig_set = store.set
+
+                async def failing_set(key, value, actor):
+                    if key == "agent.workspace.dir":
+                        raise RuntimeError("disk full")
+                    return await orig_set(key, value, actor)
+
+                store.set = failing_set  # type: ignore[method-assign]
+                other = ROOT / "data" / f".test-ws-setrb-new-{os.getpid()}"
+                resp = client.post("/api/workspace/switch", json={"dir": str(other)})
+                assert resp.status_code == 503, resp.text
+                assert "rolled back" in resp.json()["error"]["message"]
+                # A live generation is serving on the old workspace again.
+                assert rb.agent is not None
+                assert rb.current_workspace == ws
+                assert client.get("/health").status_code == 200
+                # The persisted setting still names the old workspace.
+                assert app.state.backend.settings_store.get("agent.workspace.dir") != str(other)
+        finally:
+            shutil.rmtree(ws, ignore_errors=True)
+            shutil.rmtree(ROOT / "data" / f".test-ws-setrb-new-{os.getpid()}", ignore_errors=True)
+
     def test_switch_total_failure_marks_not_running(self, tmp_path) -> None:
         import os
 

@@ -26,7 +26,7 @@ import logging
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 from agent.app import AgentApp
 from agent.build import build_agent
@@ -182,6 +182,14 @@ async def teardown_agent(
             await make()
         except Exception:
             log.warning("agent teardown step %s failed", name, exc_info=True)
+    # MCP stdio children need a live loop to be reaped: close them through a
+    # real await here. close()'s close_best_effort scheduling below stays as
+    # the sync-path fallback — a fire-and-forget task alone can be cut off
+    # when the loop closes right after, leaving the child process alive.
+    try:
+        await old.mcp.aclose_sessions()
+    except Exception:
+        log.warning("agent teardown mcp aclose failed", exc_info=True)
     close_quietly(old, what="agent")
 
 
@@ -260,6 +268,41 @@ def _swap_workspace_routes(
     app.openapi_schema = None  # force OpenAPI regen (FastAPI caches on first use)
 
 
+async def _restore_previous(
+    rebuilder: AgentRebuilder, app: Any, previous: Path, exc: Exception
+) -> NoReturn:
+    """Rebuild the previous generation after a failed switch step and raise.
+
+    Shared by the build-failure and settings-persist-failure paths: by the
+    time either fires the old generation is already torn down, so a live
+    previous generation must be rebuilt, rewired and restarted — or the
+    rebuilder is left in the clean "not running" state for the next switch
+    (or lifespan shutdown)."""
+    try:
+        ensure_workdir(previous)
+        rolled = rebuilder.build_fn(previous)
+    except Exception:
+        log.exception("workspace rollback failed")
+        # Leave no half-torn-down generation behind: the next switch
+        # (or lifespan shutdown) sees a clean "not running" state.
+        rebuilder.agent = None
+        rebuilder.current_workspace = None
+        raise ServiceError(
+            "host",
+            ErrorSuffix.UNAVAILABLE,
+            f"workspace switch failed ({exc}); rollback failed too — restart the service",
+        ) from exc
+    rebuilder.agent = rolled
+    rebuilder.current_workspace = previous
+    _swap_workspace_routes(app, rolled, previous, rebuilder)
+    await _start_agent_tasks(rebuilder, rolled)
+    if hasattr(app.state, "backend") and app.state.backend is not None:
+        app.state.backend.agent = rolled
+    raise ServiceError(
+        "host", ErrorSuffix.UNAVAILABLE, f"workspace switch failed ({exc}); rolled back"
+    ) from exc
+
+
 async def switch_workspace(
     rebuilder: AgentRebuilder, app: Any, raw_dir: str, marker: str = ""
 ) -> dict[str, Any]:
@@ -298,33 +341,20 @@ async def switch_workspace(
             new_agent = rebuilder.build_fn(target)
         except Exception as exc:
             log.exception("workspace switch build failed for %s; rolling back", target)
-            try:
-                ensure_workdir(previous)
-                rolled = rebuilder.build_fn(previous)
-            except Exception:
-                log.exception("workspace rollback failed")
-                # Leave no half-torn-down generation behind: the next switch
-                # (or lifespan shutdown) sees a clean "not running" state.
-                rebuilder.agent = None
-                rebuilder.current_workspace = None
-                raise ServiceError(
-                    "host",
-                    ErrorSuffix.UNAVAILABLE,
-                    f"workspace switch failed ({exc}); rollback failed too — restart the service",
-                ) from exc
-            rebuilder.agent = rolled
-            rebuilder.current_workspace = previous
-            _swap_workspace_routes(app, rolled, previous, rebuilder)
-            await _start_agent_tasks(rebuilder, rolled)
-            if hasattr(app.state, "backend") and app.state.backend is not None:
-                app.state.backend.agent = rolled
-            raise ServiceError(
-                "host", ErrorSuffix.UNAVAILABLE, f"workspace switch failed ({exc}); rolled back"
-            ) from exc
+            await _restore_previous(rebuilder, app, previous, exc)
         rebuilder.agent = new_agent
         rebuilder.current_workspace = target
         _swap_workspace_routes(app, new_agent, target, rebuilder)
-        await rebuilder.settings_store.set(WORKSPACE_KEY, str(target), LOCAL_USER)
+        try:
+            await rebuilder.settings_store.set(WORKSPACE_KEY, str(target), LOCAL_USER)
+        except Exception as exc:
+            # A settings-write failure after a successful build must roll back
+            # like a build failure: leaving it unhandled strands the process
+            # half-switched (routes and registry point at the new generation,
+            # but its loop/MCP tasks never started and settings stay old).
+            close_quietly(new_agent, what="agent(unswitched)")
+            log.exception("workspace switch settings write failed for %s; rolling back", target)
+            await _restore_previous(rebuilder, app, previous, exc)
         await _start_agent_tasks(rebuilder, new_agent)
         if hasattr(app.state, "backend") and app.state.backend is not None:
             app.state.backend.agent = new_agent

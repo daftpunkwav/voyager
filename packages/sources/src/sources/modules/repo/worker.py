@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import shutil
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -26,10 +27,25 @@ _ACTOR = ActorRef(kind=ActorKind.SYSTEM, id="sources.repo.worker")
 #: (owner, name, dest) -> None; default implementation is git clone --depth 1
 CloneFn = Callable[[str, str, Path], Awaitable[None]]
 
+#: Worker-side re-validation of the store's owner/name: both the clone URL and
+#: the destination directory (workspace/repo/<owner>__<name>, rmtree'd before
+#: every clone) are derived from these by f-string. Import-time URL parsing
+#: validates its own input, but store rows also originate from search results
+#: or hand-edited data dirs — a component with path separators or a '..' run
+#: must never shape a local path or a git argument.
+_COMPONENT_RE = re.compile(r"[A-Za-z0-9._-]+")
+
 #: Hard ceiling on one git clone. Without it a hung network / credential
 #: prompt blocks communicate() forever, and with a single consumer and an
 #: unbounded queue that stalls the whole repo import/remove pipeline.
 _CLONE_TIMEOUT_S = 600.0
+
+
+def _safe_component(kind: str, value: object) -> str:
+    text = str(value or "")
+    if not text or not _COMPONENT_RE.fullmatch(text) or ".." in text:
+        raise RuntimeError(f"repo {kind} contains unsupported characters: {text!r}")
+    return text
 
 
 async def _git_clone(owner: str, name: str, dest: Path) -> None:
@@ -115,11 +131,16 @@ class RepoWorker:
             return
         await self._emit(DomainEvent.TASK_PROGRESS, rid, progress=0.1, stage="clone")
         try:
-            dest = self._root / f"{repo['owner']}__{repo['name']}"
+            # Validate before any path or URL is derived (see _safe_component):
+            # a rejected component fails the job with a persisted error instead
+            # of rmtree/cloning through a crafted name.
+            owner = _safe_component("owner", repo["owner"])
+            name = _safe_component("name", repo["name"])
+            dest = self._root / f"{owner}__{name}"
             if dest.exists():  # re-import: clear the old directory first
                 # Off the event loop, same as _run_remove
                 await asyncio.to_thread(shutil.rmtree, dest, True)
-            await self._clone(repo["owner"], repo["name"], dest)
+            await self._clone(owner, name, dest)
             self._store.set_status(rid, "ready", local_path=str(dest))
             await self._emit(DomainEvent.TASK_PROGRESS, rid, progress=1.0, stage="done")
             await self._emit(

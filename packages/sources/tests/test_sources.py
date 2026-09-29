@@ -307,6 +307,32 @@ class TestRepoWorker:
         await worker.stop()
         assert d.repo_store.get(rid)["status"] == "failed"
 
+    async def test_unsafe_component_fails_without_clone_or_path(self, deps, tmp_path) -> None:
+        """A store row with path separators / a '..' run in owner or name must
+        fail the job (persisted error) instead of shaping a local directory or
+        a git argument — the worker re-validates what import-time parsing
+        cannot guarantee for rows from other origins."""
+        d, _log = deps
+        rid = d.repo_store.add({"owner": "../escape", "name": "r", "url": "x"})
+
+        async def must_not_clone(owner: str, name: str, dest: Path) -> None:
+            raise AssertionError("clone must not run for an unsafe component")
+
+        worker = RepoWorker(
+            d.repo_store, None, d.repo_queue, tmp_path / "ws", clone_fn=must_not_clone
+        )
+        await worker.start()
+        d.repo_queue.put_nowait(rid)
+        for _ in range(200):
+            await asyncio.sleep(0.02)
+            if d.repo_store.get(rid)["status"] == "failed":
+                break
+        await worker.stop()
+        row = d.repo_store.get(rid)
+        assert row["status"] == "failed"
+        assert "unsupported characters" in row["error"]
+        assert not (tmp_path / "ws" / "repo").exists()  # nothing was created
+
 
 # RepoWorker imported from its own module (keeps the import surface stable)
 from sources.modules.repo.worker import RepoWorker

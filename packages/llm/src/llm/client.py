@@ -420,6 +420,12 @@ def _anthropic_messages(
       field name, not OpenAI's tool_call_id); consecutive results are merged
       into one user message — the Anthropic convention is several tool_result
       blocks in a single user message per assistant turn.
+    - adjacent user rows are merged (text joins the previous user message as
+      an extra block or a newline-joined string): Anthropic requires roles to
+      alternate, and the neutral history legally produces adjacency — an
+      arbiter double-merge appends two user rows, and a loop-advisory
+      reminder lands right after merged tool results — which strict
+      endpoints 400 on the next round.
     - other messages: string content passes through unchanged (multi-modal
       part lists degrade to their text projection — see wire_responses
       .content_text; chat is the only format that forwards part lists).
@@ -466,7 +472,20 @@ def _anthropic_messages(
             else:
                 out.append({"role": "user", "content": [block]})
             continue
-        out.append({"role": role, "content": content_text(m.get("content"))})
+        text = content_text(m.get("content"))
+        prev = out[-1] if out else None
+        if role == "user" and prev is not None and prev.get("role") == "user":
+            # Merge into the previous user message (see the docstring): all
+            # out entries are fresh dicts built here, so mutating prev never
+            # touches the caller's history.
+            prev_content = prev.get("content")
+            if isinstance(prev_content, list):  # tool_result blocks: append as a text block
+                if text:  # an empty text block would itself be rejected
+                    prev_content.append({"type": "text", "text": text})
+            elif text:
+                prev["content"] = f"{prev_content}\n{text}" if prev_content else text
+            continue
+        out.append({"role": role, "content": text})
     return out
 
 

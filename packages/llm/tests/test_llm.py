@@ -1457,17 +1457,21 @@ class TestMessageTranslation:
         await client_mod.complete(self._ANTHROPIC, api_key="sk", model="m", messages=self._PAIRED)
         msgs = seen["body"]["messages"]
         # system extracted; assistant uses content blocks, empty content makes
-        # no empty text block
-        assert [m["role"] for m in msgs] == ["user", "assistant", "user", "user"]
+        # no empty text block. The trailing user text ("continue") merges into
+        # the tool_result user message: Anthropic requires roles to alternate,
+        # two adjacent user rows are a 400.
+        assert [m["role"] for m in msgs] == ["user", "assistant", "user"]
         assert msgs[1]["content"] == [
             {"type": "tool_use", "id": "call_1", "name": "echo_tool", "input": {"x": "a"}},
             {"type": "tool_use", "id": "call_2", "name": "echo_tool", "input": {"x": "b"}},
         ]
         # Multiple results of one assistant turn merge into a single user
-        # message, tool_use_id matching its tool_use
+        # message, tool_use_id matching its tool_use; the next user row joins
+        # the same message as a trailing text block
         assert msgs[2]["content"] == [
             {"type": "tool_result", "tool_use_id": "call_1", "content": "echo:a"},
             {"type": "tool_result", "tool_use_id": "call_2", "content": "echo:b"},
+            {"type": "text", "text": "continue"},
         ]
 
     async def test_chat_strips_thinking_blocks(self, monkeypatch) -> None:
@@ -1609,9 +1613,18 @@ class TestMessageTranslation:
             and any(b.get("type") == "tool_use" for b in m["content"])
             for m in msgs
         )
+        # The orphan lands in the trailing merged user message as a text block
+        # (adjacent user rows would be an alternation 400); its text survives
+        # verbatim apart from the block framing.
         last = msgs[-1]
-        assert last["role"] == "user" and isinstance(last["content"], str)
-        assert "legacy" in last["content"] and "stale leftover" in last["content"]
+        assert last["role"] == "user" and isinstance(last["content"], list)
+        assert any(
+            isinstance(b, dict)
+            and b.get("type") == "text"
+            and "legacy" in b["text"]
+            and "stale leftover" in b["text"]
+            for b in last["content"]
+        )
 
     async def test_incomplete_pair_strips_unmatched_tool_calls(self, monkeypatch) -> None:
         """assistant declared a/b but only a got a result: the outgoing copy
