@@ -71,6 +71,7 @@ from agent.runtime.jobs_view import JobsView
 from agent.runtime.queue_store import QueueStore
 from agent.runtime.session_index import SessionIndex
 from agent.runtime.state import CheckpointStore, prepare_resumable_checkpoints
+from agent.runtime.tokens import resolve_model_name
 from agent.runtime.trajectory import TrajectoryStore
 from agent.runtime.wire import bind_event_loop
 from agent.sessions import SessionStore
@@ -135,6 +136,22 @@ EVENTS_RETENTION = Retention(
 #: round are the largest unbounded artifact in the runtime data directory.
 RAW_LOG_RETENTION_DAYS = 7
 
+#: --- Runtime-data retention map ------------------------------------------
+#: Every bounded-growth policy over the agent's runtime data, indexed so
+#: "what bounds X, and where do I change it" starts from one list:
+#:   - events.db display streams: EVENTS_RETENTION below (24h)
+#:   - trajectory.db raw LLM rounds: RAW_LOG_RETENTION_DAYS below (7d)
+#:   - meter.db daily rows: startup purge, 90d (build_agent)
+#:   - memory episodes: agent.memory.retention_days setting (0 = keep)
+#:   - tool spill files (workspace/spill): MAX_AGE_SECONDS in
+#:     tools.core.result_budget (7d), bounded on every spill call
+#:   - code-exec execution rows + artifacts: 30d / 200-row cap
+#:     (code_exec.store; pruned every 32 creates)
+#: Deliberately not age-bounded (durable meaning): sessions.db, trajectory
+#: steps/runs, checkpoints, the durable queue, the write journal.
+#: Keep the map in sync when a store gains or loses a bound; each entry's
+#: rationale lives with its constant, not here.
+
 #: Weekday names for the environment clock line, locale-independent on
 #: purpose: strftime's %A would follow whatever locale the process happens
 #: to run under.
@@ -146,12 +163,12 @@ def resolve_env_model(llm: Any, settings: Any, persona_key: str) -> str:
     for the system head's environment layer. Resolution mirrors the wire:
     the client's own model attr first, then the per-persona routing override
     (agent.llm.overrides — the primary hop PersonaRoutingServiceLLM actually
-    consults), then the standalone/composer chain (agent.llm.model ->
-    llm.default_model). Best-effort by design: llm-domain keys are
-    unregistered in agent-only builds and those reads degrade to empty, an
-    empty result just omits the model line, and a routing fallback serving a
-    different model mid-turn is accepted drift (the served name lands in the
-    trajectory's per-round reply.model)."""
+    consults), then the shared settings chain (resolve_model_name). Best-
+    effort by design: llm-domain keys are unregistered in agent-only builds
+    and those reads degrade to empty, an empty result just omits the model
+    line, and a routing fallback serving a different model mid-turn is
+    accepted drift (the served name lands in the trajectory's per-round
+    reply.model)."""
     model = str(getattr(llm, "model", "") or "")
     provider = ""
     if not model:
@@ -164,13 +181,8 @@ def resolve_env_model(llm: Any, settings: Any, persona_key: str) -> str:
         if isinstance(entry, dict):
             model = str(entry.get("model") or "")
             provider = str(entry.get("provider") or "")
-    for name in ("agent.llm.model", "llm.default_model"):
-        if model:
-            break
-        try:
-            model = str(settings.get(name) or "")
-        except ServiceError:
-            model = ""
+    if not model:
+        model = resolve_model_name(llm, settings)
     if not model:
         return ""
     return f"{provider}/{model}" if provider else model
@@ -717,22 +729,6 @@ def build_agent(
             f" UTC{offset[:3]}:{offset[3:]}",
         )
 
-    def _budget_model_name() -> str:
-        """Model for per-profile window resolution: the client's attr first,
-        then the standalone-run setting, then the composer's chat model (what
-        an empty-model ServiceLLM actually serves per call). llm-domain keys
-        are unregistered in agent-only builds — those reads degrade to empty,
-        never raise."""
-        probe = str(getattr(llm, "model", "") or "")
-        for key in ("agent.llm.model", "llm.default_model"):
-            if probe:
-                break
-            try:
-                probe = str(settings.get(key) or "")
-            except ServiceError:
-                probe = ""
-        return probe
-
     spawner = Spawner(
         llm=chat_llm,
         toolbelt=toolbelt,
@@ -745,7 +741,7 @@ def build_agent(
         sync_digest=digests.upsert,  # refresh the DigestStore on steps
         budget_fn=lambda: budget_from_settings(
             settings,
-            model_name=_budget_model_name(),
+            model_name=resolve_model_name(llm, settings),
         ),  # hot-read context budget
         planner_llm=planner_llm,  # context editor planning client (may be routed)
     )

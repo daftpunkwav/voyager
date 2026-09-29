@@ -152,6 +152,25 @@ class McpClientPool:
 
     # ---- Connect and preview ----
 
+    async def _ensure_session(self, sid: str, cfg: dict) -> None:
+        """Connect one server unless already connected (bounded by
+        CONNECT_TIMEOUT). The caller holds the pool-level connect lock:
+        concurrent connects of the same server reuse the first connection
+        instead of each building one and leaking the other (re-checked under
+        the lock)."""
+        if sid not in self._sessions:
+            self._sessions[sid] = await asyncio.wait_for(
+                self._connect({**cfg, "cwd": self._cwd}), CONNECT_TIMEOUT
+            )
+
+    def _record_tools(self, sid: str, tools: list[dict]) -> None:
+        """Store a fresh tools/list snapshot: the preview cache, the cleared
+        entry error, and the server-declared instructions."""
+        self._previews[sid] = tools
+        self._errors.pop(sid, None)
+        raw_instructions = getattr(self._sessions[sid], "instructions", "")
+        self._instructions[sid] = str(raw_instructions) if raw_instructions else ""
+
     async def preview(self, sid: str) -> list[dict]:
         """Connect (if not yet) and run tools/list, returning the remote tool
         list.
@@ -172,14 +191,11 @@ class McpClientPool:
             self._errors[sid] = str(exc)
             raise
         try:
-            # Hold the pool-level lock for the connect section: concurrent
-            # previews of the same server reuse the first connection instead of
-            # each building one and leaking the other
+            # Hold the pool-level lock across connect + list: concurrent
+            # previews of the same server share one connection and one
+            # listing (_ensure_session re-checks under the lock)
             async with self._connect_lock:
-                if sid not in self._sessions:
-                    self._sessions[sid] = await asyncio.wait_for(
-                        self._connect({**cfg, "cwd": self._cwd}), CONNECT_TIMEOUT
-                    )
+                await self._ensure_session(sid, cfg)
                 tools = await asyncio.wait_for(
                     self._sessions[sid].list_remote_tools(), CONNECT_TIMEOUT
                 )
@@ -188,10 +204,7 @@ class McpClientPool:
             message = f"MCP '{cfg['name']}' failed to connect or list tools: {exc}"
             self._errors[sid] = message
             raise ServiceError("agent", ErrorSuffix.UNAVAILABLE, message) from exc
-        self._previews[sid] = tools
-        self._errors.pop(sid, None)
-        raw_instructions = getattr(self._sessions[sid], "instructions", "")
-        self._instructions[sid] = str(raw_instructions) if raw_instructions else ""
+        self._record_tools(sid, tools)
         # User consent point: the previewed list is what approval covers; the
         # hot-refresh path mounts only these names (new remote tools wait for
         # the next explicit preview)
@@ -307,10 +320,7 @@ class McpClientPool:
         if sid not in self._sessions:
             try:
                 async with self._connect_lock:
-                    if sid not in self._sessions:
-                        self._sessions[sid] = await asyncio.wait_for(
-                            self._connect({**cfg, "cwd": self._cwd}), CONNECT_TIMEOUT
-                        )
+                    await self._ensure_session(sid, cfg)
             except Exception as exc:  # noqa: BLE001  # any connect fault is surfaced as entry error
                 self._errors[sid] = f"MCP '{cfg['name']}' reconnect failed: {exc}"
                 return
@@ -321,10 +331,11 @@ class McpClientPool:
             self._errors[sid] = f"MCP '{cfg['name']}' refresh failed: {exc}"
             await self.drop_session(sid)
             return
-        self._previews[sid] = tools
-        self._errors.pop(sid, None)
-        raw_instructions = getattr(session, "instructions", "")
-        self._instructions[sid] = str(raw_instructions) if raw_instructions else ""
+        self._record_tools(sid, tools)
+        # Consent fork from preview(), deliberate: preview re-baselines
+        # _seen_tools wholesale (a fresh consent act), refresh never widens
+        # consent — only the seen names mount, new ones wait in _new_tools
+        # for the next explicit preview.
         seen = self._seen_tools.get(sid)
         if seen is None:
             # approved-but-never-previewed entry (e.g. hand-written settings):

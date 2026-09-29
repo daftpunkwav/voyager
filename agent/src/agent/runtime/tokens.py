@@ -21,6 +21,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from platform_contracts import ServiceError
+
 from agent.contracts import SettingsReader
 
 log = logging.getLogger("agent.runtime.tokens")
@@ -88,9 +90,42 @@ def resolve_window(settings: SettingsReader, model_name: str = "") -> ContextWin
     return ContextWindow(window_tokens=window, max_output_tokens=output)
 
 
+#: Settings fallback chain for the effective model name: the standalone
+#: agent's own model key, then the composer's chat model (what an
+#: empty-model ServiceLLM actually serves per call).
+_MODEL_FALLBACK_KEYS = ("agent.llm.model", "llm.default_model")
+
+
+def resolve_model_name(llm: Any, settings: Any) -> str:
+    """Effective model name behind an LLM client: the client's own ``model``
+    attribute first, then the standalone-run setting (agent.llm.model), then
+    the composer's chat model (llm.default_model). Tolerant by design: the
+    llm-domain keys are unregistered in agent-only builds and those reads
+    degrade to empty instead of raising (KeyError is caught for tolerant
+    test doubles; SettingsStore itself signals unknown keys with
+    ServiceError).
+
+    Single-sources the chain for every consumer that must name the same
+    model the wire actually serves (context budget windows, output caps,
+    the system head's environment line): adding or reordering a hop happens
+    here and nowhere else. The per-persona routing override is a hop ABOVE
+    this chain and stays with its only caller (agent.build.resolve_env_model).
+    """
+    model = str(getattr(llm, "model", "") or "")
+    for key in _MODEL_FALLBACK_KEYS:
+        if model:
+            break
+        try:
+            model = str(settings.get(key) or "")
+        except (KeyError, ServiceError):
+            model = ""
+    return model
+
+
 __all__ = [
     "DEFAULT_MAX_OUTPUT_TOKENS",
     "DEFAULT_WINDOW_TOKENS",
     "ContextWindow",
+    "resolve_model_name",
     "resolve_window",
 ]

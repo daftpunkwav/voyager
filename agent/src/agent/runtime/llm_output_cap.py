@@ -19,33 +19,22 @@ from typing import Any
 from platform_contracts import ServiceError
 
 from agent.llm import LLMClient, LLMReply
-from agent.runtime.tokens import resolve_window
+from agent.runtime.tokens import resolve_model_name, resolve_window
 
 log = logging.getLogger("agent.context")
-
-
-def _settings_str(settings: Any, key: str) -> str:
-    try:
-        return str(settings.get(key) or "")
-    except (KeyError, ServiceError):  # unregistered keys raise; degrade to empty
-        return ""
 
 
 def _resolve_cap(settings: Any, llm: Any) -> int:
     """Resolved max-output for the inner client's model; 0 = do not inject.
 
     ServiceLLM exposes no .model attribute (the effective chat model resolves
-    per call from llm.default_model), so the same fallback chain as the
-    budget resolver applies: client attr -> standalone-run setting ->
-    composer chat model. Routed purposes whose chain picks a different model
+    per call from llm.default_model), so the name resolves through the shared
+    resolve_model_name chain (client attr -> standalone-run setting ->
+    composer chat model). Routed purposes whose chain picks a different model
     resolve to the chat default's cap — a documented approximation.
     """
     try:
-        model_name = (
-            str(getattr(llm, "model", "") or "")
-            or _settings_str(settings, "agent.llm.model")
-            or _settings_str(settings, "llm.default_model")
-        )
+        model_name = resolve_model_name(llm, settings)
         return resolve_window(settings, model_name).max_output_tokens
     except (KeyError, ServiceError):  # settings trouble must not block the call
         log.debug("output cap resolution failed; falling back to the llm default", exc_info=True)
