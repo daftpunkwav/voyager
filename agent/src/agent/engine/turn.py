@@ -1,6 +1,5 @@
 """Turn execution for a SubagentInstance: run_turn and its step/delta/event
-callbacks, moved here from instance.py (one file, one responsibility: the
-per-turn machinery).
+callbacks (one file, one responsibility: the per-turn machinery).
 
 `inst` is duck-typed (SubagentInstance); importing the class here would cycle
 through the tools package. The instance keeps thin delegating methods so the

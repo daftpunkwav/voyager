@@ -202,8 +202,8 @@ class ModeBudget:
     def tools_exhausted(self) -> bool:
         """Whether the invocation's tool-call cap is spent. Composite dispatch
         must gate on this before handing a slice out: react reads a 0 cap as
-        unlimited, so a spent room can no longer be enforced through the
-        slice's own limits."""
+        unlimited, so a spent room cannot be enforced through the slice's own
+        limits."""
         return 0 < self._limits.max_tool_calls <= self.tool_calls_used
 
     def slice(self, *, rounds: int, tools: int | None = None) -> ModeLimits:

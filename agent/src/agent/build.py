@@ -230,11 +230,11 @@ def _build_tools(
 ) -> ToolRegistry:
     """Assemble the builtin tool roster through named sources.
 
-    Merge order (later wins on clashes) matches the previous dict.update
-    chain exactly: fs / search / shell / web / interact / memory / plan,
-    then the injected domain bridge. spawn_subagent is not here - it needs
-    to call back into master.dispatch_task, so build_agent registers it
-    after the master is assembled via toolbelt.register.
+    Merge order (later wins on clashes): fs / search / shell / web /
+    interact / skill / plan / context, then the injected domain bridge.
+    spawn_subagent is not here - it needs to call back into
+    master.dispatch_task, so build_agent registers it after the master is
+    assembled via toolbelt.register.
     """
     roots: list[str | Path] = [workspace]
     read_root_list: list[str | Path] = list(read_roots)
@@ -620,7 +620,7 @@ def build_agent(
         """Stable system head: environment, rules, scoped rules, conduct,
         persona layers, style, skill index, profile, task brief, MCP
         instructions. `query` is accepted for signature compatibility (the
-        spawner passes it) but no longer shapes the prompt: per-turn volatile
+        spawner passes it) but does not shape the prompt: per-turn volatile
         content lives in _build_turn_context so the system bytes stay
         prefix-cache stable."""
         persona = resolve_persona(persona_key) if persona_key else None

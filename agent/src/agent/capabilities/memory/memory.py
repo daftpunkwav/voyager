@@ -17,7 +17,7 @@ from platform_contracts import ErrorSuffix, ServiceError
 from agent.capabilities.deps import CapabilityDeps
 from agent.memory import Memory
 
-#: Recall bounds (from the former recall_memory tool).
+#: Recall bounds for the recall action.
 _RECALL_DEFAULT = 8
 _RECALL_MAX = 20
 _RECALL_MIN = 1

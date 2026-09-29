@@ -8,9 +8,9 @@ stdio/URL MCP servers. An empty pool is a legitimate steady state.
 
 Boundary: validation/connection here; mounting in mount.py. Config
 persistence uses the agent.mcp.servers setting; writes go through this pool
-with an actor passed by the capabilities/mcp.py capability (landed in
-audit). Tests inject connect=... with fake sessions (no processes, no
-network); production uses session.default_connect.
+with an actor passed by the capabilities/mcp.py capability. Tests inject
+connect=... with fake sessions (no processes, no network); production uses
+session.default_connect.
 """
 
 from __future__ import annotations

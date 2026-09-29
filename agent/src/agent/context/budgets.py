@@ -21,8 +21,8 @@ from agent.runtime.tokens import (
 #: Hard cap on cross-turn history length (entries): long conversations must
 #: not grow without bound. History holds only user/assistant entries (tool
 #: entries live in messages for the current turn only), dropped in pairs.
-#: Defined here (not on the instance) so the whole context budget lives in
-#: one place; the instance re-exports it for compatibility.
+#: Defined here so the whole context budget lives in one place; consumers
+#: read it through ContextBudget.history_max.
 HISTORY_MAX = 60
 
 #: Resident memory-card layer defaults: how many recent episodic entries the

@@ -396,10 +396,11 @@ async def run_react(
             notice = P.modes.react.truncated_calls
             # Skipped calls still count toward loop detection: a model stuck
             # re-issuing the same oversized call is exactly the repetition the
-            # detector exists for (rejected calls count), and this retry
-            # continue is the one path the round budget no longer bounds now
-            # that max_rounds 0 = unlimited. Same two-level consequence as the
-            # executed path: the first trip nudges, the next one aborts.
+            # detector exists for (rejected calls count). The retry consumes
+            # rounds but no tool budget, and with max_rounds 0 = unlimited the
+            # round budget never ends the loop — loop detection is the
+            # remaining bound. Same two-level consequence as the executed
+            # path: the first trip nudges, the next one aborts.
             skipped_trip: ToolCall | None = None
             skipped_reminder: str | None = None
             for call in reply.tool_calls:
@@ -573,9 +574,9 @@ async def run_react(
         tool_calls_used += len(executable)
         # Consecutive-safe partitioning (claude-code style): runs of
         # concurrent-safe calls execute in parallel, a write/unsafe call forms
-        # a singleton serial batch — mixed rounds no longer serialize wholly.
-        # Results back-fill in call order either way, so the transcript stays
-        # deterministic.
+        # a singleton serial batch, so a mixed round parallelizes only its
+        # safe runs. Results back-fill in call order either way, so the
+        # transcript stays deterministic.
         batches: list[list[ToolCall]] = []
         for call in executable:
             safe = toolbelt.concurrent_safe(call.name)
