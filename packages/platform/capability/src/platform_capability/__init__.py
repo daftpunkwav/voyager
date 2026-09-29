@@ -24,6 +24,7 @@ from platform_capability.guards import (
     summarize_args,
 )
 from platform_capability.registry import Registry
+from platform_capability.runtime_dir import secure_data_dir
 from platform_capability.wiring import Wiring
 
 __all__ = [
@@ -47,5 +48,6 @@ __all__ = [
     "current_chat_session",
     "dataclass_to_json_schema",
     "execute",
+    "secure_data_dir",
     "summarize_args",
 ]

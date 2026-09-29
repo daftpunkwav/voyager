@@ -18,6 +18,7 @@ from pathlib import Path
 from platform_contracts import ActorKind, ActorRef, DomainEvent, Event
 from platform_eventbus import EventBus
 
+from .._shared.paths import within
 from .store import RepoStore
 
 log = logging.getLogger("sources.repo.worker")
@@ -114,8 +115,20 @@ class RepoWorker:
     async def _run_remove(self, local_path: str) -> None:
         """Delete the local clone directory (queued by remove_repo after the
         DB row is gone).
+
+        Defense in depth: the enqueue side already jail-checked the stored
+        path against the workspace root, but the rmtree here runs without any
+        other validation and the queue can carry a stale row across a
+        restart — so this side re-checks instead of trusting the enqueue-time
+        gate.
         """
         if not local_path:
+            return
+        if not within(Path(local_path), self._root.parent):
+            log.warning(
+                "repo remove skipped: stored path %r is outside the workspace root",
+                local_path,
+            )
             return
 
         def _remove() -> None:

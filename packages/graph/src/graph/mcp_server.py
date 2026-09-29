@@ -8,14 +8,11 @@ from __future__ import annotations
 
 
 def main():
-    import tempfile
-    from pathlib import Path
-
-    from platform_capability import build_server
+    from platform_capability import build_server, secure_data_dir
 
     from .wiring import wire
 
-    w = wire(Path(tempfile.gettempdir()) / "graph-mcp")
+    w = wire(secure_data_dir("graph-mcp"))
     return build_server(w.registry, name="graph")
 
 

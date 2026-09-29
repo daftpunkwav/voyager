@@ -8,14 +8,11 @@ from __future__ import annotations
 
 
 def main():
-    import tempfile
-    from pathlib import Path
-
-    from platform_capability import build_server
+    from platform_capability import build_server, secure_data_dir
 
     from .wiring import wire
 
-    root = Path(tempfile.gettempdir()) / "sources-mcp"
+    root = secure_data_dir("sources-mcp")
     w = wire(root, workspace=root / "data" / "workspace")
     return build_server(w.registry, name="sources")
 

@@ -7,10 +7,13 @@ when they originate from a loopback address.
 from __future__ import annotations
 
 import ipaddress
+import logging
 
 from platform_contracts import LOCAL_USER, ActorRef, ErrorSuffix, ServiceError
 
 from platform_actor.token import LocalTokenIssuer
+
+log = logging.getLogger("platform_actor.http_auth")
 
 COOKIE_NAME = "local_session"
 _DOMAIN = "actor"
@@ -18,6 +21,11 @@ _DOMAIN = "actor"
 # Non-IP loopback aliases; the Starlette TestClient reports client host "testclient"
 _LOOPBACK_NAMES = frozenset({"localhost", "testclient"})
 _PUBLIC_PATHS = frozenset({"/health", "/api/session/bootstrap"})
+
+#: Startup warning fires once per process: the tokenless open mode is a real
+#: deployment shape (standalone uvicorn entries without an issuer), but it
+#: must never pass silently.
+_WARNED_OPEN_MODE = False
 
 
 def is_loopback(request) -> bool:
@@ -63,7 +71,15 @@ def resolve_http_actor(request, issuer: LocalTokenIssuer | None) -> ActorRef:
     Without an issuer, single-user local semantics apply; with one, requests
     from non-loopback addresses must present a valid token.
     """
+    global _WARNED_OPEN_MODE
     if issuer is None:
+        if not _WARNED_OPEN_MODE:
+            _WARNED_OPEN_MODE = True
+            log.warning(
+                "no session token issuer configured: every request maps to the "
+                "local user without authentication; bind to loopback only and "
+                "do not expose this port beyond the machine"
+            )
         return LOCAL_USER
     token = token_from_request(request)
     if token:

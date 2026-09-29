@@ -30,6 +30,7 @@ from platform_eventbus import EventBus
 from platform_settings import SettingsStore
 
 from .._shared.events import with_session
+from .._shared.paths import within as _within
 from .._shared.text import valid_tag
 from .store import DocStore
 
@@ -300,11 +301,3 @@ async def remove_document(doc_id: str) -> dict:
             )
         )
     return {"removed": doc_id, "title": doc["title"]}
-
-
-def _within(path: Path, root: Path) -> bool:
-    try:
-        path.resolve().relative_to(Path(root).resolve())
-        return True
-    except ValueError:
-        return False

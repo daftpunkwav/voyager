@@ -27,6 +27,7 @@ from platform_eventbus import EventBus
 from platform_secrets import SecretStore
 
 from .._shared.events import with_session
+from .._shared.paths import within as _within
 from . import github
 from .store import RepoStore
 
@@ -168,14 +169,6 @@ def set_repo_meta(
 )
 def list_categories() -> list[str]:
     return require_deps().store.categories()
-
-
-def _within(path: Path, root: Path) -> bool:
-    try:
-        path.resolve().relative_to(Path(root).resolve())
-        return True
-    except ValueError:
-        return False
 
 
 @capability(

@@ -9,16 +9,13 @@ from __future__ import annotations
 
 
 def main():
-    import tempfile
-    from pathlib import Path
-
-    from platform_capability import build_server
+    from platform_capability import build_server, secure_data_dir
 
     from .wiring import wire
 
     w = wire(
-        Path(tempfile.gettempdir()) / "code-exec-mcp",
-        workspace=Path(tempfile.gettempdir()) / "code-exec-workspace",
+        secure_data_dir("code-exec-mcp"),
+        workspace=secure_data_dir("code-exec-workspace"),
     )
     return build_server(w.registry, name="code-exec")
 

@@ -12,14 +12,11 @@ from __future__ import annotations
 def main():
     """Build and return the MCP server; wiring is shared with the REST entry
     point via wiring.py."""
-    import tempfile
-    from pathlib import Path
-
-    from platform_capability import build_server
+    from platform_capability import build_server, secure_data_dir
 
     from .wiring import wire
 
-    w = wire(Path(tempfile.gettempdir()) / "template-mcp")
+    w = wire(secure_data_dir("template-mcp"))
     return build_server(w.registry, name="template")
 
 

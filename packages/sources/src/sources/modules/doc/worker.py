@@ -9,6 +9,7 @@ preserve ordering.
 from __future__ import annotations
 
 import asyncio
+import logging
 import shutil
 from collections.abc import Callable
 from pathlib import Path
@@ -16,6 +17,7 @@ from pathlib import Path
 from platform_contracts import ActorKind, ActorRef, DomainEvent, Event
 from platform_eventbus import EventBus
 
+from .._shared.paths import within
 from .extract import ExtractError, Section, extract_sections
 from .store import DocStore
 
@@ -42,6 +44,7 @@ class DocWorker:
         self._store = store
         self._bus = bus
         self._queue = queue
+        self._workspace = Path(workspace)
         self._parse = parse_fn or _default_parse
         self._task: asyncio.Task | None = None
 
@@ -64,8 +67,6 @@ class DocWorker:
                 else:
                     await self._run_one(item)
             except Exception as exc:  # the worker must not die on a single bad job
-                import logging
-
                 logging.getLogger("sources.doc.worker").warning(
                     "worker task failed: item=%r error=%s", item, exc, exc_info=True
                 )
@@ -74,6 +75,17 @@ class DocWorker:
         if not local_path:
             return
         path = Path(local_path)
+        # Defense in depth: the enqueue side already jail-checked the stored
+        # path against the workspace root, but the deletion here runs without
+        # any other validation and the queue can carry a stale row across a
+        # restart — so this side re-checks instead of trusting the
+        # enqueue-time gate.
+        if not within(path, self._workspace):
+            logging.getLogger("sources.doc.worker").warning(
+                "doc remove skipped: stored path %r is outside the workspace root",
+                local_path,
+            )
+            return
         # Delete only while the path still belongs to the removed record;
         # a re-imported same-name doc points its new record at a new path
         doc = self._store.get(did)
