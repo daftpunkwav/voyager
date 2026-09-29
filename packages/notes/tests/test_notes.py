@@ -143,6 +143,48 @@ class TestSessionAttribution:
         assert len(await execute(registry, "list_notes", USER_CTX, {"tag": "x"})) == 1
         assert len(await execute(registry, "list_notes", USER_CTX, {"source_id": "s1"})) == 1
 
+    async def test_list_source_and_tag_filters_compose_with_query(self, deps) -> None:
+        # The SELECT-head excerpt CASE binds its needles before every WHERE
+        # placeholder: a source/tag filter must not be shifted onto the CASE
+        # (which used to make `source_id + query` filter by the query text).
+        await execute(
+            registry,
+            "create_note",
+            USER_CTX,
+            {"title": "hit", "content": "needle text lives here", "source_id": "s1", "tags": ["t"]},
+        )
+        await execute(
+            registry,
+            "create_note",
+            USER_CTX,
+            {"title": "miss", "content": "needle in the wrong source"},
+        )
+        hits = await execute(
+            registry, "list_notes", USER_CTX, {"source_id": "s1", "query": "needle"}
+        )
+        assert [n["title"] for n in hits] == ["hit"]
+        tagged = await execute(registry, "list_notes", USER_CTX, {"tag": "t", "query": "needle"})
+        assert [n["title"] for n in tagged] == ["hit"]
+        # excerpt window still centers on the content hit
+        assert "needle" in hits[0]["excerpt"]
+
+    async def test_content_update_version_survives_reopen(self, tmp_path) -> None:
+        # The version snapshot opens its own implicit transaction: committing
+        # before the snapshot used to leave it uncommitted (rolled back by
+        # close() unless a later write happened to commit again).
+        store = NoteStore(tmp_path / "notes.db", history_keep=5)
+        try:
+            nid = store.create({"title": "v", "content": "v1"})
+            store.update(nid, content="v2")
+        finally:
+            store.close()
+        reopened = NoteStore(tmp_path / "notes.db", history_keep=5)
+        try:
+            versions = reopened.list_versions(nid)
+        finally:
+            reopened.close()
+        assert [v["version"] for v in versions] == [1]
+
 
 class TestStatesAndSearch:
     async def test_state_views_exclude_each_other(self, deps) -> None:

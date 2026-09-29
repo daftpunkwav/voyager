@@ -221,9 +221,13 @@ class NoteStore:
                 f"UPDATE notes SET {', '.join(sets)}, updated_ts = ? WHERE id = ?",
                 (*params, time.time(), nid),
             )
-            self._conn.commit()
             if old_content is not None and old_content != new_content:
                 self._snapshot_locked(nid, old_content)
+            # Commit after the snapshot: the version INSERT/DELETE open their own
+            # implicit transaction, so committing before the snapshot left it
+            # uncommitted — it survived only if a later write happened to commit
+            # again, and was rolled back by close() (or a crash) otherwise.
+            self._conn.commit()
         return cur.rowcount > 0
 
     def delete(self, nid: str) -> None:
@@ -311,6 +315,19 @@ class NoteStore:
         direction = "ASC" if col == "title" else "DESC"
         state_sql, state_params = _STATE_CONDS.get(state, _STATE_CONDS["active"])
         conds = [state_sql]
+        # Binding order matters: the CASE placeholders in the SELECT head come
+        # before every WHERE placeholder (state/source/tag have no positional
+        # conflict only when the query needles bind first).
+        excerpt_sql = f"substr(content, 1, {_EXCERPT_LEN})"
+        query_params: list[Any] = []
+        if query:
+            needle = query.lower()
+            excerpt_sql = (
+                "CASE WHEN instr(lower(content), lower(?)) > 0 THEN"
+                " substr(content, MAX(1, instr(lower(content), lower(?)) - 60), 180)"
+                f" ELSE substr(content, 1, {_EXCERPT_LEN}) END"
+            )
+            query_params = [needle, needle]
         params: list[Any] = list(state_params)
         if source_id is not None:
             conds.append("source_id = ?")
@@ -318,17 +335,7 @@ class NoteStore:
         if tag:
             conds.append("tags LIKE ? ESCAPE '\\'")
             params.append(f"%{_like_escape(json.dumps(tag, ensure_ascii=False))}%")
-        excerpt_sql = f"substr(content, 1, {_EXCERPT_LEN})"
         if query:
-            # Binding order matters: the CASE placeholders in the SELECT head
-            # come before the LIKE placeholders in WHERE.
-            needle = query.lower()
-            excerpt_sql = (
-                "CASE WHEN instr(lower(content), lower(?)) > 0 THEN"
-                " substr(content, MAX(1, instr(lower(content), lower(?)) - 60), 180)"
-                f" ELSE substr(content, 1, {_EXCERPT_LEN}) END"
-            )
-            params.extend([needle, needle])
             pattern = f"%{_like_escape(query)}%"
             conds.append("(title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\')")
             params.extend([pattern, pattern])
@@ -339,7 +346,7 @@ class NoteStore:
             f" FROM notes WHERE {' AND '.join(conds)}"
         )
         sql += f" ORDER BY pinned DESC, {col} {direction} LIMIT ?"
-        params.append(limit)
+        params = [*query_params, *params, limit]
         with self._lock:
             rows = self._conn.execute(sql, params).fetchall()
         return [_summary_row(r) for r in rows]
