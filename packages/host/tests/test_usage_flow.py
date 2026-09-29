@@ -49,6 +49,7 @@ def stub_llm_client(monkeypatch):
         tools=None,
         reasoning_effort="",
         reasoning_variants=(),
+        **_kwargs,
     ):
         hits.append(model)
         return CompleteResult(
@@ -66,6 +67,7 @@ def stub_llm_client(monkeypatch):
         tools=None,
         reasoning_effort="",
         reasoning_variants=(),
+        **_kwargs,
     ):
         async def _gen():
             hits.append(model)

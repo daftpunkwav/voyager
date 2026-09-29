@@ -105,6 +105,9 @@ def create_app(
     extra_routers: list | None = None,
     trajectory=None,  # chat.TrajectoryReader: projection-backed /api/chat/trajectory
     uploads_workspace: Path | None = None,  # mount /api/uploads with the shared limiter
+    # Transport-level upload cap in bytes (gateway.uploads.max_mb setting;
+    # read by the composition root so a change lands on restart)
+    max_upload_bytes: int = 1024 * 1024 * 1024,
 ) -> FastAPI:
     if bus is None:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -230,7 +233,9 @@ def create_app(
     if uploads_workspace is not None:
         from .uploads import build_upload_router
 
-        app.include_router(build_upload_router(uploads_workspace, limiter))
+        app.include_router(
+            build_upload_router(uploads_workspace, limiter, max_bytes=max_upload_bytes)
+        )
 
     @app.get("/health")
     async def health() -> dict:

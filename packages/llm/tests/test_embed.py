@@ -54,7 +54,7 @@ class TestEmbed:
         settings.model = "text-embedding-3-small"
         seen: dict = {}
 
-        async def fake(provider, *, api_key, model, texts):
+        async def fake(provider, *, api_key, model, texts, **_kwargs):
             seen.update(model=model, texts=list(texts), key=api_key)
             return EmbedResult(vectors=[[0.1, 0.2]] * len(texts), model=model, input_tokens=7)
 

@@ -15,7 +15,14 @@ from typing import Any
 
 import httpx
 
-from llm.client import _TIMEOUT, ProviderError, _post, _send_with_retry, _wire_base
+from llm.client import (
+    HttpPolicy,
+    ProviderError,
+    _post,
+    _send_with_retry,
+    _stream_timeout,
+    _wire_base,
+)
 from llm.net_pin import pinned_ip
 
 
@@ -27,7 +34,12 @@ class EmbedResult:
 
 
 async def embed(
-    provider: dict[str, Any], *, api_key: str, model: str, texts: Sequence[str]
+    provider: dict[str, Any],
+    *,
+    api_key: str,
+    model: str,
+    texts: Sequence[str],
+    policy: HttpPolicy | None = None,
 ) -> EmbedResult:
     if provider.get("api_format") != "chat":
         raise ProviderError(
@@ -37,7 +49,7 @@ async def embed(
     base = _wire_base(provider)[1]  # classified lookup: a missing key is not a KeyError
     body = {"model": model, "input": list(texts)}
     chosen_ip = await pinned_ip(provider)  # resolve-and-pin before anything is sent
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=_stream_timeout(policy)) as client:
         resp = await _send_with_retry(
             lambda: _post(
                 client,
@@ -45,7 +57,8 @@ async def embed(
                 headers={"Authorization": f"Bearer {api_key}"},
                 body=body,
                 chosen_ip=chosen_ip,
-            )
+            ),
+            policy,
         )
     data = resp.json()
     items = sorted(data.get("data") or [], key=lambda item: int(item.get("index") or 0))

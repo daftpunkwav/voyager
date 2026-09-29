@@ -430,6 +430,9 @@ def build(
             ),
             sse_max_connections=_int_setting(settings_store, "gateway.sse.max_connections", 8),
             history_page_size=_int_setting(settings_store, "gateway.chat.history_page_size", 200),
+            max_upload_bytes=_int_setting(settings_store, "gateway.uploads.max_mb", 1024)
+            * 1024
+            * 1024,
         )
         app.state.backend = Backend(
             app=app,

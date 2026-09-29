@@ -9,6 +9,7 @@ from llm.capabilities.common import (
     DOMAIN,
     configured_max_output_tokens,
     effective_model,
+    http_policy,
     read_api_key,
     registry,
     require_deps,
@@ -119,6 +120,7 @@ async def complete(
             temperature=temperature,
             tools=tools,
             reasoning_effort=configured_reasoning_effort(p, use_model),
+            policy=http_policy(),
             reasoning_variants=configured_reasoning_variants(p, use_model),
         )
     except ProviderError as exc:  # classified mapping; still metered on failure (ok=0)

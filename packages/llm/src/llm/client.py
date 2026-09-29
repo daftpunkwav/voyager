@@ -50,11 +50,27 @@ _TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
 _COMPLETE_READ_CAP_S = 480.0
 
 
-def _complete_timeout(max_tokens: int) -> httpx.Timeout:
+def _read_cap_s(policy: HttpPolicy | None) -> float:
+    """Inter-chunk (streaming) read cap base: the user's request timeout when
+    set, else the module constant."""
+    if policy is not None and policy.request_timeout_s is not None:
+        return float(policy.request_timeout_s)
+    return _TIMEOUT.read or 0.0
+
+
+def _stream_timeout(policy: HttpPolicy | None = None) -> httpx.Timeout:
+    """Timeout for streaming requests: the read cap only bounds the gap
+    between SSE chunks, so it follows the user's request timeout."""
+    return httpx.Timeout(
+        connect=_TIMEOUT.connect, read=_read_cap_s(policy), write=_TIMEOUT.write, pool=_TIMEOUT.pool
+    )
+
+
+def _complete_timeout(max_tokens: int, policy: HttpPolicy | None = None) -> httpx.Timeout:
     """Per-request timeout for the non-streaming path; read scales with the
     output cap (long-thinking calls legitimately exceed 60s before the first
     response byte). Below ~480 output tokens this is identical to _TIMEOUT."""
-    read = max(_TIMEOUT.read or 0.0, min(max_tokens / 8.0, _COMPLETE_READ_CAP_S))
+    read = max(_read_cap_s(policy), min(max_tokens / 8.0, _COMPLETE_READ_CAP_S))
     return httpx.Timeout(
         connect=_TIMEOUT.connect, read=read, write=_TIMEOUT.write, pool=_TIMEOUT.pool
     )
@@ -66,6 +82,19 @@ def _complete_timeout(max_tokens: int) -> httpx.Timeout:
 _RETRY_ATTEMPTS = 2
 _RETRY_BACKOFF = 0.5
 _RETRY_AFTER_CAP = 5.0
+
+
+@dataclass(frozen=True)
+class HttpPolicy:
+    """Per-call overrides for the user-tunable transport knobs (mirrored by
+    the llm.request_timeout_s / llm.retry_attempts / llm.retry_backoff_s
+    settings, hot-read by the capabilities layer). None fields fall back to
+    the module constants above, so bare callers keep today's behavior."""
+
+    request_timeout_s: float | None = None
+    retry_attempts: int | None = None
+    retry_backoff_s: float | None = None
+
 
 #: No retry once the connection is established: the request may already have
 #: been accepted by the server, so retrying only stacks up waiting time.
@@ -576,6 +605,7 @@ async def _sleep(seconds: float) -> None:
 
 async def _send_with_retry(
     attempt: Callable[[], Awaitable[httpx.Response]],
+    policy: HttpPolicy | None = None,
 ) -> httpx.Response:
     """Exponential backoff retry for transient errors: 5xx / network blips /
     429.
@@ -584,13 +614,23 @@ async def _send_with_retry(
     is established (ReadTimeout etc.) may mean the request was already
     accepted; those are marked non-retriable and fail on first occurrence.
     """
-    for i in range(_RETRY_ATTEMPTS + 1):
+    attempts = (
+        _RETRY_ATTEMPTS
+        if policy is None or policy.retry_attempts is None
+        else int(policy.retry_attempts)
+    )
+    backoff = (
+        _RETRY_BACKOFF
+        if policy is None or policy.retry_backoff_s is None
+        else float(policy.retry_backoff_s)
+    )
+    for i in range(attempts + 1):
         try:
             return await attempt()
         except ProviderError as exc:
-            if not exc.retriable or i >= _RETRY_ATTEMPTS:
+            if not exc.retriable or i >= attempts:
                 raise
-            delay = _RETRY_BACKOFF * (2**i)
+            delay = backoff * (2**i)
             if exc.retry_after:
                 delay = max(delay, min(exc.retry_after, _RETRY_AFTER_CAP))
             await _sleep(delay)
@@ -927,6 +967,7 @@ async def complete(
     tools: list[dict[str, Any]] | None = None,
     reasoning_effort: str = "",
     reasoning_variants: Sequence[str] = (),
+    policy: HttpPolicy | None = None,
 ) -> CompleteResult:
     fmt, base = _wire_base(provider)
     url, headers, body = _wire_request(
@@ -947,10 +988,11 @@ async def complete(
     chosen_ip = await pinned_ip(provider)
     # Non-stream: the read cap covers the whole generation (see
     # _complete_timeout), derived from this request's output budget.
-    async with httpx.AsyncClient(timeout=_complete_timeout(max_tokens)) as client:
+    async with httpx.AsyncClient(timeout=_complete_timeout(max_tokens, policy)) as client:
         if fmt == "responses":
             resp = await _send_with_retry(
-                lambda: _post(client, url, headers=headers, body=body, chosen_ip=chosen_ip)
+                lambda: _post(client, url, headers=headers, body=body, chosen_ip=chosen_ip),
+                policy,
             )
             data = resp.json()
             if data.get("status") == "failed":
@@ -988,7 +1030,8 @@ async def complete(
             )
         if fmt == "anthropic":
             resp = await _send_with_retry(
-                lambda: _post(client, url, headers=headers, body=body, chosen_ip=chosen_ip)
+                lambda: _post(client, url, headers=headers, body=body, chosen_ip=chosen_ip),
+                policy,
             )
             data = resp.json()
             usage = data.get("usage") or {}
@@ -1029,7 +1072,8 @@ async def complete(
                 ),
             )
         resp = await _send_with_retry(
-            lambda: _post(client, url, headers=headers, body=body, chosen_ip=chosen_ip)
+            lambda: _post(client, url, headers=headers, body=body, chosen_ip=chosen_ip),
+            policy,
         )
         data = resp.json()
         usage = data.get("usage") or {}
@@ -1061,7 +1105,9 @@ async def complete(
         )
 
 
-async def test_connection(provider: dict[str, Any], *, api_key: str, model: str) -> TestResult:
+async def test_connection(
+    provider: dict[str, Any], *, api_key: str, model: str, policy: HttpPolicy | None = None
+) -> TestResult:
     """Connectivity test: send one minimal real request, report latency/error."""
     start = time.perf_counter()
     try:
@@ -1071,6 +1117,7 @@ async def test_connection(provider: dict[str, Any], *, api_key: str, model: str)
             model=model,
             messages=[{"role": "user", "content": "ping"}],
             max_tokens=8,
+            policy=policy,
         )
     except ProviderError as exc:
         # complete already embedded the status code and body summary in the

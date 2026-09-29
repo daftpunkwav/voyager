@@ -13,6 +13,7 @@ from platform_contracts import ActorRef, ErrorSuffix, ServiceError
 
 from llm.capabilities.common import (
     DOMAIN,
+    http_policy,
     read_api_key,
     registry,
     require_deps,
@@ -61,7 +62,7 @@ async def embed(
             hint="Set llm.embedding_model in the settings page (e.g. text-embedding-3-small)",
         )
     try:
-        result = await llm_embed(p, api_key=key, model=use_model, texts=clean)
+        result = await llm_embed(p, api_key=key, model=use_model, texts=clean, policy=http_policy())
     except ProviderError as exc:
         deps.store.record_usage(
             provider_id, use_model, 0, 0, caller=_actor.id if _actor else "", ok=False

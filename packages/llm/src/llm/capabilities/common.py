@@ -25,6 +25,7 @@ from platform_secrets import SecretStore, SecretUnavailableError
 from llm.client import (
     AuthError,
     ContextOverflowError,
+    HttpPolicy,
     ProviderError,
     RateLimitError,
 )
@@ -263,6 +264,23 @@ def private_endpoint_flag(base_url: str, actor: ActorRef | None) -> bool:
     )
 
 
+def http_policy() -> HttpPolicy | None:
+    """Hot-read the user-tunable transport knobs (request timeout / retries /
+    backoff) for one LLM call. None settings (isolated tests) or unreadable
+    values keep the client's module defaults."""
+    deps = require_deps()
+    if deps.settings is None:
+        return None
+    try:
+        return HttpPolicy(
+            request_timeout_s=float(deps.settings.get("llm.request_timeout_s")),
+            retry_attempts=int(deps.settings.get("llm.retry_attempts")),
+            retry_backoff_s=float(deps.settings.get("llm.retry_backoff_s")),
+        )
+    except Exception:  # noqa: BLE001  # dirty values degrade to the defaults
+        return None
+
+
 def configured_max_output_tokens(fallback: int = 4096) -> int:
     """Wire max_tokens default from the llm.max_output_tokens setting.
 
@@ -287,6 +305,7 @@ __all__ = [
     "configured_max_output_tokens",
     "effective_model",
     "find_bad_models_meta_field",
+    "http_policy",
     "init_deps",
     "key_name",
     "model_enabled",

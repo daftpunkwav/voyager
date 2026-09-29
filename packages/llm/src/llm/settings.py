@@ -71,4 +71,35 @@ DEFS = [
         max=128000,
         description="Max output tokens (global default)",
     ),
+    SettingDef(
+        key="llm.request_timeout_s",
+        module="llm",
+        type=SettingType.INT,
+        default=60,
+        min=10,
+        max=600,
+        description=(
+            "LLM request timeout (seconds). Streaming: cap on the gap between "
+            "SSE chunks; non-streaming derives a larger whole-generation cap "
+            "from max_tokens. Raise for slow providers or long thinking."
+        ),
+    ),
+    SettingDef(
+        key="llm.retry_attempts",
+        module="llm",
+        type=SettingType.INT,
+        default=2,
+        min=0,
+        max=6,
+        description="Retries for transient LLM errors (5xx / 429 / connect blips)",
+    ),
+    SettingDef(
+        key="llm.retry_backoff_s",
+        module="llm",
+        type=SettingType.FLOAT,
+        default=0.5,
+        min=0.05,
+        max=30.0,
+        description="Base exponential backoff between LLM retries (seconds)",
+    ),
 ]

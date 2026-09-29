@@ -31,13 +31,14 @@ import httpx
 from platform_webguard import pinned_request
 
 from .client import (
-    _TIMEOUT,
+    HttpPolicy,
     ProviderError,
     TransientError,
     _dump_rejected_request,
     _parse_tool_calls,
     _raise_typed_text,
     _request_id_from,
+    _stream_timeout,
     _wire_base,
     _wire_request,
 )
@@ -96,6 +97,7 @@ async def complete_stream(
     tools: list[dict[str, Any]] | None = None,
     reasoning_effort: str = "",
     reasoning_variants: Sequence[str] = (),
+    policy: HttpPolicy | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Streaming completion: yields text deltas and a final aggregate chunk."""
     fmt, base = _wire_base(provider)
@@ -122,7 +124,7 @@ async def complete_stream(
     in_body = False  # False = pre-first-packet (connection/status), True = body streaming
     chosen_ip = await pinned_ip(provider)  # resolve-and-pin before anything is sent
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=_stream_timeout(policy)) as client:
             request = pinned_request(
                 client, url, chosen_ip, method="POST", headers=headers, json=body
             )

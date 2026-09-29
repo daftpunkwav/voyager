@@ -154,15 +154,23 @@ class McpClientPool:
 
     # ---- Connect and preview ----
 
+    def _wire_timeout(self) -> float:
+        """Hot-read the connect/list timeout (agent.mcp.wire_timeout_s) so a
+        slow remote server can be accommodated without a restart."""
+        try:
+            return float(self._settings.get("agent.mcp.wire_timeout_s"))
+        except Exception:  # noqa: BLE001  # None store / unregistered key / dirty value
+            return WIRE_TIMEOUT
+
     async def _ensure_session(self, sid: str, cfg: dict) -> None:
         """Connect one server unless already connected (bounded by
-        WIRE_TIMEOUT). The caller holds the pool-level connect lock:
-        concurrent connects of the same server reuse the first connection
-        instead of each building one and leaking the other (re-checked under
-        the lock)."""
+        agent.mcp.wire_timeout_s, default WIRE_TIMEOUT). The caller holds the
+        pool-level connect lock: concurrent connects of the same server reuse
+        the first connection instead of each building one and leaking the
+        other (re-checked under the lock)."""
         if sid not in self._sessions:
             self._sessions[sid] = await asyncio.wait_for(
-                self._connect({**cfg, "cwd": self._cwd}), WIRE_TIMEOUT
+                self._connect({**cfg, "cwd": self._cwd}), self._wire_timeout()
             )
 
     def _record_tools(self, sid: str, tools: list[dict]) -> None:
@@ -204,7 +212,7 @@ class McpClientPool:
             async with self._connect_lock:
                 await self._ensure_session(sid, cfg)
                 tools = await asyncio.wait_for(
-                    self._sessions[sid].list_remote_tools(), WIRE_TIMEOUT
+                    self._sessions[sid].list_remote_tools(), self._wire_timeout()
                 )
         except Exception as exc:  # timeouts included: uniform readable error, no exception leaks past the capability frame
             await self.drop_session(sid)
@@ -333,7 +341,7 @@ class McpClientPool:
                 return
         session = self._sessions[sid]
         try:
-            tools = await asyncio.wait_for(session.list_remote_tools(), WIRE_TIMEOUT)
+            tools = await asyncio.wait_for(session.list_remote_tools(), self._wire_timeout())
         except Exception as exc:  # noqa: BLE001  # any list fault surfaces as entry error and drops session
             self._errors[sid] = f"MCP '{cfg['name']}' refresh failed: {exc}"
             await self.drop_session(sid)

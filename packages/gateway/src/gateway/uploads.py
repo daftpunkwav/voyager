@@ -26,7 +26,8 @@ from .ratelimit import RateLimiter
 
 log = logging.getLogger("gateway.uploads")
 
-#: Hard cap of 1GB (transport-level limit; domains enforce smaller limits)
+#: Default transport-level cap of 1GB (domains enforce smaller limits);
+#: overridden by the gateway.uploads.max_mb setting via create_app.
 _MAX_BYTES = 1024 * 1024 * 1024
 _CHUNK_SIZE = 1024 * 1024  # read in 1MB chunks to bound concurrent memory use
 #: Idle seconds between received body chunks before the upload is abandoned:
@@ -40,7 +41,9 @@ _IDLE_TIMEOUT_S = 30.0
 _UNSAFE_FILENAME_RE = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 
 
-def build_upload_router(workspace: Path, limiter: RateLimiter) -> APIRouter:
+def build_upload_router(
+    workspace: Path, limiter: RateLimiter, *, max_bytes: int = _MAX_BYTES
+) -> APIRouter:
     router = APIRouter()
 
     @router.post("/api/uploads")
@@ -73,7 +76,7 @@ def build_upload_router(workspace: Path, limiter: RateLimiter) -> APIRouter:
 
         declared = request.headers.get("content-length")
         try:
-            if declared is not None and int(declared) > _MAX_BYTES:
+            if declared is not None and int(declared) > max_bytes:
                 return _too_large()
         except ValueError:
             pass
@@ -105,7 +108,7 @@ def build_upload_router(workspace: Path, limiter: RateLimiter) -> APIRouter:
                 raise _Stalled from None
             if message["type"] == "http.request":
                 bytes_seen += len(message.get("body", b""))
-                if bytes_seen > _MAX_BYTES:
+                if bytes_seen > max_bytes:
                     raise _TooLarge
             return message
 
@@ -147,7 +150,7 @@ def build_upload_router(workspace: Path, limiter: RateLimiter) -> APIRouter:
                             if not chunk:
                                 break
                             total += len(chunk)
-                            if total > _MAX_BYTES:
+                            if total > max_bytes:
                                 raise _TooLarge
                             f.write(chunk)
                 except _TooLarge:

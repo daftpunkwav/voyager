@@ -18,11 +18,12 @@ from platform_webguard import pinned_request
 
 from llm.capabilities.common import (
     DOMAIN,
+    http_policy,
     read_api_key,
     registry,
     require_provider,
 )
-from llm.client import _TIMEOUT, ANTHROPIC_VERSION
+from llm.client import ANTHROPIC_VERSION, _stream_timeout
 from llm.net_pin import pinned_ip
 
 
@@ -57,7 +58,7 @@ async def list_remote_models(provider_id: str) -> dict:
     headers = _models_headers(p["api_format"], key)
     chosen_ip = await pinned_ip(p)  # resolve-and-pin before anything is sent
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=_stream_timeout(http_policy())) as client:
             request = pinned_request(client, url, chosen_ip, headers=headers)
             resp = await client.send(request)
     except httpx.TransportError as exc:

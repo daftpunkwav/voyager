@@ -23,6 +23,15 @@ def client(tmp_path):
     return TestClient(app), tmp_path / "ws"
 
 
+@pytest.fixture()
+def small_cap_client(tmp_path):
+    """Same app with an 8-byte transport cap: oversize rejection paths need a
+    cap far below any real body, which is a router parameter now."""
+    app = FastAPI()
+    app.include_router(build_upload_router(tmp_path / "ws", RateLimiter(600, 8), max_bytes=8))
+    return TestClient(app), tmp_path / "ws"
+
+
 class TestUpload:
     def test_upload_saves_to_imports(self, client) -> None:
         tc, ws = client
@@ -76,14 +85,11 @@ class TestUpload:
         assert resp.status_code == 413
         assert resp.json()["error"]["code"] == "GATEWAY.PAYLOAD_TOO_LARGE"
 
-    def test_lying_content_length_rejected_at_spool(self, client, monkeypatch) -> None:
+    def test_lying_content_length_rejected_at_spool(self, small_cap_client) -> None:
         """A small (lying) Content-Length passes the pre-check: the receive
         boundary cap stops the body while Starlette is still spooling it, so
         no destination directory is even created."""
-        import gateway.uploads as uploads_mod
-
-        monkeypatch.setattr(uploads_mod, "_MAX_BYTES", 8)
-        tc, ws = client
+        tc, ws = small_cap_client
         # content-length overridden below the cap: only the receive cap can stop this body
         resp = tc.post(
             "/api/uploads",
@@ -94,13 +100,10 @@ class TestUpload:
         assert resp.json()["error"]["code"] == "GATEWAY.PAYLOAD_TOO_LARGE"
         assert not (ws / "imports").exists()  # rejected before any landing
 
-    def test_chunked_oversize_rejected_without_content_length(self, client, monkeypatch) -> None:
+    def test_chunked_oversize_rejected_without_content_length(self, small_cap_client) -> None:
         """A chunked body carries no Content-Length at all: the receive
         boundary cap is still enforced."""
-        import gateway.uploads as uploads_mod
-
-        monkeypatch.setattr(uploads_mod, "_MAX_BYTES", 8)
-        tc, ws = client
+        tc, ws = small_cap_client
         resp = tc.post(
             "/api/uploads",
             files={"file": ("big.bin", b"x" * 100)},

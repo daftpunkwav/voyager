@@ -582,5 +582,11 @@
   "auto.office.export.dir": "Export directory",
   "auto.host.domains.enabled": "Enabled domains",
   "auto.privacy.activity_report": "Activity report",
-  "auto.appearance.code_font": "Code font"
+  "auto.appearance.code_font": "Code font",
+  "auto.llm.request_timeout_s": "Request timeout (s)",
+  "auto.llm.retry_attempts": "Retries",
+  "auto.llm.retry_backoff_s": "Retry backoff (s)",
+  "auto.gateway.uploads.max_mb": "Upload cap (MB)",
+  "auto.agent.mcp.wire_timeout_s": "MCP connect timeout (s)",
+  "auto.agent.retention.raw_log_days": "Raw LLM log retention (days)"
 }

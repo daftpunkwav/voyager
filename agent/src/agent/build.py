@@ -872,7 +872,13 @@ def build_agent(
     trajectory.catch_up()
     # Raw LLM round log retention: a debugging surface, not an archive - the
     # bodies are full per-round transcripts and would grow without bound.
-    trajectory.purge_raw_older_than_days(RAW_LOG_RETENTION_DAYS)
+    # agent.retention.raw_log_days overrides the constant; an unreadable
+    # value (isolated tests without the key registered) keeps the default.
+    try:
+        raw_days = int(settings.get("agent.retention.raw_log_days"))
+    except ServiceError:
+        raw_days = RAW_LOG_RETENTION_DAYS
+    trajectory.purge_raw_older_than_days(max(1, raw_days))
 
     def _raw_round_fn(session_id: str):
         """Per-session raw LLM round recorder: the exact request transcript

@@ -517,7 +517,7 @@ export function SettingsPage() {
               <WriteRootsBlock />
               <AppPolicyBlock />
               <DynamicSettingsGroup
-                prefixes={['agent.execution.', 'agent.context.']}
+                prefixes={['agent.execution.', 'agent.context.', 'agent.retention.']}
                 titleKey="execution.dynamics"
               />
             </section>

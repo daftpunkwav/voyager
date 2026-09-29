@@ -37,4 +37,16 @@ DEFS = [
         max=2000,
         description="Chat history entries fetched per request",
     ),
+    SettingDef(
+        key="gateway.uploads.max_mb",
+        module="gateway",
+        type=SettingType.INT,
+        default=1024,
+        min=1,
+        max=102400,
+        description=(
+            "Transport-level upload cap per request (MB); domains enforce "
+            "their own smaller limits. Read at startup."
+        ),
+    ),
 ]

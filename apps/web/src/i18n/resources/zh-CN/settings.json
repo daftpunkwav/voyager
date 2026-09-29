@@ -582,5 +582,11 @@
   "auto.office.export.dir": "导出目录",
   "auto.host.domains.enabled": "启用域",
   "auto.privacy.activity_report": "活动上报",
-  "auto.appearance.code_font": "代码字体"
+  "auto.appearance.code_font": "代码字体",
+  "auto.llm.request_timeout_s": "请求超时（秒）",
+  "auto.llm.retry_attempts": "重试次数",
+  "auto.llm.retry_backoff_s": "重试退避（秒）",
+  "auto.gateway.uploads.max_mb": "上传上限（MB）",
+  "auto.agent.mcp.wire_timeout_s": "MCP 连接超时（秒）",
+  "auto.agent.retention.raw_log_days": "原始 LLM 日志保留（天）"
 }

@@ -451,6 +451,31 @@ DEFS = [
         ),
     ),
     SettingDef(
+        key="agent.mcp.wire_timeout_s",
+        module="mcp",
+        type=SettingType.INT,
+        default=15,
+        min=3,
+        max=300,
+        description=(
+            "MCP connect / list_tools timeout (seconds); raise for slow "
+            "remote servers. Hot-read on every attempt."
+        ),
+    ),
+    SettingDef(
+        key="agent.retention.raw_log_days",
+        module="agent",
+        type=SettingType.INT,
+        default=7,
+        min=1,
+        max=365,
+        description=(
+            "Raw LLM round log retention (days); full per-round request/"
+            "response bodies are the largest unbounded artifact in the "
+            "runtime data directory. Read at startup."
+        ),
+    ),
+    SettingDef(
         key="agent.mcp.refresh_seconds",
         module="agent",
         type=SettingType.INT,
