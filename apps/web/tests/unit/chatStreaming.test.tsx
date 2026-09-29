@@ -52,7 +52,7 @@ beforeEach(() => {
     streaming: null,
     steps: [],
     trails: [],
-    lastSteps: [],
+    prevTurnSteps: [],
     roundTexts: [],
   });
 });

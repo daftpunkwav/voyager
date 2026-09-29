@@ -3,7 +3,7 @@
  * @description Conversation state: message stream (user/agent/system), task progress
  * cards, pending questions, connection and thinking indicators, plus the
  * execution-trajectory trails (closed per-turn step groups rebuilt from
- * persisted rows via applyTrajectory, live turns via steps/lastSteps).
+ * persisted rows via applyTrajectory, live turns via steps/prevTurnSteps).
  *
  * The chat page and the persistent floating window are two views of the same
  * conversation, so this store is shared by both —
@@ -222,7 +222,7 @@ interface LaneSnapshot {
   hasMoreHistory: boolean;
   trails: TurnTrail[];
   steps: TurnStep[];
-  lastSteps: TurnStep[];
+  prevTurnSteps: TurnStep[];
   artifacts: NoteArtifact[];
   /** Team delivery cards of this lane (agent.delivery). */
   deliveries: Delivery[];
@@ -240,7 +240,7 @@ function emptyLane(): LaneSnapshot {
     hasMoreHistory: false,
     trails: [],
     steps: [],
-    lastSteps: [],
+    prevTurnSteps: [],
     artifacts: [],
     deliveries: [],
     streaming: null,
@@ -353,10 +353,10 @@ interface ChatState {
   /** Execution trajectory of the current turn (agent.step appends; live-only). */
   steps: TurnStep[];
   /** Closed per-turn trails rebuilt from persisted rows (refresh-safe);
-   *  the latest closed turn duplicates lastSteps by reference. */
+   *  the latest closed turn duplicates prevTurnSteps by reference. */
   trails: TurnTrail[];
   /** Trajectory of the previous finished turn, shown collapsed by the timeline. */
-  lastSteps: TurnStep[];
+  prevTurnSteps: TurnStep[];
   /** Frozen lead-in texts of finished rounds of the live turn (round -> text). */
   roundTexts: RoundText[];
   /** Current streaming typing (agent.delta); cleared by agent.message, restarted on round change */
@@ -605,7 +605,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentStep: null,
   steps: [],
   trails: [],
-  lastSteps: [],
+  prevTurnSteps: [],
   roundTexts: [],
   streaming: null,
   workspaceRev: 0,
@@ -631,7 +631,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       hasMoreHistory: s.hasMoreHistory,
       trails: s.trails,
       steps: s.steps,
-      lastSteps: s.lastSteps,
+      prevTurnSteps: s.prevTurnSteps,
       artifacts: s.artifacts,
       deliveries: s.deliveries,
       streaming: s.streaming,
@@ -647,7 +647,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       hasMoreHistory: lane.hasMoreHistory,
       trails: lane.trails,
       steps: lane.steps,
-      lastSteps: lane.lastSteps,
+      prevTurnSteps: lane.prevTurnSteps,
       artifacts: lane.artifacts,
       deliveries: lane.deliveries,
       roundTexts: [],
@@ -683,7 +683,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // The agent speaking again means the lane's pending ask is settled
         // (answered, timed out, or continued with defaults)
         question: null,
-        lastSteps: lane.steps,
+        prevTurnSteps: lane.steps,
         steps: [],
         messages: [...lane.messages, toAgentMessage(ev, p)],
       };
@@ -882,7 +882,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // the dialog must not stay stuck on a question the backend dropped;
         // currentStep clears as well: any round output means "no tool running";
         // streaming settles and clears: the real message has arrived, the typing slot is done.
-        // The turn's step trajectory folds into lastSteps and the timeline collapses.
+        // The turn's step trajectory folds into prevTurnSteps and the timeline collapses.
         // The closed turn also lands in trails (msgSeq-upsert, so refresh
         // rebuilds and live appends compose without duplicates).
         const prevSteps = get().steps;
@@ -897,7 +897,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           question: null,
           currentStep: null,
           streaming: null,
-          lastSteps: prevSteps,
+          prevTurnSteps: prevSteps,
           roundTexts: [],
           steps: [],
           trails,
@@ -1090,7 +1090,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       thinking: false,
       streaming: null,
       roundTexts: [],
-      lastSteps: s.steps.length ? s.steps : s.lastSteps,
+      prevTurnSteps: s.steps.length ? s.steps : s.prevTurnSteps,
       steps: [],
       trails:
         s.steps.length > 0

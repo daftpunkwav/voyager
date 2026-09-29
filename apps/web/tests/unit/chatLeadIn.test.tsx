@@ -50,7 +50,7 @@ beforeEach(() => {
     currentStep: null,
     steps: [],
     trails: [],
-    lastSteps: [],
+    prevTurnSteps: [],
     streaming: null,
   });
 });

@@ -85,7 +85,7 @@ function reset(state: Record<string, unknown> = {}) {
     currentStep: null,
     steps: [],
     trails: [],
-    lastSteps: [],
+    prevTurnSteps: [],
     streaming: null,
     ...state,
   });
@@ -174,14 +174,14 @@ describe('ChatPage tabs', () => {
 
 describe('live trace detail', () => {
   it('expands a tool row to the call fact sheet', () => {
-    reset({ steps: TRAIL_STEPS, lastSteps: [] });
+    reset({ steps: TRAIL_STEPS, prevTurnSteps: [] });
     render(<LiveTurnTrace />);
     fireEvent.click(screen.getByText('读文件'));
     expect(screen.getByText('{"path":"a.txt"}')).toBeTruthy();
   });
 
   it('renders the round lead-in text and meta directly (no step numbers)', () => {
-    reset({ steps: TRAIL_STEPS, lastSteps: [] });
+    reset({ steps: TRAIL_STEPS, prevTurnSteps: [] });
     render(<LiveTurnTrace />);
     expect(screen.queryByText('轮 1')).toBeNull(); // round chrome removed
     // round output renders directly (never folded); thinking is a fold

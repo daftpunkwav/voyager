@@ -62,7 +62,7 @@ function resetStore() {
     currentStep: null,
     steps: [],
     trails: [],
-    lastSteps: [],
+    prevTurnSteps: [],
     roundTexts: [],
     streaming: null,
   });

@@ -139,7 +139,7 @@ export function TrajectoryView() {
   const { t } = useTranslation('chat');
   const trails = useChatStore((s) => s.trails);
   const steps = useChatStore((s) => s.steps);
-  const lastSteps = useChatStore((s) => s.lastSteps);
+  const prevTurnSteps = useChatStore((s) => s.prevTurnSteps);
   const messages = useChatStore((s) => s.messages);
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -150,9 +150,9 @@ export function TrajectoryView() {
     const bySeq = new Map<number, TurnStep>();
     for (const s of trails.flatMap((tr) => tr.steps)) bySeq.set(s.seq, s);
     for (const s of steps) bySeq.set(s.seq, s);
-    for (const s of lastSteps) bySeq.set(s.seq, s);
+    for (const s of prevTurnSteps) bySeq.set(s.seq, s);
     return [...bySeq.values()].sort((a, b) => a.seq - b.seq);
-  }, [trails, steps, lastSteps]);
+  }, [trails, steps, prevTurnSteps]);
   const stats = summarizeTurn(allSteps);
   const firstTs = allSteps[0]?.ts;
   const lastTs = allSteps[allSteps.length - 1]?.ts;

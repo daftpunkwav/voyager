@@ -29,7 +29,7 @@ function reset() {
     currentStep: null,
     steps: [],
     trails: [],
-    lastSteps: [],
+    prevTurnSteps: [],
     streaming: null,
   });
 }
@@ -101,7 +101,7 @@ describe('trajectory backfill', () => {
     // the collapsed timeline simply goes quiet.
     dispatch('agent.message', { content: 'ok' });
     expect(useChatStore.getState().trails).toHaveLength(1);
-    expect(useChatStore.getState().lastSteps).toEqual([]);
+    expect(useChatStore.getState().prevTurnSteps).toEqual([]);
   });
 
   it('null payloads map to empty steps, never throw', () => {

@@ -27,7 +27,7 @@ function resetStore(messages: ChatMessage[]) {
     currentStep: null,
     steps: [],
     trails: [],
-    lastSteps: [],
+    prevTurnSteps: [],
     roundTexts: [],
     streaming: null,
   });

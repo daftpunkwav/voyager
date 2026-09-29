@@ -211,8 +211,8 @@ export function SettingsPage() {
     addToast({ type: 'success', message: t('github.unbound') });
   };
 
-  const downloadJson = (rows: unknown, filename: string) => {
-    const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' });
+  const downloadJson = (payload: unknown, filename: string) => {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
