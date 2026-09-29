@@ -30,6 +30,12 @@ log = logging.getLogger("agent.outreach")
 FOLLOWUP_JOB_KIND = "outreach.followup"
 _MAX_FOLLOWUPS = 1  # original message + one follow-up
 
+#: Reply check: backwards page size and page budget. after_ts is at most one
+#: follow-up delay old (~30 min), so the walk normally stops at the baseline
+#: within a page or two; the budget only bounds a pathological log.
+_REPLY_PAGE = 200
+_REPLY_SCAN_PAGES = 25
+
 
 class ProactiveEngine:
     def __init__(
@@ -115,24 +121,48 @@ class ProactiveEngine:
 
     def _user_replied_since(self, session: str, ts: float) -> bool:
         """A user message in the session after ts means the user is back — the
-        chain is moot. Reads the event log through the master's store; a log
-        read failure keeps the conservative assumption (already answered)."""
+        chain is moot. USER_MESSAGE rows are paged backwards until the baseline
+        ts is passed: a fixed latest-50 window would miss the reply whenever
+        other sessions logged 50+ user messages since the outreach, and the
+        engine would then send an unwanted follow-up. Past the page budget
+        without reaching the baseline, the conservative assumption wins
+        (already answered); a log read failure keeps the same answer."""
         try:
             log_ = self._master._bus.log  # engine and master share one process
-            rows = log_.read_before(
-                before_seq=log_.latest_seq() + 1, types=[DomainEvent.USER_MESSAGE], limit=50
-            )
-            return any(
-                str(e.payload.get("session") or "") == session and e.ts > ts for _, e in rows
-            )
+            cursor = log_.latest_seq() + 1
+            for _ in range(_REPLY_SCAN_PAGES):
+                rows = log_.read_before(
+                    before_seq=cursor, types=[DomainEvent.USER_MESSAGE], limit=_REPLY_PAGE
+                )
+                if not rows:
+                    return False  # log head reached, no reply found
+                if any(
+                    isinstance(e.payload, dict)
+                    and str(e.payload.get("session") or "") == session
+                    and e.ts > ts
+                    for _, e in rows
+                ):
+                    return True
+                if min(e.ts for _, e in rows) <= ts:
+                    return False  # baseline reached: everything older predates it
+                cursor = rows[0][0]
+            return True  # baseline not reached within the budget: cannot tell
         except Exception:  # noqa: BLE001  # cannot tell -> assume replied (stay quiet)
             return True
 
     async def _compose(self, instruction: str) -> str:
         """One LLM call, no tools, no residency; an empty reply means 'say
-        nothing' and a failure stays logged (outreach is best-effort)."""
+        nothing' and a failure stays logged (outreach is best-effort). The
+        instruction rides as the system message plus a minimal user turn:
+        a message list with no user role is rejected by several providers
+        (Anthropic requires the first non-system turn to be user)."""
         try:
-            reply = await self._llm.complete([{"role": "system", "content": instruction}])
+            reply = await self._llm.complete(
+                [
+                    {"role": "system", "content": instruction},
+                    {"role": "user", "content": "Write the outreach message now."},
+                ]
+            )
         except Exception:  # outreach is best-effort, never breaks the caller
             log.warning("outreach compose failed", exc_info=True)
             return ""

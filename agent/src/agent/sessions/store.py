@@ -325,7 +325,10 @@ class SessionStore:
             return
         # replace() keeps every other field, including the pinned/archived
         # curation flags (a rename must not silently unpin the session).
-        self.save(replace(snap, title=title, updated_at=time.time()))
+        # _next_ts applies the same strictly-increasing floor touch() uses: a
+        # bare time.time() could land inside the previous write's tick (Windows
+        # clock resolution) and leave "most recently updated" order unstable.
+        self.save(replace(snap, title=title, updated_at=self._next_ts(time.time())))
 
     def delete(self, session_id: str) -> None:
         self._conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))

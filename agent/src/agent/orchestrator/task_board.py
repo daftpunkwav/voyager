@@ -34,6 +34,11 @@ _CANCELLED = "cancelled"
 
 _STATUS = (_OPEN, _CLAIMED, _ASSIGNED, _RUNNING, _DONE, _FAILED, _CANCELLED)
 
+#: Capacity eviction may only drop these: a live row (open through running)
+#: evicted by a 51st publish would strand its run — the completion path's
+#: board.get() lands NOT_FOUND and the delivery card loses its title chip.
+_TERMINAL = (_DONE, _FAILED, _CANCELLED)
+
 _MAX_TASKS = 50
 _MAX_TEXT = 2000
 
@@ -119,8 +124,12 @@ class TaskBoard:
         )
         with self._lock:
             if len(self._tasks) >= _MAX_TASKS:
-                oldest = min(self._tasks.values(), key=lambda t: t.created_ts)
-                del self._tasks[oldest.id]
+                terminal = [t for t in self._tasks.values() if t.status in _TERMINAL]
+                if terminal:
+                    oldest = min(terminal, key=lambda t: t.created_ts)
+                    del self._tasks[oldest.id]
+                # No terminal row to recycle: the board temporarily grows past
+                # the cap instead of evicting a live task someone may finish.
             self._tasks[task.id] = task
             return task.to_dict()
 

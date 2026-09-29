@@ -76,6 +76,31 @@ class TestBoardStateMachine:
         board.publish(title="b", brief="b", session="s2", publisher="orchestrator")
         assert [r["session"] for r in board.list(session="s1")] == ["s1"]
 
+    def test_capacity_eviction_only_recycles_terminal_rows(self) -> None:
+        """Filling the board must never drop a live row: a running task whose
+        board row vanished would land NOT_FOUND on its completion stamp."""
+        board = TaskBoard()
+        live_ids = []
+        for i in range(50):
+            row = board.publish(title=f"live-{i}", brief="b", session="s", publisher="orchestrator")
+            board.claim(row["id"], claimant=f"m{i}")
+            board.confirm(row["id"], publisher="orchestrator")
+            board.mark_running(row["id"], run_id=f"r-{i}")
+            live_ids.append(row["id"])
+        done_first = live_ids[0]
+        board.finish(done_first, ok=True, result="early")
+        # The 51st publish recycles the oldest TERMINAL row, not a running one
+        extra = board.publish(title="overflow", brief="b", session="s", publisher="orchestrator")
+        with pytest.raises(ServiceError):
+            board.get(done_first)  # the finished row was the eviction victim
+        assert board.get(extra["id"])["status"] == "open"
+        for tid in live_ids[1:]:
+            assert board.get(tid)["status"] == "running"  # live rows survive
+        # With nothing terminal left to recycle, the board grows instead of
+        # evicting live work
+        more = board.publish(title="overflow-2", brief="b", session="s", publisher="orchestrator")
+        assert board.get(more["id"])["status"] == "open"
+
 
 def _deps_with_board(board, dispatch=None):
     from agent.capabilities.deps import CapabilityDeps

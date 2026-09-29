@@ -301,14 +301,25 @@ class SessionManager:
             self._titles[sid] = title
 
     def delete(self, session_id: str) -> dict[str, Any]:
-        """Delete a session; refused while its instance is mid-turn."""
+        """Delete a session; refused while its instance is mid-turn.
+
+        RUNNING is the obvious refusal (the turn would keep writing into a
+        dead session); PAUSED is refused for the same reason a turn is: the
+        pause holds a resumable checkpoint whose snapshot targets this
+        session, so deleting would orphan it (resume_run would rebuild a run
+        routing into a session that no longer exists)."""
         sid = self._normalize_target(session_id)
         inst = self._instances.get(sid)
-        if inst is not None and inst.status is RunStatus.RUNNING:
+        if inst is not None and inst.status in (RunStatus.RUNNING, RunStatus.PAUSED):
+            reason = (
+                "running; cancel the turn before deleting"
+                if inst.status is RunStatus.RUNNING
+                else "paused mid-turn; resume or abandon the run before deleting"
+            )
             raise ServiceError(
                 "agent",
                 ErrorSuffix.INVALID_INPUT,
-                f"session {sid} is running; cancel the turn before deleting",
+                f"session {sid} is {reason}",
             )
         # Validate existence before dismantling anything: a NOT_FOUND raised
         # after the teardown would already have dropped the in-memory instance

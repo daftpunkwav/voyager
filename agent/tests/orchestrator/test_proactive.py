@@ -89,6 +89,53 @@ async def test_followup_not_cancelled_by_older_user_message() -> None:
     assert replies and replies[0][1] == "s1"
 
 
+async def test_reply_seen_beyond_the_latest_window() -> None:
+    """A reply buried under 200 newer other-session messages is still found:
+    the check pages backwards to the baseline instead of reading a fixed
+    latest-50 window (which would fake silence and send an unwanted nudge).
+    The first 200-row page holds only other sessions, so the walk continues."""
+    after = time.time() - 3600
+    events = [(1, _user_event("s1", after + 10))]
+    seq = 2
+    while len(events) < 201:  # 200 newer messages from other sessions
+        events.append((seq, _user_event("other", after + 20)))
+        seq += 1
+    master_log = _FakeLog(events)
+    pages: list[int] = []
+
+    def read_before(*, before_seq: int, types=None, limit: int = 500):
+        pages.append(limit)
+        rows = [(s, e) for s, e in master_log._events if s < before_seq]
+        return rows[-limit:]
+
+    engine, replies = _engine([])
+    engine._master._bus.log = SimpleNamespace(
+        latest_seq=master_log.latest_seq, read_before=read_before
+    )
+    await engine._run_followup_job(
+        {"session": "s1", "topic": "hello", "followups": 0, "after_ts": after}
+    )
+    assert replies == []  # the buried reply cancelled the chain
+    assert len(pages) == 2  # the walk continued past the first page
+
+
+async def test_compose_sends_a_user_turn() -> None:
+    """The compose request carries a user role after the system instruction:
+    several providers reject a message list with no user turn."""
+    seen: list[list] = []
+
+    async def complete(messages):
+        seen.append(messages)
+        return SimpleNamespace(text="hi", degraded=False)
+
+    engine, _ = _engine([])
+    engine._llm = SimpleNamespace(complete=complete)
+    assert await engine._compose("greet briefly") == "hi"
+    (messages,) = seen
+    assert [m["role"] for m in messages] == ["system", "user"]
+    assert messages[0]["content"] == "greet briefly"
+
+
 async def test_schedule_followup_stamps_outreach_time_as_baseline() -> None:
     engine, _ = _engine([])
     before = time.time()

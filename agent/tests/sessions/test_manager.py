@@ -47,6 +47,24 @@ class TestSessionManager:
         finally:
             app.close()
 
+    def test_delete_paused_refused(self, tmp_path) -> None:
+        """A PAUSED session holds a resumable checkpoint targeting this
+        session; deleting would orphan it, so the delete is refused (same
+        family as the RUNNING refusal)."""
+        app = _app(tmp_path, FakeLLM())
+        try:
+            mgr = app.master.sessions
+            inst = mgr.resolve("")
+            inst.state.status = RunStatus.PAUSED
+            with pytest.raises(ServiceError, match="paused mid-turn"):
+                mgr.delete(inst.session)
+            # WAITING_INPUT is the normal idle state and stays deletable.
+            inst.state.status = RunStatus.WAITING_INPUT
+            mgr.delete(inst.session)
+            assert mgr.list() == []
+        finally:
+            app.close()
+
     def test_delete_drops_queued_inbox(self, tmp_path) -> None:
         """Deleting a session drops its queued-message inbox: messages parked
         while its turn was running belong to the dead conversation and must
