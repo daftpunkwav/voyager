@@ -17,7 +17,7 @@ Every event carries `seq` (log position), `type`, `ts`, `trace_id`, and payload.
 
 ## EventLog
 
-`EventLog` appends every event to a SQLite `events` table keyed by autoincrement `seq` and serves paged reads (`before_seq`/`after_seq`) and catch-up scans. This log — not memory — is the source of truth: chat history, trajectory rebuilds, and SSE replay all read from it. `Retention` sweeps old rows by type and age; the host configures retention for `agent.delta` only (24 h), so all other event types accumulate until purged manually.
+`EventLog` appends every event to a SQLite `events` table keyed by autoincrement `seq` and serves paged reads (`before_seq`/`after_seq`) and catch-up scans. This log — not memory — is the source of truth: chat history, trajectory rebuilds, and SSE replay all read from it. `Retention` sweeps old rows by type and age; the host purges the high-churn display streams (`agent.delta`, `agent.step`, `task.progress`) after 24 h, and all other event types accumulate until purged manually.
 
 ## EventBus
 

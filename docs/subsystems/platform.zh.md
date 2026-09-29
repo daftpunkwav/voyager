@@ -14,7 +14,7 @@
 
 ## platform_eventbus
 
-`packages/platform/eventbus/src/platform_eventbus/` — 只追加日志加进程内扇出。`EventLog` 把每条 `Event` 持久化到 SQLite `events` 表,以自增 `seq` 为键,带 `Retention` 清扫(host 只保留 `agent.delta` 行,24 小时)。`EventBus` 向进程内异步订阅者投递,落后时将其标记为 `lagged`;消费者按 `seq` 从日志重放。`CursorStore` 持久化每个订阅者的游标。完整参考:[eventbus.zh.md](eventbus.zh.md)。
+`packages/platform/eventbus/src/platform_eventbus/` — 只追加日志加进程内扇出。`EventLog` 把每条 `Event` 持久化到 SQLite `events` 表,以自增 `seq` 为键,带 `Retention` 清扫(host 对 `agent.delta`/`agent.step`/`task.progress` 展示流配置 24 小时清理)。`EventBus` 向进程内异步订阅者投递,落后时将其标记为 `lagged`;消费者按 `seq` 从日志重放。`CursorStore` 持久化每个订阅者的游标。完整参考:[eventbus.zh.md](eventbus.zh.md)。
 
 ## platform_capability
 

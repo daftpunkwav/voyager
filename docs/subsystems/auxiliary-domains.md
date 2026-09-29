@@ -2,7 +2,7 @@
 
 English | [中文](auxiliary-domains.zh.md)
 
-Four small domains complete the set: `settings` (user-facing settings), `browser` (browser control, currently a skeleton adapter), `code_exec` (sandboxed code execution), and `office` (block-based docs and slides).
+Four small domains complete the set: `settings` (user-facing settings), `browser` (browser control; commands are refused until the external browser host is wired), `code_exec` (sandboxed code execution), and `office` (block-based docs and slides).
 
 ## settings domain
 
@@ -18,13 +18,13 @@ Source: `packages/browser/src/browser/` — port 8060, **disabled by default**. 
 
 Capabilities: `navigate`, `click`, `type`, `read`, `screenshot`, each returning a `BrowserResult` (`ok`, `url`, `title`, `text`, `screenshot_path`, `error`). `navigate` enforces the `browser.allowed_domains` suffix/equality match on the netloc, else `ServiceError(FORBIDDEN)`.
 
-`host.py` is a placeholder adapter: all five functions currently return placeholder results; the docstring states the real browser runs in an external browser host and the IPC is pending. Settings: `browser.allowed_domains`, `browser.headless`.
+`host.py` refuses every command with `BROWSER.UNAVAILABLE` until the IPC channel to the external browser host (`desktop/browser-host`) is wired — it never reports `ok=True` with placeholder content. Settings: `browser.allowed_domains`, `browser.headless`.
 
 ## code_exec domain
 
-Source: `packages/code_exec/src/code_exec/` — port 8050, **disabled by default**. Store `data/runtime/code_exec/code-exec.db` (an `executions` table).
+Source: `packages/code_exec/src/code_exec/` — port 8050, **disabled by default**. Store `data/runtime/code_exec/code-exec.db` (an `executions` table; rows purge after 30 days under a 200-row cap, and the artifact dirs of purged rows are removed with them).
 
-Capabilities: `list_runtimes`; `run_snippet(runtime, code)` and `run_file(runtime, file_path)` — both `long_running=True`: they spawn background work and return a `JobRef` immediately. `run_file` rejects paths escaping `workspace/sandbox/`.
+Capabilities: `list_runtimes`; `run_snippet(runtime, code)` and `run_file(runtime, file_path)` — both `long_running=True`: they spawn background work and return a `JobRef` immediately. `run_file` rejects paths escaping `workspace/sandbox/`. At most 4 executions run concurrently (`QUEUE_FULL` beyond that) and code over 256 KB is rejected (`INVALID_INPUT`).
 
 `executor.py` — `run_in_runtime(...)`: writes the snippet to `workspace/sandbox/artifacts/<exec_id>/`, then runs one-shot `docker run --rm -m <memory> -v <artifact_dir>:/workspace` (network `none` unless `code_exec.network` is on) with whitelist-validated image/cmd/extension. Without Docker, the host fallback (built-in `python`/`node`/`shell` runtimes only) refuses unless `code_exec.allow_unisolated` is enabled: host mode cannot honour memory/network limits, so an enabled run executes with full host privileges, emits a warning, and is tagged `isolation="none"` in the result. Streams are capped at 1 MiB each; timeout kills and reaps the child, keeping the isolation attribution of what actually ran. Emits `task.progress`/`task.completed`/`task.failed`.
 

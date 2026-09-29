@@ -8,7 +8,7 @@ All runtime state lives under `data/`. The layout below is what the code creates
 
 | Path | Owner | Contents | Retention |
 |---|---|---|---|
-| `data/runtime/events.db` | `platform_eventbus.EventLog` | the append-only event log | `agent.delta` rows purge after 24 h; other types accumulate |
+| `data/runtime/events.db` | `platform_eventbus.EventLog` | the append-only event log | `agent.delta`/`agent.step`/`task.progress` rows purge after 24 h; other types accumulate |
 | `data/runtime/settings.db` | `platform_settings.SettingsStore` | setting values | — |
 | `data/runtime/secrets.db` | `platform_secrets.SecretStore` | Fernet-encrypted secrets | — |
 | `data/runtime/audit.db` | `platform_capability.SqliteAuditSink` | capability call audit | — |
@@ -41,7 +41,7 @@ All runtime state lives under `data/`. The layout below is what the code creates
 | `data/runtime/sources/repo.db`, `doc.db`, `web.db` | `packages/sources` | per-kind source records |
 | `data/runtime/office/office.db` | `packages/office` `DocumentStore` | documents (`doc`/`slides`) |
 | `data/runtime/browser/browser.db` | `packages/browser` `BrowserStore` | session metadata |
-| `data/runtime/code_exec/code-exec.db` | `packages/code_exec` `ExecutionStore` | execution records |
+| `data/runtime/code_exec/code-exec.db` | `packages/code_exec` `ExecutionStore` | execution records (rows purge after 30 days under a 200-row cap; artifact dirs swept with them) |
 
 ## Workspace and engine caches
 

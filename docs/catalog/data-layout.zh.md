@@ -8,7 +8,7 @@
 
 | 路径 | 归属 | 内容 | 保留 |
 |---|---|---|---|
-| `data/runtime/events.db` | `platform_eventbus.EventLog` | 只追加事件日志 | `agent.delta` 行 24 小时后清理;其他类型持续累积 |
+| `data/runtime/events.db` | `platform_eventbus.EventLog` | 只追加事件日志 | `agent.delta`/`agent.step`/`task.progress` 行 24 小时后清理;其他类型持续累积 |
 | `data/runtime/settings.db` | `platform_settings.SettingsStore` | 设置值 | — |
 | `data/runtime/secrets.db` | `platform_secrets.SecretStore` | Fernet 加密密钥 | — |
 | `data/runtime/audit.db` | `platform_capability.SqliteAuditSink` | 能力调用审计 | — |
@@ -41,7 +41,7 @@
 | `data/runtime/sources/repo.db`、`doc.db`、`web.db` | `packages/sources` | 各类来源记录 |
 | `data/runtime/office/office.db` | `packages/office` `DocumentStore` | 文档(`doc`/`slides`) |
 | `data/runtime/browser/browser.db` | `packages/browser` `BrowserStore` | 会话元数据 |
-| `data/runtime/code_exec/code-exec.db` | `packages/code_exec` `ExecutionStore` | 执行记录 |
+| `data/runtime/code_exec/code-exec.db` | `packages/code_exec` `ExecutionStore` | 执行记录(行按 30 天保留并受 200 行上限约束;artifact 目录随之清扫) |
 
 ## 工作区与引擎缓存
 

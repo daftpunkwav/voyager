@@ -17,7 +17,7 @@
 
 ## EventLog
 
-`EventLog` 把每条事件追加到以自增 `seq` 为键的 SQLite `events` 表,并提供分页读取(`before_seq`/`after_seq`)与追赶扫描。这份日志 — 而非内存 — 是事实源:聊天历史、轨迹重建、SSE 重放都从它读取。`Retention` 按类型与年龄清扫旧行;host 只为 `agent.delta` 配置保留(24 小时),其余事件类型持续累积直至手动清理。
+`EventLog` 把每条事件追加到以自增 `seq` 为键的 SQLite `events` 表,并提供分页读取(`before_seq`/`after_seq`)与追赶扫描。这份日志 — 而非内存 — 是事实源:聊天历史、轨迹重建、SSE 重放都从它读取。`Retention` 按类型与年龄清扫旧行;host 对高频展示流(`agent.delta`、`agent.step`、`task.progress`)配置 24 小时保留,其余事件类型持续累积直至手动清理。
 
 ## EventBus
 

@@ -38,7 +38,7 @@ Domains typically declare one registry per concern module and merge them (`sourc
 `gen_rest.py` — `build_router(registry, issuer, quota, audit)` emits two routes per registry, mounted by host at `/api/<domain>`:
 
 - `GET /capabilities` — the listing with input schemas.
-- `POST /capabilities/{name}` — the invocation; returns `{"result": ...}` or the `ErrorEnvelope`.
+- `POST /capabilities/{name}` — the invocation; returns `{"result": ...}` or the `ErrorEnvelope`. Request bodies are capped at 10 MB (`INVALID_INPUT` above that; file uploads ride the multipart transport instead).
 
 `rest.py` in each domain wraps `build_router` in `create_app()` for standalone runs (`uvicorn <domain>.rest:app_factory --factory --port <port>`).
 

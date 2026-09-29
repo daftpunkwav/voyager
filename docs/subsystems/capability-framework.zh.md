@@ -38,7 +38,7 @@ class Capability:
 `gen_rest.py` — `build_router(registry, issuer, quota, audit)` 为每个 registry 产出两条路由,由 host 挂载到 `/api/<domain>`:
 
 - `GET /capabilities` — 含输入 schema 的清单。
-- `POST /capabilities/{name}` — 调用;返回 `{"result": ...}` 或 `ErrorEnvelope`。
+- `POST /capabilities/{name}` — 调用;返回 `{"result": ...}` 或 `ErrorEnvelope`。请求体上限 10 MB(超出报 `INVALID_INPUT`;文件上传走 multipart 传输)。
 
 各域的 `rest.py` 把 `build_router` 包进 `create_app()` 供独立运行(`uvicorn <domain>.rest:app_factory --factory --port <port>`)。
 

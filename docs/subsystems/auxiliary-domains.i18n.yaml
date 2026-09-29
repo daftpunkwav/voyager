@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   git hash-object docs\subsystems\auxiliary-domains.md docs\subsystems\auxiliary-domains.zh.md
-docs/subsystems/auxiliary-domains.md: 2f42e2d609ac0ad7fefecb7f1795683eb36a2538
-docs/subsystems/auxiliary-domains.zh.md: f0a1084ab9ea295973f5954f0e33093244014d5f
+docs/subsystems/auxiliary-domains.md: 08a8c73338d5cdec3d599f3357f4ad8a55b06455
+docs/subsystems/auxiliary-domains.zh.md: d6bd423c0257ae34f3de201e5aa90d295bb627eb

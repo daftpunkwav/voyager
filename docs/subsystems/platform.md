@@ -14,7 +14,7 @@ English | [中文](platform.zh.md)
 
 ## platform_eventbus
 
-`packages/platform/eventbus/src/platform_eventbus/` — the append-only log plus in-process fan-out. `EventLog` persists every `Event` to a SQLite `events` table keyed by autoincrement `seq`, with `Retention` sweeps (the host retains only `agent.delta` rows, for 24 h). `EventBus` delivers to in-process async subscribers and flags them `lagged` when they fall behind; consumers replay from the log by `seq`. `CursorStore` persists per-subscriber cursors. Full reference: [eventbus.md](eventbus.md).
+`packages/platform/eventbus/src/platform_eventbus/` — the append-only log plus in-process fan-out. `EventLog` persists every `Event` to a SQLite `events` table keyed by autoincrement `seq`, with `Retention` sweeps (the host purges the `agent.delta`/`agent.step`/`task.progress` display streams after 24 h). `EventBus` delivers to in-process async subscribers and flags them `lagged` when they fall behind; consumers replay from the log by `seq`. `CursorStore` persists per-subscriber cursors. Full reference: [eventbus.md](eventbus.md).
 
 ## platform_capability
 

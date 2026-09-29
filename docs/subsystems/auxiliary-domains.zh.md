@@ -2,7 +2,7 @@
 
 [English](auxiliary-domains.md) | 中文
 
-四个小域补全集:`settings`(面向用户的设置)、`browser`(浏览器控制,目前为占位适配器)、`code_exec`(沙箱代码执行)、`office`(块式文档与幻灯片)。
+四个小域补全集:`settings`(面向用户的设置)、`browser`(浏览器控制;外部 browser host 接通前所有命令都被拒绝)、`code_exec`(沙箱代码执行)、`office`(块式文档与幻灯片)。
 
 ## settings 域
 
@@ -18,13 +18,13 @@
 
 能力:`navigate`、`click`、`type`、`read`、`screenshot`,各自返回 `BrowserResult`(`ok`、`url`、`title`、`text`、`screenshot_path`、`error`)。`navigate` 按 `browser.allowed_domains` 对 netloc 做后缀/相等匹配,否则 `ServiceError(FORBIDDEN)`。
 
-`host.py` 是占位适配器:五个函数当前都返回占位结果;docstring 说明真实浏览器在外部 browser host 中运行,IPC 尚未接通。设置:`browser.allowed_domains`、`browser.headless`。
+`host.py` 以 `BROWSER.UNAVAILABLE` 拒绝所有命令,直至与外部 browser host(`desktop/browser-host`)的 IPC 通道接通 — 它绝不会以占位内容报告 `ok=True`。设置:`browser.allowed_domains`、`browser.headless`。
 
 ## code_exec 域
 
-源码:`packages/code_exec/src/code_exec/` — 端口 8050,**默认禁用**。存储 `data/runtime/code_exec/code-exec.db`(`executions` 表)。
+源码:`packages/code_exec/src/code_exec/` — 端口 8050,**默认禁用**。存储 `data/runtime/code_exec/code-exec.db`(`executions` 表;行按 30 天保留并受 200 行上限约束,被清理行的 artifact 目录随之删除)。
 
-能力:`list_runtimes`;`run_snippet(runtime, code)` 与 `run_file(runtime, file_path)` — 均为 `long_running=True`:拉起后台工作并立即返回 `JobRef`。`run_file` 拒绝逃出 `workspace/sandbox/` 的路径。
+能力:`list_runtimes`;`run_snippet(runtime, code)` 与 `run_file(runtime, file_path)` — 均为 `long_running=True`:拉起后台工作并立即返回 `JobRef`。`run_file` 拒绝逃出 `workspace/sandbox/` 的路径。最多 4 个执行并发(超出报 `QUEUE_FULL`),超过 256 KB 的代码被拒绝(`INVALID_INPUT`)。
 
 `executor.py` — `run_in_runtime(...)`:把代码写到 `workspace/sandbox/artifacts/<exec_id>/`,然后一次性运行 `docker run --rm -m <memory> -v <artifact_dir>:/workspace`(除 `code_exec.network` 开启外网络为 `none`),镜像/命令/扩展名经白名单校验。无 Docker 时,宿主回退(仅内置 `python`/`node`/`shell` 运行时)在 `code_exec.allow_unisolated` 未启用时直接拒绝:宿主模式无法落实内存/网络限制,启用后以完整宿主权限执行、发出警告,并在结果中标记 `isolation="none"`。每路输出上限 1 MiB;超时杀死并回收子进程,并保留实际执行的隔离归属。发出 `task.progress`/`task.completed`/`task.failed`。
 
