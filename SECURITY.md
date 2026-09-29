@@ -48,6 +48,25 @@ Security-relevant surfaces, in rough priority order:
   roots.
 - **Workspace containment** — `agent/src/agent/tools/workspace/` (`jail.py`,
   `workdir.py`): path containment for the agent's file and shell tools.
+- **Standalone entry data dirs** — `packages/*/src/*/mcp_server.py` +
+  `packages/platform/capability/src/platform_capability/runtime_dir.py`: each
+  standalone MCP server keeps its data in a fixed name under the system temp
+  dir; `secure_data_dir()` creates it owner-only and refuses a path that is
+  not a plain directory owned by the current user.
+
+### Known boundaries (by design, not oversights)
+
+- The destructive-command blocklist in
+  `agent/src/agent/tools/workspace/bash.py` (`_DESTRUCTIVE_RE`) is a
+  last-resort hard stop against machine-level irreversible operations, not a
+  command parser — obfuscated equivalents exist and are out of its scope.
+  The real gates in front of the bash tool are the `agent.permissions`
+  modes/allow/deny lists and the shell dimension policy; treat the blocklist
+  as defense in depth, never as the boundary itself.
+- `LLM_DEBUG_DUMP_DIR` (see `.env.example`) dumps full request/response
+  pairs — including conversation plaintext — to disk when set. It is
+  opt-in diagnostics, files are written 0o600 (Unix), and the directory
+  should be treated as user-confidential; leave it unset unless debugging.
 
 Findings outside the surfaces above are equally welcome. Secret hygiene note:
 never commit `.env` files; if real key material ever lands in the tree, rotate
