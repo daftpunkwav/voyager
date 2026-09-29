@@ -169,6 +169,22 @@ class TestChat:
         assert "offline reply" in r.text
         assert "id: 1" in r.text  # frames carry seq as the client resume cursor
 
+    def test_sse_slot_not_taken_when_tail_read_fails(self, app, bus, monkeypatch) -> None:
+        """latest_seq runs BEFORE acquire_sse: a failing tail read answers 500
+        without taking an SSE slot — the slot is released in gen()'s finally,
+        which never runs when the response never starts, so an order inversion
+        would leak one slot per failing request until the stream cap shuts the
+        door for everyone."""
+
+        def _boom() -> int:
+            raise RuntimeError("log tail read exploded")
+
+        monkeypatch.setattr(bus.log, "latest_seq", _boom)
+        with TestClient(app, raise_server_exceptions=False) as c:
+            r = c.get("/api/chat/stream")
+        assert r.status_code == 500
+        assert app.state.limiter.sse_open == 0
+
     def test_sse_streams_agent_step(self, client, bus) -> None:
         """Tool steps (agent.step) are visible on the human timeline: they are
         included in _STREAM_TYPES."""

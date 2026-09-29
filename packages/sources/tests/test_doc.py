@@ -344,6 +344,26 @@ class TestExtractor:
         sections = _from_docx(p)
         assert [s.title for s in sections] == ["Chapter 1", "Chapter 2"]
 
+    def test_docx_oversize_chapter_splits_midway(self, tmp_path) -> None:
+        """A chapter whose body grows past the chapter target is flushed at
+        the target even with no heading in sight: the remainder becomes its
+        own section instead of one unbounded chapter (the check rides the
+        running length of the buffer, not a per-heading boundary)."""
+        import docx
+
+        document = docx.Document()
+        document.add_paragraph("Chapter 1", style="Heading 1")
+        document.add_paragraph("intro " + "a" * 5000)
+        document.add_paragraph("b" * 5000)  # pushes the running length past 8000
+        document.add_paragraph("tail paragraph")
+        p = tmp_path / "big.docx"
+        document.save(str(p))
+        sections = _from_docx(p)
+        assert [s.title for s in sections] == ["Chapter 1", ""]
+        assert sections[0].text.startswith("Chapter 1\nintro")
+        assert sections[0].text.endswith("b" * 5000)
+        assert sections[1].text == "tail paragraph"
+
     def test_epub_spine_order(self, tmp_path) -> None:
         p = tmp_path / "b.epub"
         with zipfile.ZipFile(p, "w") as zf:

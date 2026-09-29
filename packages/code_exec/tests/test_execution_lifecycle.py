@@ -145,6 +145,20 @@ class TestRunLifecycle:
             )
         assert exc.value.body.code == "CODE_EXEC.INVALID_INPUT"
 
+    async def test_run_file_rejects_non_utf8_file(self, wired) -> None:
+        """A binary (or other-encoding) file picked by mistake is a caller
+        error with a readable 400 — never a raw UnicodeDecodeError escaping
+        the capability frame — and nothing is spawned for it (no store row)."""
+        target = Path(wired["workspace"]) / "sandbox" / "blob.py"
+        target.write_bytes(b'print("ok")\xff\xfe\x00')
+        with pytest.raises(ServiceError) as exc:
+            await execute(
+                registry, "run_file", USER_CTX, {"runtime": "python", "file_path": "blob.py"}
+            )
+        assert exc.value.body.code == "CODE_EXEC.INVALID_INPUT"
+        assert "UTF-8" in exc.value.body.message
+        assert wired["store"].list_recent() == []
+
     async def test_missing_deps_rejects_immediately(self, monkeypatch) -> None:
         """Before service wiring there is no store to record into: the call
         fails fast instead of half-starting an execution."""
@@ -177,4 +191,19 @@ class TestExecutionStore:
             "updated_ts": first["updated_ts"],
         }
         assert store.get("missing") is None
+        store.close()
+
+    def test_list_recent_tiebreaks_equal_timestamps_by_insertion(self, tmp_path) -> None:
+        """Rows created inside one clock tick (a burst of creates) share a
+        created_ts: "newest first" must then fall to insertion order (rowid),
+        matching prune's newest-window selection — otherwise the history page
+        order is arbitrary."""
+        store = ExecutionStore(tmp_path / "exec.db")
+        store.create("e1", "python", kind="snippet")
+        store.create("e2", "python", kind="snippet")
+        with store._lock:
+            store._conn.execute("UPDATE executions SET created_ts = 1000.0")
+            store._conn.commit()
+        rows = store.list_recent(limit=10)
+        assert [r["id"] for r in rows] == ["e2", "e1"]
         store.close()

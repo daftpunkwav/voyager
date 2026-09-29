@@ -6,6 +6,8 @@ network.
 """
 
 import json
+import os
+import time
 from typing import Any, ClassVar
 
 import httpx
@@ -1289,6 +1291,71 @@ class TestMessageTranslation:
             )
         assert not (tmp_path / "dump").exists()
 
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits are a Unix-only contract")
+    async def test_dump_file_is_created_owner_only(self, tmp_path, monkeypatch) -> None:
+        """The dump carries conversation plaintext, so it must land 0o600 on
+        disk: a regression to a plain write (0644) would expose it to every
+        local account. Windows deliberately relies on the profile ACL."""
+        from llm.client import ProviderError
+
+        dump_dir = tmp_path / "dump"
+        monkeypatch.setenv("LLM_DEBUG_DUMP_DIR", str(dump_dir))
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, json={"error": {"message": "nope"}})
+
+        self._patch(monkeypatch, handler)
+        with pytest.raises(ProviderError):
+            await client_mod.complete(
+                self._ANTHROPIC,
+                api_key="sk",
+                model="m",
+                messages=[{"role": "user", "content": "hi"}],
+            )
+        (dump,) = dump_dir.glob("llm-*.json")
+        assert dump.stat().st_mode & 0o777 == 0o600
+
+    async def test_dump_never_overwrites_an_existing_file(self, tmp_path, monkeypatch) -> None:
+        """The dump is created O_EXCL under a pinned filename: a collision
+        (replayed filename, concurrent retry) must skip the dump — never
+        overwrite the earlier rejection's file — and the raised error carries
+        no dump_path (the diagnostics write failed)."""
+
+        class _FixedTimeNs:
+            """time module stand-in for llm.client: only time_ns is pinned so
+            the dump filename is predictable; everything else delegates."""
+
+            def __getattr__(self, name: str):
+                return getattr(time, name)
+
+            @staticmethod
+            def time_ns() -> int:
+                return 1_760_000_000_000_000_000
+
+        from llm.client import ProviderError
+
+        dump_dir = tmp_path / "dump"
+        dump_dir.mkdir()
+        sentinel = dump_dir / "llm-1760000000000000000.json"
+        sentinel.write_text('{"earlier": "rejection"}', encoding="utf-8")
+        monkeypatch.setenv("LLM_DEBUG_DUMP_DIR", str(dump_dir))
+        monkeypatch.setattr(client_mod, "time", _FixedTimeNs())
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, json={"error": {"message": "nope"}})
+
+        self._patch(monkeypatch, handler)
+        with pytest.raises(ProviderError) as exc:
+            await client_mod.complete(
+                self._ANTHROPIC,
+                api_key="sk",
+                model="m",
+                messages=[{"role": "user", "content": "hi"}],
+            )
+        assert exc.value.dump_path == ""
+        assert "dump" not in exc.value.detail_suffix()
+        assert sentinel.read_text(encoding="utf-8") == '{"earlier": "rejection"}'
+
     async def test_anthropic_flattens_bare_tool_role(self, monkeypatch) -> None:
         seen = {}
 
@@ -1707,6 +1774,66 @@ class TestMessageTranslation:
                 messages=[{"role": "user", "content": "hi"}],
             )
         assert "2013" in str(exc.value)  # provider's real error reason is visible
+
+
+class TestCompleteTimeout:
+    """_complete_timeout: the non-streaming read cap scales with the request's
+    output budget (/8), floored at the shared _TIMEOUT (small answers must not
+    shrink the default) and capped so a hung connection still fails in bounded
+    time. The other three arms never move."""
+
+    @pytest.mark.parametrize("max_tokens", [1, 100, 383])
+    def test_small_output_budget_identical_to_shared_timeout(self, max_tokens: int) -> None:
+        # 383/8 < 60s: the scaling must not lower the default read cap
+        assert client_mod._complete_timeout(max_tokens) == client_mod._TIMEOUT
+
+    def test_read_scales_with_the_output_budget(self) -> None:
+        # pins the /8 factor in the uncapped band: 2000 output tokens -> 250s
+        assert client_mod._complete_timeout(2000).read == 250.0
+
+    def test_read_is_capped_so_hung_connections_fail_bounded(self) -> None:
+        assert client_mod._COMPLETE_READ_CAP_S == 480.0  # pin the constant itself
+        assert client_mod._complete_timeout(100_000).read == 480.0
+        # 480*8 output tokens is the exact entry into the cap; one below scales
+        assert client_mod._complete_timeout(3840).read == 480.0
+        assert client_mod._complete_timeout(3839).read == pytest.approx(479.875)
+
+    def test_other_timeout_arms_stay_at_the_shared_defaults(self) -> None:
+        scaled = client_mod._complete_timeout(100_000)
+        assert scaled.connect == client_mod._TIMEOUT.connect
+        assert scaled.write == client_mod._TIMEOUT.write
+        assert scaled.pool == client_mod._TIMEOUT.pool
+
+    async def test_non_streaming_call_carries_the_scaled_read_timeout(self, monkeypatch) -> None:
+        """complete() must actually pass the scaled timeout to the HTTP client
+        (the wire contract, not just the helper's arithmetic)."""
+        seen = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "content": [{"type": "text", "text": "ok"}],
+                    "usage": {"input_tokens": 1, "output_tokens": 1},
+                    "model": "m",
+                },
+            )
+
+        real = TestMessageTranslation._real_client
+
+        def spy(**kw):
+            seen["timeout"] = kw["timeout"]
+            return real(transport=httpx.MockTransport(handler))
+
+        monkeypatch.setattr(client_mod.httpx, "AsyncClient", spy)
+        await client_mod.complete(
+            TestMessageTranslation._ANTHROPIC,
+            api_key="sk",
+            model="m",
+            messages=[{"role": "user", "content": "hi"}],
+            max_tokens=2000,
+        )
+        assert seen["timeout"].read == 250.0
 
 
 class TestMaxOutputTokensSetting:

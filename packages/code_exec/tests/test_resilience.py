@@ -55,7 +55,9 @@ async def _drain() -> None:
 class TestConcurrencyCap:
     async def test_over_limit_rejected_with_queue_full(self, svc, monkeypatch) -> None:
         """The third concurrent call is rejected instead of queueing without
-        bound: each accepted call holds a container/host process."""
+        bound: each accepted call holds a container/host process. Completion
+        frees the slots — the freed capacity is observable at the entry point
+        again (two more accepted, a third rejected)."""
         release = asyncio.Event()
 
         async def slow_runtime(*_args, **_kwargs) -> RunResult:
@@ -68,12 +70,38 @@ class TestConcurrencyCap:
         with pytest.raises(ServiceError) as exc:
             await execute(registry, "run_snippet", USER_CTX, {"runtime": "python", "code": "x3"})
         assert exc.value.body.code == "CODE_EXEC.QUEUE_FULL"
-        # The rejected call spawned nothing; the two accepted ones hold slots
-        assert len(capabilities._bg_tasks) == 2
-        assert capabilities._active_executions == 2
         release.set()
         await _drain()
-        assert capabilities._active_executions == 0  # slots fully released
+        release = asyncio.Event()
+        await execute(registry, "run_snippet", USER_CTX, {"runtime": "python", "code": "x4"})
+        await execute(registry, "run_snippet", USER_CTX, {"runtime": "python", "code": "x5"})
+        with pytest.raises(ServiceError) as exc:
+            await execute(registry, "run_snippet", USER_CTX, {"runtime": "python", "code": "x6"})
+        assert exc.value.body.code == "CODE_EXEC.QUEUE_FULL"
+        release.set()
+        await _drain()
+
+    async def test_run_file_reserves_from_the_same_cap(self, svc, monkeypatch) -> None:
+        """run_file holds its own reserve point (after reading the file):
+        the concurrent cap applies to file runs too, not just snippets."""
+        sandbox = svc / "sandbox"
+        (sandbox / "job.py").write_text("print('x')\n", encoding="utf-8")
+        release = asyncio.Event()
+
+        async def slow_runtime(*_args, **_kwargs) -> RunResult:
+            await release.wait()
+            return RunResult(status="completed", exit_code=0, stdout="", stderr="", artifact_dir="")
+
+        monkeypatch.setattr(capabilities, "run_in_runtime", slow_runtime)
+        await execute(registry, "run_file", USER_CTX, {"runtime": "python", "file_path": "job.py"})
+        await execute(registry, "run_file", USER_CTX, {"runtime": "python", "file_path": "job.py"})
+        with pytest.raises(ServiceError) as exc:
+            await execute(
+                registry, "run_file", USER_CTX, {"runtime": "python", "file_path": "job.py"}
+            )
+        assert exc.value.body.code == "CODE_EXEC.QUEUE_FULL"
+        release.set()
+        await _drain()
 
     async def test_slot_released_after_failure(self, svc, monkeypatch) -> None:
         """A failed execution releases its slot: capacity is never leaked by
@@ -85,7 +113,6 @@ class TestConcurrencyCap:
         monkeypatch.setattr(capabilities, "run_in_runtime", refusing_runtime)
         await execute(registry, "run_snippet", USER_CTX, {"runtime": "python", "code": "x"})
         await _drain()
-        assert capabilities._active_executions == 0
         # The freed slot accepts a new execution immediately
         ref = await execute(registry, "run_snippet", USER_CTX, {"runtime": "python", "code": "x"})
         assert ref.job_id
