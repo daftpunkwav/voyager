@@ -5,7 +5,7 @@ and domain tool injection.
 import asyncio
 import json
 
-from agent.build import resolve_env_model
+from agent.build import resolve_prompt_model
 from agent.engine import Mode, TaskBook
 from agent.llm import FakeLLM, LLMReply
 from agent.main import build_agent
@@ -210,13 +210,13 @@ class TestEnvInSystem:
         finally:
             app.close()
 
-    def test_resolve_env_model_prefers_client_attr(self, tmp_path) -> None:
+    def test_resolve_prompt_model_prefers_client_attr(self, tmp_path) -> None:
         class _Client:
             model = "direct-model"
 
         settings = SettingsStore(tmp_path / "s.db")
-        assert resolve_env_model(_Client(), settings, "orchestrator") == "direct-model"
-        assert resolve_env_model(FakeLLM(), settings, "") == ""
+        assert resolve_prompt_model(_Client(), settings, "orchestrator") == "direct-model"
+        assert resolve_prompt_model(FakeLLM(), settings, "") == ""
 
 
 class TestPurposeRouting:

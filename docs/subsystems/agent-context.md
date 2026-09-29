@@ -10,7 +10,7 @@ Source: `agent/src/agent/context/`
 
 `builder.py` — `ContextBuilder.system(...)` composes the system prompt in a fixed, byte-stable order (prefix-cache friendly):
 
-1. `【运行环境】` — environment disclosure (`prompts/definitions/context.toml` `context.environment`): harness identity (Voyager), the configured chat model (resolved by `build.resolve_env_model`: client attr → `agent.llm.overrides[persona]` → `agent.llm.model` / `llm.default_model`), OS, and the workspace path — session-stable facts, so the model knows who/where it is without forensic guesswork
+1. `【运行环境】` — environment disclosure (`prompts/definitions/context.toml` `context.environment`): harness identity (Voyager), the configured chat model (resolved by `build.resolve_prompt_model`: client attr → `agent.llm.overrides[persona]` → `agent.llm.model` / `llm.default_model`), OS, and the workspace path — session-stable facts, so the model knows who/where it is without forensic guesswork
 2. `【全局规则】` — `prompts/definitions/common.toml` (`common.global_rules`)
 3. Scoped rules — `workspace/AGENTS.md`
 4. `【用户准则】` — setting `agent.conduct`

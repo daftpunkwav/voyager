@@ -34,7 +34,9 @@ MCP_KEY = "agent.mcp.servers"
 #: Legal shape of a config id (stable primary key, feeds tool name mcp__<id>__<tool>)
 _ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 
-CONNECT_TIMEOUT = 15.0  # cap for connection handshake + tools/list (seconds)
+#: Per-call cap for one remote MCP wire operation: the connect handshake and
+#: every tools/list each get this budget (seconds).
+WIRE_TIMEOUT = 15.0
 
 ConnectFn = Callable[[dict], Awaitable[McpSession]]
 
@@ -111,7 +113,7 @@ class McpClientPool:
         self._connect = connect or default_connect
         self._cwd = str(cwd) if cwd else None
         self._sessions: dict[str, McpSession] = {}
-        self._previews: dict[str, list[dict]] = {}  # latest tools/list per server
+        self._latest_tools: dict[str, list[dict]] = {}  # latest tools/list per server
         self._instructions: dict[str, str] = {}  # server-declared instructions per sid
         self._seen_tools: dict[str, set[str]] = {}  # consent snapshot: names OK'd via preview
         self._new_tools: dict[str, list[str]] = {}  # refresh-discovered names awaiting consent
@@ -154,19 +156,19 @@ class McpClientPool:
 
     async def _ensure_session(self, sid: str, cfg: dict) -> None:
         """Connect one server unless already connected (bounded by
-        CONNECT_TIMEOUT). The caller holds the pool-level connect lock:
+        WIRE_TIMEOUT). The caller holds the pool-level connect lock:
         concurrent connects of the same server reuse the first connection
         instead of each building one and leaking the other (re-checked under
         the lock)."""
         if sid not in self._sessions:
             self._sessions[sid] = await asyncio.wait_for(
-                self._connect({**cfg, "cwd": self._cwd}), CONNECT_TIMEOUT
+                self._connect({**cfg, "cwd": self._cwd}), WIRE_TIMEOUT
             )
 
     def _record_tools(self, sid: str, tools: list[dict]) -> None:
         """Store a fresh tools/list snapshot: the preview cache, the cleared
         entry error, and the server-declared instructions."""
-        self._previews[sid] = tools
+        self._latest_tools[sid] = tools
         self._errors.pop(sid, None)
         raw_instructions = getattr(self._sessions[sid], "instructions", "")
         self._instructions[sid] = str(raw_instructions) if raw_instructions else ""
@@ -174,6 +176,11 @@ class McpClientPool:
     async def preview(self, sid: str) -> list[dict]:
         """Connect (if not yet) and run tools/list, returning the remote tool
         list.
+
+        This is also the remount point for already-approved entries: a
+        successful list re-baselines consent (the previewed list is what
+        approval covers) and remounts, so a server fixed after a failed
+        startup rejoins the tool surface through this same method.
 
         validate_server_config runs before connecting: a dirty config (left
         over from settings written directly, bypassing add validation) is
@@ -197,7 +204,7 @@ class McpClientPool:
             async with self._connect_lock:
                 await self._ensure_session(sid, cfg)
                 tools = await asyncio.wait_for(
-                    self._sessions[sid].list_remote_tools(), CONNECT_TIMEOUT
+                    self._sessions[sid].list_remote_tools(), WIRE_TIMEOUT
                 )
         except Exception as exc:  # timeouts included: uniform readable error, no exception leaks past the capability frame
             await self.drop_session(sid)
@@ -237,7 +244,7 @@ class McpClientPool:
         consent-filtered subset); returns the tool names mounted this time.
         """
         session = self._sessions.get(sid)
-        remote_tools = tools if tools is not None else (self._previews.get(sid) or [])
+        remote_tools = tools if tools is not None else (self._latest_tools.get(sid) or [])
         cfg = self.find_config(sid) or {"id": sid, "name": sid}
         return remount(self._toolbelt, cfg, session, remote_tools, approved)
 
@@ -326,7 +333,7 @@ class McpClientPool:
                 return
         session = self._sessions[sid]
         try:
-            tools = await asyncio.wait_for(session.list_remote_tools(), CONNECT_TIMEOUT)
+            tools = await asyncio.wait_for(session.list_remote_tools(), WIRE_TIMEOUT)
         except Exception as exc:  # noqa: BLE001  # any list fault surfaces as entry error and drops session
             self._errors[sid] = f"MCP '{cfg['name']}' refresh failed: {exc}"
             await self.drop_session(sid)
@@ -372,7 +379,7 @@ class McpClientPool:
                 **cfg,
                 "connected": sid in self._sessions,
                 "error": self._errors.get(sid, ""),
-                "preview": self._previews.get(sid, []),
+                "preview": self._latest_tools.get(sid, []),
                 "new_tools": self._new_tools.get(sid, []),  # refresh-discovered, awaiting consent
                 "mounted": [n for n in mounted_all if n.startswith(f"mcp__{sid}__")],
             }

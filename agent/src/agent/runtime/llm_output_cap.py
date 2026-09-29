@@ -27,11 +27,14 @@ log = logging.getLogger("agent.context")
 def _resolve_cap(settings: Any, llm: Any) -> int:
     """Resolved max-output for the inner client's model; 0 = do not inject.
 
-    ServiceLLM exposes no .model attribute (the effective chat model resolves
-    per call from llm.default_model), so the name resolves through the shared
-    resolve_model_name chain (client attr -> standalone-run setting ->
-    composer chat model). Routed purposes whose chain picks a different model
-    resolve to the chat default's cap — a documented approximation.
+    Parameter order is (settings, llm) — the reverse of resolve_model_name
+    (llm, settings); the settings handle leads because every resolution hop
+    reads through it. ServiceLLM exposes no .model attribute (the effective
+    chat model resolves per call from llm.default_model), so the name
+    resolves through the shared resolve_model_name chain (client attr ->
+    standalone-run setting -> composer chat model). Routed purposes whose
+    chain picks a different model resolve to the chat default's cap — a
+    documented approximation.
     """
     try:
         model_name = resolve_model_name(llm, settings)

@@ -109,7 +109,8 @@ def resolve_model_name(llm: Any, settings: Any) -> str:
     model the wire actually serves (context budget windows, output caps,
     the system head's environment line): adding or reordering a hop happens
     here and nowhere else. The per-persona routing override is a hop ABOVE
-    this chain and stays with its only caller (agent.build.resolve_env_model).
+    this chain and stays with its only caller
+    (agent.build.resolve_prompt_model).
     """
     model = str(getattr(llm, "model", "") or "")
     for key in _MODEL_FALLBACK_KEYS:

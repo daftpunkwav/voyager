@@ -10,7 +10,7 @@
 
 `builder.py` — `ContextBuilder.system(...)` 以固定、字节稳定的顺序组装系统提示(对前缀缓存友好):
 
-1. `【运行环境】` — 环境披露层(`prompts/definitions/context.toml` 的 `context.environment`):宿主身份(Voyager)、当前配置的聊天模型(由 `build.resolve_env_model` 解析:client attr → `agent.llm.overrides[persona]` → `agent.llm.model` / `llm.default_model`)、操作系统与 workspace 路径——全部是会话级稳定事实,让模型无需"法医式查表"就知道自己是谁、在哪里
+1. `【运行环境】` — 环境披露层(`prompts/definitions/context.toml` 的 `context.environment`):宿主身份(Voyager)、当前配置的聊天模型(由 `build.resolve_prompt_model` 解析:client attr → `agent.llm.overrides[persona]` → `agent.llm.model` / `llm.default_model`)、操作系统与 workspace 路径——全部是会话级稳定事实,让模型无需"法医式查表"就知道自己是谁、在哪里
 2. `【全局规则】` — `prompts/definitions/common.toml` (`common.global_rules`)
 3. 作用域规则 — `workspace/AGENTS.md`
 4. `【用户准则】` — 设置 `agent.conduct`

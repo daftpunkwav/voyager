@@ -105,7 +105,9 @@ def budget_from_settings(settings: SettingsReader, model_name: str = "") -> Cont
     (agent.context.model_profiles); empty or unknown names use the globals.
     """
 
-    def _int(key: str, fallback: int) -> int:
+    def _int_or(key: str, fallback: int) -> int:
+        """Non-positive or malformed values count as unset (same contract as
+        runtime.tokens._int_or)."""
         try:
             value = int(settings.get(key))
         except (TypeError, ValueError):
@@ -113,7 +115,7 @@ def budget_from_settings(settings: SettingsReader, model_name: str = "") -> Cont
         return value if value > 0 else fallback
 
     def _int_or_zero(key: str, fallback: int) -> int:
-        """Like _int but an explicit 0 is a valid "off" value, not unset."""
+        """Like _int_or but an explicit 0 is a valid "off" value, not unset."""
         try:
             value = int(settings.get(key))
         except (TypeError, ValueError):
@@ -122,12 +124,12 @@ def budget_from_settings(settings: SettingsReader, model_name: str = "") -> Cont
 
     resolved = resolve_window(settings, model_name)
     return ContextBudget(
-        history_max=_int("agent.context.history_max", HISTORY_MAX),
-        compress_budget=_int("agent.context.compress_budget", COMPRESS_BUDGET),
+        history_max=_int_or("agent.context.history_max", HISTORY_MAX),
+        compress_budget=_int_or("agent.context.compress_budget", COMPRESS_BUDGET),
         window_tokens=resolved.window_tokens,
         max_output_tokens=resolved.max_output_tokens,
-        auto_compact_at=_int("agent.context.auto_compact_at", 75),
-        compact_target=_int("agent.context.compact_target", 0),
+        auto_compact_at=_int_or("agent.context.auto_compact_at", 75),
+        compact_target=_int_or("agent.context.compact_target", 0),
         memory_cards=_int_or_zero("agent.memory.context_cards", MEMORY_CARDS),
         memory_card_chars=_int_or_zero("agent.memory.context_card_chars", MEMORY_CARD_CHARS),
         recall_facts=_int_or_zero("agent.memory.recall_facts", RECALL_FACTS),
@@ -139,8 +141,8 @@ def budget_from_settings(settings: SettingsReader, model_name: str = "") -> Cont
         profile_chars=_int_or_zero("agent.memory.profile_chars", PROFILE_CHARS),
         task_chars=_int_or_zero("agent.context.task_chars", TASK_CHARS),
         page_chars=_int_or_zero("agent.context.page_chars", PAGE_CHARS),
-        prune_protect_tokens=_int("agent.context.prune_protect_tokens", PRUNE_PROTECT_TOKENS),
-        prune_min_tokens=_int("agent.context.prune_min_tokens", PRUNE_MIN_TOKENS),
+        prune_protect_tokens=_int_or("agent.context.prune_protect_tokens", PRUNE_PROTECT_TOKENS),
+        prune_min_tokens=_int_or("agent.context.prune_min_tokens", PRUNE_MIN_TOKENS),
     )
 
 

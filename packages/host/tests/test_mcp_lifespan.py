@@ -24,7 +24,7 @@ def test_slow_mcp_start_does_not_block_ready(tmp_path, monkeypatch) -> None:
     async def slow_start(self) -> None:
         self._started = True  # preserve idempotent semantics
         try:
-            await asyncio.sleep(2)  # simulate a slow preview (single-server CONNECT_TIMEOUT=15s)
+            await asyncio.sleep(2)  # simulate a slow preview (single-server WIRE_TIMEOUT=15s)
         except asyncio.CancelledError:
             cancelled.append(True)  # shutdown cancels rather than waiting the full 2s
             raise

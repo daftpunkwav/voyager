@@ -158,7 +158,7 @@ RAW_LOG_RETENTION_DAYS = 7
 _WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
 
-def resolve_env_model(llm: Any, settings: Any, persona_key: str) -> str:
+def resolve_prompt_model(llm: Any, settings: Any, persona_key: str) -> str:
     """Identity of the model configured to serve this persona's chat turns,
     for the system head's environment layer. Resolution mirrors the wire:
     the client's own model attr first, then the per-persona routing override
@@ -707,7 +707,7 @@ def build_agent(
         OS, workspace path) are assembly-root state; the bytes change only
         when the model configuration or the workspace moves — the same
         volatility class as the other settings-sourced layers."""
-        model = resolve_env_model(llm, settings, persona_key)
+        model = resolve_prompt_model(llm, settings, persona_key)
         return render(
             P.context.environment.body,
             model_line=render(P.context.environment.model_line, model=model) if model else "",
