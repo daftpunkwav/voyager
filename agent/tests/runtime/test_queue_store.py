@@ -25,6 +25,29 @@ class TestCron:
         assert next_cron_time("bad expr", now) is None
         assert next_cron_time("99 99 * * *", now) is None  # never matches -> None
 
+    def test_dow_range_containing_sunday_matches(self) -> None:
+        # The DOW rewrite cyclically shifts cron 0=Sun onto Python 0=Mon, so a
+        # range containing Sunday becomes a reversed pair (0-1 -> "6-0"); only
+        # a wrap match keeps it schedulable.
+        from datetime import datetime
+
+        now = time.time()
+        nxt = next_cron_time("* * * * 0-1", now)  # Sunday+Monday
+        assert nxt is not None and (nxt - now) <= 8 * 86400
+        assert datetime.fromtimestamp(nxt).astimezone().weekday() in (0, 6)
+        every_day = next_cron_time("* * * * 0-6", now)
+        assert every_day is not None and (every_day - now) <= 120
+        fri_sun = next_cron_time("* * * * 5-7", now)  # 7 = Sunday alias
+        assert fri_sun is not None and datetime.fromtimestamp(fri_sun).astimezone().weekday() in (
+            4,
+            5,
+            6,
+        )
+        # A wrap range is standard cron on any field: hours 22-2 = 22,23,0,1,2
+        hour_wrap = next_cron_time("30 22-2 * * *", now)
+        assert hour_wrap is not None
+        assert datetime.fromtimestamp(hour_wrap).astimezone().hour in (22, 23, 0, 1, 2)
+
     def test_cron_slot_is_idempotent(self, tmp_path) -> None:
         store = QueueStore(tmp_path / "queue.db")
         jid = store.enqueue(kind="tick", cron="*/15 * * * *", run_at=time.time() - 60)

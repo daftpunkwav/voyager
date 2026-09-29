@@ -92,7 +92,11 @@ def _cron_dow_to_python(field: str) -> str:
 
 def _field_matches(field: str, value: int) -> bool:
     """One cron field against one value: `*`, `*/n`, `a-b`, lists `a,b,c`,
-    plain numbers."""
+    plain numbers. A range with lo > hi wraps (standard cron: `22-2` hours =
+    22,23,0,1,2) — required here because the DOW rewrite maps cron's 0=Sunday
+    onto Python's 0=Monday with a cyclic shift, so a range that contains
+    Sunday (`0-3`, `0-6`) becomes a reversed pair (`6-2`, `6-5`) that only a
+    wrap matches."""
     field = field.strip()
     if field == "*":
         return True
@@ -108,10 +112,14 @@ def _field_matches(field: str, value: int) -> bool:
         elif "-" in part and not part.startswith("-"):
             lo, _, hi = part.partition("-")
             try:
-                if int(lo) <= value <= int(hi):
-                    return True
+                lo_i, hi_i = int(lo), int(hi)
             except ValueError:
                 return False
+            if lo_i <= hi_i:
+                if lo_i <= value <= hi_i:
+                    return True
+            elif value >= lo_i or value <= hi_i:  # wrap: 6-2 = 6,0,1,2
+                return True
         else:
             try:
                 if int(part) == value:

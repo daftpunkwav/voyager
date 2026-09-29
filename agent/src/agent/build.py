@@ -793,6 +793,10 @@ def build_agent(
         blackboard=blackboard,
         task_board=task_board,
     )
+    # The proactive engine was constructed before the master existed; without
+    # this bind its greeting/follow-up paths compose through the LLM first and
+    # then crash on None.reply.
+    proactive.bind(master)
     # Background completions report through the notifier: quiet notices and
     # budget-gated wakeups share the master's reply/notice channels
     scheduler.set_completion_listener(JobNotifier(master, wake_budget))
