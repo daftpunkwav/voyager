@@ -58,6 +58,7 @@ import { ReadRootsBlock } from '@/components/settings/agent/ReadRootsBlock';
 import { WriteRootsBlock } from '@/components/settings/agent/WriteRootsBlock';
 import { AppPolicyBlock } from '@/components/settings/agent/AppPolicyBlock';
 import { MemoryBlock } from '@/components/settings/agent/MemoryBlock';
+import { DynamicSettingsGroup } from '@/components/settings/dynamic/DynamicSettingsGroup';
 import { MemoryRetentionBlock } from '@/components/settings/agent/MemoryRetentionBlock';
 
 type Section =
@@ -80,6 +81,7 @@ type Section =
   | 'usage'
   | 'activity'
   | 'data'
+  | 'domains'
   | 'about';
 
 // Labels resolve through settings:nav.<id> at render time so the active
@@ -120,6 +122,7 @@ const NAV_GROUPS: {
       { id: 'usage', icon: 'usage' },
       { id: 'activity', icon: 'activity' },
       { id: 'data', icon: 'data' },
+      { id: 'domains', icon: 'domains' },
       { id: 'about', icon: 'about' },
     ],
   },
@@ -470,6 +473,8 @@ export function SettingsPage() {
                   </div>
                 </div>
               </section>
+
+              <DynamicSettingsGroup modules={['appearance', 'privacy']} />
             </section>
           )}
 
@@ -494,6 +499,10 @@ export function SettingsPage() {
               <StyleBlock />
               <ConductBlock />
               <GuidelinesBlock />
+              <DynamicSettingsGroup
+                prefixes={['agent.outreach.', 'agent.triggers.', 'agent.direct_chat']}
+                titleKey="behavior.dynamics"
+              />
             </section>
           )}
 
@@ -507,6 +516,10 @@ export function SettingsPage() {
               <ReadRootsBlock />
               <WriteRootsBlock />
               <AppPolicyBlock />
+              <DynamicSettingsGroup
+                prefixes={['agent.execution.', 'agent.context.']}
+                titleKey="execution.dynamics"
+              />
             </section>
           )}
 
@@ -515,6 +528,18 @@ export function SettingsPage() {
               <h2>{t('memory.title')}</h2>
               <MemoryBlock />
               <MemoryRetentionBlock />
+              <DynamicSettingsGroup
+                prefixes={[
+                  'agent.memory.distill_interval',
+                  'agent.memory.context_cards',
+                  'agent.memory.context_card_chars',
+                  'agent.memory.recall_facts',
+                  'agent.memory.recall_chars',
+                  'agent.memory.profile_chars',
+                  'agent.skills.organize_every',
+                ]}
+                titleKey="memory.dynamics"
+              />
             </section>
           )}
 
@@ -522,6 +547,17 @@ export function SettingsPage() {
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('llm.overrides.title')}</h2>
               <AgentLlmOverridesPanel />
+              <DynamicSettingsGroup
+                prefixes={[
+                  'agent.llm.routing',
+                  'agent.llm.base_url',
+                  'agent.llm.api_key',
+                  'agent.llm.model',
+                  'agent.llm.timeout_s',
+                  'agent.pricing.',
+                ]}
+                titleKey="agentLlm.dynamics"
+              />
             </section>
           )}
 
@@ -531,6 +567,7 @@ export function SettingsPage() {
               <SubagentsSection />
               <InstanceList />
               <ResumableList />
+              <DynamicSettingsGroup prefixes={['agent.subagents.']} />
             </section>
           )}
 
@@ -545,6 +582,9 @@ export function SettingsPage() {
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('mcp.title')}</h2>
               <McpBlock />
+              <DynamicSettingsGroup
+                prefixes={['agent.mcp.refresh_seconds', 'agent.mcp.instructions']}
+              />
             </section>
           )}
 
@@ -573,6 +613,33 @@ export function SettingsPage() {
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('toolPerms.title')}</h2>
               <ToolPermissions />
+            </section>
+          )}
+
+          {section === 'domains' && (
+            <section className="settings-section glass-card glass-card--overview-outer">
+              <h2>{t('domains.title')}</h2>
+              <DynamicSettingsGroup
+                modules={['gateway', 'graph', 'sources', 'browser', 'code_exec', 'office']}
+                titleKey="domains.services"
+              />
+              <DynamicSettingsGroup
+                prefixes={[
+                  'notes.sort.',
+                  'notes.list.',
+                  'notes.editor.',
+                  'notes.trash.',
+                  'notes.history.',
+                  'notes.export.',
+                  'notes.assets.',
+                ]}
+                titleKey="domains.notes"
+              />
+              <DynamicSettingsGroup
+                prefixes={['agent.observability.', 'agent.evaluation.']}
+                titleKey="domains.observability"
+              />
+              <DynamicSettingsGroup prefixes={['host.domains.']} titleKey="domains.system" />
             </section>
           )}
 

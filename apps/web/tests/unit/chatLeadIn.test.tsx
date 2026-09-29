@@ -91,7 +91,7 @@ describe('lead-in delivery vs the closed trace', () => {
     // Expand the closed trace: the round row would duplicate the lead-in the
     // bubble already carries.
     fireEvent.click(container.querySelector('.chat-trace__head') as Element);
-    const occurrences = container.textContent!.split(lead).length - 1;
+    const occurrences = (container.textContent ?? '').split(lead).length - 1;
     expect(occurrences).toBe(1);
     expect(container.querySelector('.chat-round__out')).toBeNull();
   });
