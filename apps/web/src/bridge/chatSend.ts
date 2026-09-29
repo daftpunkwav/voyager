@@ -238,7 +238,7 @@ export async function loadSessionTimeline(sessionId: string): Promise<void> {
   const stillActive = () =>
     (useChatStore.getState().activeSessionId || undefined) === (sessionId || undefined);
   try {
-    const page = await fetchChatHistory(200, sessionId || undefined);
+    const page = await fetchChatHistory(undefined, sessionId || undefined);
     if (!stillActive()) return;
     useChatStore.getState().applyHistory(page.messages, page.hasMore);
   } catch {

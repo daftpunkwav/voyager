@@ -45,8 +45,8 @@ _TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
 #: must cover the full server-side generation time, not an inter-chunk gap.
 #: Derived from the request's max_tokens: tolerate providers sustaining
 #: ~8 tok/s at the cap, bounded at 480s so a hung connection still fails in
-#: bounded time. Streaming keeps _TIMEOUT: there the read cap is only the
-#: gap between SSE chunks.
+#: bounded time. Streaming bounds only the gap between SSE chunks (see
+#: _stream_timeout): the configured request timeout when set, else _TIMEOUT.
 _COMPLETE_READ_CAP_S = 480.0
 
 
@@ -614,10 +614,12 @@ async def _send_with_retry(
     is established (ReadTimeout etc.) may mean the request was already
     accepted; those are marked non-retriable and fail on first occurrence.
     """
+    # Clamped at 0: a dirty negative value must not empty the attempt loop
+    # (range(0) would return None instead of a Response).
     attempts = (
         _RETRY_ATTEMPTS
         if policy is None or policy.retry_attempts is None
-        else int(policy.retry_attempts)
+        else max(0, int(policy.retry_attempts))
     )
     backoff = (
         _RETRY_BACKOFF

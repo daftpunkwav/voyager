@@ -69,7 +69,7 @@ def build_upload_router(
                 content={
                     "error": {
                         "code": "GATEWAY.PAYLOAD_TOO_LARGE",
-                        "message": "file exceeds the 1GB transport limit",
+                        "message": f"file exceeds the {max_bytes // (1024 * 1024)}MB transport limit",
                     }
                 },
             )

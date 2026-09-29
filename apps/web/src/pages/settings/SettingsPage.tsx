@@ -482,6 +482,7 @@ export function SettingsPage() {
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('llm.title')}</h2>
               <LlmSettingsSection />
+              <DynamicSettingsGroup modules={['llm']} titleKey="llm.dynamics" />
             </section>
           )}
 
@@ -583,7 +584,11 @@ export function SettingsPage() {
               <h2>{t('mcp.title')}</h2>
               <McpBlock />
               <DynamicSettingsGroup
-                prefixes={['agent.mcp.refresh_seconds', 'agent.mcp.instructions']}
+                prefixes={[
+                  'agent.mcp.wire_timeout_s',
+                  'agent.mcp.refresh_seconds',
+                  'agent.mcp.instructions',
+                ]}
               />
             </section>
           )}

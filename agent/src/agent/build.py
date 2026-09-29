@@ -140,7 +140,8 @@ RAW_LOG_RETENTION_DAYS = 7
 #: Every bounded-growth policy over the agent's runtime data, indexed so
 #: "what bounds X, and where do I change it" starts from one list:
 #:   - events.db display streams: EVENTS_RETENTION below (24h)
-#:   - trajectory.db raw LLM rounds: RAW_LOG_RETENTION_DAYS below (7d)
+#:   - trajectory.db raw LLM rounds: RAW_LOG_RETENTION_DAYS below
+#:     (7d default; agent.retention.raw_log_days setting)
 #:   - meter.db daily rows: startup purge, 90d (build_agent)
 #:   - memory episodes: agent.memory.retention_days setting (0 = keep)
 #:   - tool spill files (workspace/spill): MAX_AGE_SECONDS in

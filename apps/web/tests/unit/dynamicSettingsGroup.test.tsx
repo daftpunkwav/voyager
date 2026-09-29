@@ -104,8 +104,8 @@ describe('DynamicSettingsGroup', () => {
       })
     );
 
-    // The post-save reload unmounts rows while isLoading, so re-query the
-    // re-created input instead of reusing the detached node
+    // The post-save reload replaces the schema rows, so re-query the input
+    // instead of reusing the node captured before the save
     const reloaded = await screen.findByLabelText('工具超时（秒）');
     fireEvent.change(reloaded, { target: { value: '99999' } });
     fireEvent.blur(reloaded);

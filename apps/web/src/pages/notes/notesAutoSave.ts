@@ -6,8 +6,8 @@
  * persist and to which endpoint.
  *
  * Responsibilities:
- * - Track dirty state against the last persisted snapshot with a 5s
- *   debounced flush
+ * - Track dirty state against the last persisted snapshot with a debounced
+ *   flush driven by notes.editor.autosave_s (0 = off)
  * - Create or update via the notes hooks, reporting save state to the
  *   workspace
  * - Flush on unload through the beacon channel and refuse navigation on
@@ -53,17 +53,25 @@ export function useNotesAutoSave(options: { newProjectId: string }) {
   const [autosaveMs, setAutosaveMs] = useState(AUTOSAVE_DEFAULT_MS);
   useEffect(() => {
     let alive = true;
+    // Set once a settings.changed event has been applied: the in-flight
+    // initial read may still carry the pre-change value and must not win
+    let eventApplied = false;
     const apply = (seconds: number) => {
       if (alive) setAutosaveMs(seconds > 0 ? seconds * 1000 : 0);
     };
     callCapability<{ value?: number }>('settings', 'get_setting', { key: AUTOSAVE_KEY })
-      .then((item) => apply(Number(item?.value ?? AUTOSAVE_DEFAULT_MS / 1000)))
+      .then((item) => {
+        if (alive && !eventApplied) apply(Number(item?.value ?? AUTOSAVE_DEFAULT_MS / 1000));
+      })
       .catch(() => {
         // Settings unreadable (backend down): keep the default debounce
       });
     const off = subscribe([EventType.SETTINGS_CHANGED], (event) => {
       const payload = event.payload as { key?: string; value?: unknown };
-      if (payload.key === AUTOSAVE_KEY) apply(Number(payload.value ?? AUTOSAVE_DEFAULT_MS / 1000));
+      if (payload.key === AUTOSAVE_KEY) {
+        eventApplied = true;
+        apply(Number(payload.value ?? AUTOSAVE_DEFAULT_MS / 1000));
+      }
     });
     return () => {
       alive = false;

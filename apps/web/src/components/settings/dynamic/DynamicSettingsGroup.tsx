@@ -15,7 +15,7 @@
  * segment, so a new backend key is still usable before a label lands.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { callCapability } from '@/bridge/client';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -154,7 +154,11 @@ function BoolRow({ item, label }: { item: SettingSchemaItem; label: string }) {
         checked={value}
         onChange={(e) => {
           setBusy(true);
-          save(item.key, e.target.checked, label).finally(() => setBusy(false));
+          // useSettingSave already toasts the failure; only the busy gate
+          // lives here, so the rethrown error is swallowed
+          save(item.key, e.target.checked, label)
+            .finally(() => setBusy(false))
+            .catch(() => undefined);
         }}
       />
     </div>
@@ -178,7 +182,10 @@ function ChoiceRow({ item, label }: { item: SettingSchemaItem; label: string }) 
         options={item.choices.map((c) => ({ value: c, label: c }))}
         onChange={(next) => {
           setBusy(true);
-          save(item.key, next, label).finally(() => setBusy(false));
+          // Same as BoolRow: the toast is owned by useSettingSave
+          save(item.key, next, label)
+            .finally(() => setBusy(false))
+            .catch(() => undefined);
         }}
       />
     </div>
@@ -193,6 +200,10 @@ function ValueRow({ item, label }: { item: SettingSchemaItem; label: string }) {
   const save = useSettingSave();
   const numeric = item.type === 'int' || item.type === 'float';
   const [draft, setDraft] = useState(() => toDraft(item));
+  // The draft handed to the last save attempt: the Save button and the
+  // input's blur fire in sequence on a click, so without this guard every
+  // button save would commit twice (duplicate request + duplicate toast).
+  const lastCommitted = useRef<string | null>(null);
   // Re-sync only when the persisted serialization changes: the schema reload
   // after any row's save rebuilds every item object, and keying on the item
   // identity would clobber an in-progress edit in this row.
@@ -202,9 +213,11 @@ function ValueRow({ item, label }: { item: SettingSchemaItem; label: string }) {
   }, [persisted]);
 
   const commit = () => {
+    if (draft === lastCommitted.current) return;
     if (numeric) {
       const n = Number(draft);
       if (
+        draft.trim() === '' || // Number('') is 0: an emptied field must not save as zero
         !Number.isFinite(n) ||
         (item.min !== null && n < item.min) ||
         (item.max !== null && n > item.max)
@@ -212,6 +225,7 @@ function ValueRow({ item, label }: { item: SettingSchemaItem; label: string }) {
         addToast({ type: 'warning', message: t('auto.invalidRange', { label }) });
         return;
       }
+      lastCommitted.current = draft;
       save(item.key, item.type === 'int' ? Math.round(n) : n, label).catch(() =>
         setDraft(toDraft(item))
       );
@@ -219,12 +233,15 @@ function ValueRow({ item, label }: { item: SettingSchemaItem; label: string }) {
     }
     if (item.type === 'json') {
       try {
-        save(item.key, JSON.parse(draft), label).catch(() => setDraft(toDraft(item)));
+        const parsed = JSON.parse(draft);
+        lastCommitted.current = draft;
+        save(item.key, parsed, label).catch(() => setDraft(toDraft(item)));
       } catch {
         addToast({ type: 'warning', message: t('auto.invalidJson', { label }) });
       }
       return;
     }
+    lastCommitted.current = draft;
     save(item.key, draft, label).catch(() => setDraft(toDraft(item)));
   };
 
