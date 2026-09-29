@@ -167,7 +167,7 @@ export function MessageList() {
     const prevTop = scroller.scrollTop;
     const prevCount = store.messages.length;
     try {
-      const page = await fetchChatHistoryBefore(oldest.seq, 200, sid);
+      const page = await fetchChatHistoryBefore(oldest.seq, undefined, sid);
       // A mid-fetch session switch orphans this page: it belongs to the
       // previous lane (switchSession reset historyLoading, so paging recovers)
       if ((useChatStore.getState().activeSessionId || undefined) !== sid) return;

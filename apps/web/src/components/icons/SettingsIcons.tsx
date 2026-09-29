@@ -97,6 +97,34 @@ export const SettingsIcons = {
       <path d="M9 13v2" />
     </IconBase>
   ),
+  /** Behavior: chat bubble (arbiter / style / conduct shape the conversation) */
+  behavior: (props: IconProps) => (
+    <IconBase {...props}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </IconBase>
+  ),
+  /** Execution bounds: shield (round caps / quotas / network & file roots) */
+  execution: (props: IconProps) => (
+    <IconBase {...props}>
+      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+    </IconBase>
+  ),
+  /** Memory: clock with a rewind arrow (retention / episodic store) */
+  memory: (props: IconProps) => (
+    <IconBase {...props}>
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M12 7v5l4 2" />
+    </IconBase>
+  ),
+  /** Domain services: stacked layers (code_exec / gateway / graph / sources / browser) */
+  domains: (props: IconProps) => (
+    <IconBase {...props}>
+      <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
+      <path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" />
+      <path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" />
+    </IconBase>
+  ),
   /** Subagents: fork — definitions branch off a resident */
   subagents: (props: IconProps) => (
     <IconBase {...props}>

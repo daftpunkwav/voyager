@@ -59,7 +59,7 @@ export function useChatStream(onNavigate: (path: string) => void) {
         // in the session so "no history" and "history failed to load" stay
         // distinguishable for the user
         return (
-          fetchChatHistory(200, sid)
+          fetchChatHistory(undefined, sid)
             .then((page) => {
               // Stale-apply guard: if the user switched sessions while the
               // fetch was in flight, this page belongs to the previous lane;

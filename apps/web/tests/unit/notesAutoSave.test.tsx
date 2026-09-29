@@ -15,6 +15,8 @@ import { useNotesAutoSave } from '@/pages/notes/notesAutoSave';
 
 const mutateAsync = vi.hoisted(() => vi.fn());
 const createAsync = vi.hoisted(() => vi.fn());
+const subscribeMock = vi.hoisted(() => vi.fn(() => () => {}));
+const callCapabilityMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/useNotes', () => ({
   useUpdateNote: () => ({ mutateAsync, isPending: false }),
@@ -25,6 +27,14 @@ vi.mock('react-router-dom', () => ({
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
 }));
 
+// The autosave debounce reads notes.editor.autosave_s and listens for changes;
+// both bridges stay stubbed so no transport is touched.
+vi.mock('@/bridge/stream', () => ({ subscribe: subscribeMock }));
+vi.mock('@/bridge/client', () => ({
+  beaconCapability: vi.fn(),
+  callCapability: callCapabilityMock,
+}));
+
 beforeEach(() => {
   initI18n();
   vi.useFakeTimers();
@@ -32,6 +42,9 @@ beforeEach(() => {
   mutateAsync.mockResolvedValue({});
   createAsync.mockReset();
   createAsync.mockResolvedValue({ id: 'n-created' });
+  subscribeMock.mockClear();
+  callCapabilityMock.mockReset();
+  callCapabilityMock.mockResolvedValue({ value: 5 });
   act(() => {
     useNoteStore.setState({
       editingNoteId: 'n1',

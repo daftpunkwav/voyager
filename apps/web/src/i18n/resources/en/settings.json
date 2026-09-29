@@ -449,6 +449,9 @@
   "tools.paramRequired": "required",
   "tools.noParams": "This tool takes no parameters",
   "nav.toolPerms": "Tool permissions",
+  "nav.behavior": "Behavior",
+  "nav.execution": "Execution",
+  "nav.memory": "Memory",
   "toolPerms.title": "Tool permissions",
   "toolPerms.loading": "Loading permission policy…",
   "toolPerms.loadFailed": "Failed to load the permission policy",
@@ -476,5 +479,8 @@
   "toolPerms.listEmpty.allow": "Empty — meaningful only in no-dangerous mode",
   "toolPerms.addPlaceholder": "tool, tool.action or bash:prefix*",
   "toolPerms.add": "Add",
-  "toolPerms.remove": "Remove"
+  "toolPerms.remove": "Remove",
+  "behavior.title": "Behavior & Style",
+  "execution.title": "Execution & Bounds",
+  "memoryArea.title": "Memory management"
 }

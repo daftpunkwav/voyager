@@ -1,6 +1,6 @@
 /**
  * @file notesAutoSave
- * @description Autosave slice for the note editor: dirty tracking, a 5s debounced flush, a beforeunload beacon fallback, and manual save.
+ * @description Autosave slice for the note editor: dirty tracking, a settings-driven debounced flush (notes.editor.autosave_s, 0=off), a beforeunload beacon fallback, and manual save.
  *
  * The content state itself stays in noteStore; this hook only decides when to
  * persist and to which endpoint.
@@ -16,7 +16,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { beaconCapability } from '@/bridge/client';
+import { beaconCapability, callCapability } from '@/bridge/client';
+import { EventType } from '@/bridge/events';
+import { subscribe } from '@/bridge/stream';
 import { i18n } from '@/i18n';
 import { useCreateNote, useUpdateNote } from '@/hooks/useNotes';
 import { useNoteStore } from '@/stores/noteStore';
@@ -24,6 +26,11 @@ import { useUIStore } from '@/stores/uiStore';
 import { isPersistedNoteId } from './noteLine';
 
 export type NotesSaveState = 'saved' | 'unsaved' | 'saving';
+
+/** Debounce source of truth: the notes.editor.autosave_s setting (0=off);
+ *  this hook only mirrors it in milliseconds. */
+const AUTOSAVE_KEY = 'notes.editor.autosave_s';
+const AUTOSAVE_DEFAULT_MS = 5000;
 
 /** The project id attached when a new draft is persisted is owned by the page (the workspace also displays it); the hook only consumes it. */
 export function useNotesAutoSave(options: { newProjectId: string }) {
@@ -39,6 +46,30 @@ export function useNotesAutoSave(options: { newProjectId: string }) {
   const dirtyRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPersistedRef = useRef<{ id: string; title: string; content: string } | null>(null);
+  // Debounce width mirrors the notes.editor.autosave_s setting (0=off: no
+  // timer is armed, manual save / the unload beacon stay available). A live
+  // save already in flight keeps its old delay — the new value applies from
+  // the next dirty mark.
+  const [autosaveMs, setAutosaveMs] = useState(AUTOSAVE_DEFAULT_MS);
+  useEffect(() => {
+    let alive = true;
+    const apply = (seconds: number) => {
+      if (alive) setAutosaveMs(seconds > 0 ? seconds * 1000 : 0);
+    };
+    callCapability<{ value?: number }>('settings', 'get_setting', { key: AUTOSAVE_KEY })
+      .then((item) => apply(Number(item?.value ?? AUTOSAVE_DEFAULT_MS / 1000)))
+      .catch(() => {
+        // Settings unreadable (backend down): keep the default debounce
+      });
+    const off = subscribe([EventType.SETTINGS_CHANGED], (event) => {
+      const payload = event.payload as { key?: string; value?: unknown };
+      if (payload.key === AUTOSAVE_KEY) apply(Number(payload.value ?? AUTOSAVE_DEFAULT_MS / 1000));
+    });
+    return () => {
+      alive = false;
+      off();
+    };
+  }, []);
 
   /** Shared settle tail after a save resolves: apply the clean/dirty verdict
    *  (dirty flag + save state) and re-arm the debounce when keystrokes landed
@@ -46,14 +77,17 @@ export function useNotesAutoSave(options: { newProjectId: string }) {
    *  silently dropped behind a "saved" indicator (including on beforeunload,
    *  which reads the same dirty flag). Returns the verdict; callers must
    *  propagate it before navigating away or promoting the URL. */
-  const settleAfterSave = useCallback((clean: boolean): boolean => {
-    dirtyRef.current = !clean;
-    setSaveState(clean ? 'saved' : 'unsaved');
-    if (!clean && !timerRef.current) {
-      timerRef.current = setTimeout(() => void flushRef.current(), 5000);
-    }
-    return clean;
-  }, []);
+  const settleAfterSave = useCallback(
+    (clean: boolean): boolean => {
+      dirtyRef.current = !clean;
+      setSaveState(clean ? 'saved' : 'unsaved');
+      if (!clean && !timerRef.current && autosaveMs > 0) {
+        timerRef.current = setTimeout(() => void flushRef.current(), autosaveMs);
+      }
+      return clean;
+    },
+    [autosaveMs]
+  );
 
   /** Persists dirty content immediately (or creates the draft); a clean state passes through untouched.
    *  Returns false when there are real changes that could not be saved (empty title or save failure):
@@ -156,13 +190,13 @@ export function useNotesAutoSave(options: { newProjectId: string }) {
     }
   }, [updateNote, createNote, newProjectId, addToast, setSearchParams, settleAfterSave]);
 
-  /** Marks dirty and resets the 5s debounce timer. */
+  /** Marks dirty and resets the debounce timer (autosave_s=0 arms nothing). */
   const markDirty = useCallback(() => {
     dirtyRef.current = true;
     setSaveState('unsaved');
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => void flush(), 5000);
-  }, [flush]);
+    if (autosaveMs > 0) timerRef.current = setTimeout(() => void flush(), autosaveMs);
+  }, [flush, autosaveMs]);
 
   // Content change marks dirty; skip the very first change right after a note is loaded (loadedFor tracks which note has been loaded)
   const loadedFor = useRef<string | null>(null);

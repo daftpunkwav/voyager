@@ -46,12 +46,28 @@ import { PluginsBlock } from '@/components/settings/agent/PluginsBlock';
 import { McpBlock } from '@/components/settings/agent/McpBlock';
 import { SkillsBlock } from '@/components/settings/agent/SkillsBlock';
 import { UserHooksBlock } from '@/components/settings/agent/UserHooksBlock';
+import { ArbiterBlock } from '@/components/settings/agent/ArbiterBlock';
+import { StyleBlock } from '@/components/settings/agent/StyleBlock';
+import { ConductBlock } from '@/components/settings/agent/ConductBlock';
+import { GuidelinesBlock } from '@/components/settings/agent/GuidelinesBlock';
+import { RoundsBlock } from '@/components/settings/agent/RoundsBlock';
+import { TokenQuotaBlock } from '@/components/settings/agent/TokenQuotaBlock';
+import { NetworkBlock } from '@/components/settings/agent/NetworkBlock';
+import { WorkspaceBlock } from '@/components/settings/agent/WorkspaceBlock';
+import { ReadRootsBlock } from '@/components/settings/agent/ReadRootsBlock';
+import { WriteRootsBlock } from '@/components/settings/agent/WriteRootsBlock';
+import { AppPolicyBlock } from '@/components/settings/agent/AppPolicyBlock';
+import { MemoryBlock } from '@/components/settings/agent/MemoryBlock';
+import { MemoryRetentionBlock } from '@/components/settings/agent/MemoryRetentionBlock';
 
 type Section =
   | 'general'
   | 'appearance'
   | 'llm'
   | 'agents'
+  | 'behavior'
+  | 'execution'
+  | 'memory'
   | 'agentLlm'
   | 'subagents'
   | 'plugins'
@@ -84,6 +100,9 @@ const NAV_GROUPS: {
     labelKey: 'navGroup.agent',
     items: [
       { id: 'agents', icon: 'agents' },
+      { id: 'behavior', icon: 'behavior' },
+      { id: 'execution', icon: 'execution' },
+      { id: 'memory', icon: 'memory' },
       { id: 'agentLlm', icon: 'agentLlm' },
       { id: 'subagents', icon: 'subagents' },
       { id: 'plugins', icon: 'plugins' },
@@ -465,6 +484,37 @@ export function SettingsPage() {
             <section className="settings-section glass-card glass-card--overview-outer">
               <h2>{t('agents.title')}</h2>
               <PersonaGrid />
+            </section>
+          )}
+
+          {section === 'behavior' && (
+            <section className="settings-section glass-card glass-card--overview-outer">
+              <h2>{t('behavior.title')}</h2>
+              <ArbiterBlock />
+              <StyleBlock />
+              <ConductBlock />
+              <GuidelinesBlock />
+            </section>
+          )}
+
+          {section === 'execution' && (
+            <section className="settings-section glass-card glass-card--overview-outer">
+              <h2>{t('execution.title')}</h2>
+              <RoundsBlock />
+              <TokenQuotaBlock />
+              <NetworkBlock />
+              <WorkspaceBlock />
+              <ReadRootsBlock />
+              <WriteRootsBlock />
+              <AppPolicyBlock />
+            </section>
+          )}
+
+          {section === 'memory' && (
+            <section className="settings-section glass-card glass-card--overview-outer">
+              <h2>{t('memory.title')}</h2>
+              <MemoryBlock />
+              <MemoryRetentionBlock />
             </section>
           )}
 

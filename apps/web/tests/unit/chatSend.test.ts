@@ -177,7 +177,7 @@ describe('fetchChatHistory / fetchChatHistoryBefore', () => {
     await expect(fetchChatHistory()).rejects.toThrow('聊天历史加载失败(500)');
   });
 
-  it('newest page: requests the default window and unwraps messages + has_more', async () => {
+  it('newest page: omits limit (backend default page) and unwraps messages + has_more', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
         has_more: true,
@@ -189,7 +189,7 @@ describe('fetchChatHistory / fetchChatHistoryBefore', () => {
       hasMore: true,
       messages: [{ seq: 1, type: 'user.message', payload: { content: 'a' } }],
     });
-    expect(fetchMock).toHaveBeenCalledWith('/api/chat/messages?limit=200', expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith('/api/chat/messages', expect.anything());
   });
 
   it('older page: passes the before_seq cursor through', async () => {

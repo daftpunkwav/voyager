@@ -59,21 +59,30 @@ function sessionQuery(session?: string): string {
 }
 
 /** Newest history page (initial load): user.message + agent.message in one
- *  timeline, optionally narrowed to one chat session. */
-export function fetchChatHistory(limit = 200, session?: string): Promise<ChatHistoryPage> {
-  return fetchHistoryPage(`/api/chat/messages?limit=${limit}${sessionQuery(session)}`);
+ *  timeline, optionally narrowed to one chat session. `limit` omitted = the
+ *  backend default page (the gateway.chat.history_page_size setting). */
+export function fetchChatHistory(limit?: number, session?: string): Promise<ChatHistoryPage> {
+  const parts = [
+    limit !== undefined ? `limit=${limit}` : '',
+    session ? `session=${encodeURIComponent(session)}` : '',
+  ].filter(Boolean);
+  const query = parts.length > 0 ? `?${parts.join('&')}` : '';
+  return fetchHistoryPage(`/api/chat/messages${query}`);
 }
 
 /** Older history page for backward paging: the window immediately before
- *  beforeSeq, ascending. */
+ *  beforeSeq, ascending. `limit` omitted = the backend default page. */
 export function fetchChatHistoryBefore(
   beforeSeq: number,
-  limit = 200,
+  limit?: number,
   session?: string
 ): Promise<ChatHistoryPage> {
-  return fetchHistoryPage(
-    `/api/chat/messages?before_seq=${beforeSeq}&limit=${limit}${sessionQuery(session)}`
-  );
+  const parts = [
+    `before_seq=${beforeSeq}`,
+    limit !== undefined ? `limit=${limit}` : '',
+    session ? `session=${encodeURIComponent(session)}` : '',
+  ].filter(Boolean);
+  return fetchHistoryPage(`/api/chat/messages?${parts.join('&')}`);
 }
 
 /** Newest trajectory window (initial load): agent.step rows for rebuilding

@@ -449,6 +449,9 @@
   "tools.paramRequired": "必填",
   "tools.noParams": "该工具没有参数",
   "nav.toolPerms": "工具权限",
+  "nav.behavior": "行为风格",
+  "nav.execution": "执行边界",
+  "nav.memory": "记忆",
   "toolPerms.title": "工具权限",
   "toolPerms.loading": "正在加载权限策略…",
   "toolPerms.loadFailed": "权限策略加载失败",
@@ -476,5 +479,8 @@
   "toolPerms.listEmpty.allow": "空 — 仅在禁危险模式下有意义",
   "toolPerms.addPlaceholder": "工具名、工具.action 或 bash:前缀*",
   "toolPerms.add": "添加",
-  "toolPerms.remove": "移除"
+  "toolPerms.remove": "移除",
+  "behavior.title": "行为与风格",
+  "execution.title": "执行与边界",
+  "memoryArea.title": "记忆管理"
 }
