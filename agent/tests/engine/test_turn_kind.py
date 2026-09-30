@@ -70,11 +70,10 @@ def test_normal_turn_marked_message(tmp_path) -> None:
         app.close()
 
 
-def test_conversational_delivery_joins_lead_ins(tmp_path) -> None:
-    """A chat turn whose first round streamed text and then called a tool
-    delivers lead-in + final answer as ONE message (the final round only
-    writes the continuation), and the model-facing history carries the flow
-    once — no duplicated lead-in entry."""
+def test_conversational_delivery_final_only(tmp_path) -> None:
+    """A chat turn delivers ONE message: the final answer. The first round's
+    narration lives only in the execution trace, and the model-facing history
+    carries the closing once — no duplicate assistant entry."""
 
     seen = {"n": 0}
 
@@ -92,13 +91,12 @@ def test_conversational_delivery_joins_lead_ins(tmp_path) -> None:
     )
     try:
         asyncio.run(_drive(app, "hi"))
-        full = "我先查一下 usage。\n\n查完了,结果是这样。"
         messages = [e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_MESSAGE])]
-        assert messages[-1]["content"] == full
+        assert messages[-1]["content"] == "查完了,结果是这样。"
         chat = app.master.chat
         assert chat is not None
         history = [m.get("content", "") for m in chat.history if m.get("role") == "assistant"]
-        assert history == [full]  # the lead-in is carried once, by the closing
+        assert history == ["查完了,结果是这样。"]
     finally:
         app.close()
 

@@ -64,7 +64,7 @@ def test_render_leaves_json_and_empty_braces_alone():
 
 def test_global_rules_layer():
     rules = P.common.global_rules.splitlines()
-    assert len(rules) == 9
+    assert len(rules) == 10
     assert rules[0].startswith("Honesty first")
     # The Chinese-reply rule survives the anglicization: replies stay Chinese
     assert "Chinese" in rules[1]
@@ -100,5 +100,5 @@ class TestGlobalRules:
     def test_shape_locked(self) -> None:
         """Locks only the count and the first rule's prefix, not the full text."""
         rules = P.common.global_rules.splitlines()
-        assert len(rules) == 9
+        assert len(rules) == 10
         assert rules[0].startswith("Honesty first")

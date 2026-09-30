@@ -25,11 +25,18 @@ SYNTHESIZE_THRESHOLD = 400
 #: than the old 200 so the head of the report still carries the conclusion)
 FALLBACK_CHARS = 300
 
+#: A completed run with no text result (an empty final round) still needs a
+#: readable receipt: "[done] name: " with nothing after the colon reads as a
+#: broken notice.
+EMPTY_RESULT_TEXT = "已完成,但未返回文本结果。"
+
 
 async def synthesize_result(llm: LLMClient, name: str, result: str) -> str:
     """Condense a long subagent result for the chat notice; short results and
     failed syntheses fall back to a capped excerpt."""
     result = str(result or "")
+    if not result.strip():
+        return EMPTY_RESULT_TEXT
     if len(result) <= SYNTHESIZE_THRESHOLD:
         return result
     try:
@@ -49,4 +56,4 @@ async def synthesize_result(llm: LLMClient, name: str, result: str) -> str:
     return result[:FALLBACK_CHARS] + " …[已截断]"
 
 
-__all__ = ["FALLBACK_CHARS", "SYNTHESIZE_THRESHOLD", "synthesize_result"]
+__all__ = ["EMPTY_RESULT_TEXT", "FALLBACK_CHARS", "SYNTHESIZE_THRESHOLD", "synthesize_result"]

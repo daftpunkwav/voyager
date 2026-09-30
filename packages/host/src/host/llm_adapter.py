@@ -21,6 +21,32 @@ NO_PROVIDER_TEXT = (
     "fill in its api key, then I can continue.)"
 )
 
+
+def _stripped_error(message: str) -> str:
+    """The llm domain's error strings open with their own "LLM call failed: "
+    prefix (chained fallbacks stack several) — strip the repeats so an outer
+    wrapper adds exactly one readable prefix."""
+    msg = (message or "").strip()
+    while msg.startswith("LLM call failed: "):
+        msg = msg[len("LLM call failed: ") :].strip()
+    return msg
+
+
+def _degraded_text(message: str) -> str:
+    """One readable failure placeholder: the llm domain's error strings already
+    open with "LLM call failed" (plain failure) or "LLM call failed after N
+    attempt(s)" (exhausted routing chain), so keep whichever it is and wrap it
+    once — stacking a second prefix produced "(LLM call failed: LLM call
+    failed: ...)". A message drained to nothing by the cleanup still names the
+    failure."""
+    msg = _stripped_error(message)
+    if not msg:
+        return "(LLM call failed)"
+    if not msg.startswith("LLM call failed"):
+        msg = f"LLM call failed: {msg}"
+    return f"({msg})"
+
+
 LateBoundCall = Callable[[str, str, dict[str, Any]], Awaitable[Any]]
 
 
@@ -144,7 +170,7 @@ class ServiceLLM:
             out = await self._call(self._llm_domain, "complete", args)
         except ServiceError as exc:
             return LLMReply(
-                text=f"(LLM call failed: {exc.body.message})",
+                text=_degraded_text(exc.body.message),
                 degraded=True,
                 overflow=exc.body.hint == CONTEXT_OVERFLOW_HINT,
             )
@@ -219,7 +245,7 @@ class ServiceLLM:
         except ServiceError as exc:
             yield StreamReply(
                 final=LLMReply(
-                    text=f"(LLM call failed: {exc.body.message})",
+                    text=_degraded_text(exc.body.message),
                     degraded=True,
                     overflow=exc.body.hint == CONTEXT_OVERFLOW_HINT,
                 )

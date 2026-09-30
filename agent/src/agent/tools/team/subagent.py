@@ -16,7 +16,8 @@ def subagent_tool(registry: Registry, audit: AuditSinks | None = None) -> AgentT
         description=(
             "subagent 域,action:"
             " spawn(goal 派出后台任务,persona/mode/name/readonly/allowed_tools 可选,"
-            "白名单只能收窄本实例已有工具面)/"
+            "默认继承本实例全部工具;allowed_tools 只应收窄到任务确实需要的少数工具,"
+            "写文件类任务的白名单必须包含 write/edit 等落盘工具)/"
             " list(定义与运行中实例)/"
             " register(name,description 等登记自定义定义)/ unregister(name 删除定义)/"
             " wait(id_or_name,timeout_s,阻塞等结果)/"

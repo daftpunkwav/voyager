@@ -346,13 +346,12 @@ async def run_mode(
         # The raw round log is a REACT-only surface: other modes' intermediate
         # products never face the user, so recording them buys nothing.
         kwargs["on_raw"] = on_raw
-        # react assembles the conversational delivery itself (visible lead-in
-        # texts + the final answer as one self-contained message)
-        kwargs["conversational"] = conversational
     if mode in (Mode.COT, Mode.PLAN_EXECUTE):
         # Only the modes with a closing synthesis phase shape their final
         # answer by it (chat reply vs task report); other runners have no
-        # finalizer to tune.
+        # finalizer to tune. REACT delivers the final answer only — the
+        # conversational distinction lives in the closing prompts of the
+        # stepwise modes, not in its delivery.
         kwargs["conversational"] = conversational
     return await runner(**kwargs)
 

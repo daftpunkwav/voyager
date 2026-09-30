@@ -218,7 +218,6 @@ async def run_react(
     compress_budget: int = COMPRESS_BUDGET,
     governor: ContextGovernor | None = None,
     deadline: Deadline | None = None,
-    conversational: bool = False,
 ) -> str:
     tool_calls_used = 0
     tokens_used = 0
@@ -228,12 +227,6 @@ async def run_react(
     # plumbing, and the "no tool needed" justification the model writes under it
     # must never replace the real answer the user already saw streaming
     pending_answer: str | None = None
-    # Visible lead-in texts: rounds that streamed text AND kept working via
-    # tools (or via the idle-continue nudge). A conversational turn delivers
-    # them ahead of the final answer — the last round only writes the
-    # continuation ("查完了,实证在这"), which reads as missing its first
-    # half when the lead-in lives only inside the execution trace.
-    lead_ins: list[str] = []
     # Whether this run already appended the idle-continue nudge: gates the
     # continue check instead of scanning the transcript for the mark, so a
     # user message containing "[react]" or a stale nudge row from session
@@ -486,7 +479,6 @@ async def run_react(
                 # classification at the turn layer) speaks instead.
                 if text and not reply.degraded:
                     pending_answer = text
-                    lead_ins.append(text)
                 messages.append({"role": "assistant", "content": text})
                 messages.append(
                     {
@@ -502,18 +494,12 @@ async def run_react(
                 final = pending_answer
             else:
                 final = user_text
-            if conversational and lead_ins:
-                # Whole visible flow: lead-ins + the answer, so the delivered
-                # message is self-contained (task reports stay final-text-only
-                # — the master reads work products, not conversation flow).
-                # Only the entry IDENTICAL to the final is dropped (the nudge's
-                # own pending_answer): containment matching would also delete a
-                # short lead-in that merely appears inside the final, losing
-                # the opening line the user already saw. A blank final joins
-                # nothing — appending it would leave a trailing "\n\n".
-                flow = [t for t in lead_ins if t and t != final]
-                if flow:
-                    return "\n\n".join([*flow, final] if final else flow)
+            # One delivered message per turn: the final answer only. Round
+            # narration stays in the execution trace (each llm step carries the
+            # full round text), so the closing message must be self-contained —
+            # a continuation that merely points at earlier rounds ("查完了,实证
+            # 在这") would read as missing its first half, which the conversational
+            # system layer forbids.
             return final
         if toolbelt is None:
             return reply.text or "[无工具可用] LLM 请求了工具但未授予"
@@ -553,10 +539,6 @@ async def run_react(
         # Stored thinking blocks ride along for verbatim echo-back while tool
         # use continues (extended thinking); attached only when present so
         # chat-format payloads never gain unknown message fields.
-        # Degraded rounds' harness text ("(LLM call failed: ...)") is provider
-        # plumbing, not a visible lead-in: it must never join the delivery.
-        if (reply.text or "").strip() and not reply.degraded:
-            lead_ins.append(reply.text)
         assistant_entry: dict[str, Any] = {
             "role": "assistant",
             "content": reply.text or "",

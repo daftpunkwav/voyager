@@ -125,6 +125,20 @@ class TestDegraded:
         assert reply.final is True
         assert "LLM call failed" in (reply.text or "")
 
+    async def test_degraded_text_never_stacks_prefixes(self) -> None:
+        """The llm domain's error message already opens with "LLM call failed":
+        the placeholder keeps exactly one prefix (chained messages must not
+        nest into "(LLM call failed: LLM call failed: ...)")."""
+
+        async def call(domain: str, name: str, args: dict) -> Any:
+            if name == "list_providers":
+                return [{"id": "p1", "enabled": True, "has_api_key": True, "models": ["m9"]}]
+            raise ServiceError("llm", ErrorSuffix.UNAVAILABLE, "LLM call failed: ConnectTimeout")
+
+        llm = ServiceLLM(call)
+        reply = await llm.complete(MSGS)
+        assert (reply.text or "") == "(LLM call failed: ConnectTimeout)"
+
     async def test_overflow_hint_marks_reply(self) -> None:
         """The llm domain's CONTEXT_OVERFLOW_HINT on the ServiceError maps to
         LLMReply.overflow, driving the ReAct loop's compact-and-retry."""

@@ -35,7 +35,7 @@ agent 引擎是事件驱动的:它不拥有请求处理器。总线事件启动�
 
 1. `governor.enforce` — 确定性 prune,仍超阈值则 LLM 压缩。
 2. `complete_streaming(llm, messages, specs, ...)` — 一次模型请求;记录用量与原始请求/响应(`on_step`、`on_raw`)。
-3. 若回复携带最终文本,返回。无工具的非寒暄回答可能触发一轮 `continue_if_idle` 催促。
+3. 若回复携带最终文本,返回。最终文本是该回合唯一交付的消息——中间轮次的旁白只留在步骤轨迹上(聊天 UI 在执行轨迹内展示)。无工具的非寒暄回答可能触发一轮 `continue_if_idle` 催促。
 4. 否则追加 assistant `tool_calls` 条目,把调用划分为可并行的批次与串行单例,经 `Toolbelt.call_detailed` 执行,追加 `role:"tool"` 结果,并记录 `on_step("tool", ...)`。
 
 默认值:`ModeLimits(max_rounds=20, max_tool_calls=40, max_tokens=0)`(`engine/modes/base.py`)。

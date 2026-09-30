@@ -3229,18 +3229,18 @@ a.chat-card:hover {
 .chat-side__agent--failed .chat-side__agent-name {
   color: var(--error);
 }
-/* Team delivery card: a dispatched teammate's structured hand-in. */
+/* Team delivery card: a dispatched teammate's structured hand-in. Same
+   neutral hairline card as the system notes — no colored edge accents. */
 .delivery-card {
   align-self: stretch;
   margin: 10px 0 2px;
   padding: 10px 14px;
   border: 1px solid var(--bg-300);
-  border-left: 3px solid var(--brand-400);
   border-radius: var(--radius-sm);
   background: var(--bg-100);
 }
 .delivery-card--failed {
-  border-left-color: var(--error);
+  border-color: color-mix(in srgb, var(--error) 45%, transparent);
   background: var(--error-surface);
 }
 .delivery-card__head {
@@ -3321,8 +3321,7 @@ a.chat-card:hover {
   margin: 2px 0;
   padding: 7px 12px;
   border: 1px solid var(--bg-300);
-  border-left: 3px solid var(--brand-400);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--bg-200);
   color: var(--text-600);
   font-size: 12.5px;

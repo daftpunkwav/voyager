@@ -23,7 +23,7 @@ from agent.runtime import current_instance
 from agent.settings import OVERRIDES_KEY, ROUTING_KEY
 from platform_contracts import ActorKind, ActorRef, DomainEvent, Event, ServiceError
 
-from .llm_adapter import NO_PROVIDER_TEXT, LateBoundCall, ServiceLLM
+from .llm_adapter import NO_PROVIDER_TEXT, LateBoundCall, ServiceLLM, _stripped_error
 
 SYSTEM_HOST = ActorRef(kind=ActorKind.SYSTEM, id="host.llm")
 
@@ -154,7 +154,7 @@ class RoutingServiceLLM(ServiceLLM):
                         last_error,
                     )
         return LLMReply(
-            text=f"(LLM call failed after {len(chain)} attempt(s): {last_error})",
+            text=f"(LLM call failed after {len(chain)} attempt(s): {_stripped_error(last_error)})",
             degraded=True,
         )
 
@@ -236,7 +236,8 @@ class RoutingServiceLLM(ServiceLLM):
             return
         yield StreamReply(
             final=LLMReply(
-                text=f"(LLM call failed after {len(chain)} attempt(s): {last_error})", degraded=True
+                text=f"(LLM call failed after {len(chain)} attempt(s): {_stripped_error(last_error)})",
+                degraded=True,
             )
         )
 

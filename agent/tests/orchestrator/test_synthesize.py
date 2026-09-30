@@ -47,8 +47,12 @@ async def test_threshold_boundary_is_verbatim() -> None:
     assert await synthesize_result(llm, "t", exact) == exact
 
 
-@pytest.mark.parametrize("result", [None, ""])
-async def test_empty_results_pass_through(result) -> None:
+@pytest.mark.parametrize("result", [None, "", "   \n"])
+async def test_empty_results_get_readable_receipt(result) -> None:
+    """A completed run with no text result still produces a readable notice:
+    "[done] name: " with an empty tail reads as a broken receipt."""
+    from agent.orchestrator.synthesize import EMPTY_RESULT_TEXT
+
     llm = FakeLLM()
-    assert await synthesize_result(llm, "t", result) == ""
-    assert llm.calls == []
+    assert await synthesize_result(llm, "t", result) == EMPTY_RESULT_TEXT
+    assert llm.calls == []  # no LLM call spent on empty results

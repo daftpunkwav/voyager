@@ -35,7 +35,7 @@ Each round in `run_react`:
 
 1. `governor.enforce` — deterministic prune, then LLM compaction if still over threshold.
 2. `complete_streaming(llm, messages, specs, ...)` — one model request; usage and raw request/response are recorded (`on_step`, `on_raw`).
-3. If the reply carries final text, return it. A no-tool non-chitchat answer may trigger one `continue_if_idle` nudge round.
+3. If the reply carries final text, return it. The final text is the turn's only delivered message — intermediate round narration stays on the step trail (the chat UI shows it inside the execution trace). A no-tool non-chitchat answer may trigger one `continue_if_idle` nudge round.
 4. Otherwise append the assistant `tool_calls` entry, partition calls into concurrency-safe batches vs serial singletons, execute via `Toolbelt.call_detailed`, append `role:"tool"` results, and record `on_step("tool", ...)`.
 
 Defaults: `ModeLimits(max_rounds=20, max_tool_calls=40, max_tokens=0)` (`engine/modes/base.py`).

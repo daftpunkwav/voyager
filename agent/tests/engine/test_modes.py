@@ -119,10 +119,16 @@ class TestReAct:
         ]
         assert [m["tool_call_id"] for m in messages[2:]] == ["1", "2"]
 
-    async def test_conversational_delivery_joins_lead_ins(self) -> None:
-        """Chat turns deliver the whole visible flow: a round that streamed
-        text and kept working via tools contributes its text ahead of the
-        final answer, so the message never opens mid-thought."""
+    async def test_conversational_delivers_final_only(self) -> None:
+        """One delivered message per turn, the final answer only: a round that
+        streamed text and kept working via tools narrates inside the execution
+        trace (the round's llm step carries its full text), never in the
+        closing message — the ZCode-style delivery."""
+        steps: list[tuple[str, str, str]] = []
+
+        async def _step(kind: str, name: str, summary: str, _detail=None) -> None:
+            steps.append((kind, name, summary))
+
         llm = FakeLLM(
             [
                 LLMReply(text="我先自我介绍一下。", tool_calls=(ToolCall("1", "echo_tool", {}),)),
@@ -135,15 +141,16 @@ class TestReAct:
             toolbelt=_belt(),
             messages=_msgs(),
             limits=ModeLimits(),
+            on_step=_step,
             conversational=True,
         )
-        assert result == "我先自我介绍一下。\n\n查完了,这是结论。"
+        assert result == "查完了,这是结论。"
+        # The narration stays visible in the step trail instead
+        assert any(kind == "llm" and "我先自我介绍一下。" in summary for kind, _, summary in steps)
 
-    async def test_lead_in_kept_when_final_merely_contains_it(self) -> None:
-        """Drop-from-flow matching is equality, not containment: a short
-        lead-in that merely appears inside the final ("好" inside "好的…")
-        must still be delivered — the user saw it stream, dropping it would
-        silently cut the opening line from the message."""
+    async def test_final_only_even_when_lead_in_prefixes_it(self) -> None:
+        """A lead-in that literally prefixes the final must still stay out of
+        the delivery: the message is the final text alone, not a join."""
         result = await run_mode(
             Mode.REACT,
             llm=FakeLLM(
@@ -157,11 +164,11 @@ class TestReAct:
             limits=ModeLimits(),
             conversational=True,
         )
-        assert result == "好\n\n好的,这是结论。"
+        assert result == "好的,这是结论。"
 
-    async def test_blank_final_joins_no_trailing_separator(self) -> None:
-        """A final round with empty text must not leave a trailing "\n\n" on
-        the joined delivery: the join filters the blank segment out."""
+    async def test_blank_final_delivers_empty(self) -> None:
+        """A final round with empty text delivers an empty result (the turn
+        layer decides the closure wording); no join residue."""
         result = await run_mode(
             Mode.REACT,
             llm=FakeLLM(
@@ -175,8 +182,7 @@ class TestReAct:
             limits=ModeLimits(),
             conversational=True,
         )
-        assert result == "先看一下。"
-        assert not result.endswith("\n\n")
+        assert result == ""
 
     async def test_task_turn_keeps_final_text_only(self) -> None:
         """Task reports stay final-text-only: the master reads work products,
@@ -198,8 +204,8 @@ class TestReAct:
 
     async def test_degraded_round_text_never_joins_the_delivery(self) -> None:
         """A provider-failure round's harness text ("(LLM call failed: ...)")
-        is plumbing, not a visible lead-in: the recovery round's answer is
-        delivered alone, without the failure placeholder ahead of it."""
+        is plumbing, not a visible lead-in: only the final round's answer is
+        delivered, the failure placeholder stays in the trace."""
         seen = {"n": 0}
 
         def _flaky(_messages, _tools=None):
@@ -224,7 +230,7 @@ class TestReAct:
             limits=ModeLimits(),
             conversational=True,
         )
-        assert result == "查完了,一切正常。\n\n结论:没问题。"
+        assert result == "结论:没问题。"
         assert "LLM call failed" not in result
 
     async def test_degraded_final_round_never_becomes_pending_answer(self) -> None:
