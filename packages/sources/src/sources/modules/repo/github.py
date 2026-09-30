@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import base64
 import re
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 from urllib.parse import urlparse
 
@@ -70,8 +72,23 @@ def parse_repo_url(url: str) -> tuple[str, str]:
     return owner, repo
 
 
+@asynccontextmanager
+async def client() -> AsyncIterator[httpx.AsyncClient]:
+    """One shared AsyncClient for multi-request flows (repo import does
+    metadata + README back to back): connection reuse saves one TLS
+    handshake per extra request. Single-request callers keep using
+    ``_request`` directly; the constructor arguments match ``_request`` so
+    tests mocking ``httpx.AsyncClient`` keep working."""
+    async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as c:
+        yield c
+
+
 async def _request(
-    path: str, token: str | None = None, params: dict[str, Any] | None = None
+    path: str,
+    token: str | None = None,
+    params: dict[str, Any] | None = None,
+    *,
+    client: httpx.AsyncClient | None = None,
 ) -> Any:
     headers = {
         "Accept": "application/vnd.github+json",
@@ -79,8 +96,11 @@ async def _request(
     }
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
+    if client is not None:
         resp = await client.get(f"{_API}{path}", headers=headers, params=params)
+    else:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as c:
+            resp = await c.get(f"{_API}{path}", headers=headers, params=params)
     if resp.status_code == 404:
         raise ServiceError("sources", ErrorSuffix.NOT_FOUND, f"GitHub resource not found: {path}")
     if resp.status_code == 403:
@@ -94,8 +114,10 @@ async def _request(
     return resp.json()
 
 
-async def fetch_repo_info(owner: str, repo: str, token: str | None = None) -> dict[str, Any]:
-    data = await _request(f"/repos/{owner}/{repo}", token)
+async def fetch_repo_info(
+    owner: str, repo: str, token: str | None = None, *, client: httpx.AsyncClient | None = None
+) -> dict[str, Any]:
+    data = await _request(f"/repos/{owner}/{repo}", token, client=client)
     return {
         "owner": owner,
         "name": data.get("name", repo),
@@ -106,9 +128,11 @@ async def fetch_repo_info(owner: str, repo: str, token: str | None = None) -> di
     }
 
 
-async def fetch_readme(owner: str, repo: str, token: str | None = None) -> str:
+async def fetch_readme(
+    owner: str, repo: str, token: str | None = None, *, client: httpx.AsyncClient | None = None
+) -> str:
     try:
-        data = await _request(f"/repos/{owner}/{repo}/readme", token)
+        data = await _request(f"/repos/{owner}/{repo}/readme", token, client=client)
     except ServiceError as exc:
         if exc.body.code.endswith("NOT_FOUND"):
             return ""

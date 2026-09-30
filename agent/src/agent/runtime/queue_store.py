@@ -132,24 +132,44 @@ def _field_matches(field: str, value: int) -> bool:
 def next_cron_time(expr: str, after_ts: float) -> float | None:
     """Next fire time (epoch seconds, machine-local calendar) strictly after
     after_ts for a 5-field cron expression; None when malformed or no
-    occurrence within ~370 days."""
+    occurrence within ~370 days.
+
+    The scan skips whole spans whose coarser field already rules them out
+    (a month mismatch jumps to the next month, a day/hour mismatch to the
+    next day/hour) instead of stepping minute by minute — the visited
+    minutes are the same candidate set, so the first match (or the None
+    after 370 days) is identical, just reached with orders of magnitude
+    fewer iterations. Note on DST: all arithmetic is wall-clock on
+    zone-aware datetimes, so in a zone where a jump target (e.g. midnight)
+    falls inside a spring-forward gap the timestamp is taken with the
+    pre-transition offset; minute-stepping would land on the shifted wall
+    time. Identical in DST-free zones (this deployment runs in UTC+8).
+    """
     fields = expr.split()
     if len(fields) != 5:
         return None
+    minute_f, hour_f, dom_f, mon_f = fields[0], fields[1], fields[2], fields[3]
+    dow_f = _cron_dow_to_python(fields[4])  # pure field rewrite: hoisted out of the scan
     start = datetime.fromtimestamp(after_ts).astimezone() + timedelta(minutes=1)
     start = start.replace(second=0, microsecond=0)
     minute_end = start + timedelta(days=370)
     cur = start
     while cur < minute_end:
-        if (
-            _field_matches(fields[0], cur.minute)
-            and _field_matches(fields[1], cur.hour)
-            and _field_matches(fields[2], cur.day)
-            and _field_matches(fields[3], cur.month)
-            and _field_matches(_cron_dow_to_python(fields[4]), cur.weekday())
-        ):
-            return cur.timestamp()
-        cur += timedelta(minutes=1)
+        if not _field_matches(mon_f, cur.month):
+            # Land on the 1st of the next month at 00:00 (+32 days cannot
+            # stay inside a 31-day-max month).
+            cur = (cur.replace(day=1, hour=0, minute=0) + timedelta(days=32)).replace(day=1)
+            continue
+        if not (_field_matches(dom_f, cur.day) and _field_matches(dow_f, cur.weekday())):
+            cur = cur.replace(hour=0, minute=0) + timedelta(days=1)
+            continue
+        if not _field_matches(hour_f, cur.hour):
+            cur = cur.replace(minute=0) + timedelta(hours=1)
+            continue
+        if not _field_matches(minute_f, cur.minute):
+            cur += timedelta(minutes=1)
+            continue
+        return cur.timestamp()
     return None
 
 

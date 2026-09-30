@@ -91,8 +91,11 @@ async def import_repo(url: str, category: str = "", clone: bool = True) -> JobRe
             f"Repo already imported: {owner}/{name}",
             hint="See list_repos; remove_repo first before re-importing",
         )
-    info = await github.fetch_repo_info(owner, name, _token())
-    readme = await github.fetch_readme(owner, name, _token())
+    # Metadata + README share one client: same per-request timeout, headers
+    # and error mapping as _request, one TLS handshake instead of two.
+    async with github.client() as gh:
+        info = await github.fetch_repo_info(owner, name, _token(), client=gh)
+        readme = await github.fetch_readme(owner, name, _token(), client=gh)
     rid = deps.store.add(
         {**info, "category": category, "readme": readme, "status": "importing", "source": "github"}
     )
