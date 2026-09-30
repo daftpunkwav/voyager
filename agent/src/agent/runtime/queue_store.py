@@ -15,6 +15,7 @@ import json
 import sqlite3
 import threading
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -208,7 +209,7 @@ class QueueStore:
         """Insert one pending job; explicit run_at wins over delay_s. Returns
         the job id (caller-supplied ids are upserted, so re-enqueueing the
         same logical job is idempotent)."""
-        jid = job_id or f"{kind}-{uuid_hex()}"
+        jid = job_id or f"{kind}-{uuid.uuid4().hex[:12]}"
         when = run_at if run_at is not None else time.time() + max(0.0, delay_s)
         blob = json.dumps(payload or {}, ensure_ascii=False, default=str)
         if len(blob) > _MAX_PAYLOAD:
@@ -395,12 +396,6 @@ class QueueStore:
 
     def close(self) -> None:
         self._conn.close()
-
-
-def uuid_hex() -> str:
-    import uuid
-
-    return uuid.uuid4().hex[:12]
 
 
 __all__ = ["Job", "QueueStore", "next_cron_time"]

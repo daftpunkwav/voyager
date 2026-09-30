@@ -1,4 +1,8 @@
-"""Tools tool group (the aggregated tools surface). Zero-logic aggregation."""
+"""Tools tool group (the aggregated tools surface). Zero-logic aggregation.
+
+The tools/tools/ stutter is contract-mandated: group and file name must
+equal the frozen capability name "tools"
+(agent/tests/granularity/test_file_granularity.py)."""
 
 from __future__ import annotations
 

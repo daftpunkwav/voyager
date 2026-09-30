@@ -462,15 +462,15 @@ def build_agent(
         llm = FakeLLM()
     owns_log = bus is None
 
-    log = EventLog(data_dir / "events.db", retention=EVENTS_RETENTION)
-    bus = bus or EventBus(log)
+    event_log = EventLog(data_dir / "events.db", retention=EVENTS_RETENTION)
+    bus = bus or EventBus(event_log)
     if not owns_log:
         # The bus was injected by the host: it persists into the host's own
         # shared log, and the local file above would stay empty forever.
         # Projections (trajectory, session index) must read the log the bus
         # actually writes to, or every step is lost across restarts.
-        log = bus.log
-    cursors = CursorStore(log.conn, log.lock)
+        event_log = bus.log
+    cursors = CursorStore(event_log.conn, event_log.lock)
 
     owns_settings = settings_store is None
     settings = settings_store or SettingsStore(data_dir / "settings.db", bus=bus)
@@ -502,9 +502,9 @@ def build_agent(
     # on write_roots goes through policy's L2 confirmation)
     policy, read_roots, write_roots = _build_policy(settings, workspace)
     meter_store = MeterStore(data_dir / "meter.db")
-    # Startup library maintenance: purge daily rows older than 90 days so
-    # meter.db does not grow with dates
-    meter_store.purge_older_than_days(90)
+    # Startup library maintenance: purge daily rows older than 90 days (UTC
+    # day-string boundary, see MeterStore) so meter.db does not grow with dates
+    meter_store.purge_days_before_today_utc(90)
     meter = Meter(
         store=meter_store,
         pricing_overrides_fn=lambda: settings.get("agent.pricing.overrides"),
@@ -915,7 +915,7 @@ def build_agent(
     scheduler.set_completion_listener(JobNotifier(master, wake_budget))
     # Session search index: FTS projection over the event log (lazy catch_up
     # keeps it current on reads; the boot fold happens right after assembly)
-    session_index = SessionIndex(data_dir / "session_index.db", log)
+    session_index = SessionIndex(data_dir / "session_index.db", event_log)
     # Durable session goals: boot downgrades active goals to paused (an
     # unattended process never resumes them); continuation rounds run through
     # the durable queue with an admission fence
@@ -932,7 +932,7 @@ def build_agent(
             **plan_tools(plan_gates, asker),
         }
     )
-    jobs_view = JobsView(log)
+    jobs_view = JobsView(event_log)
     registry = build_agent_registry(
         CapabilityDeps(
             settings=settings,
@@ -964,7 +964,7 @@ def build_agent(
             goal_manager=goal_manager,  # durable session goals
             skills_dir=skills_dir,  # skill propose writes here
             session_index=session_index,  # session search action
-            log=log,  # session read action pages the shared history
+            log=event_log,  # session read action pages the shared history
         )
     )
     # Agent-side projection of the agent's own governance/observation
@@ -978,7 +978,7 @@ def build_agent(
             **team_tools(registry, audit),
             **memory_tools(registry, audit),
             **extension_tools(registry, audit),
-            **session_tools(registry, master.sessions, session_index, log, audit),
+            **session_tools(registry, master.sessions, session_index, event_log, audit),
             **observe_tools(registry, audit),
             **jobs_tools(registry, audit),
             **tools_tools(registry, audit),
@@ -986,7 +986,7 @@ def build_agent(
     )
     # Trajectory projection: a rebuildable query index over the event log
     # (steps / runs); startup catch-up folds whatever landed while down
-    trajectory = TrajectoryStore(data_dir / "trajectory.db", log)
+    trajectory = TrajectoryStore(data_dir / "trajectory.db", event_log)
     trajectory.catch_up()
     # Raw LLM round log retention: a debugging surface, not an archive - the
     # bodies are full per-round transcripts and would grow without bound.
@@ -1031,7 +1031,7 @@ def build_agent(
 
     return AgentApp(
         bus=bus,
-        log=log,
+        log=event_log,
         settings=settings,
         memory=memory,
         master=master,

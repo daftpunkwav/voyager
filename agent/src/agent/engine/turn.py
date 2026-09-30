@@ -310,11 +310,11 @@ async def _run_turn(
         inst.system_prompt = inst.build_system(inst.task, inst.persona, user_text or "")
     messages = _build_turn_messages(inst, user_text, view, member_prompt)
     inst._turn_messages = messages  # live reference for mid-turn snapshots (on_step)
-    belt = inst.toolbelt
+    turn_belt = inst.toolbelt
     if view is not None and view.tool_allow is not None:
         # Member turn: the teammate works on its own curated surface (trimmed
         # view, never written back — the resident host keeps its full table)
-        belt = inst.toolbelt.trimmed(view.tool_allow)
+        turn_belt = inst.toolbelt.trimmed(view.tool_allow)
     elif view is None and inst.task.allowed_tools is None and inst.toolbelt.names():
         # Conversational instances (allowed_tools=None): the full tool table
         # is selectable, but each complete only receives activated schemas
@@ -330,7 +330,7 @@ async def _run_turn(
                 domain = page_preactivate(cur.page)
                 if domain and domain not in preactivate:
                     preactivate.append(domain)  # domain-page preactivation saves one activate round
-        belt = graded_toolbelt(
+        turn_belt = graded_toolbelt(
             inst.toolbelt,
             inst.active,
             preactivate=tuple(preactivate),
@@ -340,7 +340,7 @@ async def _run_turn(
     # tool segment hashes the ACTIVE specs (what the wire actually carries),
     # schema bytes included — a graded-activation change is a real tools-segment
     # cache break and must not be misread as provider-side.
-    specs = belt.specs()
+    specs = turn_belt.specs()
     inst.prefix_watch.observe(
         system=str(messages[0].get("content") or "") if messages else "",
         tools=[spec.name for spec in specs],
@@ -377,7 +377,7 @@ async def _run_turn(
             result = await run_mode(
                 member_mode or inst.task.mode or Mode.REACT,
                 llm=inst.llm,
-                toolbelt=belt,
+                toolbelt=turn_belt,
                 messages=messages,
                 limits=inst.task.limits or ModeLimits(),
                 on_step=inst._on_step,

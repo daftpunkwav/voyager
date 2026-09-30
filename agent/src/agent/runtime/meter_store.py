@@ -144,14 +144,16 @@ class MeterStore:
             ).fetchall()
         return [(str(r[0]), int(r[1]), int(r[2]), int(r[3])) for r in rows]
 
-    def purge_older_than_days(self, days: int, *, now: float | None = None) -> int:
-        """Delete day rows older than today_utc - days (strictly less), returning the
+    def purge_days_before_today_utc(self, days: int, *, now: float | None = None) -> int:
+        """Delete day rows strictly before today_utc - days, returning the
         number of rows removed.
 
         Startup-time maintenance: keeps meter_tokens/meter_models from
         accumulating unboundedly across dates. Day boundaries match
-        tokens_used_today (time.gmtime, UTC calendar days).
-        """
+        tokens_used_today (time.gmtime, UTC calendar days). Named apart from
+        the epoch-second purge_*_older_than_days family (queue / journal /
+        audit / llm stores): the cutoff here is a UTC day string, so rows
+        from the partial day `days` ago survive."""
         base = time.time() if now is None else now
         cutoff = time.strftime("%Y-%m-%d", time.gmtime(base - days * 86400))
         with self._lock:

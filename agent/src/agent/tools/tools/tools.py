@@ -1,6 +1,8 @@
 """tools tool: the tool roster's self-management surface in one tool —
 list / describe / search, bound to the same tools capability (audit
-symmetry; schema derived from the capability)."""
+symmetry; schema derived from the capability). The tools/tools/ stutter is
+contract-mandated (agent/tests/granularity/test_file_granularity.py: group
+and file name must equal the frozen capability name "tools")."""
 
 from __future__ import annotations
 

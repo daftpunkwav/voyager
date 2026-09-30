@@ -80,8 +80,8 @@ class TestMeterStore:
         finally:
             store.close()
 
-    def test_purge_older_than_days(self, tmp_path) -> None:
-        """purge(90): deletes rows older than today-90; the day exactly 90 days ago and today are kept."""
+    def test_purge_days_before_today_utc(self, tmp_path) -> None:
+        """purge(90): deletes day rows before today_utc-90; the day exactly 90 days ago and today are kept."""
         store = MeterStore(tmp_path / "meter.db")
         try:
             now = _ts(2026, 1, 15, 12, 0)
@@ -89,7 +89,7 @@ class TestMeterStore:
             store.add("llm", 40, 0, ts=_ts(2025, 10, 16, 8, 0))  # 91 days ago -> deleted
             store.add("llm", 7, 0, ts=_ts(2025, 10, 17, 8, 0))  # exactly 90 days ago -> kept
             store.add("llm", 5, 3, ts=now)  # today -> kept
-            assert store.purge_older_than_days(90, now=now) == 2
+            assert store.purge_days_before_today_utc(90, now=now) == 2
             assert store.tokens_used_today(now=now) == 8  # today total unchanged
             assert store.tokens_used_today(now=_ts(2025, 10, 17, 9, 0)) == 7
             assert store.tokens_used_today(now=_ts(2025, 10, 6, 9, 0)) == 0
