@@ -17,6 +17,13 @@ with per-format conversion. Message history follows the agent's neutral
 protocol: paired assistant.tool_calls / role:"tool" turns are encoded into
 each provider's native tool protocol, and orphan tool results are downgraded
 to user text (see _resolve_tool_messages).
+
+Internal contract: llm/stream.py (SSE streaming) builds on this module's
+private helpers — _dump_rejected_request, _parse_tool_calls,
+_raise_typed_text, _request_id_from, _stream_timeout, _wire_base and
+_wire_request. These names are this package's internal (not public) API:
+they may be reshaped together with stream.py, never renamed or dropped
+unilaterally.
 """
 
 from __future__ import annotations

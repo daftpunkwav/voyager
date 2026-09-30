@@ -178,7 +178,11 @@ class Master:
         # collecting a Task before completion, silently dropping its notifications
         self._bg: set[asyncio.Task] = set()
         # Per-session arbitration queues (feed/queue decisions land here while
-        # that session's turn is running)
+        # that session's turn is running). Deliberately unbounded: queued user
+        # input is answered in order when the running turn ends and is never
+        # refused here — capping (or rejecting) queued messages is a product
+        # decision, and the outer bound is the gateway's rate limiting, not
+        # this structure.
         self._inboxes: dict[str, deque[_Queued]] = {}
         self.sessions = SessionManager(
             spawner=spawner,

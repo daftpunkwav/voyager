@@ -412,10 +412,16 @@ class McpClientPool:
             try:
                 async with self._connect_lock:
                     await self._ensure_session(sid, cfg)
+                    # Read under the same lock hold: the session exists once
+                    # _ensure_session returned, and no await may open between
+                    # connect and read for a future edit to race a concurrent
+                    # drop_session into.
+                    session = self._sessions[sid]
             except Exception as exc:  # noqa: BLE001  # any connect fault is surfaced as entry error
                 self._errors[sid] = f"MCP '{cfg['name']}' reconnect failed: {exc}"
                 return
-        session = self._sessions[sid]
+        else:
+            session = self._sessions[sid]
         try:
             tools = await asyncio.wait_for(session.list_remote_tools(), self._wire_timeout())
         except Exception as exc:  # noqa: BLE001  # any list fault surfaces as entry error and drops session

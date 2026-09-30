@@ -22,7 +22,8 @@ class _Event:
         self.text_delta = text_delta
 
 
-class _LLM:  # noqa: same duck-type surface as LLMClient.complete_stream
+# Same duck-type surface as LLMClient.complete_stream (complete + complete_stream).
+class _LLM:
     """Stream fake: yields the given chunks, then cancels mid-round."""
 
     def __init__(self, chunks: list[str]) -> None:
