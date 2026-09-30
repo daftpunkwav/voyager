@@ -96,7 +96,6 @@ class TestCompactTranscript:
         # pairs + system + final + summary (~524) -> fits under 600
         report = await compact_transcript(msgs, llm, target=600)
         assert report is not None
-        assert report is not None
         assert report["mode"] == "plan"
         assert report["summarized"] == 1 and report["dropped"] == 1
         texts = [str(m.get("content")) for m in msgs]

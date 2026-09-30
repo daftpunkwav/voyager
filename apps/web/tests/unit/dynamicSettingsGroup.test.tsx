@@ -130,4 +130,39 @@ describe('DynamicSettingsGroup', () => {
       })
     );
   });
+
+  it('an emptied numeric field warns without a request (Number("") is 0: never saved as zero)', async () => {
+    render(<DynamicSettingsGroup prefixes={['agent.execution.']} />);
+    const box = screen.getByLabelText('工具超时（秒）') as HTMLInputElement;
+    fireEvent.change(box, { target: { value: '' } });
+    fireEvent.blur(box);
+    await waitFor(() =>
+      expect(useUIStore.getState().toasts.some((t) => t.type === 'warning')).toBe(true)
+    );
+    // No set_setting at all: clearing the field must not persist 0
+    expect(callCapabilityMock).not.toHaveBeenCalledWith(
+      'settings',
+      'set_setting',
+      expect.anything()
+    );
+  });
+
+  it('a save-button click followed by the blur it triggers commits once', async () => {
+    // Clicking 保存 blurs the input before the click handler runs; without
+    // the lastCommitted guard both would fire set_setting (duplicate request
+    // + duplicate toast).
+    render(<DynamicSettingsGroup prefixes={['agent.execution.']} />);
+    const box = screen.getByLabelText('工具超时（秒）') as HTMLInputElement;
+    fireEvent.change(box, { target: { value: '120' } });
+    fireEvent.blur(box); // the blur side of the click sequence
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() =>
+      expect(callCapabilityMock).toHaveBeenCalledWith('settings', 'set_setting', {
+        key: 'agent.execution.tool_deadline_s',
+        value: 120,
+      })
+    );
+    const saves = callCapabilityMock.mock.calls.filter((c) => c[1] === 'set_setting');
+    expect(saves).toHaveLength(1);
+  });
 });

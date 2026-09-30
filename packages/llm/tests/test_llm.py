@@ -1437,6 +1437,51 @@ class TestMessageTranslation:
         # tool results carry tool_call_id, paired with the assistant
         assert [m["tool_call_id"] for m in msgs[3:5]] == ["call_1", "call_2"]
 
+    async def test_anthropic_adjacent_user_rows_merge(self, monkeypatch) -> None:
+        """Two adjacent plain user rows (an arbiter double-merge appends two)
+        join into ONE user message — strict anthropic endpoints 400 on
+        non-alternating roles. An empty trailing row is dropped entirely, an
+        empty prefix keeps the newcomer's text verbatim."""
+        seen = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "content": [{"type": "text", "text": "ok"}],
+                    "usage": {"input_tokens": 1, "output_tokens": 1},
+                    "model": "m",
+                },
+            )
+
+        self._patch(monkeypatch, handler)
+        await client_mod.complete(
+            self._ANTHROPIC,
+            api_key="sk",
+            model="m",
+            messages=[
+                {"role": "system", "content": "s"},
+                {"role": "user", "content": "first"},
+                {"role": "user", "content": "second"},
+            ],
+        )
+        msgs = seen["body"]["messages"]
+        assert [m["role"] for m in msgs] == ["user"]
+        assert msgs[0]["content"] == "first\nsecond"
+
+        # An empty row merges nothing (an empty text payload would itself 400)
+        await client_mod.complete(
+            self._ANTHROPIC,
+            api_key="sk",
+            model="m",
+            messages=[
+                {"role": "user", "content": "only"},
+                {"role": "user", "content": ""},
+            ],
+        )
+        assert seen["body"]["messages"] == [{"role": "user", "content": "only"}]
+
     async def test_anthropic_paired_tool_use_blocks(self, monkeypatch) -> None:
         """Paired history sends tool_use / tool_result content blocks in
         anthropic format, not flattened strings."""

@@ -9,6 +9,7 @@ from agent.build import resolve_prompt_model
 from agent.engine import Mode, TaskBook
 from agent.llm import FakeLLM, LLMReply
 from agent.main import build_agent
+from agent.settings import DEFS as AGENT_SETTING_DEFS
 from agent.tools import AgentTool
 from platform_actor import ActorContext
 from platform_contracts import LOCAL_USER, ActorKind, ActorRef
@@ -217,6 +218,32 @@ class TestEnvInSystem:
         settings = SettingsStore(tmp_path / "s.db")
         assert resolve_prompt_model(_Client(), settings, "orchestrator") == "direct-model"
         assert resolve_prompt_model(FakeLLM(), settings, "") == ""
+
+    async def test_resolve_prompt_model_overrides_route(self, tmp_path) -> None:
+        """A bare client (no model attr) resolves through the per-persona
+        routing override: the provider/model pair the PersonaRoutingServiceLLM
+        would actually serve, alias folded to the canonical key first."""
+
+        class _Bare:  # no model attribute on purpose
+            pass
+
+        class _Client:
+            model = "direct-model"
+
+        settings = SettingsStore(tmp_path / "s.db")
+        settings.register_fresh(AGENT_SETTING_DEFS)  # agent.llm.overrides is agent-registered
+        assert resolve_prompt_model(_Bare(), settings, "orchestrator") == ""
+
+        await settings.set(
+            "agent.llm.overrides",
+            {"orchestrator": {"provider": "prov-a", "model": "model-x"}},
+            LOCAL_USER,
+        )
+        assert resolve_prompt_model(_Bare(), settings, "orchestrator") == "prov-a/model-x"
+        # A legacy alias folds to the same override entry
+        assert resolve_prompt_model(_Bare(), settings, "lucien") == "prov-a/model-x"
+        # The client's own model attr still outranks the override
+        assert resolve_prompt_model(_Client(), settings, "orchestrator") == "direct-model"
 
 
 class TestPurposeRouting:
