@@ -353,6 +353,27 @@ class QueueStore:
             self._conn.commit()
         return cur.rowcount
 
+    def purge_finished_older_than_days(self, days: int, *, now: float | None = None) -> int:
+        """Startup purge of finished one-shot rows (done/failed/cancelled,
+        no cron schedule) past the retention window.
+
+        Terminal rows have no consumer after their single retry window
+        elapses (the jobs view reads the event log, not this table), so they
+        are write-only residue that would otherwise accumulate one row per
+        delayed job forever. Cron definitions keep cycling pending/running
+        and are never touched, even a cancelled one (the definition stays
+        visible); pending/running rows are never touched. Returns the row
+        count."""
+        cutoff = (time.time() if now is None else now) - days * 86400
+        with self._lock:
+            cur = self._conn.execute(
+                "DELETE FROM jobs WHERE cron = '' AND run_at < ?"
+                " AND status IN ('done', 'failed', 'cancelled')",
+                (cutoff,),
+            )
+            self._conn.commit()
+        return cur.rowcount
+
     def close(self) -> None:
         self._conn.close()
 

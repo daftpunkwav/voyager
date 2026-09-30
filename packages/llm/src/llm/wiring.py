@@ -16,7 +16,7 @@ from platform_settings import SettingsStore
 
 from .capabilities import Deps, init_deps, registry
 from .settings import DEFS
-from .store import ProviderStore
+from .store import USAGE_RETENTION_DAYS, ProviderStore
 
 
 def wire(
@@ -29,6 +29,10 @@ def wire(
     if settings_store is not None:
         settings_store.register_fresh(DEFS)
     store = ProviderStore(data_dir / "llm.db")
+    # Startup purge of usage rows past the retention window (90d, mirrors
+    # meter.db): one row is written per LLM call, so the table would grow
+    # forever without it.
+    store.purge_usage_older_than_days(USAGE_RETENTION_DAYS)
     owns_secrets = secrets is None
     secrets = secrets or SecretStore(data_dir / "secrets.db")
     init_deps(Deps(store=store, secrets=secrets, settings=settings_store))

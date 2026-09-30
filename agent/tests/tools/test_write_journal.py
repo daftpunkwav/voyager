@@ -8,6 +8,7 @@ tool-wiring integration covered by TestJournalWiring.
 
 import json
 import threading
+import time
 
 import pytest
 from agent.llm import ToolCall
@@ -255,6 +256,75 @@ class TestCrossThreadSerialization:
         for t in threads:
             t.join()
         assert len(journal.recent(limit=100)) == 40
+
+
+class TestRetention:
+    def test_purge_drops_old_rows_and_unreferenced_blobs(self, tmp_path) -> None:
+        """Startup retention: rows past the window go, their blobs and orphan
+        blobs (crash between blob write and row insert) go with them, and the
+        fresh entries' blobs survive."""
+        journal = _journal(tmp_path)
+        old_target = tmp_path / "old.txt"
+        old_target.write_text("old content", encoding="utf-8")
+        old_entry = journal.capture(old_target, "write")
+        assert old_entry is not None
+        old_blob = journal.recent()[0].blob
+        assert old_blob is not None
+        orphan = tmp_path / "journal" / "blobs" / "deadbeef.bin"
+        orphan.write_bytes(b"orphan")
+        with journal._lock:  # backdate past the window
+            journal._db.execute(
+                "UPDATE writes SET ts = ? WHERE seq = ?", (time.time() - 40 * 86400, old_entry)
+            )
+            journal._db.commit()
+
+        fresh_target = tmp_path / "fresh.txt"
+        fresh_target.write_text("fresh previous", encoding="utf-8")
+        fresh_entry = journal.capture(fresh_target, "write")
+
+        assert journal.purge_older_than_days(30) == 1
+        rows = journal.recent(limit=10)
+        assert [r.seq for r in rows] == [fresh_entry]
+        assert not (tmp_path / "journal" / "blobs" / old_blob).exists()
+        assert not orphan.exists()
+        fresh_blob = rows[0].blob
+        assert fresh_blob is not None
+        assert (tmp_path / "journal" / "blobs" / fresh_blob).exists()
+
+    def test_purge_keeps_blobs_shared_with_surviving_rows(self, tmp_path) -> None:
+        """Blobs are content-addressed and shared: a purged entry must not
+        take a blob that a surviving entry still references."""
+        journal = _journal(tmp_path)
+        t1, t2 = tmp_path / "a.txt", tmp_path / "b.txt"
+        t1.write_text("same", encoding="utf-8")
+        t2.write_text("same", encoding="utf-8")
+        e1 = journal.capture(t1, "write")
+        e2 = journal.capture(t2, "write")
+        assert e1 is not None and e2 is not None
+        rows = {r.seq: r for r in journal.recent(limit=10)}
+        # identical content -> both entries reference one deduplicated blob
+        assert rows[e1].blob is not None
+        assert rows[e1].blob == rows[e2].blob
+        shared_blob = rows[e1].blob
+        with journal._lock:  # backdate only the first entry
+            journal._db.execute(
+                "UPDATE writes SET ts = ? WHERE seq = ?", (time.time() - 40 * 86400, e1)
+            )
+            journal._db.commit()
+
+        assert journal.purge_older_than_days(30) == 1
+        remaining = journal.recent(limit=10)
+        assert [r.seq for r in remaining] == [e2]
+        assert (tmp_path / "journal" / "blobs" / shared_blob).exists()
+
+    def test_purge_window_keeps_recent(self, tmp_path) -> None:
+        journal = _journal(tmp_path)
+        target = tmp_path / "f.txt"
+        target.write_text("v1", encoding="utf-8")
+        entry = journal.capture(target, "write")
+        assert entry is not None
+        assert journal.purge_older_than_days(30) == 0
+        assert journal.recent()[0].seq == entry
 
 
 class TestSafeGuards:

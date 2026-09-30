@@ -7,6 +7,28 @@ from platform_actor import ActorContext
 from platform_capability import Registry, SqliteAuditSink, capability, execute
 from platform_contracts import LOCAL_USER
 
+_NOW = 1_000_000.0
+
+
+def _entry(
+    *,
+    capability: str = "notes.create_note",
+    trace_id: str = "tr1",
+    ts: float = _NOW,
+):
+    from platform_capability import AuditEntry
+
+    return AuditEntry(
+        actor_id="u1",
+        actor_kind="user",
+        capability=capability,
+        args_summary="{}",
+        ok=True,
+        error_code="",
+        trace_id=trace_id,
+        ts=ts,
+    )
+
 
 @pytest.fixture()
 def sink(tmp_path):
@@ -47,6 +69,20 @@ class TestSink:
         assert len(sink.recent(trace_id="tr1")) == 2
         assert len(sink.recent(ok=True)) == 1
         assert len(sink.recent(capability="notes.create_note")) == 1
+
+    def test_purge_older_than_days_keeps_recent(self, sink) -> None:
+        sink.record(_entry(capability="old.cap", trace_id="old"))
+        sink.record(_entry(capability="fresh.cap", ts=_NOW + 1, trace_id="fresh"))
+        # 89 days before the newest row: inside the window
+        purged = sink.purge_older_than_days(90, now=_NOW + 1)
+        assert purged == 0
+        assert len(sink.recent()) == 2
+        # exactly 90 days after the newest row: the cutoff lands on its ts and
+        # the strict-less comparison keeps it while the 1s-older row crosses
+        purged = sink.purge_older_than_days(90, now=_NOW + 1 + 90 * 86400)
+        assert purged == 1
+        rows = sink.recent()
+        assert [r["capability"] for r in rows] == ["fresh.cap"]
 
 
 class TestGuardIntegration:

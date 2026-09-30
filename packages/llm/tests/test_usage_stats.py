@@ -3,6 +3,7 @@ recent calls, and the in-place migration that adds cached_tokens to older DBs.
 """
 
 import sqlite3
+import time
 
 from llm.store import ProviderStore
 
@@ -138,3 +139,25 @@ class TestMigration:
         stats = store.usage_stats(days=1)
         assert stats["totals"]["prompt_cached_tokens"] == 0
         assert stats["totals"]["prompt_uncached_tokens"] == 10
+
+
+class TestUsageRetention:
+    def test_purge_usage_older_than_days(self, tmp_path) -> None:
+        """Startup purge drops usage rows past the retention window and keeps
+        provider rows (configuration) untouched."""
+        store = _store(tmp_path)
+        store.record_usage("p1", "m1", 10, 5)
+        old_ts = time.time() - 91 * 86400
+        conn = sqlite3.connect(tmp_path / "llm.db")
+        conn.execute(
+            "INSERT INTO usage (ts, provider_id, model, caller, input_tokens, output_tokens)"
+            " VALUES (?, 'p1', 'm1', '', 1, 1)",
+            (old_ts,),
+        )
+        conn.commit()
+        conn.close()
+
+        assert store.purge_usage_older_than_days(90) == 1
+        stats = store.usage_stats(days=365)
+        assert stats["totals"]["calls"] == 1  # only the fresh row survives
+        assert store.list() != []  # provider rows untouched

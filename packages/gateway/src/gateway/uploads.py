@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 from datetime import UTC
 from pathlib import Path
 
@@ -38,13 +39,57 @@ _CHUNK_SIZE = 1024 * 1024  # read in 1MB chunks to bound concurrent memory use
 #: entire network-transfer phase.
 _IDLE_TIMEOUT_S = 30.0
 
+#: Upload staging retention: files under workspace/imports/<YYYYMM>/ are
+#: staging copies — the importing domain capabilities copy them into their
+#: own storage, so files left here are either not-yet-imported uploads or
+#: residue. Swept at router build (process startup) with a generous window
+#: on purpose: an upload may legitimately sit here unimported for a while.
+_IMPORT_RETENTION_DAYS = 30
+
 _UNSAFE_FILENAME_RE = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+
+
+def _sweep_stale_imports(workspace: Path, *, now: float | None = None) -> int:
+    """Startup sweep of stale upload staging files (mtime past the retention
+    window), removing month directories that become empty. Best-effort per
+    file: an undeletable file never blocks startup, it just survives until
+    the next sweep."""
+    root = Path(workspace) / "imports"
+    cutoff = (now if now is not None else time.time()) - _IMPORT_RETENTION_DAYS * 86400
+    removed = 0
+    try:
+        months = list(root.iterdir())
+    except OSError:
+        return 0
+    for month in months:
+        if not month.is_dir():
+            continue
+        try:
+            entries = list(month.iterdir())
+        except OSError:
+            continue  # unreadable month dir: skip it, never block startup
+        for f in entries:
+            try:
+                if f.is_file() and f.stat().st_mtime < cutoff:
+                    f.unlink(missing_ok=True)
+                    removed += 1
+            except OSError:
+                continue
+        try:
+            month.rmdir()  # only succeeds when empty
+        except OSError:
+            pass
+    return removed
 
 
 def build_upload_router(
     workspace: Path, limiter: RateLimiter, *, max_bytes: int = _MAX_BYTES
 ) -> APIRouter:
     router = APIRouter()
+    # Startup sweep of stale staging files (see _IMPORT_RETENTION_DAYS)
+    swept = _sweep_stale_imports(workspace)
+    if swept:
+        log.info("startup sweep purged %d stale upload staging file(s)", swept)
 
     @router.post("/api/uploads")
     async def upload(request: Request) -> JSONResponse:

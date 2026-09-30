@@ -148,8 +148,21 @@ RAW_LOG_RETENTION_DAYS = 7
 #:     tools.core.result_budget (7d), bounded on every spill call
 #:   - code-exec execution rows + artifacts: 30d / 200-row cap
 #:     (code_exec.store; pruned every 32 creates)
+#:   - upload staging (workspace/imports): 30d startup sweep
+#:     (gateway.uploads)
+#:   - durable queue (queue.db): finished one-shot rows purged at startup,
+#:     30d (queue_store.purge_finished_older_than_days); pending/running
+#:     rows and cron definitions are never age-bounded
+#:   - write journal (journal.db + blobs/): entries purged at startup, 30d,
+#:     plus GC of blobs no surviving entry references
+#:     (write_journal.purge_older_than_days)
+#: Host/domain-owned runtime data outside agent/:
+#:   - audit.db (data root): startup purge, 90d (platform_capability.audit_db)
+#:   - llm.db usage rows: startup purge, 90d (llm.store / llm.wiring)
+#:   - graph index.db terminal rows: 500-row startup prune (graph.index_queue)
 #: Deliberately not age-bounded (durable meaning): sessions.db, trajectory
-#: steps/runs, checkpoints, the durable queue, the write journal.
+#: steps/runs, checkpoints (pending/running durable-queue rows and cron
+#: definitions see the queue entry above).
 #: Keep the map in sync when a store gains or loses a bound; each entry's
 #: rationale lives with its constant, not here.
 
@@ -577,6 +590,10 @@ def build_agent(
     wake_budget = WakeBudget()  # background-completion wakeup gate (per session)
     queue_store = QueueStore(data_dir / "queue.db")
     queue_store.recover()  # jobs stuck 'running' from a crash go back to pending
+    # Startup purge of finished one-shot rows (30d): terminal rows have no
+    # consumer after their retry window; cron definitions and pending/running
+    # jobs are never touched.
+    queue_store.purge_finished_older_than_days(30)
     checkpoints = CheckpointStore(data_dir / "checkpoints")
     # Startup sweep of orphan .tmp files left by a crash during save's atomic
     # write; anything unsweepable is retried next startup

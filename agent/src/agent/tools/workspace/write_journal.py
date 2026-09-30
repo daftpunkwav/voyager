@@ -33,6 +33,14 @@ class JournalEntry:
     undone: bool
 
 
+#: Journal retention (days): undo targets are recent by construction (undo()
+#: walks newest-first), so a bounded window keeps the safety net without
+#: letting the blobs — full previous file contents, the largest unbounded
+#: artifact in the runtime data — accumulate forever. Purged at construction
+#: (process startup); 30d mirrors the other agent-owned runtime stores.
+JOURNAL_RETENTION_DAYS = 30
+
+
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -60,11 +68,48 @@ class WriteJournal:
             )"""
         )
         self._db.commit()
+        # Startup purge of entries past the retention window (see
+        # JOURNAL_RETENTION_DAYS); blob GC doubles as orphan reclamation for
+        # a crash between the blob write and the row insert.
+        self.purge_older_than_days(JOURNAL_RETENTION_DAYS)
 
     def close(self) -> None:
         """Release the sqlite connection (app shutdown / test teardown)."""
         with self._lock:
             self._db.close()
+
+    def purge_older_than_days(self, days: int, *, now: float | None = None) -> int:
+        """Startup retention: drop journal entries older than now - days
+        (strictly less), then delete blob files no surviving entry references
+        (blobs are content-addressed and shared between entries, so only the
+        unreferenced set goes). Best-effort per blob: an undeletable file
+        survives until the next startup. Returns the removed row count.
+
+        The referenced-set snapshot and the deletion share one lock hold: a
+        capture slipping in between would have its fresh blob deleted as
+        unreferenced."""
+        cutoff = (time.time() if now is None else now) - days * 86400
+        with self._lock:
+            cur = self._db.execute("DELETE FROM writes WHERE ts < ?", (cutoff,))
+            self._db.commit()
+            referenced = {
+                r[0]
+                for r in self._db.execute(
+                    "SELECT DISTINCT blob FROM writes WHERE blob IS NOT NULL"
+                ).fetchall()
+            }
+            try:
+                candidates = list(self._blobs.glob("*.bin"))
+            except OSError:
+                return cur.rowcount
+            for blob in candidates:
+                if blob.name in referenced:
+                    continue
+                try:
+                    blob.unlink(missing_ok=True)
+                except OSError:
+                    continue
+            return cur.rowcount
 
     def capture(self, path: Path, intent: str) -> int | None:
         """Snapshot the file's current content before a mutation; returns the

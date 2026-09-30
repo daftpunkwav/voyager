@@ -60,6 +60,16 @@ _COLS = (
     "kinds",
 )
 
+#: Terminal-row history cap: done/failed/cancelled rows only feed the
+#: list_index_jobs history view (the UI derives each project's newest status
+#: from it) and the frontend polls the whole list, so without a bound the
+#: poll payload grows forever. Rows are tiny, so the cap is generous: a
+#: project would need 500 newer jobs before its last status row scrolled
+#: out. Queued/running rows are never touched and the purge runs at
+#: construction (process startup) only, so a retry window is never racing
+#: it.
+_MAX_TERMINAL_ROWS = 500
+
 
 class IndexQueue:
     def __init__(self, db_path: str | Path) -> None:
@@ -68,6 +78,27 @@ class IndexQueue:
         self._conn.executescript(_SCHEMA)
         self._migrate()
         self._lock = threading.Lock()
+        self._prune_terminal()
+
+    def _prune_terminal(self) -> int:
+        """Startup retention: drop terminal rows beyond the history cap
+        (newest kept), mirroring code_exec.store's row-count prune. Returns
+        the purged row count."""
+        with self._lock:
+            ids = [
+                r[0]
+                for r in self._conn.execute(
+                    "SELECT id FROM index_jobs"
+                    " WHERE status IN ('done', 'failed', 'cancelled')"
+                    " ORDER BY updated_ts DESC, rowid DESC LIMIT -1 OFFSET ?",
+                    (_MAX_TERMINAL_ROWS,),
+                ).fetchall()
+            ]
+            if ids:
+                marks = ",".join("?" for _ in ids)
+                self._conn.execute(f"DELETE FROM index_jobs WHERE id IN ({marks})", ids)
+                self._conn.commit()
+        return len(ids)
 
     def _migrate(self) -> None:
         """Idempotently add missing columns to older databases via ALTER TABLE."""

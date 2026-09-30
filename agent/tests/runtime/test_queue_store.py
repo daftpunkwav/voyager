@@ -130,6 +130,27 @@ class TestQueue:
         assert store.due(now=time.time() + 120) == []
         store.close()
 
+    def test_purge_finished_keeps_live_rows_and_cron(self, tmp_path) -> None:
+        """Startup purge drops only terminal one-shot rows past the window;
+        cron definitions, pending and running rows are never touched."""
+        store = QueueStore(tmp_path / "queue.db")
+        done = store.enqueue(kind="one", delay_s=0, job_id="one-1")
+        store.mark_started(done)
+        store.mark_done(done)
+        failed = store.enqueue(kind="one", delay_s=0, job_id="one-2")
+        store.mark_started(failed)
+        store.mark_failed(failed, "boom")
+        store.mark_failed(failed, "boom")  # second failure: give-up
+        cancelled = store.enqueue(kind="one", delay_s=3600, job_id="one-3")
+        store.cancel(cancelled)
+        cron = store.enqueue(kind="tick", cron="* * * * *", job_id="cron-1", delay_s=0)
+        pending = store.enqueue(kind="one", delay_s=3600, job_id="one-4")
+        # All five rows already sit "in the past" from the purge's point of view
+        assert store.purge_finished_older_than_days(30, now=time.time() + 31 * 86400) == 3
+        ids = {j.id for j in store.list(statuses=("pending", "running"))}
+        assert ids == {cron, pending}  # live rows and the cron definition survive
+        store.close()
+
 
 class TestSchedulerQueue:
     async def test_poll_loop_runs_due_jobs(self, tmp_path) -> None:

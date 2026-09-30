@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from gateway.mounts import MountSpec
 from gateway.ratelimit import RateLimiter
-from gateway.uploads import build_upload_router
+from gateway.uploads import _sweep_stale_imports, build_upload_router
 
 
 @pytest.fixture()
@@ -232,3 +232,34 @@ class TestUploadSharesGatewayLimiter:
             r = tc.post("/api/uploads", files={"file": ("late.txt", b"x")})
             assert r.status_code == 429
             assert r.json()["error"]["code"] == "GATEWAY.RATE_LIMITED"
+
+
+class TestStagingSweep:
+    def test_sweep_removes_stale_files_and_empty_months(self, tmp_path) -> None:
+        """Startup staging sweep: files past the retention window are removed
+        (with month dirs that become empty); fresh uploads and non-file
+        entries survive."""
+        import os
+        import time
+
+        ws = tmp_path / "ws"
+        old_month = ws / "imports" / "202601"
+        old_month.mkdir(parents=True)
+        old = old_month / "old.txt"
+        old.write_bytes(b"x")
+        stale = time.time() - 40 * 86400
+        os.utime(old, (stale, stale))
+        fresh_month = ws / "imports" / "202609"
+        fresh_month.mkdir(parents=True)
+        fresh = fresh_month / "fresh.txt"
+        fresh.write_bytes(b"y")
+
+        removed = _sweep_stale_imports(ws)
+
+        assert removed == 1
+        assert not old.exists()
+        assert not old_month.exists()  # emptied month dir is removed
+        assert fresh.exists() and fresh_month.exists()
+
+    def test_sweep_noop_without_imports_dir(self, tmp_path) -> None:
+        assert _sweep_stale_imports(tmp_path / "ws") == 0

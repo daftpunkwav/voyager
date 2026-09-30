@@ -11,10 +11,17 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+import time
 from pathlib import Path
 from typing import Any, Self
 
 from platform_capability.guards import AuditEntry
+
+#: Audit rows are an operational history (who called what, with what
+#: outcome), not an archive: every capability call writes one row, so
+#: without a policy the table grows forever (45MB was observed). Purged at
+#: sink construction (process startup) by ts; 90 days mirrors meter.db.
+AUDIT_RETENTION_DAYS = 90
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS audit (
@@ -55,6 +62,9 @@ class SqliteAuditSink:
         self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self._conn.executescript(_SCHEMA)
         self._lock = threading.Lock()
+        # Startup purge of audit rows past the retention window; freed pages
+        # are reused by later inserts (no VACUUM: too heavy for startup).
+        self.purge_older_than_days(AUDIT_RETENTION_DAYS)
 
     def record(self, entry: AuditEntry) -> None:
         with self._lock:
@@ -105,6 +115,15 @@ class SqliteAuditSink:
         for item in out:
             item["ok"] = bool(item["ok"])
         return out
+
+    def purge_older_than_days(self, days: int, *, now: float | None = None) -> int:
+        """Delete audit rows older than now - days (strictly less), returning
+        the row count. Startup-time maintenance over the ts index."""
+        cutoff = (time.time() if now is None else now) - days * 86400
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM audit WHERE ts < ?", (cutoff,))
+            self._conn.commit()
+            return cur.rowcount
 
     def close(self) -> None:
         self._conn.close()

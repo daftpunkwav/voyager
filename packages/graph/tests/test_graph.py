@@ -155,6 +155,31 @@ class TestQueue:
             await execute(registry, "cancel_index", USER_CTX, {"job_id": jid})
         assert exc.value.body.code == "GRAPH.CONFLICT"
 
+    def test_terminal_history_pruned_to_cap_on_reopen(self, tmp_path) -> None:
+        """Startup prune drops terminal rows beyond the history cap (newest
+        kept) and never touches queued rows: the list_index_jobs poll payload
+        stays bounded while each project's newest status row survives."""
+        from graph.index_queue import IndexQueue
+
+        path = tmp_path / "prune.db"
+        queue = IndexQueue(path)
+        queued_id = queue.enqueue("p", "/x")  # stays queued across the prune
+        done_ids = [queue.enqueue("p", "/x") for _ in range(505)]
+        for jid in done_ids:
+            queue.next()
+            queue.finish(jid, ok=True)
+        queue.close()
+
+        reopened = IndexQueue(path)
+        try:
+            rows = reopened.list()
+            done = [r for r in rows if r["status"] == "done"]
+            assert len(done) == 500  # cap, newest kept
+            assert all(r["id"] not in set(done_ids[:5]) for r in done)
+            assert any(r["id"] == queued_id for r in rows)  # queued rows untouched
+        finally:
+            reopened.close()
+
 
 class TestScheduler:
     async def test_retry_then_done(self, deps) -> None:

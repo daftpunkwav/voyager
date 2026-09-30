@@ -54,6 +54,11 @@ CREATE TABLE IF NOT EXISTS usage (
 CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage(ts);
 """
 
+#: Usage rows are metering history for the usage page (30d default view);
+#: without a purge they accumulate one row per LLM call forever. 90 days
+#: mirrors meter.db; purged by ts at wiring time (process startup).
+USAGE_RETENTION_DAYS = 90
+
 
 def is_private_host(host: str) -> bool:
     """Loopback/private/link-local/non-global hosts, judged literally from the
@@ -239,6 +244,16 @@ class ProviderStore:
                 ),
             )
             self._conn.commit()
+
+    def purge_usage_older_than_days(self, days: int, *, now: float | None = None) -> int:
+        """Delete usage rows older than now - days (strictly less), returning
+        the row count. Startup-time maintenance over the ts index; provider
+        rows are configuration and are never touched."""
+        cutoff = (time.time() if now is None else now) - days * 86400
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM usage WHERE ts < ?", (cutoff,))
+            self._conn.commit()
+            return cur.rowcount
 
     def usage_stats(self, days: int = 30, *, recent_limit: int = 20) -> dict[str, Any]:
         """Aggregated usage for the usage page.
