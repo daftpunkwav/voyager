@@ -30,6 +30,8 @@ platform_*  ◀── { gateway, agent, 全部域 }  ◀── host
 - 只有 `host` import `agent` 和 `gateway`(加上它组装的域 wiring)。`agent` 只 import `platform_*` — 从不 import 域。
 - `gateway` 包不 import 任何域(`packages/gateway/README.md` 的"zero domain imports");域以挂载路由的形式进入 gateway。
 
+域的独立性也延伸到词汇上,同一个生命周期步骤在不同域可以有不同的名字。已知的一对是"启动时崩溃恢复卡在活跃态的行":graph 包的 `recover_stale_running`(`graph/index_queue.py` — 未超重试上限的 running 行重新入队,已耗尽的判失败)与 sources 包的 `fail_in_flight`(`sources/modules/repo/store.py`、`sources/modules/doc/store.py` — 将 in-flight 行判失败,重导入即重试路径)。名字不同是因为重试策略不同,不要为对称而互相改名。
+
 ## 能力即服务单元
 
 每个业务操作是一个 `Capability`(`platform_capability/define.py`):frozen dataclass,绑定名称、描述、Pydantic 输入模型与处理器,注册进各域的 `Registry`。一次注册,框架投影出两个面:

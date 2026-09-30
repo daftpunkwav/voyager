@@ -30,6 +30,8 @@ platform_*  ◀── { gateway, agent, every domain }  ◀── host
 - Only `host` imports `agent` and `gateway` (plus the domain wirings it assembles). `agent` imports `platform_*` only — never a domain.
 - The `gateway` package imports no domain ("zero domain imports" in `packages/gateway/README.md`); domains reach it as mounted routers.
 
+Domain independence extends to vocabulary, so the same lifecycle step may carry a different name per domain. The one known pair is startup crash recovery of rows stuck in an active state: `recover_stale_running` in the graph package (`graph/index_queue.py` — requeues running rows under the attempts cap, fails exhausted ones) and `fail_in_flight` in the sources package (`sources/modules/repo/store.py`, `sources/modules/doc/store.py` — fails in-flight rows; re-import is the retry path). The names differ because the retry policies differ; do not cross-rename them for symmetry.
+
 ## Capability as the service unit
 
 Every business operation is a `Capability` (`platform_capability/define.py`): a frozen dataclass binding a name, description, Pydantic input model, and handler, registered in a per-domain `Registry`. From one registration the framework projects two surfaces:
