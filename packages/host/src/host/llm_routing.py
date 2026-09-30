@@ -17,7 +17,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from agent.contracts import Purpose
-from agent.llm import LLMReply, StreamReply, ToolSpec, stripped_error_message
+from agent.llm import LLMReply, StreamReply, ToolSpec, degraded_error_text
 from agent.personas import canonical_persona_key
 from agent.runtime import current_instance
 from agent.settings import OVERRIDES_KEY, ROUTING_KEY
@@ -154,7 +154,7 @@ class RoutingServiceLLM(ServiceLLM):
                         last_error,
                     )
         return LLMReply(
-            text=f"(LLM call failed after {len(chain)} attempt(s): {stripped_error_message(last_error)})",
+            text=degraded_error_text(last_error, attempts=len(chain)),
             degraded=True,
         )
 
@@ -236,7 +236,7 @@ class RoutingServiceLLM(ServiceLLM):
             return
         yield StreamReply(
             final=LLMReply(
-                text=f"(LLM call failed after {len(chain)} attempt(s): {stripped_error_message(last_error)})",
+                text=degraded_error_text(last_error, attempts=len(chain)),
                 degraded=True,
             )
         )

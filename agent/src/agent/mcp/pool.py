@@ -38,6 +38,11 @@ _ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 #: every tools/list each get this budget (seconds).
 WIRE_TIMEOUT = 15.0
 
+#: Default interval between periodic tools/list refreshes (seconds); the
+#: agent.mcp.refresh_seconds setting hot-overrides it. One constant so the
+#: loop's fallbacks cannot drift apart.
+REFRESH_INTERVAL = 300.0
+
 ConnectFn = Callable[[dict], Awaitable[McpSession]]
 
 log = logging.getLogger("agent.mcp")
@@ -350,14 +355,14 @@ class McpClientPool:
         and the cycle body being contained both keep the loop sleeping - a
         failing settings read must never turn this into a zero-delay hot loop."""
         while True:
-            interval = 300.0
+            interval = REFRESH_INTERVAL
             try:
                 if self._settings is not None:
                     raw = self._settings.get("agent.mcp.refresh_seconds")
-                    interval = float(raw) if raw else 300.0
+                    interval = float(raw) if raw else REFRESH_INTERVAL
             except Exception:  # noqa: BLE001  # closed store / dirty value: default interval
-                interval = 300.0
-            await asyncio.sleep(interval if interval > 0 else 300.0)
+                interval = REFRESH_INTERVAL
+            await asyncio.sleep(interval if interval > 0 else REFRESH_INTERVAL)
             try:
                 if interval > 0:
                     await self.refresh_approved()

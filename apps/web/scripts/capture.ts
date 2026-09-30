@@ -1,5 +1,8 @@
 // Capture screenshots of Phase 6/7 pages for visual verification
-import { chromium } from 'playwright';
+// chromium comes from the declared devDependency (@playwright/test re-exports
+// it); importing bare 'playwright' relied on npm hoisting an undeclared
+// transitive dependency.
+import { chromium } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';

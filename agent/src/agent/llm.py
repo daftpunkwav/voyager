@@ -201,14 +201,22 @@ def stripped_error_message(message: str) -> str:
     return msg
 
 
-def degraded_error_text(message: str) -> str:
-    """One readable failure placeholder for a degraded LLMReply: the llm
-    domain's error strings already open with "LLM call failed" (plain failure)
-    or "LLM call failed after N attempt(s)" (exhausted routing chain), so keep
-    whichever it is and wrap it once — stacking a second prefix produced
-    "(LLM call failed: LLM call failed: ...)". A message drained to nothing by
-    the cleanup still names the failure."""
+def degraded_error_text(message: str, *, attempts: int = 0) -> str:
+    """One readable failure placeholder for a degraded LLMReply — the single
+    text protocol for harness degradation. The llm domain's error strings
+    already open with "LLM call failed", so keep that and wrap it once —
+    stacking a second prefix produced "(LLM call failed: LLM call failed:
+    ...)". A message drained to nothing by the cleanup still names the
+    failure.
+
+    attempts > 0 marks the exhausted-routing-chain variant ("after N
+    attempt(s)"): the host router builds BOTH of its degraded replies
+    (complete and stream) through this constructor, so the wording lives in
+    one place instead of being hand-concatenated at each fallthrough.
+    """
     msg = stripped_error_message(message)
+    if attempts > 0:
+        return f"(LLM call failed after {attempts} attempt(s): {msg})"
     if not msg:
         return "(LLM call failed)"
     if not msg.startswith("LLM call failed"):
