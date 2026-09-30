@@ -184,6 +184,21 @@ class DocStore:
             )
             self._conn.commit()
 
+    def fail_in_flight(self, error: str) -> int:
+        """Startup crash recovery: rows stuck in 'importing'/'parsing' can
+        only come from a hard kill — the parse queue is in-memory and no
+        worker will ever pick them up again, so they would sit in-flight
+        forever. Mark them failed; re-import is the retry path. Returns the
+        affected row count."""
+        with self._lock:
+            cur = self._conn.execute(
+                "UPDATE documents SET status = 'failed', error = ?, updated_ts = ?"
+                " WHERE status IN ('importing', 'parsing')",
+                (error, time.time()),
+            )
+            self._conn.commit()
+        return cur.rowcount
+
     def remove(self, did: str) -> None:
         with self._lock:
             self._conn.execute("DELETE FROM documents WHERE id = ?", (did,))

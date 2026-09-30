@@ -92,6 +92,19 @@ class TestAddDocument:
         assert doc["status"] == "stored"
         assert d.doc_queue.qsize() == 0
 
+    def test_fail_in_flight_gives_stuck_rows_an_exit(self, deps) -> None:
+        """Startup crash recovery: rows stuck 'importing'/'parsing' (queue
+        lost in a hard kill) become failed with a named error; terminal
+        statuses are untouched."""
+        d, _ = deps
+        stuck_import = d.doc_store.add({"title": "a", "status": "importing"})
+        stuck_parse = d.doc_store.add({"title": "b", "status": "parsing"})
+        ready = d.doc_store.add({"title": "c", "status": "ready"})
+        assert d.doc_store.fail_in_flight("interrupted by restart; re-import to retry") == 2
+        assert d.doc_store.get(stuck_import)["status"] == "failed"
+        assert d.doc_store.get(stuck_parse)["status"] == "failed"
+        assert d.doc_store.get(ready)["status"] == "ready"
+
     async def test_missing_file_and_outside_workspace(self, deps, tmp_path) -> None:
         with pytest.raises(ServiceError, match="File not found"):
             await execute(

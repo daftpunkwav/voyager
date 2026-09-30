@@ -54,6 +54,18 @@ class RateLimiter:
         hits.append(now)
 
     def acquire_sse(self) -> None:
+        """Take one SSE connection slot (lease).
+
+        Lease contract: the caller releases in the stream generator's
+        finally, so the release is armed on the generator's first iteration.
+        Starlette starts iterating even on disconnect (cancel or
+        OSError/ClientDisconnect), and CPython refcounting then finalizes a
+        suspended generator promptly — but a response that never starts at
+        all (framework-level crash between endpoint return and response
+        start) would leave the slot held until process restart (the counter
+        is in-memory). Local single-user scale with a small cap makes a
+        lease-TTL sweeper disproportionate; revisit if that changes.
+        """
         if self._sse_open >= self._sse_max:
             raise ServiceError(
                 _DOMAIN,

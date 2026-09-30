@@ -9,11 +9,16 @@ checkpoint reclaim.
   and the loop survives.
 - On boot, alive checkpoints without a resume snapshot are marked failed; ones with a
   snapshot become PAUSED awaiting recovery.
+- The breaker's half-open state admits a single probe; concurrent callers fail fast.
 """
 
+import asyncio
+
 import httpx
+import pytest
 from agent.llm import ToolCall
 from agent.policy import FsPolicy, PolicyEngine
+from agent.runtime.recovery import CircuitBreaker, CircuitOpenError
 from agent.tools import AgentTool, Toolbelt, ensure_workdir
 
 
@@ -156,3 +161,83 @@ class TestToolBreaker:
         trimmed = belt.trimmed(["flaky"])
         assert "[熔断]" in await trimmed.call(ToolCall("2", "flaky", {}))
         assert counter["calls"] == 3
+
+
+class TestCircuitBreakerHalfOpen:
+    async def test_half_open_admits_single_probe(self) -> None:
+        """After reset_after only the first call enters fn; a concurrent caller
+        fails fast with CircuitOpenError until the probe resolves."""
+        cb = CircuitBreaker(open_after=1, reset_after=0.05)
+
+        async def boom() -> None:
+            raise RuntimeError("boom")
+
+        with pytest.raises(RuntimeError):
+            await cb.call(boom)
+        assert cb.open is True
+        await asyncio.sleep(0.06)  # half-open now
+
+        entered = asyncio.Event()
+        release = asyncio.Event()
+
+        async def probe() -> str:
+            entered.set()
+            await release.wait()
+            return "ok"
+
+        first = asyncio.create_task(cb.call(probe))
+        await entered.wait()  # the probe holds the half-open slot
+        with pytest.raises(CircuitOpenError):
+            await cb.call(probe)  # second concurrent caller: rejected, fn not entered
+        release.set()
+        assert await first == "ok"
+        assert cb.open is False  # probe success closed the breaker
+
+    async def test_failed_probe_reopens(self) -> None:
+        """A failed half-open probe re-opens the circuit for another window."""
+        cb = CircuitBreaker(open_after=1, reset_after=0.05)
+
+        async def boom() -> None:
+            raise RuntimeError("boom")
+
+        with pytest.raises(RuntimeError):
+            await cb.call(boom)
+        await asyncio.sleep(0.06)
+        with pytest.raises(RuntimeError):
+            await cb.call(boom)  # the probe itself failed
+        assert cb.open is True
+        # Still within the new window: closed again for everyone
+        with pytest.raises(CircuitOpenError):
+            await cb.call(boom)
+
+    async def test_cancelled_probe_releases_the_half_open_slot(self) -> None:
+        """A cancelled probe must release the probe slot without counting a
+        failure: otherwise the breaker stays wedged in "probe in flight"
+        forever and never recovers."""
+        cb = CircuitBreaker(open_after=1, reset_after=0.05)
+
+        async def boom() -> None:
+            raise RuntimeError("boom")
+
+        with pytest.raises(RuntimeError):
+            await cb.call(boom)
+        assert cb.open is True
+        await asyncio.sleep(0.06)  # half-open now
+
+        entered = asyncio.Event()
+
+        async def slow() -> None:
+            entered.set()
+            await asyncio.sleep(60)
+
+        probe = asyncio.create_task(cb.call(slow))
+        await entered.wait()  # the probe holds the half-open slot
+        probe.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await probe
+
+        # The slot is free again: the next half-open caller enters fn (and its
+        # failure re-opens the circuit instead of being rejected up front).
+        with pytest.raises(RuntimeError, match="boom"):
+            await cb.call(boom)
+        assert cb.open is True

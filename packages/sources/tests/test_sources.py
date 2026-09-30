@@ -136,6 +136,26 @@ class TestRepo:
         with pytest.raises(Exception, match="already imported"):
             await execute(registry, "import_repo", USER_CTX, {"url": "https://github.com/o/a"})
 
+    def test_fail_in_flight_gives_stuck_rows_an_exit(self, deps) -> None:
+        """Startup crash recovery: rows stuck 'importing' (queue lost in a
+        hard kill) become failed with a named error; ready/failed rows are
+        untouched and re-import is the retry path."""
+        d, _ = deps
+        stuck = d.repo_store.add(
+            {"name": "s", "owner": "o", "url": "https://github.com/o/s", "status": "importing"}
+        )
+        ready = d.repo_store.add(
+            {"name": "r", "owner": "o", "url": "https://github.com/o/r", "status": "ready"}
+        )
+        failed = d.repo_store.add(
+            {"name": "f", "owner": "o", "url": "https://github.com/o/f", "status": "failed"}
+        )
+        assert d.repo_store.fail_in_flight("interrupted by restart; re-import to retry") == 1
+        assert d.repo_store.get(stuck)["status"] == "failed"
+        assert "interrupted by restart" in d.repo_store.get(stuck)["error"]
+        assert d.repo_store.get(ready)["status"] == "ready"
+        assert d.repo_store.get(failed)["status"] == "failed"
+
     async def test_reimport_preserves_user_meta(self, deps) -> None:
         """Re-import over a conflicting URL updates source fields only;
         category/tags/progress/note are preserved and the id stays the same.

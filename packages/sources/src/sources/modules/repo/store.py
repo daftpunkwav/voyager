@@ -244,6 +244,22 @@ class RepoStore:
             )
             self._conn.commit()
 
+    def fail_in_flight(self, error: str) -> int:
+        """Startup crash recovery: rows stuck in 'importing' can only come
+        from a hard kill — the clone queue is in-memory and no worker will
+        ever pick them up again, so they would sit in 'importing' forever
+        (never re-importable as ready, always shown as in-flight). Mark them
+        failed; re-import is the retry path (the URL upsert preserves user
+        metadata). Returns the affected row count."""
+        with self._lock:
+            cur = self._conn.execute(
+                "UPDATE repos SET status = 'failed', error = ?, updated_ts = ?"
+                " WHERE status = 'importing'",
+                (error, time.time()),
+            )
+            self._conn.commit()
+        return cur.rowcount
+
     def remove(self, rid: str) -> None:
         with self._lock:
             self._conn.execute("DELETE FROM repos WHERE id = ?", (rid,))
