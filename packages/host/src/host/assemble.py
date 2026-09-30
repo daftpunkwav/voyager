@@ -41,7 +41,7 @@ from agent.settings import WORKSPACE_DIR_KEY
 from fastapi import FastAPI
 from platform_actor import LocalTokenIssuer
 from platform_capability import CostQuota, SqliteAuditSink, Wiring
-from platform_contracts import ErrorSuffix, ServiceError
+from platform_contracts import ErrorSuffix, ServiceError, repo_root
 from platform_eventbus import EventBus, EventLog
 from platform_secrets import SecretStore
 from platform_settings import SettingsStore
@@ -59,7 +59,7 @@ from .settings import DEFS as HOST_SETTING_DEFS
 
 log = logging.getLogger("host.assemble")
 
-ROOT = Path(__file__).resolve().parents[4]  # repo root (packages/host/src/host)
+ROOT = repo_root()
 
 DOMAINS_DIR = "packages"
 # Every domain is an installed top-level package (src layout), so a card's

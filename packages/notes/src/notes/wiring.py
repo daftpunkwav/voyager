@@ -23,6 +23,7 @@ from contextlib import suppress
 from pathlib import Path
 
 from platform_capability import Wiring
+from platform_contracts import repo_root
 from platform_eventbus import EventBus
 from platform_settings import SettingsStore
 
@@ -91,7 +92,7 @@ def wire(
         (settings_store.get("notes.history.per_note") if settings_store else 20) or 0
     )
     store = NoteStore(Path(data_dir) / "notes.db", history_keep=history_keep)
-    workspace = Path(workspace) if workspace else Path(__file__).parents[4] / "data" / "workspace"
+    workspace = Path(workspace) if workspace else repo_root() / "data" / "workspace"
     asset_store = assets.AssetStore(Path(data_dir) / "assets.db")
 
     def _max_asset_mb() -> int:

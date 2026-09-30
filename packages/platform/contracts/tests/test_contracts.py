@@ -1,5 +1,7 @@
 """Tests for the contracts package: event envelope, error codes, HTTP mapping."""
 
+import time
+
 from platform_contracts import (
     HTTP_STATUS,
     LOCAL_USER,
@@ -14,6 +16,8 @@ from platform_contracts import (
     JobStatus,
     ServiceError,
     make_code,
+    repo_root,
+    retention_cutoff,
 )
 
 
@@ -72,6 +76,18 @@ class TestDto:
     def test_health_report(self) -> None:
         rep = HealthReport(service="graph", status=HealthStatus.DOWN, detail="connection refused")
         assert rep.to_dict()["status"] == "down"
+
+
+class TestSharedHelpers:
+    def test_retention_cutoff_uses_injected_or_current_clock(self) -> None:
+        assert retention_cutoff(30, now=1_000_000.0) == 1_000_000.0 - 30 * 86400
+        now = time.time()
+        assert now - 7 * 86400 - 1 < retention_cutoff(7) <= now - 7 * 86400 + 1
+
+    def test_repo_root_is_the_repository_directory(self) -> None:
+        root = repo_root()
+        assert (root / "packages").is_dir()
+        assert (root / "pyproject.toml").is_file()
 
 
 class TestFrontendEventMirror:

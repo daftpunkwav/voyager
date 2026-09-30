@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from platform_contracts import ErrorSuffix, ServiceError
+from platform_contracts import ErrorSuffix, ServiceError, retention_cutoff
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (
@@ -364,7 +364,7 @@ class QueueStore:
         and are never touched, even a cancelled one (the definition stays
         visible); pending/running rows are never touched. Returns the row
         count."""
-        cutoff = (time.time() if now is None else now) - days * 86400
+        cutoff = retention_cutoff(days, now=now)
         with self._lock:
             cur = self._conn.execute(
                 "DELETE FROM jobs WHERE cron = '' AND run_at < ?"

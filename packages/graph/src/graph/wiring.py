@@ -14,6 +14,7 @@ import asyncio
 from pathlib import Path
 
 from platform_capability import Wiring
+from platform_contracts import repo_root
 from platform_eventbus import EventBus
 from platform_settings import SettingsStore
 
@@ -42,9 +43,7 @@ def wire(
     ``call(domain, name, args)``; graph consumes it as its L0 resource catalog
     provider (injected via ``needs`` in the module card)."""
     data_dir = Path(data_dir)
-    workspace_root = (
-        Path(workspace) if workspace else Path(__file__).resolve().parents[4] / "data" / "workspace"
-    )
+    workspace_root = Path(workspace) if workspace else repo_root() / "data" / "workspace"
     if settings_store is not None:
         settings_store.register_fresh(DEFS)
     store = GraphStore(data_dir / "graph.db")

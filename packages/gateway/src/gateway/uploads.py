@@ -13,12 +13,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-import time
-from datetime import UTC
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from platform_contracts import retention_cutoff
 from starlette.datastructures import UploadFile
 from starlette.types import Message
 
@@ -55,7 +56,7 @@ def _sweep_stale_imports(workspace: Path, *, now: float | None = None) -> int:
     file: an undeletable file never blocks startup, it just survives until
     the next sweep."""
     root = Path(workspace) / "imports"
-    cutoff = (now if now is not None else time.time()) - _IMPORT_RETENTION_DAYS * 86400
+    cutoff = retention_cutoff(_IMPORT_RETENTION_DAYS, now=now)
     removed = 0
     try:
         months = list(root.iterdir())
@@ -171,9 +172,6 @@ def build_upload_router(
                             }
                         },
                     )
-
-                import uuid
-                from datetime import datetime
 
                 safe_name = _UNSAFE_FILENAME_RE.sub("_", file.filename or "upload")
                 safe_name = safe_name.replace("..", "_").strip(" .")[:120] or "upload"

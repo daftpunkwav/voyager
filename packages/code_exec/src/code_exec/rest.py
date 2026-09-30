@@ -13,13 +13,13 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from platform_capability import build_router
-from platform_contracts import HealthReport, HealthStatus
+from platform_contracts import HealthReport, HealthStatus, repo_root
 from platform_eventbus import EventBus
 
 from .wiring import wire
 
 _DEFAULT_DATA = Path(__file__).parents[2] / "data"  # package root: packages/<domain>/data
-_DEFAULT_WORKSPACE = Path(__file__).parents[4] / "data" / "workspace"  # repo root
+_DEFAULT_WORKSPACE = repo_root() / "data" / "workspace"
 
 
 def create_app(

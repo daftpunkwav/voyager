@@ -15,6 +15,8 @@ import logging
 import os
 from pathlib import Path
 
+from platform_contracts import repo_root
+
 ENV_PRIMARY = "SECRETS_ENCRYPTION_KEY"
 ENV_FALLBACK = "SECRET_KEY"
 
@@ -80,14 +82,12 @@ def _read_from_env_file(path: Path | None) -> str:
 
 
 def _repo_env() -> Path | None:
-    """Locate the repo-root .env: this package lives at
-    packages/platform/secrets/src/platform_secrets/, so five levels up is the
-    repo root.
+    """Locate the repo-root .env.
 
-    Limitation: relies on the repository layout (editable/source checkout).
-    Non-source installs (e.g. sdist into site-packages) resolve a wrong
-    "repo root"; a missing .env then yields empty material and the caller
-    degrades gracefully — a known and accepted assumption for a local tool.
+    Limitation: relies on the repository layout (editable/source checkout),
+    shared via platform_contracts.repo_root. Non-source installs (e.g. sdist
+    into site-packages) resolve a wrong "repo root"; a missing .env then
+    yields empty material and the caller degrades gracefully — a known and
+    accepted assumption for a local tool.
     """
-    root = Path(__file__).resolve().parents[5]
-    return root / ".env"
+    return repo_root() / ".env"

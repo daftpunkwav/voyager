@@ -20,6 +20,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from platform_contracts import retention_cutoff
+
 
 @dataclass(frozen=True)
 class JournalEntry:
@@ -88,7 +90,7 @@ class WriteJournal:
         The referenced-set snapshot and the deletion share one lock hold: a
         capture slipping in between would have its fresh blob deleted as
         unreferenced."""
-        cutoff = (time.time() if now is None else now) - days * 86400
+        cutoff = retention_cutoff(days, now=now)
         with self._lock:
             cur = self._db.execute("DELETE FROM writes WHERE ts < ?", (cutoff,))
             self._db.commit()

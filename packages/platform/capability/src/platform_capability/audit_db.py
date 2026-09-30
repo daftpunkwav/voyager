@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import sqlite3
 import threading
-import time
 from pathlib import Path
 from typing import Any, Self
+
+from platform_contracts import retention_cutoff
 
 from platform_capability.guards import AuditEntry
 
@@ -119,7 +120,7 @@ class SqliteAuditSink:
     def purge_older_than_days(self, days: int, *, now: float | None = None) -> int:
         """Delete audit rows older than now - days (strictly less), returning
         the row count. Startup-time maintenance over the ts index."""
-        cutoff = (time.time() if now is None else now) - days * 86400
+        cutoff = retention_cutoff(days, now=now)
         with self._lock:
             cur = self._conn.execute("DELETE FROM audit WHERE ts < ?", (cutoff,))
             self._conn.commit()

@@ -22,6 +22,8 @@ from platform_contracts.events import (
     RuntimeEvent,
     new_trace_id,
 )
+from platform_contracts.paths import repo_root
+from platform_contracts.retention import SECONDS_PER_DAY, retention_cutoff
 from platform_contracts.version import ENVELOPE_VERSION, PROTOCOL_VERSION
 
 __all__ = [
@@ -30,6 +32,7 @@ __all__ = [
     "HTTP_STATUS",
     "LOCAL_USER",
     "PROTOCOL_VERSION",
+    "SECONDS_PER_DAY",
     "ActorKind",
     "ActorRef",
     "DomainEvent",
@@ -45,4 +48,6 @@ __all__ = [
     "ServiceError",
     "make_code",
     "new_trace_id",
+    "repo_root",
+    "retention_cutoff",
 ]

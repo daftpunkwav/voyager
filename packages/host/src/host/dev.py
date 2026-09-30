@@ -15,10 +15,11 @@ import os
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 from typing import IO
 
-ROOT = Path(__file__).resolve().parents[4]  # repo root (packages/host/src/host)
+from platform_contracts import repo_root
+
+ROOT = repo_root()
 
 _LOCK_HANDLE: IO[str] | None = None  # held until process exit: closing it releases the lock
 

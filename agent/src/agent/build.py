@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from platform_contracts import DomainEvent, ServiceError
+from platform_contracts import DomainEvent, ServiceError, repo_root
 from platform_eventbus import CursorStore, EventBus, EventLog, Retention
 from platform_settings import SettingsStore
 
@@ -567,9 +567,9 @@ def build_agent(
     # hooks.event_patterns to the loop live (approved = subscribed, revoked =
     # unsubscribed, no restart).
     plugins_root = (
-        # src layout: build.py sits at <repo>/agent/src/agent/build.py; the
-        # declarative user plugins live at <repo>/plugins/
-        Path(plugins_dir) if plugins_dir else (Path(__file__).resolve().parents[3] / "plugins")
+        # Declarative user plugins live at <repo>/plugins/ (source-checkout
+        # assumption shared via repo_root)
+        Path(plugins_dir) if plugins_dir else repo_root() / "plugins"
     )
     plugins = PluginManager(
         plugins_root, settings=settings, skills=skills, hooks=hooks, mcp=mcp, workspace=workspace

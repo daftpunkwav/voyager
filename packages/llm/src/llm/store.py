@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from platform_contracts import retention_cutoff
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS providers (
     id           TEXT PRIMARY KEY,
@@ -249,7 +251,7 @@ class ProviderStore:
         """Delete usage rows older than now - days (strictly less), returning
         the row count. Startup-time maintenance over the ts index; provider
         rows are configuration and are never touched."""
-        cutoff = (time.time() if now is None else now) - days * 86400
+        cutoff = retention_cutoff(days, now=now)
         with self._lock:
             cur = self._conn.execute("DELETE FROM usage WHERE ts < ?", (cutoff,))
             self._conn.commit()
