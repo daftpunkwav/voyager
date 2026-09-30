@@ -34,6 +34,8 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { useNoteStore } from '@/stores/noteStore';
 import { useUIStore } from '@/stores/uiStore';
+import { uploadFile } from '@/bridge/client';
+import { addAsset } from '@/api/notes';
 import {
   applyNoteHighlightInDoc,
   diffReplace,
@@ -274,10 +276,9 @@ export function NoteEditor({
     setUploading(true);
     try {
       for (const file of allowed) {
-        const { uploadFile } = await import('@/bridge/client');
         const { file_path, filename } = await uploadFile(file);
         // api/notes.addAsset returns the business payload directly
-        const payload = (await (await import('@/api/notes')).addAsset(file_path, filename)) as {
+        const payload = (await addAsset(file_path, filename)) as {
           markdown?: string;
           url?: string;
         } | null;

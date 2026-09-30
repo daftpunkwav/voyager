@@ -24,7 +24,7 @@ import {
 import { getGraph } from '@/api/graph';
 import { ModalOverlay } from '@/components/common/ModalOverlay';
 import { confirmDialog } from '@/stores/uiStore';
-import { classifyErrorKind } from '@/components/graph/l0EdgeTypes';
+import { classifyErrorKind } from '@/utils/graphErrorKind';
 
 type IndexRow = {
   id: string;

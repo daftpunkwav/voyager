@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { StarRepo } from '@/api/types';
+import { listStars } from '@/api/auth';
 import { useGithubStars } from '@/hooks/useGithub';
 import { useImportProjects, useProjects } from '@/hooks/useProjects';
 import { useUIStore } from '@/stores/uiStore';
@@ -184,7 +185,6 @@ export function ImportStarsDrawer({ open, onClose }: ImportStarsDrawerProps) {
     setRefreshing(true);
     try {
       // api/auth.listStars returns {items,total} directly (the envelope is already unwrapped in the api layer)
-      const { listStars } = await import('@/api/auth');
       const res = await listStars(ghUser);
       const total = res.total ?? res.items?.length ?? 0;
       void qc.invalidateQueries({ queryKey: ['githubStars', ghUser] });

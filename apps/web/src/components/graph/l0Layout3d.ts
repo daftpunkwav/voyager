@@ -91,16 +91,6 @@ export function filledDiskRadius(localR: number, centrality: number): number {
   return localR * (0.02 + 0.98 * Math.sqrt(t));
 }
 
-export function foundationRadius(localR: number, foundation: number): number {
-  const f = Math.max(0, Math.min(1, foundation));
-  return filledDiskRadius(localR, f);
-}
-
-/** @deprecated Kept for tests; for tree layouts use relative ranks plus filledDiskRadius. */
-export function treeRingRadius(localR: number, foundation: number, _memberCount: number): number {
-  return filledDiskRadius(localR, foundation);
-}
-
 export function hubnessRadius(maxR: number, hubness: number): number {
   return filledDiskRadius(maxR, hubness);
 }
