@@ -52,8 +52,15 @@ async def compact_context(*, instance: SubagentInstance) -> dict[str, Any] | Non
     """Restructure one instance's transcript via the LLM editor; None when
     already within target. Persisting is the caller's concern: the capability
     path persists the session afterwards, the tool path persists at turn end
-    (mid-turn snapshots already carry the condensed transcript)."""
-    return await instance.governor().compact(instance.context_view())
+    (mid-turn snapshots already carry the condensed transcript).
+
+    When the view is the persisted cross-turn history (no live turn), the
+    lossy mechanical fallback is off: a failed plan must leave history
+    untouched rather than blind-truncate it to a handful of entries with no
+    summary row. The live-view discriminator mirrors context_view itself."""
+    view = instance.context_view()
+    persistent = instance._turn_messages is None
+    return await instance.governor().compact(view, allow_mechanical=not persistent)
 
 
 __all__ = ["compact_context", "context_status"]

@@ -115,7 +115,11 @@ class ContextGovernor:
         return await self.compact(messages)
 
     async def compact(
-        self, messages: list[dict[str, Any]], *, target: int | None = None
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        target: int | None = None,
+        allow_mechanical: bool = True,
     ) -> dict[str, Any] | None:
         """Unconditional compaction attempt (proactive tool calls, overflow
         recovery); None when already within target.
@@ -124,7 +128,10 @@ class ContextGovernor:
         the context_planner purpose is routed (a lighter model suffices: the
         planner only classifies and summarizes segments); without one it
         shares the chat client as before. The backoff guard suppresses the
-        LLM path after repeated failures - see agent.context.backoff."""
+        LLM path after repeated failures - see agent.context.backoff.
+        allow_mechanical=False guards a persistent transcript (cross-turn
+        history): a failed plan then leaves it untouched (mode="skipped")
+        instead of the lossy mechanical truncation."""
         planner = self._planner if self._planner is not None else self._llm
         allow = self._guard.allow_llm() if self._guard is not None else True
         report = await compact_transcript(
@@ -133,6 +140,7 @@ class ContextGovernor:
             target=target if target is not None else self.target_tokens(),
             fallback_budget=self._fallback_budget,
             allow_llm=allow,
+            allow_mechanical=allow_mechanical,
         )
         if report is not None:
             # The transcript was restructured in place: the provider anchor

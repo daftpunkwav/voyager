@@ -118,6 +118,26 @@ class TestRateTurn:
         facts = app.memory.semantic.query(subject="整理笔记")
         assert any(f["relation"] == "评价" and "★★★★☆" in f["object"] for f in facts)
 
+    async def test_rate_turn_replaces_an_older_verdict(self, app) -> None:
+        """Re-rating the same subject supersedes the older verdict (same
+        subject+relation+source): contradictory ratings must not coexist in
+        the recall budget."""
+        await execute(
+            app.registry,
+            "rate_turn",
+            USER_CTX,
+            {"score": 5, "comment": "完美", "subject": "整理笔记"},
+        )
+        await execute(
+            app.registry,
+            "rate_turn",
+            USER_CTX,
+            {"score": 1, "comment": "返工", "subject": "整理笔记"},
+        )
+        facts = app.memory.semantic.query(subject="整理笔记", relation="评价")
+        assert len(facts) == 1
+        assert "★☆☆☆☆" in facts[0]["object"] and "返工" in facts[0]["object"]
+
     async def test_rate_turn_rejects_non_integer_score(self, app) -> None:
         """bool is an int subclass and a float like 4.0 would pass the value
         check but crash the star rendering - both are rejected up front."""

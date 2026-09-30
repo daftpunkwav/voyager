@@ -158,15 +158,26 @@ class PrefixWatch:
 
     def _fold_head(self, messages: Sequence[dict[str, object]]) -> str | None:
         """Hash the tracked head (first _HEAD_DEPTH body messages); returns a
-        description of the first moved message, or None when unchanged (the
-        baseline-setting first observation counts as unchanged too)."""
+        description of the first moved message, or None when the head bytes
+        are unchanged (the baseline-setting first observation counts as
+        unchanged too).
+
+        Only a differing hash WITHIN the common span is a change: the cache
+        prefix is the overlapping bytes, so pure tail growth (each tool round
+        appends messages and the window slides forward over identical early
+        entries) or tail shrink leaves the prefix intact — counting those as
+        head changes would mask real provider-side breaks and inflate the
+        counter once per round."""
         head = [
             _hash(f"{m.get('role', '')}\n{m.get('content', '')}")
             for m in messages[1 : _HEAD_DEPTH + 1]
         ]
         previous = self._head
         self._head = head
-        if previous is None or previous == head:
+        if previous is None:
+            return None
+        common = min(len(previous), len(head))
+        if previous[:common] == head[:common]:
             return None
         self.changes["messages"] += 1
         for i, (old, new) in enumerate(zip(previous, head)):

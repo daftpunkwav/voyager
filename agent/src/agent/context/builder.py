@@ -49,12 +49,11 @@ TURN_CONTEXT_HEADER = "【会话状态】"
 _CARD_FIELD_CHARS = 60
 
 
-def render_memory_cards(memory: MemoryRecallSource, *, count: int, max_chars: int) -> str:
-    """Compact lines for the most recent episodic entries, newest first,
-    trimmed oldest-first to the character cap; "" when nothing fits."""
-    if count <= 0 or max_chars <= 0:
-        return ""
-    lines: list[str] = []
+def _card_rows(memory: MemoryRecallSource, *, count: int) -> list[tuple[str, str]]:
+    """(summary, rendered line) per recent episodic entry, newest first — the
+    card rows before the character trim. Shared by the renderer and the
+    seen-summary probe so both see identical rows."""
+    rows: list[tuple[str, str]] = []
     for entry in memory.episodic.recent(limit=count):
         detail = entry.get("detail") or {}
         action = detail.get("action") if isinstance(detail, dict) else None
@@ -65,10 +64,33 @@ def render_memory_cards(memory: MemoryRecallSource, *, count: int, max_chars: in
             head += f" {target[:_CARD_FIELD_CHARS]}"
         if result:
             head += f" → {result[:_CARD_FIELD_CHARS]}"
-        lines.append(head)
-    while lines and sum(len(line) + 1 for line in lines) > max_chars:
-        lines.pop()  # the list is newest-first, so the oldest card goes first
-    return "\n".join(lines)
+        rows.append((str(entry.get("summary") or ""), head))
+    return rows
+
+
+def _trim_rows(rows: list[tuple[str, str]], max_chars: int) -> list[tuple[str, str]]:
+    """Trim the newest-first rows oldest-first to the character cap."""
+    while rows and sum(len(line) + 1 for _, line in rows) > max_chars:
+        rows.pop()  # the list is newest-first, so the oldest card goes first
+    return rows
+
+
+def render_memory_cards(memory: MemoryRecallSource, *, count: int, max_chars: int) -> str:
+    """Compact lines for the most recent episodic entries, newest first,
+    trimmed oldest-first to the character cap; "" when nothing fits."""
+    if count <= 0 or max_chars <= 0:
+        return ""
+    return "\n".join(line for _, line in _trim_rows(_card_rows(memory, count=count), max_chars))
+
+
+def memory_card_summaries(memory: MemoryRecallSource, *, count: int, max_chars: int) -> set[str]:
+    """Summaries of the entries the card layer actually renders (identical
+    trim to render_memory_cards): the recall exclusion set, so an episode the
+    cap dropped — or the whole layer being off — keeps its recall eligibility
+    instead of being hidden twice."""
+    if count <= 0 or max_chars <= 0:
+        return set()
+    return {summary for summary, _ in _trim_rows(_card_rows(memory, count=count), max_chars)}
 
 
 def truncate_layer(text: str, max_chars: int, marker: str) -> str:
@@ -229,6 +251,7 @@ __all__ = [
     "MEMORY_CARDS_HEADER",
     "TURN_CONTEXT_HEADER",
     "ContextBuilder",
+    "memory_card_summaries",
     "render_memory_cards",
     "truncate_layer",
 ]

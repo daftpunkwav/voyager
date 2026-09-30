@@ -81,11 +81,25 @@ def test_warm_then_cold_with_unchanged_head_is_unexplained(caplog) -> None:
 def test_warm_then_cold_after_head_move_is_explained() -> None:
     watch = PrefixWatch()
     watch.observe(system="s", tools=("a",))
-    watch.observe_round(input_tokens=5000, cached_tokens=4000, messages=_msgs("a", "b"))
-    # The head grew append-only (a new exchange landed): expected re-bill
-    watch.observe_round(input_tokens=6000, cached_tokens=0, messages=_msgs("a", "b", "c"))
+    watch.observe_round(input_tokens=5000, cached_tokens=4000, messages=_msgs("sys", "a", "b"))
+    # An existing head entry was rewritten (compaction / edit): the prefix
+    # bytes changed at tracked index 0, so the re-bill is harness-explained
+    watch.observe_round(input_tokens=6000, cached_tokens=0, messages=_msgs("sys", "moved", "b"))
     assert watch.unexplained_misses == 0
     assert watch.changes["messages"] == 1
+    assert watch.warm_rounds == 1 and watch.cold_rounds == 1
+
+
+def test_warm_then_cold_after_append_only_growth_is_unexplained() -> None:
+    """Append-only growth keeps the request head bytes identical (the cache
+    prefix is the overlapping span), so a cold round after it is NOT explained
+    by the head: it counts as a provider-side miss instead of masking one."""
+    watch = PrefixWatch()
+    watch.observe(system="s", tools=("a",))
+    watch.observe_round(input_tokens=5000, cached_tokens=4000, messages=_msgs("sys", "a", "b"))
+    watch.observe_round(input_tokens=6000, cached_tokens=0, messages=_msgs("sys", "a", "b", "c"))
+    assert watch.unexplained_misses == 1
+    assert watch.changes["messages"] == 0
     assert watch.warm_rounds == 1 and watch.cold_rounds == 1
 
 

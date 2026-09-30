@@ -2,10 +2,11 @@
 
 External text — fetched web pages, search results, external MCP tool output —
 is data, never instructions. Every wrap is fenced with an explicit open/close
-marker naming the source and stating the boundary; wrapped content is meant
-for tool/user message channels only and must never reach the system prompt
-(enforced by construction: only the web tools and callers of wrap_untrusted
-produce these markers).
+marker naming the source and stating the boundary; wrapped content belongs
+on tool/user message channels. One deliberate exception: MCP server
+instructions enter the stable system head, fenced (build._mcp_section) —
+an approved server's usage text is exactly the content the fence exists to
+carry safely when a stable-head placement is required.
 
 The fence is advisory (prompt-level), not a security boundary. Markers
 embedded in the body are neutralized so a page cannot close the fence early,

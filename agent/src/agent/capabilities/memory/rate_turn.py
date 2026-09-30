@@ -37,6 +37,9 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
         stars = "★" * score + "☆" * (5 - score)
         text = f"{stars} {comment.strip()[:_MAX_COMMENT_CHARS]}".strip()
         topic = subject.strip()[:60] or "agent 执行"
-        deps.memory.semantic.add(topic, "评价", text, source="feedback")
+        # supersede: the user's latest verdict on a subject replaces the older
+        # one (same subject+relation+source) — contradictory ratings must not
+        # coexist in the recall budget (same semantics as the distill channel)
+        deps.memory.semantic.add(topic, "评价", text, source="feedback", supersede=True)
         deps.memory.episodic.log("feedback", f"{topic} 评分:{text}")
         return {"score": score, "subject": topic, "stored": True}

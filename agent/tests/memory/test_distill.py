@@ -168,6 +168,54 @@ async def test_exact_duplicate_fact_not_rewritten(tmp_path) -> None:
     assert len(hits) == 1
 
 
+async def test_write_failure_keeps_the_cursor(tmp_path) -> None:
+    """A write-phase failure (disk full, lock timeout) does not advance the
+    cursor: the same window is re-extracted next time instead of being lost
+    forever (the cursor used to move before the writes)."""
+    memory = _memory(tmp_path)
+    payload = {
+        "profile": {"favorite_color": "蓝色"},
+        "facts": [["用户", "works_on", "voyager 项目"]],
+    }
+    llm = FakeLLM(default=json.dumps(payload, ensure_ascii=False))
+    d = Distiller(llm=llm, memory=memory, settings=_settings({"agent.memory.distill_interval": 1}))
+    for i in range(4):
+        memory.working.add("user", f"消息{i}")
+    # the semantic write blows up once
+    real_add = memory.semantic.add
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("disk full")
+
+    memory.semantic.add = _boom  # type: ignore[method-assign]
+    coro = d.maybe_distill()
+    assert coro is not None
+    try:
+        await coro
+        raised = False
+    except RuntimeError:
+        raised = True
+    assert raised
+    assert d._cursor == -1  # the window is NOT consumed
+    assert memory.semantic.query(keyword="voyager") == []
+
+    # the store heals: the same entries re-extract and land this time
+    memory.semantic.add = real_add  # type: ignore[method-assign]
+    coro = d.maybe_distill()
+    assert coro is not None
+    await coro
+    hits = memory.semantic.query(keyword="voyager")
+    assert any(h["object"] == "voyager 项目" for h in hits)
+    assert memory.profile.get("favorite_color") == "蓝色"
+    assert d._cursor >= 0  # success advances the cursor
+    # and the consumed window is not re-extracted again
+    calls = len(llm.calls)
+    coro = d.maybe_distill()
+    assert coro is not None
+    await coro
+    assert len(llm.calls) == calls
+
+
 class TestDistillDegradation:
     async def test_llm_failure_skips_and_keeps_cursor(self, tmp_path) -> None:
         """A failing distillation LLM call is swallowed (never surfaces as chat

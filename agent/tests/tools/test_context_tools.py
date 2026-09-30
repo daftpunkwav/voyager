@@ -73,7 +73,11 @@ class TestContextTools:
         assert inst.history == [{"role": "assistant", "content": "noted"}]
 
     async def test_compact_reports_fallback(self, tmp_path) -> None:
+        """Mid-turn (live wire view) a failed plan falls back to the
+        deterministic compress: the transcript is transient and rebuilt from
+        history next turn."""
         inst = _instance(FakeLLM([LLMReply(text="not json")]), tmp_path)
+        inst._turn_messages = [*inst.history]  # live view: the mid-turn surface
         tools = context_tools()
         token = current_instance.set(inst)
         try:
@@ -81,6 +85,26 @@ class TestContextTools:
         finally:
             current_instance.reset(token)
         assert outcome["mode"] == "fallback"
+
+    async def test_compact_on_history_never_blind_truncates(self, tmp_path) -> None:
+        """No live turn: the view is the PERSISTED history. A failed plan must
+        leave it untouched (mode=skipped) — the mechanical fallback would drop
+        the oldest entries permanently, with no summary row and no rebuild."""
+        llm = FakeLLM([LLMReply(text="not json")])
+        inst = _instance(llm, tmp_path)
+        tools = context_tools()
+        token = current_instance.set(inst)
+        try:
+            outcome = await tools["context"].handler(action="compact")
+        finally:
+            current_instance.reset(token)
+        assert outcome["mode"] == "skipped"
+        assert outcome["after_tokens"] == outcome["before_tokens"]
+        assert inst.history == [
+            {"role": "user", "content": "word " * 600},
+            {"role": "assistant", "content": "noted"},
+        ]
+        assert llm.calls  # the planner was still attempted
 
     async def test_without_instance_returns_error(self) -> None:
         tools = context_tools()

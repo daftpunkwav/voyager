@@ -10,6 +10,7 @@ Responsibilities:
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 import time
@@ -17,6 +18,8 @@ from pathlib import Path
 from typing import Any
 
 from agent.memory.matching import like_pattern, score, split_terms
+
+log = logging.getLogger("agent.memory.episodic")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS episodes (
@@ -130,11 +133,21 @@ class EpisodicMemory:
 
 
 def _row(r: tuple) -> dict[str, Any]:
+    # One corrupt detail row (disk damage / hand edit) degrades to a raw-text
+    # wrapper instead of killing the whole read path (recent/search feed the
+    # per-turn context assembly)
+    try:
+        detail: Any = json.loads(r[5])
+    except ValueError:
+        log.warning("episodic row %s: corrupt detail JSON; serving it as raw text", r[0])
+        detail = r[5]
+    if not isinstance(detail, dict):
+        detail = {"raw": detail}
     return {
         "id": r[0],
         "ts": r[1],
         "run_id": r[2],
         "kind": r[3],
         "summary": r[4],
-        "detail": json.loads(r[5]),
+        "detail": detail,
     }

@@ -87,7 +87,14 @@ def render_relevant_recall(
     if limit <= 0 or max_chars <= 0 or not query.strip():
         return ""
     try:
-        hits = memory.recall(query.strip(), limit=limit)
+        hits = memory.recall(
+            query.strip(),
+            limit=limit,
+            # Forwarded into Memory.recall so resident-layer duplicates are
+            # dropped BEFORE the cap truncation and never consume slots
+            exclude_summaries=exclude_summaries,
+            exclude_profile_keys=exclude_profile_keys,
+        )
     except Exception:  # noqa: BLE001  # a broken memory store must never break the turn
         return ""
     exclude = exclude_summaries or set()

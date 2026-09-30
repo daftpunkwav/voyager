@@ -100,9 +100,6 @@ class Distiller:
         if parsed is None:
             log.info("distillation output was not valid JSON; skipped")
             return
-        # Nothing is written before this line, so a failed pass leaves the
-        # cursor untouched and the same entries are retried next time.
-        self._cursor = max(int(e.get("seq") or 0) for e in entries)
         profile = parsed.get("profile")
         if isinstance(profile, dict):
             for key, value in list(profile.items())[:5]:
@@ -130,6 +127,11 @@ class Distiller:
                     self._memory.semantic.add(
                         subject, relation, obj, source="distill", node_id=node_id, supersede=True
                     )
+        # The cursor advances only after every write succeeded: a write-phase
+        # failure (disk full, lock timeout) leaves the window unclaimed, so the
+        # same entries are re-extracted next time. Re-extraction is safe —
+        # profile writes upsert and has_fact skips exact duplicates.
+        self._cursor = max(int(e.get("seq") or 0) for e in entries)
 
 
 def _parse_json(text: str) -> dict[str, Any] | None:

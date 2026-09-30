@@ -67,7 +67,13 @@ class TestMemoryTools:
         try:
             seen: list[int] = []
 
-            def _recall(query: str, limit: int = 8) -> list:
+            def _recall(
+                query: str,
+                limit: int = 8,
+                *,
+                exclude_summaries: set[str] | None = None,
+                exclude_profile_keys: set[str] | None = None,
+            ) -> list:
                 seen.append(limit)
                 return []
 

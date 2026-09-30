@@ -5,7 +5,12 @@ from __future__ import annotations
 
 from agent.build import build_agent
 from agent.context.budgets import budget_from_settings
-from agent.context.builder import MEMORY_CARDS_HEADER, ContextBuilder, render_memory_cards
+from agent.context.builder import (
+    MEMORY_CARDS_HEADER,
+    ContextBuilder,
+    memory_card_summaries,
+    render_memory_cards,
+)
 from agent.llm import FakeLLM, LLMReply
 from agent.memory import Memory
 from platform_actor import ActorContext
@@ -45,6 +50,48 @@ class TestRenderMemoryCards:
         assert MEMORY_CARDS_HEADER in with_cards and "grep" in with_cards
         assert MEMORY_CARDS_HEADER not in builder.turn_context()
         assert MEMORY_CARDS_HEADER not in builder.system()
+        mem.close()
+
+
+class TestMemoryCardSummaries:
+    """The recall exclusion set mirrors what the card layer ACTUALLY renders:
+    entries the character cap trimmed are not in the set, and a closed layer
+    (count/chars 0) excludes nothing."""
+
+    def _mem(self, tmp_path) -> Memory:
+        mem = Memory(tmp_path / "m")
+        for i in range(4):
+            mem.episodic.log(
+                "tool",
+                f"事件{i}",
+                {"action": {"tool": f"t{i}", "target": f"x{i}"}, "result": "ok"},
+            )
+        return mem
+
+    def test_summaries_match_the_rendered_cards(self, tmp_path) -> None:
+        mem = self._mem(tmp_path)
+        text = render_memory_cards(mem, count=3, max_chars=10_000)
+        assert memory_card_summaries(mem, count=3, max_chars=10_000) == {
+            "事件3",
+            "事件2",
+            "事件1",
+        }
+        for line in text.splitlines():
+            assert line.count("事件") == 1  # every rendered line is accounted for
+        mem.close()
+
+    def test_cap_trimmed_entries_are_not_excluded(self, tmp_path) -> None:
+        mem = self._mem(tmp_path)
+        tight = render_memory_cards(mem, count=4, max_chars=40)
+        kept = memory_card_summaries(mem, count=4, max_chars=40)
+        assert len(tight.splitlines()) < 4  # the cap really trimmed
+        assert kept == {"事件3"}  # only the newest card survived; older stay recall-eligible
+        mem.close()
+
+    def test_closed_layer_excludes_nothing(self, tmp_path) -> None:
+        mem = self._mem(tmp_path)
+        assert memory_card_summaries(mem, count=0, max_chars=100) == set()
+        assert memory_card_summaries(mem, count=4, max_chars=0) == set()
         mem.close()
 
 

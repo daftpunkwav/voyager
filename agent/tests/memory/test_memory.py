@@ -192,3 +192,107 @@ class TestSemanticSupersede:
             assert {f["object"] for f in facts} == {"v1", "v2"}  # both survive
         finally:
             mem.close()
+
+
+class TestRecallPerSourceCap:
+    """recall caps each lexical source at `limit` before the overall cap
+    truncates: one zone (an ever-growing profile) cannot squeeze the others
+    out of the recall budget."""
+
+    def test_profile_hits_cannot_squeeze_episodic_out(self, tmp_path) -> None:
+        m = Memory(tmp_path)
+        for i in range(4):
+            m.profile.set(f"topic{i}", "langgraph 笔记")
+        m.episodic.log("consider", "读了 langgraph 源码")
+        # limit=2 -> per-source profile cap 2, overall cap 4: both episodic
+        # slots survive instead of the old all-profile wall
+        hits = m.recall("langgraph", 2)
+        sources = [h["from"] for h in hits]
+        assert sources.count("profile") == 2  # capped per source
+        assert "episodic" in sources  # not squeezed out by the profile zone
+        m.close()
+
+    def test_exclude_frees_slots_before_truncation(self, tmp_path) -> None:
+        m = Memory(tmp_path)
+        m.profile.set("p1", "langgraph 一")
+        m.profile.set("p2", "langgraph 二")
+        m.profile.set("p3", "langgraph 三")
+        m.episodic.log("consider", "读了 langgraph 源码")
+        hits = m.recall("langgraph", 2, exclude_profile_keys={"p1", "p2", "p3"})
+        assert [h["from"] for h in hits] == ["episodic"]  # excluded profile frees the budget
+        assert all(h.get("key") not in {"p1", "p2", "p3"} for h in hits if h["from"] == "profile")
+        m.close()
+
+    def test_exclude_summaries_drops_resident_card_duplicates(self, tmp_path) -> None:
+        m = Memory(tmp_path)
+        m.episodic.log("tool", "grep 周报")
+        hits = m.recall("周报", 4, exclude_summaries={"grep 周报"})
+        assert hits == []  # the entry rides a resident card, recall skips it
+        m.close()
+
+
+class TestRenderedKeys:
+    """rendered_keys mirrors render()'s character cap: only keys whose lines
+    render whole count as resident-layer visible (a cut line keeps its recall
+    eligibility, otherwise the value would be visible nowhere)."""
+
+    def test_keys_past_the_cap_are_not_rendered(self, tmp_path) -> None:
+        m = Memory(tmp_path)
+        m.profile.set("key1", "短值")
+        m.profile.set("key2长名字", "非常长的值" * 10)
+        text = m.profile.render(max_chars=40)
+        assert text.endswith("…")  # the cap really cut something
+        keys = m.profile.rendered_keys(max_chars=40)
+        assert "key1" in keys
+        assert "key2长名字" not in keys
+        m.close()
+
+    def test_fitting_profile_renders_every_key(self, tmp_path) -> None:
+        m = Memory(tmp_path)
+        m.profile.set("a", "1")
+        m.profile.set("b", "2")
+        assert m.profile.rendered_keys(max_chars=800) == {"a", "b"}
+        assert m.profile.rendered_keys(max_chars=0) == set()  # layer off
+        m.close()
+
+
+class TestCorruptRows:
+    """One corrupt row (disk damage / hand edit) degrades to raw text instead
+    of killing the whole read path."""
+
+    def test_corrupt_episodic_detail_degrades_to_raw(self, tmp_path) -> None:
+        m = Memory(tmp_path)
+        m.episodic.log("tool", "好的那行", {"action": {"tool": "grep"}})
+        with m.episodic._lock:  # corrupt one row directly in the store
+            m.episodic._conn.execute(
+                "UPDATE episodes SET detail = '{not json' WHERE summary = '好的那行'"
+            )
+            m.episodic._conn.commit()
+        rows = m.episodic.recent()
+        assert len(rows) == 1 and rows[0]["detail"] == {"raw": "{not json"}
+        assert m.episodic.search("好的那行")[0]["summary"] == "好的那行"
+        m.close()
+
+    def test_non_dict_json_detail_wraps(self, tmp_path) -> None:
+        m = Memory(tmp_path)
+        m.episodic.log("tool", "标量行")
+        with m.episodic._lock:
+            m.episodic._conn.execute("UPDATE episodes SET detail = '42' WHERE summary = '标量行'")
+            m.episodic._conn.commit()
+        assert m.episodic.recent()[0]["detail"] == {"raw": 42}
+        m.close()
+
+    def test_corrupt_profile_value_degrades_to_raw_text(self, tmp_path) -> None:
+        m = Memory(tmp_path)
+        m.profile.set("好的键", "普通值")
+        m.profile.set("坏键", "值")  # created via the API, then corrupted below
+        with m.profile._lock:
+            m.profile._conn.execute("UPDATE profile SET value = '{{oops' WHERE key = '坏键'")
+            m.profile._conn.commit()
+        data = m.profile.all()
+        assert data["坏键"] == "{{oops"  # raw text, no exception
+        assert data["好的键"] == "普通值"  # the other rows survive
+        assert "坏键" in m.profile.render()
+        hits = m.recall("坏键")
+        assert any(h.get("key") == "坏键" for h in hits)  # recall still serves the raw value
+        m.close()

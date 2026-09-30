@@ -8,8 +8,13 @@ from __future__ import annotations
 import asyncio
 
 from agent.build import build_agent
-from agent.llm import FakeLLM
+from agent.llm import FakeLLM, LLMReply
 from agent.memory.read_policy import HEADER, render_relevant_recall
+from platform_actor import ActorContext
+from platform_capability import execute
+from platform_contracts import LOCAL_USER
+
+USER_CTX = ActorContext(actor=LOCAL_USER)
 
 
 def _memory(tmp_path):
@@ -184,3 +189,81 @@ def test_aged_hits_carry_freshness_suffix_and_stale_note(tmp_path) -> None:
         assert "以当前实际状态为准" not in fresh
     finally:
         app.close()
+
+
+def test_card_cap_dropped_episode_stays_recall_eligible(tmp_path) -> None:
+    """The recall exclusion set comes from the card layer's ACTUAL render: an
+    episode the character cap dropped keeps its recall eligibility instead of
+    being hidden twice (old behavior excluded everything in the recent-cards
+    window, rendered or not)."""
+    llm = FakeLLM([LLMReply(text="ok")])
+    app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=llm)
+    try:
+        # The newest cards fill the tiny card cap; the older query-matching
+        # episode is trimmed off the card layer
+        app.memory.episodic.log("consider", "蓝绿部署回滚手册在 wiki")
+        app.memory.episodic.log(
+            "tool", "无关操作一", {"action": {"tool": "ls", "target": "/tmp"}, "result": "ok"}
+        )
+        app.memory.episodic.log(
+            "tool", "无关操作二", {"action": {"tool": "ls", "target": "/var"}, "result": "ok"}
+        )
+
+        async def _scenario() -> None:
+            await execute(
+                app.registry,
+                "set_setting",
+                USER_CTX,
+                {"key": "agent.memory.context_card_chars", "value": 40},
+            )
+            await app.master.handle_user_message("蓝绿部署回滚手册 在哪里")
+            while app.master._bg:
+                await asyncio.gather(*list(app.master._bg))
+
+        asyncio.run(_scenario())
+        sent = llm.calls[0]["messages"]
+        ctx_rows = [
+            str(m.get("content") or "")
+            for m in sent
+            if str(m.get("content") or "").startswith("【会话状态】")
+        ]
+        assert ctx_rows and HEADER in ctx_rows[0]
+        # the card layer dropped it, so recall is where it must surface
+        assert "蓝绿部署回滚手册在 wiki" in ctx_rows[0]
+    finally:
+        app.memory.close()
+
+
+def test_profile_line_cut_by_cap_stays_recall_eligible(tmp_path) -> None:
+    """A profile key whose line the profile cap cut shows only a fragment on
+    the resident layer, so it must NOT be excluded from recall (the full
+    key:value would be visible nowhere)."""
+    llm = FakeLLM([LLMReply(text="ok")])
+    app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=llm)
+    try:
+        app.memory.profile.set("另一个键", "x")  # sorts first, renders whole
+        app.memory.profile.set("部署约束", "纯本地单用户,永不上线" * 10)
+
+        async def _scenario() -> None:
+            await execute(
+                app.registry,
+                "set_setting",
+                USER_CTX,
+                {"key": "agent.memory.profile_chars", "value": 20},
+            )
+            await app.master.handle_user_message("部署 约束是什么")
+            while app.master._bg:
+                await asyncio.gather(*list(app.master._bg))
+
+        asyncio.run(_scenario())
+        sent = llm.calls[0]["messages"]
+        system = str(sent[0].get("content") or "")
+        assert "【用户画像】" in system and "另一个键" in system  # the layer is on and cut
+        ctx_rows = [
+            str(m.get("content") or "")
+            for m in sent
+            if str(m.get("content") or "").startswith("【会话状态】")
+        ]
+        assert ctx_rows and "[画像] 部署约束" in ctx_rows[0]
+    finally:
+        app.memory.close()

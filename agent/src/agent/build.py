@@ -17,6 +17,7 @@ import json
 import logging
 import platform
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -29,7 +30,9 @@ from agent.app import AgentApp
 from agent.capabilities import CapabilityDeps, build_agent_registry
 from agent.context import ContextBuilder, OnDemandLoader, PageContextRegistry
 from agent.context.budgets import budget_from_settings
+from agent.context.builder import memory_card_summaries
 from agent.context.plan_gate import PlanGates
+from agent.context.provenance import wrap_untrusted
 from agent.context.scoped_rules import ScopedRules
 from agent.engine import Spawner, SubagentRegistry
 from agent.engine.triggered_spawn import make_handler as make_trigger_handler
@@ -723,13 +726,19 @@ def build_agent(
 
     def _mcp_section() -> str:
         """Server-declared usage instructions (connected, approved servers),
-        sorted by sid for stable bytes; omitted when none or disabled."""
+        sorted by sid for stable bytes; omitted when none or disabled. Each
+        server's text is external, attacker-influenceable content riding the
+        stable system head, so it goes through the same provenance fence as
+        fetched web pages (source mcp:<sid>) and cannot pose as system text."""
         if not settings.get("agent.mcp.instructions"):
             return ""
         entries = mcp.instructions_map()
         if not entries:
             return ""
-        blocks = [f"【MCP: {sid}】\n{text.strip()}" for sid, text in entries.items()]
+        blocks = [
+            f"【MCP: {sid}】\n{wrap_untrusted(text.strip(), f'mcp:{sid}')}"
+            for sid, text in entries.items()
+        ]
         return "\n\n".join(blocks)
 
     def _build_system(task, persona_key: str, query: str = "") -> str:
@@ -791,14 +800,22 @@ def build_agent(
         # recent-cards layer are excluded, not duplicated.
         recall = ""
         if query and cards.recall_facts > 0 and cards.recall_chars > 0 and memory is not None:
-            exclude = {
-                str(e.get("summary") or "")
-                for e in memory.episodic.recent(limit=cards.memory_cards)
-            }
-            # Profile keys already ride the resident profile layer:
-            # keep the recall budget for episodic/semantic hits. When the
-            # profile layer itself is off, its hits stay eligible here.
-            profile_keys = set(memory.profile.all()) if cards.profile_chars > 0 else None
+            # Only what the card layer actually renders keeps its exclusion:
+            # its character cap drops the oldest cards and a zero cap closes
+            # the layer, and a dropped entry must stay recall-eligible instead
+            # of being hidden twice.
+            exclude = memory_card_summaries(
+                memory, count=cards.memory_cards, max_chars=cards.memory_card_chars
+            )
+            # Profile keys actually visible on the resident profile layer (the
+            # same cap may cut later lines): keep the recall budget for
+            # episodic/semantic hits. When the profile layer itself is off,
+            # its hits stay eligible here.
+            profile_keys = (
+                memory.profile.rendered_keys(cards.profile_chars)
+                if cards.profile_chars > 0
+                else None
+            )
             recall = render_relevant_recall(
                 memory,
                 query,
@@ -935,8 +952,19 @@ def build_agent(
         }
     )
     jobs_view = JobsView(event_log)
+
+    @dataclass
+    class _CapabilityDeps(CapabilityDeps):
+        """Build-local deps extension: the master-bound delivery announcer the
+        resume close-out reads (agent_instance resume continue_run closes a
+        board-backed run through the same card path as dispatch). Kept as a
+        subclass because the shared CapabilityDeps dataclass stays closed;
+        every other capability is unaffected (still a CapabilityDeps)."""
+
+        board_announce: Any = None  # master.announce_delivery (bound)
+
     registry = build_agent_registry(
-        CapabilityDeps(
+        _CapabilityDeps(
             settings=settings,
             memory=memory,
             skills=skills,
@@ -967,6 +995,7 @@ def build_agent(
             skills_dir=skills_dir,  # skill propose writes here
             session_index=session_index,  # session search action
             log=event_log,  # session read action pages the shared history
+            board_announce=master.announce_delivery,  # resume close-out (agent_instance)
         )
     )
     # Agent-side projection of the agent's own governance/observation

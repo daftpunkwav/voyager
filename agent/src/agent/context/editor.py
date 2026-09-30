@@ -201,6 +201,7 @@ async def compact_transcript(
     target: int,
     fallback_budget: int | None = None,
     allow_llm: bool = True,
+    allow_mechanical: bool = True,
 ) -> dict[str, Any] | None:
     """Restructure the transcript in place under the target token estimate.
 
@@ -213,6 +214,12 @@ async def compact_transcript(
     allow_llm=False skips the planner call entirely (backoff policy owned by
     the caller, see agent.context.backoff) and reports mode="mechanical";
     "fallback" always means the planner was tried and its plan was rejected.
+    allow_mechanical=False additionally forbids the deterministic fallback —
+    the caller owns a PERSISTENT transcript (cross-turn history): the
+    mechanical pass drops the oldest entries with no summary row, and on that
+    surface the loss is permanent (no mid-turn rebuild, the SUMMARY_MARK
+    write-back never fires). A failed plan leaves the transcript untouched and
+    reports mode="skipped".
     """
     before = estimate_messages(messages)
     if before <= target:
@@ -257,6 +264,20 @@ async def compact_transcript(
             )
         log.info("editor plan left %d tokens over target %d; falling back", after, target)
 
+    if not allow_mechanical:
+        # Persistent-surface guard: only the plan path may rewrite history —
+        # it replaces the condensed span with a summary row; the mechanical
+        # pass would silently truncate it.
+        log.warning("compaction on the persistent history left undone (plan unavailable)")
+        return _plan_report(
+            mode="skipped",
+            before=before,
+            after=before,
+            target=target,
+            kept=0,
+            summarized=0,
+            dropped=0,
+        )
     budget = fallback_budget if fallback_budget is not None else target
     messages[:] = compress(messages, budget=budget, prune=True)
     return _plan_report(

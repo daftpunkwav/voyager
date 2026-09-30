@@ -82,27 +82,48 @@ class Memory:
             )
         return cands
 
-    def recall(self, query: str, limit: int = 8) -> list[dict[str, Any]]:
+    def recall(
+        self,
+        query: str,
+        limit: int = 8,
+        *,
+        exclude_summaries: set[str] | None = None,
+        exclude_profile_keys: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """Retrieval-style injection: aggregates profile/episodic/semantic hits
         with the source labeled.
 
         Lexical channel: profile key/values hit on any token (same multi-word
         accounting as episodic/semantic search); episodic/semantic rank
-        internally by hit-term count. Optional vector channel (an injected
-        embedder): similarity-ranked candidates from the pooled stores join
-        the lexical hits, de-duplicated per item identity.
+        internally by hit-term count. Each lexical source is capped at `limit`
+        so one zone cannot dominate the aggregate before the overall cap
+        truncates. Optional vector channel (an injected embedder):
+        similarity-ranked candidates from the pooled stores join the lexical
+        hits, de-duplicated per item identity.
+
+        `exclude_summaries` / `exclude_profile_keys` drop episodic summaries /
+        profile keys already visible on a resident context layer BEFORE any
+        truncation, so hidden duplicates never consume recall slots.
         """
         terms = split_terms(query)
+        skip_summaries = exclude_summaries or set()
+        skip_keys = exclude_profile_keys or set()
         hits: list[dict[str, Any]] = []
         profile_scored: list[tuple[int, dict[str, Any]]] = []
         for key, value in self.profile.all().items():
+            if key in skip_keys:
+                continue  # already on the resident profile layer
             hay = f"{key} {value}"
             s = score(terms, [hay])
             if s:
                 profile_scored.append((s, {"from": "profile", "key": key, "value": value}))
         profile_scored.sort(key=lambda item: -item[0])
-        hits += [item for _, item in profile_scored]
-        hits += [{"from": "episodic", **e} for e in self.episodic.search(query, limit)]
+        hits += [item for _, item in profile_scored[:limit]]
+        hits += [
+            {"from": "episodic", **e}
+            for e in self.episodic.search(query, limit)
+            if str(e.get("summary") or "") not in skip_summaries
+        ]
         hits += [{"from": "semantic", **f} for f in self.semantic.query(keyword=query, limit=limit)]
         cap = max(limit * 2, 8)
         if self._embedder is not None:
@@ -119,7 +140,14 @@ class Memory:
                 identity = c.identity.split(":", 1)[-1]
                 if (c.source, identity) in seen:
                     continue  # already surfaced by the lexical channel
-                hits.append({**c.payload, "similarity": round(c.similarity, 4)})
+                payload = {**c.payload, "similarity": round(c.similarity, 4)}
+                # The exclusions hold on the vector channel too: a resident-layer
+                # duplicate must not re-enter through similarity ranking
+                if c.source == "profile" and str(payload.get("key") or "") in skip_keys:
+                    continue
+                if c.source == "episodic" and str(payload.get("summary") or "") in skip_summaries:
+                    continue
+                hits.append(payload)
         return hits[:cap]
 
     def vector_status(self) -> dict[str, Any]:
