@@ -100,6 +100,14 @@ def validate_server_config(raw: dict) -> dict:
     }
 
 
+def _refreshable(cfg: dict) -> bool:
+    """Whether a config entry participates in hot refresh: usable id, enabled,
+    and user-approved (never-approved entries stay unmounted until their
+    first preview)."""
+    sid = str(cfg.get("id") or "").strip()
+    return bool(sid) and bool(cfg.get("enabled", True)) and bool(cfg.get("approved"))
+
+
 class McpClientPool:
     """External MCP server connection pool: connect (injectable) -> preview ->
     approve -> mount into the root Toolbelt."""
@@ -320,11 +328,14 @@ class McpClientPool:
         _new_tools awaiting an explicit preview, same as a refresh cycle. An
         entry without a persisted snapshot stays unmounted until that preview.
         When auto_refresh is enabled (composition root), a periodic tools/list
-        refresh loop starts after the initial reconnect.
+        refresh loop starts after the initial reconnect. Eligible entries
+        reconnect concurrently (same rationale as refresh_approved: one slow
+        server must not delay every other server's mount behind its timeout).
         """
         if self._started:
             return
         self._started = True
+        eligible: list[dict] = []
         for cfg in self.configs():
             if not cfg.get("enabled", True) or not cfg.get("approved"):
                 continue
@@ -338,12 +349,9 @@ class McpClientPool:
             except ServiceError as exc:
                 self._errors[sid] = str(exc)
                 continue
-            try:
-                # seen-filtered mount (consent never widens at startup); a
-                # server fixed after a failed startup rejoins via preview()
-                await self._refresh_one(sid, cfg)
-            except Exception as exc:  # noqa: BLE001  # per-server failure recorded for the settings page; startup continues
-                self._errors[sid] = str(exc)
+            eligible.append(cfg)
+        if eligible:
+            await asyncio.gather(*(self._refresh_config(cfg) for cfg in eligible))
         if self._auto_refresh and self._refresher is None:
             self._refresher = asyncio.create_task(self._refresh_loop())
 
@@ -376,15 +384,26 @@ class McpClientPool:
         and remount the consent-filtered tool set. Newly appeared remote tools
         are NOT mounted automatically - approval covers the previewed list,
         not the future; new names land in list_state['new_tools'] and wait
-        for the next explicit preview. Never raises."""
-        for cfg in self.configs():
-            sid = str(cfg.get("id") or "").strip()
-            if not sid or not cfg.get("enabled", True) or not cfg.get("approved"):
-                continue
-            try:
-                await self._refresh_one(sid, cfg)
-            except Exception as exc:  # noqa: BLE001  # recorded; other servers proceed
-                self._errors[sid] = str(exc)
+        for the next explicit preview. Never raises.
+
+        Servers refresh concurrently: one slow server (its wire operations are
+        each bounded by agent.mcp.wire_timeout_s) must not stretch the whole
+        cycle by its own timeout per hop. Safety: per-sid state is disjoint,
+        remount is synchronous (the event loop interleaves tasks only at
+        awaits), and reconnects still serialize on the pool-level connect
+        lock; the fan-out is bounded by the user-maintained config list."""
+        await asyncio.gather(
+            *(self._refresh_config(cfg) for cfg in self.configs() if _refreshable(cfg))
+        )
+
+    async def _refresh_config(self, cfg: dict) -> None:
+        """One server's refresh with the entry-error recording both call sites
+        guarantee: a failure is recorded and the other servers proceed."""
+        sid = str(cfg.get("id") or "").strip()
+        try:
+            await self._refresh_one(sid, cfg)
+        except Exception as exc:  # noqa: BLE001  # recorded; other servers proceed
+            self._errors[sid] = str(exc)
 
     async def _refresh_one(self, sid: str, cfg: dict) -> None:
         """Re-list one server and remount the consent-filtered subset; a

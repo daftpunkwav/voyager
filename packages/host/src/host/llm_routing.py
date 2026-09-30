@@ -27,6 +27,11 @@ from .llm_adapter import NO_PROVIDER_TEXT, LateBoundCall, ServiceLLM
 
 SYSTEM_HOST = ActorRef(kind=ActorKind.SYSTEM, id="host.llm")
 
+#: Sentinel for "default provider not resolved yet" inside one chain walk:
+#: None is a meaningful outcome (no usable provider), so it cannot double as
+#: the marker.
+_UNRESOLVED = object()
+
 
 def resolve_chain(routing: Any, purpose: Purpose | str) -> list[dict[str, str]]:
     """Hops for one purpose: [{"provider": id, "model": name}, ...], primary
@@ -130,12 +135,18 @@ class RoutingServiceLLM(ServiceLLM):
         if not chain:
             return await super().complete(messages, tools, max_tokens=max_tokens)
         last_error = ""
+        # Default-resolution hops share one provider lookup per walk: each
+        # empty-provider hop would otherwise re-run list_providers + the two
+        # setting reads (read-only work, identical result) on a path that only
+        # runs when the previous hop already failed on the wire.
+        default_provider: Any = _UNRESOLVED
         for index, hop in enumerate(chain):
-            provider = (
-                {"id": hop["provider"], "model": self._model}
-                if hop["provider"]
-                else await super()._resolve_provider()
-            )
+            if hop["provider"]:
+                provider = {"id": hop["provider"], "model": self._model}
+            else:
+                if default_provider is _UNRESOLVED:
+                    default_provider = await super()._resolve_provider()
+                provider = default_provider
             if provider is None:
                 return LLMReply(text=NO_PROVIDER_TEXT, degraded=True)
             try:
@@ -193,12 +204,16 @@ class RoutingServiceLLM(ServiceLLM):
                 yield reply
             return
         last_error = ""
+        # Same per-walk memo as complete: one default resolution, not one per
+        # empty-provider hop (see the comment there).
+        default_provider: Any = _UNRESOLVED
         for index, hop in enumerate(chain):
-            provider = (
-                {"id": hop["provider"], "model": self._model}
-                if hop["provider"]
-                else await super()._resolve_provider()
-            )
+            if hop["provider"]:
+                provider = {"id": hop["provider"], "model": self._model}
+            else:
+                if default_provider is _UNRESOLVED:
+                    default_provider = await super()._resolve_provider()
+                provider = default_provider
             if provider is None:
                 yield StreamReply(final=LLMReply(text=NO_PROVIDER_TEXT, degraded=True))
                 return
