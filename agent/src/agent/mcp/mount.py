@@ -42,6 +42,22 @@ async def _call_remote(session: McpSession, remote_name: str, kwargs: dict) -> s
         return f"[MCP 错误] {remote_name}: {exc}"
 
 
+def _write_flags(remote: dict) -> tuple[bool, bool]:
+    """(write, irreversible) classification for one remote tool.
+
+    The MCP spec's annotations carry the server's own hints: readOnlyHint
+    True marks a pure read. Everything else — no annotations, a missing hint,
+    a False readOnlyHint — classifies as write (fail-closed): remote semantics
+    are the least verifiable surface here, so an unknown tool must be excluded
+    from read-only subagent surfaces and never retried on transient errors
+    (a retried write-shaped remote call can double-execute)."""
+    annotations = remote.get("annotations")
+    if isinstance(annotations, dict) and annotations.get("readOnlyHint") is True:
+        destructive = annotations.get("destructiveHint") is True
+        return (False, destructive)
+    return (True, False)
+
+
 def _build_tool(cfg: dict, session: McpSession, remote: dict) -> AgentTool:
     """Build an AgentTool for one remote tool: server-decided JSON-RPC
     errors return as [MCP 错误] text for the model to correct, while
@@ -49,6 +65,7 @@ def _build_tool(cfg: dict, session: McpSession, remote: dict) -> AgentTool:
     and circuit breaker."""
     remote_name = str(remote.get("name") or "")
     tool_name = _tool_name(cfg["id"], remote_name)
+    write, irreversible = _write_flags(remote)
 
     async def handler(**kwargs: Any) -> str:
         return await _call_remote(session, remote_name, kwargs)
@@ -71,6 +88,8 @@ def _build_tool(cfg: dict, session: McpSession, remote: dict) -> AgentTool:
         # approval is only the registry gate; calls go through the app dimension
         # (target = tool name, same agent.app.allowed set)
         dimension="app",
+        write=write,
+        irreversible=irreversible,
     )
 
 

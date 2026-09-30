@@ -16,7 +16,7 @@ capability.
 from __future__ import annotations
 
 from platform_capability import Registry, capability
-from platform_contracts import ErrorSuffix, ServiceError
+from platform_contracts import ActorKind, ActorRef, ErrorSuffix, ServiceError
 
 from agent.capabilities.deps import CapabilityDeps
 
@@ -38,6 +38,7 @@ async def extension_action(
     zip_path: str = "",
     source_dir: str = "",
     overwrite: bool = False,
+    actor: ActorRef | None = None,
 ) -> dict | list:
     """Dispatch one extension action against plugins/MCP/user-hooks managers."""
     if kind not in _KINDS:
@@ -64,7 +65,15 @@ async def extension_action(
     if key == "mcp.list":
         return deps.mcp.list_state()
     if key == "mcp.preview":
-        preview = await deps.mcp.preview(id)  # raises AGENT.UNAVAILABLE with a readable message
+        # Consent fork by actor: an agent-initiated preview is a read-only
+        # look — the listing returns without re-baselining consent and
+        # without remounting, so new remote tools stay behind the user's own
+        # explicit preview instead of entering the tool surface on the
+        # agent's say-so. User/system actors keep the consent act.
+        rebase = actor is None or actor.kind is not ActorKind.AGENT
+        preview = await deps.mcp.preview(
+            id, rebase=rebase
+        )  # raises AGENT.UNAVAILABLE with a readable message
         return {"id": id, "preview": preview}
     if key == "hook.list":
         return {"items": deps.user_hooks.list()}
@@ -90,6 +99,7 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
         zip_path: str = "",
         source_dir: str = "",
         overwrite: bool = False,
+        _actor: ActorRef | None = None,
     ) -> dict | list:
         return await extension_action(
             deps,
@@ -100,4 +110,5 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
             zip_path=zip_path,
             source_dir=source_dir,
             overwrite=overwrite,
+            actor=_actor,
         )

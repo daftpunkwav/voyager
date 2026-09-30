@@ -140,6 +140,9 @@ def _exe_free(token: str) -> str:
 
 
 def _matches_prefix(tokens: tuple[str, ...], pattern: str) -> bool:
+    """Token-prefix match. A pattern without the trailing `*` is still a
+    prefix (the documented grammar): `git push` must deny `git push origin
+    main` too — in the deny direction an exact-only reading fails open."""
     parts = pattern.lower().split()
     if not parts:
         return False
@@ -148,7 +151,7 @@ def _matches_prefix(tokens: tuple[str, ...], pattern: str) -> bool:
     if not tokens:
         return False
     head = parts[:-1] if parts[-1] == "*" else parts
-    if len(tokens) < len(head) or (parts[-1] != "*" and len(tokens) != len(head)):
+    if len(tokens) < len(head):
         return False
     # Executable-name normalization applies to the first token only: later
     # arguments like `setup.exe` are ordinary file names.

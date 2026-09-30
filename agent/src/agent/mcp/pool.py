@@ -181,7 +181,7 @@ class McpClientPool:
         raw_instructions = getattr(self._sessions[sid], "instructions", "")
         self._instructions[sid] = str(raw_instructions) if raw_instructions else ""
 
-    async def preview(self, sid: str) -> list[dict]:
+    async def preview(self, sid: str, *, rebase: bool = True) -> list[dict]:
         """Connect (if not yet) and run tools/list, returning the remote tool
         list.
 
@@ -189,6 +189,11 @@ class McpClientPool:
         successful list re-baselines consent (the previewed list is what
         approval covers) and remounts, so a server fixed after a failed
         startup rejoins the tool surface through this same method.
+
+        `rebase=False` is the agent-initiated read-only look (extension
+        capability): the listing returns, but consent is NOT re-baselined and
+        nothing remounts — a new remote tool stays behind the user's own
+        explicit preview, so the agent cannot widen its own tool surface.
 
         validate_server_config runs before connecting: a dirty config (left
         over from settings written directly, bypassing add validation) is
@@ -220,16 +225,18 @@ class McpClientPool:
             self._errors[sid] = message
             raise ServiceError("agent", ErrorSuffix.UNAVAILABLE, message) from exc
         self._record_tools(sid, tools)
-        # User consent point: the previewed list is what approval covers; the
-        # hot-refresh path mounts only these names (new remote tools wait for
-        # the next explicit preview)
-        self._seen_tools[sid] = {str(t.get("name") or "") for t in tools}
-        self._new_tools.pop(sid, None)
-        # Already approved: a successful tools/list remounts (so a server fixed
-        # after a failed startup rejoins the tool surface via "refresh")
-        approved = list(cfg.get("approved") or [])
-        if approved:
-            self.remount(sid, approved)
+        if rebase:
+            # User consent point: the previewed list is what approval covers;
+            # the hot-refresh path mounts only these names (new remote tools
+            # wait for the next explicit preview)
+            self._seen_tools[sid] = {str(t.get("name") or "") for t in tools}
+            self._new_tools.pop(sid, None)
+            # Already approved: a successful tools/list remounts (so a server
+            # fixed after a failed startup rejoins the tool surface via
+            # "refresh")
+            approved = list(cfg.get("approved") or [])
+            if approved:
+                self.remount(sid, approved)
         return tools
 
     async def drop_session(self, sid: str) -> None:
@@ -270,8 +277,12 @@ class McpClientPool:
         Idempotent (repeat calls are no-ops); a per-server failure is recorded
         in the entry error and blocks neither startup nor other servers; dirty
         entries without an id (direct settings writes) are skipped the same way.
-        When auto_refresh is enabled (composition root), a periodic tools/list
-        refresh loop starts after the initial reconnect.
+        Mounting goes through the hot-refresh path (_refresh_one): the consent
+        snapshot decides what mounts and a server that grew new tools since the
+        last consent does not silently widen the surface at startup — fresh
+        names land in _new_tools awaiting an explicit preview, same as a
+        refresh cycle. When auto_refresh is enabled (composition root), a
+        periodic tools/list refresh loop starts after the initial reconnect.
         """
         if self._started:
             return
@@ -283,8 +294,16 @@ class McpClientPool:
             if not sid:
                 continue
             try:
-                # preview remounts on its own when already approved
-                await self.preview(sid)
+                # Dirty configs are refused before connect, exactly like the
+                # user preview path (the refresh path itself does not validate)
+                validate_server_config(cfg)
+            except ServiceError as exc:
+                self._errors[sid] = str(exc)
+                continue
+            try:
+                # seen-filtered mount (consent never widens at startup); a
+                # server fixed after a failed startup rejoins via preview()
+                await self._refresh_one(sid, cfg)
             except Exception as exc:  # noqa: BLE001  # per-server failure recorded for the settings page; startup continues
                 self._errors[sid] = str(exc)
         if self._auto_refresh and self._refresher is None:

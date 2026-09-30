@@ -116,11 +116,13 @@ class TestDenyList:
             assert rp.check("bash", {"command": "git push"}) is not None
             assert rp.check("bash", {"command": "git status"}) is None
 
-    def test_bash_prefix_deny_exact_match_only(self) -> None:
+    def test_bash_prefix_deny_covers_extra_arguments(self) -> None:
         rp = _resolver({"mode": "full", "deny": ["bash:git status"], "allow": []})
         assert rp.check("bash", {"command": "git status"}) is not None
-        # exact pattern: extra arguments are not covered
-        assert rp.check("bash", {"command": "git status --short"}) is None
+        # Documented prefix grammar: a bare pattern denies its argument
+        # extensions too — an exact-only reading would let `git status
+        # --short` slip past a deny built for `git status` (fail-open).
+        assert rp.check("bash", {"command": "git status --short"}) is not None
 
     def test_bash_prefix_deny_resists_quote_case_exe_variants(self) -> None:
         """Quoting shapes, case, and a Windows .exe suffix must not slip a

@@ -213,10 +213,10 @@ class TestMcpFailureClasses:
     as corrective text."""
 
     @staticmethod
-    def _mount(session, retries: int = 1) -> Toolbelt:
+    def _mount(session, retries: int = 1, remote: dict | None = None) -> Toolbelt:
         from agent.mcp.mount import _build_tool
 
-        tool = _build_tool({"id": "srv", "name": "Srv"}, session, {"name": "fetch"})
+        tool = _build_tool({"id": "srv", "name": "Srv"}, session, remote or {"name": "fetch"})
         return Toolbelt(
             {tool.name: tool},
             PolicyEngine(app=AppPolicy(allowed=frozenset({"*"}))),
@@ -245,8 +245,30 @@ class TestMcpFailureClasses:
 
     async def test_transport_failure_flows_into_retry_and_breaker(self) -> None:
         """Transport failures propagate out of the mount handler: retries apply
-        (read-only surface) and enough consecutive failures open the breaker,
-        which the pipeline renders as [熔断] instead of hammering the server."""
+        to tools the server declares read-only, and enough consecutive
+        failures open the breaker, which the pipeline renders as [熔断] instead
+        of hammering the server."""
+        calls = 0
+
+        class _S:
+            async def call_tool(self, name: str, arguments: dict) -> str:
+                nonlocal calls
+                calls += 1
+                raise ConnectionError("connection reset")
+
+        belt = self._mount(_S(), remote={"name": "fetch", "annotations": {"readOnlyHint": True}})
+        out = await belt.call_detailed(ToolCall("1", "mcp__srv__fetch", {}))
+        assert out.ok is False and calls == 2  # retried once
+        assert "[积木服务离线]" in out.text
+        nxt = await belt.call_detailed(ToolCall("2", "mcp__srv__fetch", {}))
+        # the third attempt opens the breaker mid-call; the open circuit short-circuits
+        assert nxt.text.startswith("[熔断]")
+        assert calls == 3
+
+    async def test_unannotated_remote_tool_is_write_classified_and_never_retried(self) -> None:
+        """No annotations = unknown remote semantics, classified fail-closed as
+        write: it never retries (a retried write-shaped remote call can
+        double-execute) and read-only surfaces exclude it."""
         calls = 0
 
         class _S:
@@ -256,10 +278,7 @@ class TestMcpFailureClasses:
                 raise ConnectionError("connection reset")
 
         belt = self._mount(_S())
+        assert belt.describe("mcp__srv__fetch")["write"] is True
         out = await belt.call_detailed(ToolCall("1", "mcp__srv__fetch", {}))
-        assert out.ok is False and calls == 2  # retried once
+        assert out.ok is False and calls == 1  # no retry
         assert "[积木服务离线]" in out.text
-        nxt = await belt.call_detailed(ToolCall("2", "mcp__srv__fetch", {}))
-        # the third attempt opens the breaker mid-call; the open circuit short-circuits
-        assert nxt.text.startswith("[熔断]")
-        assert calls == 3

@@ -113,6 +113,14 @@ class _McpProtocol:
                 "name": str(t.get("name") or ""),
                 "description": str(t.get("description") or ""),
                 "schema": t.get("inputSchema") or {},
+                # MCP annotations (readOnlyHint / destructiveHint): the mount
+                # layer maps them onto the write classification — carried
+                # through verbatim, absent stays absent
+                **(
+                    {"annotations": t["annotations"]}
+                    if isinstance(t.get("annotations"), dict)
+                    else {}
+                ),
             }
             for t in tools
             if isinstance(t, dict) and t.get("name")

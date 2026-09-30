@@ -68,7 +68,11 @@ class Toolbelt:
         self._permissions = permissions
 
     def names(self) -> list[str]:
-        return sorted(self._tools)
+        # dict() copies in a single C-level step: register/unregister run on
+        # the event-loop thread while roster reads (tools list/search) may
+        # execute on a to_thread worker — iterating the live dict there can
+        # raise "dictionary changed size during iteration".
+        return sorted(dict(self._tools))
 
     def concurrent_safe(self, name: str) -> bool:
         """Whether one tool may run in parallel with other same-round calls
@@ -90,7 +94,10 @@ class Toolbelt:
             self._tools.pop(n, None)
 
     def specs(self) -> list[ToolSpec]:
-        names = self.names()
+        # Work on one snapshot: names() and the lookup below must see the same
+        # roster, or a concurrent unregister turns into a KeyError
+        snapshot = dict(self._tools)
+        names = sorted(snapshot)
         if self._active is not None:
             # Names missing from the activation set are naturally absent; call()
             # is not restricted (invoking a non-activated name still works — the
@@ -98,7 +105,7 @@ class Toolbelt:
             names = [n for n in names if n in self._active]
         return [
             ToolSpec(name=t.name, description=t.description, schema=t.schema)
-            for t in (self._tools[n] for n in names)
+            for t in (snapshot[n] for n in names)
         ]
 
     def roster(self) -> list[dict[str, Any]]:
@@ -107,7 +114,9 @@ class Toolbelt:
         ToolSpec leaves out (frontend tool catalog and allowlist grouping).
         `class` is the permission class from the central table (unknown tools
         read as D), consumed by the permission modes and the settings UI."""
-        names = self.names()
+        # Same snapshot discipline as specs()
+        snapshot = dict(self._tools)
+        names = sorted(snapshot)
         if self._active is not None:
             names = [n for n in names if n in self._active]
         return [
@@ -118,7 +127,7 @@ class Toolbelt:
                 "write": t.is_write,
                 "class": tool_class(t.name),
             }
-            for t in (self._tools[n] for n in names)
+            for t in (snapshot[n] for n in names)
         ]
 
     def describe(self, name: str) -> dict[str, Any]:

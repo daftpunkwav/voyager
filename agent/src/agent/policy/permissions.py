@@ -86,8 +86,12 @@ TOOL_CLASS: dict[str, str] = {
     "memory.remember": CLASS_D,
     "memory.forget": CLASS_D,
     "memory.clear": CLASS_D,
-    # skills (aggregated; propose lands in the loader-indexed library)
+    # skills (aggregated; propose lands in the loader-indexed library and
+    # from there into the system prompt's skill layer — same injection risk
+    # the fs/shell guards block for the skills subtree, so it is D and the
+    # other skill actions stay R via the tool-level default)
     "skill": CLASS_R,
+    "skill.propose": CLASS_D,
     # extension (aggregated kind×action): every list/preview action is R via
     # the tool-level default; the three lifecycle actions are unique per kind
     # (install/uninstall only for plugin, reload only for hook), so plain
