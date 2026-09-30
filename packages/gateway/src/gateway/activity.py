@@ -51,6 +51,7 @@ _OPERATION_TYPES = frozenset(
         DomainEvent.NOTE_DELETED,
         DomainEvent.NOTE_RESTORED,
         DomainEvent.NOTE_PURGED,
+        DomainEvent.NOTE_PURGED_BATCH,
         DomainEvent.SOURCE_ADDED,
         DomainEvent.SOURCE_REMOVED,
         DomainEvent.SESSION_DELETED,

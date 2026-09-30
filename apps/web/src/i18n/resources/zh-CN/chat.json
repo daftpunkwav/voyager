@@ -45,6 +45,7 @@
   "feed.noteDeleted": "删除笔记《{{title}}》",
   "feed.noteRestored": "恢复笔记《{{title}}》",
   "feed.notePurged": "彻底删除笔记《{{title}}》",
+  "feed.notePurgedBatch": "批量彻底删除 {{count}} 条笔记",
   "feed.sessionDeleted": "删除会话《{{title}}》",
   "feed.noteEdited": "编辑笔记《{{title}}》",
   "feed.settingsChanged": "修改设置 {{key}}",

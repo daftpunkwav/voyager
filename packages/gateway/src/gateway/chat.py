@@ -84,6 +84,7 @@ _STREAM_TYPES = (
     DomainEvent.NOTE_DELETED,
     DomainEvent.NOTE_RESTORED,
     DomainEvent.NOTE_PURGED,
+    DomainEvent.NOTE_PURGED_BATCH,
     DomainEvent.SOURCE_ADDED,
     DomainEvent.SOURCE_READY,
     DomainEvent.SOURCE_REMOVED,

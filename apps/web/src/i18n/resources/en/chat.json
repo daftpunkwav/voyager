@@ -45,6 +45,7 @@
   "feed.noteDeleted": "Deleted note \"{{title}}\"",
   "feed.noteRestored": "Restored note \"{{title}}\"",
   "feed.notePurged": "Permanently deleted note \"{{title}}\"",
+  "feed.notePurgedBatch": "Permanently deleted {{count}} notes",
   "feed.sessionDeleted": "Deleted session \"{{title}}\"",
   "feed.noteEdited": "Edited note \"{{title}}\"",
   "feed.settingsChanged": "Changed setting {{key}}",

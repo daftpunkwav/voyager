@@ -37,6 +37,7 @@ const NOTE_EVENTS = [
   EventType.NOTE_DELETED,
   EventType.NOTE_RESTORED,
   EventType.NOTE_PURGED,
+  EventType.NOTE_PURGED_BATCH,
 ] as const;
 
 function useNotesUiBridge() {

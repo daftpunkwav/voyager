@@ -90,6 +90,11 @@ export function summarize(ev: FeedEvent): RowSummary {
         text: i18n.t('chat:feed.notePurged', { title: clip(p.title, 40) }),
         tone: 'muted',
       };
+    case EventType.NOTE_PURGED_BATCH:
+      return {
+        text: i18n.t('chat:feed.notePurgedBatch', { count: Number(p.purged_count ?? 0) }),
+        tone: 'muted',
+      };
     case EventType.SESSION_DELETED:
       return {
         text: i18n.t('chat:feed.sessionDeleted', { title: clip(p.title, 40) }),
