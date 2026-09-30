@@ -475,6 +475,29 @@ class TestReAct:
         assert len(llm.calls) == 2  # nudge still happened (forcing is intact)
         assert any("[react]" in str(m.get("content", "")) for m in messages)
 
+    async def test_truncated_pre_nudge_answer_keeps_marker(self) -> None:
+        """Round 1 hit the output cap, the nudge round only confirms "no tools
+        needed": the pre-nudge answer is delivered WITH the truncation marker.
+        Storing the raw text would deliver the provider-cut answer as complete
+        and persist it unmarked into history — the next turn could no longer
+        offer to continue the cut answer."""
+        llm = FakeLLM(
+            [
+                LLMReply(text="回答前半", meta={"finish_reason": "length"}),
+                LLMReply(text="当前无需调用工具。"),
+            ]
+        )
+        result = await run_mode(
+            Mode.REACT,
+            llm=llm,
+            toolbelt=_belt(),
+            messages=[{"role": "user", "content": "讲讲上下文压缩"}],
+            limits=ModeLimits(),
+            continue_if_idle=True,
+        )
+        assert result.startswith("回答前半")
+        assert "[输出被截断]" in result
+
     async def test_nudge_then_tools_still_returns_post_tool_answer(self) -> None:
         """After the nudge the model picks up a tool: the post-tool answer wins,
         the pre-nudge text must not shadow it."""

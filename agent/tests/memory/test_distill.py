@@ -168,10 +168,12 @@ async def test_exact_duplicate_fact_not_rewritten(tmp_path) -> None:
     assert len(hits) == 1
 
 
-async def test_write_failure_keeps_the_cursor(tmp_path) -> None:
-    """A write-phase failure (disk full, lock timeout) does not advance the
-    cursor: the same window is re-extracted next time instead of being lost
-    forever (the cursor used to move before the writes)."""
+async def test_write_failure_keeps_the_cursor(tmp_path, caplog) -> None:
+    """A write-phase failure (disk full, lock timeout) is logged and does not
+    advance the cursor: the same window is re-extracted next time instead of
+    being lost forever. It must not escape either — the distillation runs as a
+    fire-and-forget background task, so a raised exception would surface only
+    as "Task exception was never retrieved" at GC time."""
     memory = _memory(tmp_path)
     payload = {
         "profile": {"favorite_color": "蓝色"},
@@ -190,14 +192,12 @@ async def test_write_failure_keeps_the_cursor(tmp_path) -> None:
     memory.semantic.add = _boom  # type: ignore[method-assign]
     coro = d.maybe_distill()
     assert coro is not None
-    try:
-        await coro
-        raised = False
-    except RuntimeError:
-        raised = True
-    assert raised
+    with caplog.at_level("WARNING", logger="agent.memory.distill"):
+        await coro  # must not raise: the background task cannot surface it
     assert d._cursor == -1  # the window is NOT consumed
     assert memory.semantic.query(keyword="voyager") == []
+    failure_logs = [r for r in caplog.records if "write phase failed" in r.message]
+    assert failure_logs and failure_logs[0].exc_info is not None
 
     # the store heals: the same entries re-extract and land this time
     memory.semantic.add = real_add  # type: ignore[method-assign]

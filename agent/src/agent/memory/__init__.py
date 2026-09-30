@@ -119,11 +119,15 @@ class Memory:
                 profile_scored.append((s, {"from": "profile", "key": key, "value": value}))
         profile_scored.sort(key=lambda item: -item[0])
         hits += [item for _, item in profile_scored[:limit]]
-        hits += [
+        # Oversize the search by the exclusion set, then truncate after the
+        # filter: resident-layer duplicates dropped here must not consume the
+        # channel's slots (search-then-filter would under-fill the channel).
+        episodic = [
             {"from": "episodic", **e}
-            for e in self.episodic.search(query, limit)
+            for e in self.episodic.search(query, limit + len(skip_summaries))
             if str(e.get("summary") or "") not in skip_summaries
         ]
+        hits += episodic[:limit]
         hits += [{"from": "semantic", **f} for f in self.semantic.query(keyword=query, limit=limit)]
         cap = max(limit * 2, 8)
         if self._embedder is not None:

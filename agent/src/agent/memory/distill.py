@@ -101,32 +101,48 @@ class Distiller:
             log.info("distillation output was not valid JSON; skipped")
             return
         profile = parsed.get("profile")
-        if isinstance(profile, dict):
-            for key, value in list(profile.items())[:5]:
-                if key and value:
-                    self._memory.profile.set(str(key), str(value))
         facts = parsed.get("facts")
-        if isinstance(facts, list):
-            for fact in facts[:_MAX_FACTS]:
-                if (
-                    isinstance(fact, (list, tuple))
-                    and len(fact) in (3, 4)
-                    and all(str(part).strip() for part in fact[:3])
-                ):
-                    subject, relation, obj = (str(part).strip() for part in fact[:3])
-                    if self._memory.semantic.has_fact(subject, relation, obj):
-                        continue  # exact re-extraction, not new knowledge
-                    # Optional 4th element: a graph node id the model saw via the
-                    # graph tools; stored only, so recall can hand it back for
-                    # graph__expand_neighbors without the agent importing graph
-                    node_id = str(fact[3]).strip() if len(fact) == 4 else ""
-                    # supersede: a re-extracted (subject, relation) with a new
-                    # object replaces the older distilled fact (contradictions
-                    # must not accumulate in the recall budget); exact dupes
-                    # were already skipped above
-                    self._memory.semantic.add(
-                        subject, relation, obj, source="distill", node_id=node_id, supersede=True
-                    )
+        try:
+            if isinstance(profile, dict):
+                for key, value in list(profile.items())[:5]:
+                    if key and value:
+                        self._memory.profile.set(str(key), str(value))
+            if isinstance(facts, list):
+                for fact in facts[:_MAX_FACTS]:
+                    if (
+                        isinstance(fact, (list, tuple))
+                        and len(fact) in (3, 4)
+                        and all(str(part).strip() for part in fact[:3])
+                    ):
+                        subject, relation, obj = (str(part).strip() for part in fact[:3])
+                        if self._memory.semantic.has_fact(subject, relation, obj):
+                            continue  # exact re-extraction, not new knowledge
+                        # Optional 4th element: a graph node id the model saw via the
+                        # graph tools; stored only, so recall can hand it back for
+                        # graph__expand_neighbors without the agent importing graph
+                        node_id = str(fact[3]).strip() if len(fact) == 4 else ""
+                        # supersede: a re-extracted (subject, relation) with a new
+                        # object replaces the older distilled fact (contradictions
+                        # must not accumulate in the recall budget); exact dupes
+                        # were already skipped above
+                        self._memory.semantic.add(
+                            subject,
+                            relation,
+                            obj,
+                            source="distill",
+                            node_id=node_id,
+                            supersede=True,
+                        )
+        except Exception:
+            # The distillation runs as a fire-and-forget background task
+            # (master.track_background discards without retrieving), so an
+            # escaping write-phase failure (disk full / lock timeout) would
+            # surface only as "Task exception was never retrieved" at GC time.
+            # Log it here and leave the cursor where it is: the same window is
+            # re-extracted on a later turn, and re-extraction is idempotent
+            # (profile upserts, has_fact skips exact duplicates).
+            log.warning("distillation write phase failed; window left unclaimed", exc_info=True)
+            return
         # The cursor advances only after every write succeeded: a write-phase
         # failure (disk full, lock timeout) leaves the window unclaimed, so the
         # same entries are re-extracted next time. Re-extraction is safe —

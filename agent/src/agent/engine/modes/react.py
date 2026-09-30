@@ -477,8 +477,13 @@ async def run_react(
                 # lead-in it would join the conversational flow. Both stay
                 # unset; the post-nudge round's own text (or its degraded
                 # classification at the turn layer) speaks instead.
+                # user_text, not raw text: when this round hit the output cap
+                # the truncation marker must ride along, or the nudge round's
+                # "no tools needed" confirmation would deliver the cut answer
+                # unmarked — and persist it into history, so the next turn
+                # could no longer offer to continue.
                 if text and not reply.degraded:
-                    pending_answer = text
+                    pending_answer = user_text
                 messages.append({"role": "assistant", "content": text})
                 messages.append(
                     {

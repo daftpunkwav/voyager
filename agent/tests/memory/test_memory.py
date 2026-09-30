@@ -230,6 +230,18 @@ class TestRecallPerSourceCap:
         assert hits == []  # the entry rides a resident card, recall skips it
         m.close()
 
+    def test_excluded_summaries_do_not_consume_episodic_slots(self, tmp_path) -> None:
+        """The episodic channel oversizes its search by the exclusion set and
+        truncates after the filter: resident-layer duplicates dropped from the
+        first `limit` rows must not under-fill the channel — a fresh episode
+        beyond the truncation point still gets its slot."""
+        m = Memory(tmp_path)
+        m.episodic.log("tool", "grep 周报 旧")  # rides a resident card
+        m.episodic.log("tool", "grep 周报 新")  # recall-worthy, older id ranks lower
+        hits = m.recall("周报", 1, exclude_summaries={"grep 周报 旧"})
+        assert [h["summary"] for h in hits if h["from"] == "episodic"] == ["grep 周报 新"]
+        m.close()
+
 
 class TestRenderedKeys:
     """rendered_keys mirrors render()'s character cap: only keys whose lines
