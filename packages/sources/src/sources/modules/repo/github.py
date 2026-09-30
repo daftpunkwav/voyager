@@ -18,6 +18,11 @@ from platform_contracts import ErrorSuffix, ServiceError
 
 _API = "https://api.github.com"
 _TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
+#: Pin the REST API version: without this header GitHub serves the behavior
+#: of the current default version, which can shift under us (breaking
+#: changes to existing fields ship only in new dated versions). The single
+#: constant is the upgrade point.
+_API_VERSION = "2022-11-28"
 
 #: Owner/repo names feed the clone destination (workspace/repo/{owner}__{repo})
 #: and API paths; anything outside GitHub's charset is rejected up front so a
@@ -68,7 +73,10 @@ def parse_repo_url(url: str) -> tuple[str, str]:
 async def _request(
     path: str, token: str | None = None, params: dict[str, Any] | None = None
 ) -> Any:
-    headers = {"Accept": "application/vnd.github+json"}
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": _API_VERSION,
+    }
     if token:
         headers["Authorization"] = f"Bearer {token}"
     async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:

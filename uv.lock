@@ -112,7 +112,6 @@ dependencies = [
     { name = "python-multipart" },
     { name = "settings" },
     { name = "sources" },
-    { name = "template" },
     { name = "uvicorn" },
 ]
 
@@ -125,6 +124,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "template" },
 ]
 
 [package.metadata]
@@ -153,7 +153,6 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "settings", editable = "packages/settings" },
     { name = "sources", editable = "packages/sources" },
-    { name = "template", editable = "packages/_template" },
     { name = "uvicorn", specifier = ">=0.30.0" },
 ]
 
@@ -166,6 +165,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.23.0" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "ruff", specifier = ">=0.8.0" },
+    { name = "template", editable = "packages/_template" },
 ]
 
 [[package]]

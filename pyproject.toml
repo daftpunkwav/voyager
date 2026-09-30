@@ -25,7 +25,6 @@ dependencies = [
     "office",
     "settings",
     "sources",
-    "template",
     "platform-contracts",
     "platform-actor",
     "platform-eventbus",
@@ -88,6 +87,11 @@ platform-webguard = { workspace = true }
 
 [dependency-groups]
 dev = [
+    # The scaffold member stays out of the production aggregate (host scan
+    # skips underscore-prefixed directories, so _template is never
+    # discovered): it is installed for the dev flow only, so the default
+    # pytest run can collect its tests.
+    "template",
     # grimp is a direct import of scripts/gen_dep_graph.py (graph:check); the
     # floor follows import-linter's own requirement so both resolve together
     "grimp>=3.0",

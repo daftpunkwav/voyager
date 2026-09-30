@@ -29,6 +29,8 @@ AGENT_CTX = ActorContext(actor=ActorRef(kind=ActorKind.AGENT, id="agent.main", s
 
 def _mock_github(monkeypatch) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
+        # Every request must pin the API version (drift protection contract)
+        assert request.headers.get("X-GitHub-Api-Version") == github_mod._API_VERSION
         path = request.url.path
         if path.endswith("/readme"):
             import base64

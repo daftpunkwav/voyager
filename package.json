@@ -24,6 +24,7 @@
     "typecheck:py": "uv run mypy packages agent",
     "test:py": "uv run pytest -q --cov=agent --cov=packages --cov-branch --cov-report=term --cov-fail-under=90",
     "audit:web": "npm audit --audit-level=high",
+    "audit:py": "uv run python scripts/pip_audit.py",
     "eval": "uv run pytest agent/tests/eval -q",
     "eval:update": "uv run python scripts/update_eval_baseline.py",
     "graph": "uv run python scripts/gen_dep_graph.py",
