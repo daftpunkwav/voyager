@@ -17,13 +17,13 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from agent.contracts import Purpose
-from agent.llm import LLMReply, StreamReply, ToolSpec
+from agent.llm import LLMReply, StreamReply, ToolSpec, stripped_error_message
 from agent.personas import canonical_persona_key
 from agent.runtime import current_instance
 from agent.settings import OVERRIDES_KEY, ROUTING_KEY
 from platform_contracts import ActorKind, ActorRef, DomainEvent, Event, ServiceError
 
-from .llm_adapter import NO_PROVIDER_TEXT, LateBoundCall, ServiceLLM, _stripped_error
+from .llm_adapter import NO_PROVIDER_TEXT, LateBoundCall, ServiceLLM
 
 SYSTEM_HOST = ActorRef(kind=ActorKind.SYSTEM, id="host.llm")
 
@@ -154,7 +154,7 @@ class RoutingServiceLLM(ServiceLLM):
                         last_error,
                     )
         return LLMReply(
-            text=f"(LLM call failed after {len(chain)} attempt(s): {_stripped_error(last_error)})",
+            text=f"(LLM call failed after {len(chain)} attempt(s): {stripped_error_message(last_error)})",
             degraded=True,
         )
 
@@ -236,7 +236,7 @@ class RoutingServiceLLM(ServiceLLM):
             return
         yield StreamReply(
             final=LLMReply(
-                text=f"(LLM call failed after {len(chain)} attempt(s): {_stripped_error(last_error)})",
+                text=f"(LLM call failed after {len(chain)} attempt(s): {stripped_error_message(last_error)})",
                 degraded=True,
             )
         )

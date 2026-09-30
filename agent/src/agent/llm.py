@@ -188,6 +188,33 @@ class StreamingLLClient(Protocol):
 
 ScriptFn = Callable[..., LLMReply | Awaitable[LLMReply]]
 
+_LLM_FAIL_PREFIX = "LLM call failed: "
+
+
+def stripped_error_message(message: str) -> str:
+    """The llm domain's error strings open with their own "LLM call failed: "
+    prefix (chained fallbacks stack several) — strip the repeats so an outer
+    wrapper adds exactly one readable prefix."""
+    msg = (message or "").strip()
+    while msg.startswith(_LLM_FAIL_PREFIX):
+        msg = msg[len(_LLM_FAIL_PREFIX) :].strip()
+    return msg
+
+
+def degraded_error_text(message: str) -> str:
+    """One readable failure placeholder for a degraded LLMReply: the llm
+    domain's error strings already open with "LLM call failed" (plain failure)
+    or "LLM call failed after N attempt(s)" (exhausted routing chain), so keep
+    whichever it is and wrap it once — stacking a second prefix produced
+    "(LLM call failed: LLM call failed: ...)". A message drained to nothing by
+    the cleanup still names the failure."""
+    msg = stripped_error_message(message)
+    if not msg:
+        return "(LLM call failed)"
+    if not msg.startswith("LLM call failed"):
+        msg = f"LLM call failed: {msg}"
+    return f"({msg})"
+
 
 class FakeLLM:
     """Scripted fake LLM: pops scripted replies in order; returns the default

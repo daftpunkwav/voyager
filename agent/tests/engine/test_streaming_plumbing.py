@@ -218,6 +218,30 @@ class TestServiceErrorFold:
         assert "(LLM call failed: model refused)" in (out.text or "")
         assert seen == ["partial"]  # what the user saw was still delivered
 
+    async def test_mid_stream_error_keeps_one_prefix(self) -> None:
+        """The llm domain's ServiceError messages already open with their own
+        "LLM call failed: " prefix: the fold wraps exactly once instead of
+        nesting into "(LLM call failed: LLM call failed: ...)\"."""
+
+        class _RefusingStream:
+            def complete_stream(self, messages, specs):
+                async def stream():
+                    raise ServiceError(
+                        "llm", ErrorSuffix.UNAVAILABLE, "LLM call failed: ConnectTimeout"
+                    )
+                    yield _StreamEvent()  # makes this an async generator
+
+                return stream()
+
+        async def consumer(round_no: int, text: str) -> None:
+            pass
+
+        on_delta, _ = delta_timer(consumer)
+        llm: Any = _RefusingStream()
+        out = await complete_streaming(llm, [], None, on_delta, round_n=1)
+        assert out.degraded is True
+        assert (out.text or "") == "(LLM call failed: ConnectTimeout)"
+
     async def test_plain_refusal_is_not_overflow(self) -> None:
         class _RefusingStream:
             def complete_stream(self, messages, specs):

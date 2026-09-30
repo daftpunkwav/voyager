@@ -15,7 +15,7 @@ from typing import Any
 from platform_contracts import CONTEXT_OVERFLOW_HINT, ServiceError
 
 from agent.engine.modes.base import DeltaCb, EventCb, ModeBudget, noop_event
-from agent.llm import LLMClient, LLMReply
+from agent.llm import LLMClient, LLMReply, degraded_error_text
 from agent.runtime.deadline import Deadline
 from agent.runtime.events import RuntimeEvent
 
@@ -136,7 +136,11 @@ async def complete_streaming(
         if tail and on_delta is not None:
             await on_delta(round_n, tail)
         return LLMReply(
-            text=f"(LLM call failed: {exc.body.message})",
+            # The llm domain's message already opens with its own "LLM call
+            # failed: " prefix: wrap exactly once (same shape as the aggregate
+            # adapter's degraded paths), never "(LLM call failed: LLM call
+            # failed: ...)".
+            text=degraded_error_text(exc.body.message),
             degraded=True,
             overflow=exc.body.hint == CONTEXT_OVERFLOW_HINT,
         )
