@@ -84,6 +84,7 @@ graph LR
     p_platform_eventbus --> p_platform_contracts
     p_platform_health --> p_platform_contracts
     p_platform_health --> p_platform_eventbus
+    p_platform_secrets --> p_platform_contracts
     p_platform_settings --> p_platform_contracts
     p_platform_settings --> p_platform_eventbus
     p_settings --> p_platform_capability
