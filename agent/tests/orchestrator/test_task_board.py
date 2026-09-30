@@ -9,8 +9,12 @@ from agent.build import build_agent
 from agent.capabilities.team.taskboard import taskboard_action
 from agent.llm import FakeLLM, LLMReply
 from agent.orchestrator.task_board import TaskBoard
-from platform_capability import current_chat_session
-from platform_contracts import DomainEvent, ServiceError
+from agent.runtime.state import RunStatus
+from platform_actor import ActorContext
+from platform_capability import current_chat_session, execute
+from platform_contracts import LOCAL_USER, DomainEvent, ServiceError
+
+USER_CTX = ActorContext(actor=LOCAL_USER)
 
 
 class TestBoardStateMachine:
@@ -568,3 +572,186 @@ class TestTaskClaimNotice:
             assert payloads == []
         finally:
             app.close()
+
+
+class TestBoardResumeDelivery:
+    """A board-backed run resumed from a checkpoint closes out like a
+    dispatch: the row reaches its terminal state and the delivery card goes
+    out. The resume snapshot carries no board_task_id, so the resume path
+    re-attaches the row by run_id (the checkpoint preserves it) before the
+    run continues."""
+
+    def _app(self, tmp_path, llm=None):
+        return build_agent(
+            data_dir=tmp_path / "rd",
+            workspace_dir=tmp_path / "ws",
+            llm=llm or FakeLLM(default="任务已完成,结论是可行的。"),
+        )
+
+    @staticmethod
+    def _park_paused_board_run(app, session: str) -> str:
+        """A board-backed REACT instance parked as a PAUSED checkpoint (the
+        post-restart state a resume acts on); returns the run_id."""
+        from agent.engine import Mode, TaskBook
+
+        board = app.master._task_board
+        assert board is not None
+        row = board.publish(
+            title="讲 real-mock", brief="三句话", session=session, publisher="orchestrator"
+        )
+        board.claim(row["id"], claimant="explainer")
+        board.confirm(row["id"], publisher="orchestrator")
+        inst = app.spawner.spawn(
+            TaskBook(goal="三句话", mode=Mode.REACT, session=session, board_task_id=row["id"]),
+            persona="explainer",
+            name="explainer-run",
+        )
+        board.mark_running(row["id"], run_id=inst.state.run_id)
+        inst.state.status = RunStatus.PAUSED
+        inst.state.resume = inst.build_resume_snapshot().to_dict()
+        app.spawner._checkpoints.save(inst.state)
+        return inst.state.run_id
+
+    @staticmethod
+    def _raise_board_row(app, session: str, run_id: str) -> str:
+        """The new process's board knows nothing of the old row: recreate a
+        running row bound to the same run_id (what the resumed run closes)."""
+        board = app.master._task_board
+        assert board is not None
+        row = board.publish(
+            title="讲 real-mock", brief="三句话", session=session, publisher="orchestrator"
+        )
+        board.claim(row["id"], claimant="explainer")
+        board.confirm(row["id"], publisher="orchestrator")
+        board.mark_running(row["id"], run_id=run_id)
+        return row["id"]
+
+    async def _wait_terminal(self, board: TaskBoard, task_id: str) -> dict:
+        for _ in range(250):
+            row = board.get(task_id)
+            if row["status"] in ("done", "failed", "cancelled"):
+                return row
+            await asyncio.sleep(0.02)
+        return board.get(task_id)
+
+    @staticmethod
+    async def _drain_resume_tasks() -> None:
+        """The background resume run must finish INSIDE the scenario's event
+        loop: asyncio.run cancels pending tasks on exit, which would cut the
+        close-out between the board stamp and the card publish."""
+        from agent.capabilities.team import agent_instance as agent_instance_module
+
+        while agent_instance_module._bg_tasks:
+            await asyncio.gather(*list(agent_instance_module._bg_tasks), return_exceptions=True)
+            await asyncio.sleep(0.01)
+
+    async def _wait_delivery(self, app, status: str) -> dict | None:
+        """The board row closes before the card publish inside
+        announce_delivery, so the event needs its own bounded wait."""
+        for _ in range(250):
+            deliveries = [
+                e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_DELIVERY])
+            ]
+            if deliveries and deliveries[-1].get("status") == status:
+                return deliveries[-1]
+            await asyncio.sleep(0.02)
+        return None
+
+    def test_resumed_board_run_closes_row_and_delivers(self, tmp_path) -> None:
+        app1 = self._app(tmp_path)
+        try:
+            run_id = self._park_paused_board_run(app1, "s-resume")
+        finally:
+            app1.close()
+        app2 = self._app(tmp_path)
+        try:
+            board = app2.master._task_board
+            assert board is not None
+            task_id = self._raise_board_row(app2, "s-resume", run_id)
+
+            async def _scenario() -> dict:
+                out = await execute(
+                    app2.registry,
+                    "agent_instance",
+                    USER_CTX,
+                    {"action": "resume", "run_id": run_id, "continue_run": True},
+                )
+                assert out["continuing"] is True
+                row = await self._wait_terminal(board, task_id)
+                await self._drain_resume_tasks()
+                return row
+
+            row = asyncio.run(_scenario())
+            assert row["status"] == "done"  # the row no longer lingers on running
+            assert "可行" in (row["result"] or "")
+            card = asyncio.run(self._wait_delivery(app2, "done"))
+            assert card is not None
+            assert card["board_task_id"] == task_id  # the card carries the row link
+        finally:
+            app2.close()
+
+    def test_resumed_board_run_failure_marks_row_failed(self, tmp_path) -> None:
+        app1 = self._app(tmp_path)
+        try:
+            run_id = self._park_paused_board_run(app1, "s-resume")
+        finally:
+            app1.close()
+
+        async def _raise_start(_inst, *a, **kw):
+            raise RuntimeError("resume exploded")
+
+        app2 = self._app(tmp_path, llm=FakeLLM())
+        try:
+            board = app2.master._task_board
+            assert board is not None
+            task_id = self._raise_board_row(app2, "s-resume", run_id)
+            app2.spawner.start = _raise_start  # type: ignore[method-assign]
+
+            async def _scenario() -> dict:
+                out = await execute(
+                    app2.registry,
+                    "agent_instance",
+                    USER_CTX,
+                    {"action": "resume", "run_id": run_id, "continue_run": True},
+                )
+                assert out["continuing"] is True
+                row = await self._wait_terminal(board, task_id)
+                await self._drain_resume_tasks()
+                return row
+
+            row = asyncio.run(_scenario())
+            assert row["status"] == "failed"
+            card = asyncio.run(self._wait_delivery(app2, "failed"))
+            assert card is not None
+            assert "resume exploded" in card["error"]
+        finally:
+            app2.close()
+
+    def test_plain_resume_without_board_row_stays_quiet(self, tmp_path) -> None:
+        app1 = self._app(tmp_path)
+        try:
+            run_id = self._park_paused_board_run(app1, "s-resume")
+        finally:
+            app1.close()
+        app2 = self._app(tmp_path)
+        try:
+            # no board row matches the run_id: a plain resume keeps the legacy
+            # behavior (no delivery card, no board close-out)
+
+            async def _scenario() -> None:
+                out = await execute(
+                    app2.registry,
+                    "agent_instance",
+                    USER_CTX,
+                    {"action": "resume", "run_id": run_id, "continue_run": True},
+                )
+                assert out["continuing"] is True
+                await asyncio.sleep(0.1)
+
+            asyncio.run(_scenario())
+            deliveries = [
+                e.payload for _, e in app2.log.read_after(types=[DomainEvent.AGENT_DELIVERY])
+            ]
+            assert deliveries == []
+        finally:
+            app2.close()

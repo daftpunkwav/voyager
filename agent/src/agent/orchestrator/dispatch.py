@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass
 
@@ -24,6 +25,7 @@ from agent.orchestrator.task_graph import DeferredTask  # noqa: F401  # re-expor
 from agent.personas import resolve_persona
 from agent.policy import NetworkPolicy, PolicyEngine, narrow_network
 from agent.runtime.current import current_instance
+from agent.runtime.deadline import Deadline
 from agent.runtime.state import RunStatus
 from agent.settings import SUBAGENTS_MAX_DEPTH_KEY
 from agent.tools.core.base import Toolbelt
@@ -43,6 +45,30 @@ def _turn_degraded(inst) -> bool:
 
 
 log = logging.getLogger("agent.dispatch")
+
+
+async def finish_board_run(
+    announce: Callable[..., Awaitable[None]] | None,
+    inst: SubagentInstance,
+    *,
+    result: str = "",
+    error: str = "",
+) -> None:
+    """Board-backed run completion close-out, shared by dispatch's background
+    _run and the resume path (agent_instance resume continue_run): the
+    ok/degraded judgment plus the structured delivery card through
+    Master.announce_delivery (`announce` = that bound method; None keeps the
+    legacy quiet path for compositions that inject no announcer). A non-empty
+    `error` is the failure/stop branch ("cancelled" closes the board row as
+    cancelled rather than failed); a degraded final round's text is harness
+    placeholder, not a real answer — it delivers as a failure."""
+    if announce is None:
+        return
+    if error:
+        await announce(inst, ok=False, result="", error=error)
+        return
+    ok = inst.status is RunStatus.COMPLETED and not _turn_degraded(inst)
+    await announce(inst, ok=ok, result=result if ok else "", error="" if ok else result[:500])
 
 
 async def dispatch_task(
@@ -211,6 +237,10 @@ async def dispatch_task(
         len(allowed_tools) if allowed_tools is not None else "full",
     )
     inst = spawner.spawn(task, persona=spawn_key, name=name or goal[:16])
+    # Same turn-level backstop the chat path applies (master._turn): without
+    # a deadline a hung tool on a background instance pins a scheduler slot
+    # forever (three hung dispatches stall all subagent work).
+    inst.deadline = Deadline.from_settings(settings)
     # Parent linkage for the cancel cascade: the spawn_subagent tool runs
     # inside the dispatching instance's turn, where current_instance is set;
     # a background dispatch (goal/queue) has no turn context and stays top-level
@@ -241,7 +271,7 @@ async def dispatch_task(
                         # The board row must not linger as running: a cancelled
                         # board-backed run closes out through the same failure
                         # card + relay path as any other board outcome.
-                        await master.announce_delivery(inst, ok=False, result="", error="cancelled")
+                        await finish_board_run(master.announce_delivery, inst, error="cancelled")
                     else:
                         await master.reply(
                             f"[cancelled] {inst.name}", session=inst.task.session, kind="notice"
@@ -252,8 +282,8 @@ async def dispatch_task(
             # A board-backed run announces a failure card + the host's relay;
             # plain dispatches keep the lightweight [failed] notice
             if getattr(inst.task, "board_task_id", ""):
-                await master.announce_delivery(
-                    inst, ok=False, result="", error=f"{type(exc).__name__}: {exc}"
+                await finish_board_run(
+                    master.announce_delivery, inst, error=f"{type(exc).__name__}: {exc}"
                 )
             else:
                 await master.reply(
@@ -267,9 +297,11 @@ async def dispatch_task(
                 # for a concurrency slot: start() returns normally (no
                 # CancelledError) but nothing ran
                 if getattr(inst.task, "board_task_id", ""):
-                    await master.announce_delivery(inst, ok=False, result="", error="cancelled")
+                    await finish_board_run(master.announce_delivery, inst, error="cancelled")
                 else:
-                    await master.reply(f"[cancelled] {inst.name}", session=inst.task.session)
+                    await master.reply(
+                        f"[cancelled] {inst.name}", session=inst.task.session, kind="notice"
+                    )
             elif inst.status.value == "paused":
                 await master.reply(
                     f"[paused] {inst.name}", session=inst.task.session, kind="notice"
@@ -277,12 +309,9 @@ async def dispatch_task(
             elif getattr(inst.task, "board_task_id", ""):
                 # Team task-board delivery: structured card + the standing
                 # host relays the report to the user (event-driven wakeup,
-                # not a sleep loop). A degraded turn's text is harness
-                # placeholder, not a real answer — announce it as a failure.
-                ok = inst.status is RunStatus.COMPLETED and not _turn_degraded(inst)
-                await master.announce_delivery(
-                    inst, ok=ok, result=result if ok else "", error="" if ok else result[:500]
-                )
+                # not a sleep loop); ok/degraded judgment lives in the shared
+                # close-out.
+                await finish_board_run(master.announce_delivery, inst, result=result)
             else:
                 # Long results get one synthesis call so the notice carries the
                 # conclusions instead of a blind cut; failures fall back inside

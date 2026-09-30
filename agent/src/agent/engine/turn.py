@@ -271,6 +271,12 @@ async def run_turn(
     the group timeline attributed to it. Empty = the resident host (Lucien).
     """
     view = _member_view(member)
+    # Cancelled while queued for a concurrency slot: the deferred coroutine
+    # must stop here instead of rewriting CANCELLED back to RUNNING and
+    # running to completion once the slot opens (start()'s entry check only
+    # covers cancels that land before start was called).
+    if inst.state.status is RunStatus.CANCELLED:
+        return "[cancelled] 已在开始执行前被取消,未执行任何步骤。"
     was_paused = inst.state.status is RunStatus.PAUSED
     inst.state.status = RunStatus.RUNNING
     if view is not None:
@@ -436,6 +442,14 @@ async def _run_turn(
                     run_id=inst.state.run_id,
                     subagent=_speaker_label(inst),
                 )
+                # Live continue_run rides the same pending view: the
+                # in-process resume path reads resume_messages (the snapshot
+                # below serves the after-restart path). Task instances only —
+                # a conversational resume would arrive with fresh user input,
+                # which the resume branch of _build_turn_messages does not
+                # carry; chat pauses rebuild from history like before.
+                if not inst.task.conversational:
+                    inst.resume_messages = messages
                 if inst.checkpoint_persist is not None:
                     inst.state.resume = inst.build_resume_snapshot(
                         in_turn=True,

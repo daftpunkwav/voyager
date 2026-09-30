@@ -3,10 +3,11 @@ to abort a run.
 """
 
 import asyncio
+from typing import Any
 
 import pytest
 from agent.engine import Mode, TaskBook
-from agent.llm import FakeLLM
+from agent.llm import FakeLLM, LLMReply, ToolSpec
 from agent.main import build_agent
 from agent.runtime.state import RunStatus
 from platform_actor import ActorContext
@@ -95,6 +96,78 @@ class TestHardCancel:
         with pytest.raises(asyncio.CancelledError):
             await asyncio.wait_for(task, timeout=1)
         assert inst.state.status is RunStatus.CANCELLED
+
+    async def test_cancel_while_queued_in_scheduler_prevents_run(
+        self, tmp_path, agent_replies, wait_until
+    ) -> None:
+        """The real queuing race: an instance parked INSIDE scheduler.run
+        (waiting for a concurrency slot) is cancelled — when the slot opens,
+        the deferred coroutine re-checks CANCELLED at the run_turn entry and
+        never executes a round (it used to revive to RUNNING and run to
+        completion)."""
+
+        class GateLLM(FakeLLM):
+            """Hangs the holder's round (slot stays busy); counts finished
+            rounds so a revived queued instance cannot hide."""
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.rounds = 0
+                self.gate = asyncio.Event()
+
+            async def complete(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[ToolSpec] | None = None,
+                response_format: dict[str, Any] | None = None,
+                max_tokens: int | None = None,
+            ) -> LLMReply:
+                head = str(messages[0].get("content") or "") if messages else ""
+                if "hold the slot" in head:
+                    await self.gate.wait()
+                self.rounds += 1
+                return await super().complete(messages, tools, response_format, max_tokens)
+
+        llm = GateLLM()
+        app = _app(tmp_path, llm)
+        from platform_contracts import LOCAL_USER
+
+        await app.settings.set("agent.subagents.max_concurrent", 1, LOCAL_USER)
+        holder = await app.master.dispatch_task("hold the slot", name="holder")
+        assert holder is not None
+        queued = await app.master.dispatch_task("queued work", name="queuedjob")
+        assert queued is not None
+        out = await app.spawner.cancel("queuedjob")
+        assert out == [queued.id]
+        await app.spawner.cancel(holder.name)  # frees the slot
+        await wait_until(
+            lambda: any("[cancelled]" in r and "queuedjob" in r for r in agent_replies(app))
+        )
+        assert llm.rounds == 0  # the queued instance never executed a round
+        assert queued.state.status is RunStatus.CANCELLED
+
+    async def test_stopped_chat_revives_on_next_message(self, tmp_path) -> None:
+        """A stopped conversation revives on the next message: CANCELLED is
+        terminal for start(), so without the revive the session would swallow
+        every later message silently (a FAILED instance revives implicitly;
+        this is the CANCELLED counterpart). Task instances stay terminal."""
+        from platform_contracts import DomainEvent
+
+        app = _app(tmp_path)
+        await app.master.handle_user_message("first")
+        while app.master._bg:
+            await asyncio.gather(*list(app.master._bg))
+        chat = app.master.chat
+        assert chat is not None
+        chat.state.status = RunStatus.CANCELLED  # as a completed stop leaves it
+        await app.master.handle_user_message("还在吗")
+        while app.master._bg:
+            await asyncio.gather(*list(app.master._bg))
+        assert chat.state.status is RunStatus.WAITING_INPUT
+        messages = [e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_MESSAGE])]
+        assert messages and messages[-1].get("content")
+        # a task instance is NOT revived by dispatch: start() keeps it terminal
+        app.memory.close()
 
 
 class TestCancelCascade:

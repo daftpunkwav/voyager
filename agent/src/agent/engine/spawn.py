@@ -153,9 +153,13 @@ class Spawner:
         Incremental mid-ReAct persistence is handled by instance._on_step;
         the finally here persists the turn-terminal (done/failed/cancelled)
         boundary snapshot, which overrides the mid-run snapshot and resets
-        in_turn to False. A CANCELLED instance never enters the turn: cancel
-        may land while the instance is still queued for a concurrency slot,
-        and the deferred coroutine must not run once the slot opens.
+        in_turn to False — except when the turn ended in PAUSED: the
+        PauseRequested handler already persisted the mid-turn snapshot with
+        pending_messages, and overwriting it here would reduce resume to a
+        full re-run of the turn (duplicate tool side effects). A CANCELLED
+        instance never enters the turn: cancel may land while the instance is
+        still queued for a concurrency slot, and the deferred coroutine must
+        not run once the slot opens (run_turn re-checks the status at entry).
         """
         if instance.state.status is RunStatus.CANCELLED:
             return "[cancelled] 已在开始执行前被取消,未执行任何步骤。"
@@ -164,7 +168,7 @@ class Spawner:
                 instance.id, instance.run_turn(user_text, member=member)
             )
         finally:
-            if self._checkpoints is not None:
+            if self._checkpoints is not None and instance.state.status is not RunStatus.PAUSED:
                 instance.state.resume = instance.build_resume_snapshot().to_dict()
                 self._checkpoints.save(instance.state)
             # The turn has terminated (success or failure): evict oldest terminal
@@ -177,7 +181,11 @@ class Spawner:
         Rebuild only, no re-run: the instance enters self.instances with state
         exactly as persisted (PAUSED after boot), waiting for an explicit
         resume (resume_run continue_run=true); the original run_id / steps /
-        started_ts are preserved.
+        started_ts are preserved. Deliberate semantics: the enforcement
+        budget is re-issued from the snapshot's original limits (the
+        per-round/tool counters that state.rounds / state.tool_calls keep
+        for display do NOT constrain the rebuilt run) — recovery may need
+        rounds the interrupted attempt already spent.
         """
         if self._checkpoints is None:
             raise ServiceError("agent", ErrorSuffix.NOT_FOUND, "checkpoint storage is not enabled")
@@ -337,38 +345,55 @@ class Spawner:
         CancelledError inside run_turn is a BaseException, so an
         ``except Exception`` cannot swallow it and rewrite the status. Returns
         the stopped instance ids (target first, then descendants); empty list
-        when nothing matched.
+        when nothing matched. PENDING counts as a hit too: a queued instance
+        (waiting for a concurrency slot) is not alive, but the user naming it
+        must still be able to stop it before it ever runs.
         """
         hits = [
-            i for i in self.instances.values() if i.status.alive and id_or_name in (i.id, i.name)
+            i
+            for i in self.instances.values()
+            if (i.status.alive or i.status is RunStatus.PENDING) and id_or_name in (i.id, i.name)
         ]
         stopped: list[SubagentInstance] = []
         stopped_ids: set[str] = set()
-        queue = list(hits)
-        while queue:
-            inst = queue.pop(0)
-            if inst.id in stopped_ids:
-                continue
-            stopped_ids.add(inst.id)
-            inst.cancel()
-            await self._events.emit(
-                RuntimeEvent.AGENT_CANCELLED,
-                run_id=inst.state.run_id,
-                subagent=inst.id,
-                name=inst.name,
-            )
-            stopped.append(inst)
-            # cascade: everything still running under this instance - running
-            # AND queued (PENDING waits for a concurrency slot; without this
-            # it would start and run to completion once a slot frees up)
-            queue.extend(
-                other
-                for other in self.instances.values()
-                if other.id not in stopped_ids
-                and (other.status.alive or other.status is RunStatus.PENDING)
-                and other.parent_run_id == inst.id
-            )
-        for sid in stopped_ids:
+
+        async def _collect_and_mark(roots: list[SubagentInstance]) -> None:
+            queue = list(roots)
+            while queue:
+                inst = queue.pop(0)
+                if inst.id in stopped_ids:
+                    continue
+                stopped_ids.add(inst.id)
+                inst.cancel()
+                await self._events.emit(
+                    RuntimeEvent.AGENT_CANCELLED,
+                    run_id=inst.state.run_id,
+                    subagent=inst.id,
+                    name=inst.name,
+                )
+                stopped.append(inst)
+                # cascade: everything still running under this instance - running
+                # AND queued (PENDING waits for a concurrency slot; without this
+                # it would start and run to completion once a slot frees up)
+                queue.extend(
+                    other
+                    for other in self.instances.values()
+                    if other.id not in stopped_ids
+                    and (other.status.alive or other.status is RunStatus.PENDING)
+                    and other.parent_run_id == inst.id
+                )
+
+        await _collect_and_mark(hits)
+        for sid in list(stopped_ids):
+            await self._scheduler.cancel(sid)
+        # The interrupt requests above are asynchronous: a parent that was
+        # mid-dispatch could have registered one more child between the mark
+        # pass and its own task being cancelled. One re-scan over the children
+        # of the stopped set keeps that escape from outliving the stop.
+        await _collect_and_mark(
+            [i for i in self.instances.values() if i.parent_run_id in stopped_ids]
+        )
+        for sid in list(stopped_ids):
             await self._scheduler.cancel(sid)
         # Emergency stop lands in CANCELLED: evict oldest terminal instances when over the cap
         self._trim_terminal_instances()

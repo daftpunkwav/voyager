@@ -44,7 +44,7 @@ from agent.orchestrator.digest import DigestStore
 from agent.orchestrator.evaluation import TaskEvaluator, record_evaluation
 from agent.orchestrator.synthesize import synthesize_result
 from agent.orchestrator.task_board import TaskBoard
-from agent.personas import PERSONAS, canonical_persona_key
+from agent.personas import PERSONAS, canonical_persona_key, resolve_persona
 from agent.policy import PolicyEngine
 from agent.prompts import P, render
 from agent.runtime.deadline import Deadline
@@ -331,8 +331,13 @@ class Master:
         sid = inst.task.session
         if self._wake_budget is not None and not self._wake_budget.allow(sid):
             try:
+                # Display name, not the persona struct key: this line lands on
+                # the user's timeline (the delivery card shows the display
+                # name everywhere else).
+                preset = resolve_persona(member)
+                shown = preset.display_name if preset is not None else member
                 await self.reply(
-                    f"[team-report] {member} "
+                    f"[team-report] {shown} "
                     + ("已完成" if ok else "执行失败")
                     + ",详情见上方交付卡。",
                     trace_id=trace_id,
@@ -377,6 +382,19 @@ class Master:
             note_line=render(P.orchestrator.task_claim_note, note=note) if note else "",
         )
         try:
+            # Same anti-self-excitation gate as announce_delivery: a claim
+            # notice is an agent-triggered wakeup, and an over-budget burst
+            # (handoff -> claim -> notice -> handoff ...) must degrade to a
+            # quiet receipt instead of spending another LLM turn.
+            if self._wake_budget is not None and not self._wake_budget.allow(session):
+                await self.reply(
+                    f"[task-claim] {claimant} 认领了「{title}」,详情见任务板。",
+                    session=session,
+                    kind="notice",
+                )
+                return
+            if self._wake_budget is not None:
+                self._wake_budget.record(session)
             await self.handle_notice(session, body)
         except Exception:
             log.warning(
@@ -563,6 +581,32 @@ class Master:
         barrier): a False result cancels the turn before any LLM work.
         `member` hands the floor to a resident teammate for this turn."""
 
+        async def _reply_turn_failure(exc: Exception) -> None:
+            # The turn is backgrounded: the EventLoop no longer awaits the
+            # whole turn, so a failure must not become "Task exception was
+            # never retrieved" (same semantics as loop isolation). It must
+            # not become silence either: tell the user the turn died, or a
+            # provider/infrastructure failure would look like the agent
+            # simply ignoring the message.
+            try:
+                await self._reply(
+                    f"(Turn failed: {exc})",
+                    trace_id=trace_id,
+                    session=inst.session,
+                    kind="error",
+                )
+            except Exception:
+                log.exception("publishing the turn-failure reply failed")
+
+        async def _drive(text_: str, member_: str) -> None:
+            await self._turn(inst, text_, trace_id, member=member_)
+            # Re-arm the goal continuation after every turn (primary and
+            # queued alike): an active goal keeps advancing until the agent
+            # marks it done/blocked; the driver's fence and daily round
+            # budget bound the loop.
+            if self.goal_driver is not None:
+                self.goal_driver.maybe_schedule(inst.session)
+
         async def _run() -> None:
             try:
                 async with self.sessions.lock_for(inst.session):
@@ -577,13 +621,15 @@ class Master:
                             inst.session,
                         )
                         return
-                    await self._turn(inst, text, trace_id, member=member)
-                    # Re-arm the goal continuation after every turn (primary
-                    # and queued alike): an active goal keeps advancing until
-                    # the agent marks it done/blocked; the driver's fence and
-                    # daily round budget bound the loop.
-                    if self.goal_driver is not None:
-                        self.goal_driver.maybe_schedule(inst.session)
+                    # One failed turn must not strand the queue: parked
+                    # entries were already acknowledged ("[Queued]") and would
+                    # be answered out of order (or never) if the drain only
+                    # ran on the success path.
+                    try:
+                        await _drive(text, member)
+                    except Exception as exc:
+                        log.exception("user turn failed")
+                        await _reply_turn_failure(exc)
                     inbox = self._session_inbox(inst.session)
                     while inbox:  # queued messages are handled in order
                         queued = inbox.popleft()
@@ -601,39 +647,37 @@ class Master:
                                 inst.session,
                             )
                             continue
-                        if queued.member:
-                            # A named teammate takes the floor for this entry;
-                            # the rest of the queue keeps its order behind it
-                            await self._turn(inst, queued.text, trace_id, member=queued.member)
-                        else:
-                            if self._memory is not None:
-                                self._memory.working.add("user", queued.text)
-                            await self._turn(inst, queued.text, trace_id)
-                        if self.goal_driver is not None:
-                            self.goal_driver.maybe_schedule(inst.session)
+                        try:
+                            if queued.member:
+                                # A named teammate takes the floor for this entry;
+                                # the rest of the queue keeps its order behind it
+                                await _drive(queued.text, queued.member)
+                            else:
+                                if self._memory is not None:
+                                    self._memory.working.add("user", queued.text)
+                                await _drive(queued.text, "")
+                        except Exception as exc:
+                            log.exception("queued turn failed")
+                            await _reply_turn_failure(exc)
             except Exception as exc:
-                # The turn is backgrounded: the EventLoop no longer awaits the
-                # whole turn, so a failure must not become "Task exception was
-                # never retrieved" (same semantics as loop isolation). It must
-                # not become silence either: tell the user the turn died, or a
-                # provider/infrastructure failure would look like the agent
-                # simply ignoring the message.
-                log.exception("user turn failed")
-                try:
-                    await self._reply(
-                        f"(Turn failed: {exc})",
-                        trace_id=trace_id,
-                        session=inst.session,
-                        kind="error",
-                    )
-                except Exception:
-                    log.exception("publishing the turn-failure reply failed")
+                # Lock acquisition / scheduling bookkeeping failed: the same
+                # readable report, so the message never dies silently.
+                log.exception("turn scheduling failed")
+                await _reply_turn_failure(exc)
 
         self.track_background(asyncio.create_task(_run()))
 
     async def _turn(
         self, inst: SubagentInstance, text: str, trace_id: str, *, member: str = ""
     ) -> None:
+        # A stopped conversation revives on the next message: start() treats
+        # CANCELLED as terminal and would drop every later message without a
+        # trace, and the chat instance has no other way back (a FAILED
+        # instance revives implicitly in run_turn; this is the CANCELLED
+        # counterpart). Task instances stay terminal - a cancelled run must
+        # not resurrect itself.
+        if inst.task.conversational and inst.state.status is RunStatus.CANCELLED:
+            inst.state.status = RunStatus.WAITING_INPUT
         # Re-read round limits every turn: changes from the settings page apply
         # to the next message without restarting the conversation instance
         inst.apply_limits(limits_from_settings(self._settings))

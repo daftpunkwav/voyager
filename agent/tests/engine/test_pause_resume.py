@@ -110,6 +110,23 @@ class TestPauseResume:
         types = [e.type for _, e in app.log.read_after()]
         assert RuntimeEvent.AGENT_RESUMED in types
 
+    async def test_pause_checkpoint_keeps_mid_turn_snapshot(self, app) -> None:
+        """The turn-boundary snapshot written by start()'s finally must NOT
+        overwrite the pause's mid-turn snapshot: overwriting it (status PAUSED,
+        in_turn=False, no pending messages) reduces every resume to a full
+        re-run of the turn — duplicated tool side effects."""
+
+        dispatch = await app.master.dispatch_task("pausable snapshot", name="pausable_snap")
+        assert dispatch is not None
+        pause_run(app.spawner, app.master.chat, "pausable_snap")
+        app.llm_paced.gate.set()
+        assert await _wait(lambda: inst_paused(app, dispatch.id))
+
+        state = app.checkpoints.load(dispatch.state.run_id)
+        assert state.resume is not None
+        assert state.resume["in_turn"] is True
+        assert state.resume.get("pending_messages")
+
     async def test_pause_unknown_instance(self, app) -> None:
         from platform_contracts import ServiceError
 

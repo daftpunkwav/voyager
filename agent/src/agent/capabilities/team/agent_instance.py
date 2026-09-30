@@ -9,6 +9,8 @@ The agent's agent_instance tool binds this same capability.
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
+from dataclasses import replace
 from typing import Any
 
 from platform_capability import Registry, capability
@@ -16,11 +18,38 @@ from platform_contracts import DomainEvent, ErrorSuffix, ServiceError
 
 from agent.capabilities.deps import CapabilityDeps
 from agent.engine.spawn import Spawner
+from agent.orchestrator.dispatch import finish_board_run
 from agent.runtime.state import ResumeSnapshot, RunStatus
 
 #: Task references for the background resume run (create_task results must be
 #: held, otherwise the GC may reclaim the Task before completion)
 _bg_tasks: set[asyncio.Task] = set()
+
+
+def _reattach_board_task(deps: CapabilityDeps, inst, run_id: str) -> str:
+    """Restore the board linkage a resume snapshot does not carry: the row
+    this run executes is matched by run_id (which the checkpoint preserves)
+    and re-stamped onto the frozen TaskBook via replace. Returns the board
+    task id ("" = no live row: plain resume, no delivery close-out)."""
+    board = deps.task_board
+    if board is None:
+        return ""
+    try:
+        row = next(
+            (
+                r
+                for r in board.list()
+                if str(r.get("run_id") or "") == run_id
+                and r.get("status") in ("assigned", "running")
+            ),
+            None,
+        )
+    except Exception:  # noqa: BLE001  # a broken board must not block the resume itself
+        return ""
+    if row is None:
+        return ""
+    inst.task = replace(inst.task, board_task_id=str(row.get("id") or ""))
+    return str(row.get("id") or "")
 
 
 def _resolve(spawner: Spawner, chat: Any, id_or_name: str):
@@ -70,6 +99,13 @@ async def agent_instance_action(
         return {"pausing": inst.id, "name": inst.name, "status": "pause-requested"}
     if action == "resume":
         inst = deps.spawner.resume_from_checkpoint(run_id)
+        # Board-backed runs close out like dispatches: without the re-attached
+        # row the resumed run would finish with no delivery card and a board
+        # row stuck on running. The announcer is build-injected
+        # (master.announce_delivery); a deps without it keeps the legacy
+        # behavior (plain resume, no board close-out).
+        announce = getattr(deps, "board_announce", None)
+        board_id = _reattach_board_task(deps, inst, run_id) if announce is not None else ""
         out = {
             "resumed": inst.id,
             "run_id": run_id,
@@ -81,8 +117,15 @@ async def agent_instance_action(
 
             async def _run() -> None:
                 try:
-                    await deps.spawner.start(inst)
+                    result = await deps.spawner.start(inst)
                 except asyncio.CancelledError:
+                    # The board row must not linger as running: a cancelled
+                    # board-backed run closes out through the same failure
+                    # card + relay path as any other board outcome (best
+                    # effort - shutdown may already be tearing the bus down).
+                    if board_id:
+                        with suppress(Exception):
+                            await finish_board_run(announce, inst, error="cancelled")
                     raise
                 except Exception as exc:  # noqa: BLE001  # RunFailed sent; emit visible event
                     err = f"{type(exc).__name__}: {exc}"
@@ -101,6 +144,15 @@ async def agent_instance_action(
                         checkpoints.save(state)
                     except Exception:  # noqa: BLE001, S110
                         pass
+                    # Same completion wrapper as dispatch: the board row closes
+                    # and the delivery card goes out even on a failed resume
+                    if board_id:
+                        await finish_board_run(announce, inst, error=err)
+                else:
+                    # Same completion wrapper as dispatch: ok/degraded judgment
+                    # plus the structured delivery card for board-backed runs
+                    if board_id:
+                        await finish_board_run(announce, inst, result=result)
 
             task = asyncio.create_task(_run())
             _bg_tasks.add(task)
