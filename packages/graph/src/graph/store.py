@@ -197,12 +197,18 @@ class GraphStore:
             ]
             node_ids = {n["id"] for n in nodes}
             edges = []
-            for r in self._conn.execute(
-                f"SELECT {','.join(_EDGE_COLS)} FROM edges WHERE project = ?", (project,)
-            ):
-                e = _row(_EDGE_COLS, r)
-                if e["src"] in node_ids and e["dst"] in node_ids:
-                    edges.append(e)
+            # Membership is tested on the raw tuples (src/dst at fixed column
+            # positions, same convention as operations.find_path); dicts are
+            # materialized only for edges that pass, so a UI query limited to
+            # 200 nodes stops paying dict construction for the whole project
+            # edge table. Result set and table order are unchanged; an empty
+            # node set can never match an edge, so the scan is skipped.
+            if node_ids:
+                for r in self._conn.execute(
+                    f"SELECT {','.join(_EDGE_COLS)} FROM edges WHERE project = ?", (project,)
+                ):
+                    if r[2] in node_ids and r[3] in node_ids:
+                        edges.append(_row(_EDGE_COLS, r))
         return {"project": project, "nodes": nodes, "edges": edges}
 
     def subgraph(
@@ -224,12 +230,18 @@ class GraphStore:
         seen_edges: dict[str, dict] = {}
         frontier = {node_id}
         with self._lock:
-            all_edges = [
-                _row(_EDGE_COLS, r)
-                for r in self._conn.execute(
-                    f"SELECT {','.join(_EDGE_COLS)} FROM edges WHERE project = ?", (project,)
-                )
-            ]
+            # One scan builds the endpoint adjacency (same pattern as
+            # operations.find_path); each BFS layer then touches only edges
+            # incident to its frontier instead of rescanning the whole edge
+            # table (O(depth x E) -> O(E + visited edges)).
+            incident: dict[str, list[dict]] = {}
+            for r in self._conn.execute(
+                f"SELECT {','.join(_EDGE_COLS)} FROM edges WHERE project = ?", (project,)
+            ):
+                e = _row(_EDGE_COLS, r)
+                incident.setdefault(e["src"], []).append(e)
+                if e["dst"] != e["src"]:  # self-loops listed once; seen_edges dedupes anyway
+                    incident.setdefault(e["dst"], []).append(e)
             for _ in range(max(depth, 0) + 1):
                 if not frontier:
                     break
@@ -242,8 +254,8 @@ class GraphStore:
                     n = _row(_NODE_COLS, r)
                     seen_nodes[n["id"]] = n
                 nxt = set()
-                for e in all_edges:
-                    if e["src"] in frontier or e["dst"] in frontier:
+                for f in frontier:
+                    for e in incident.get(f, ()):
                         if not (edge_filter and e["type"] != edge_filter):
                             seen_edges[e["id"]] = e
                         # Traversal follows every edge regardless of the

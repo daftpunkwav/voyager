@@ -22,11 +22,21 @@ class CEngineClient:
     """HTTP + JSON-RPC client for the C engine sidecar. Empty base_url = not configured."""
 
     def __init__(
-        self, base_url: str, *, timeout: float = 300.0, poll_interval: float = 2.0
+        self,
+        base_url: str,
+        *,
+        timeout: float = 300.0,
+        poll_interval: float = 2.0,
+        index_timeout: float = 1800.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.poll_interval = poll_interval
+        #: Total wall-clock budget for one index_repository call (POST +
+        #: status polling). Generous for local repos; it only fires when the
+        #: engine reports indexing=True forever, which would otherwise poll
+        #: unbounded and hold the scheduler slot.
+        self.index_timeout = index_timeout
         self._rpc_id = 0
 
     async def health(self) -> bool:
@@ -70,9 +80,28 @@ class CEngineClient:
                     ErrorSuffix.INTERNAL,
                     f"C engine index start failed: HTTP {resp.status_code}",
                 )
+            deadline = asyncio.get_running_loop().time() + self.index_timeout
             while True:
+                if asyncio.get_running_loop().time() >= deadline:
+                    raise ServiceError(
+                        _DOMAIN,
+                        ErrorSuffix.UNAVAILABLE,
+                        f"C engine indexing did not finish within {self.index_timeout:g}s",
+                        hint="check the engine sidecar; retry the index when it is idle",
+                    )
                 await asyncio.sleep(self.poll_interval)
-                st = await client.get(f"{self.base_url}/api/index-status")
+                try:
+                    st = await client.get(f"{self.base_url}/api/index-status")
+                except httpx.HTTPError as exc:
+                    raise ServiceError(
+                        _DOMAIN, ErrorSuffix.UNAVAILABLE, f"C engine unreachable: {exc}"
+                    ) from exc
+                if st.status_code >= 400:
+                    raise ServiceError(
+                        _DOMAIN,
+                        ErrorSuffix.INTERNAL,
+                        f"C engine index status failed: HTTP {st.status_code}",
+                    )
                 status = st.json()
                 if not status.get("indexing", False):
                     if status.get("error"):
