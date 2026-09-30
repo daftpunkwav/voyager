@@ -162,6 +162,78 @@ class TestStdioSession:
         await session.aclose()
 
 
+# Spawns a grandchild that reports its own pid to a file and sleeps, then
+# exits immediately: the direct child is gone, the grandchild is orphaned and
+# still holds the inherited pipe handles - exactly the shape a launcher shim
+# (npx / .cmd) leaves behind.
+_ORPHANER_SCRIPT = (
+    "import subprocess, sys\n"
+    "subprocess.Popen([sys.executable, '-c', "
+    "\"import os, sys, time; open(sys.argv[1], 'w').write(str(os.getpid())); time.sleep(300)\","
+    " sys.argv[1]])\n"
+)
+
+
+def _pid_alive(pid: int) -> bool:
+    """Windows liveness probe without extra dependencies: an exited process
+    answers GetExitCodeProcess with something other than STILL_ACTIVE."""
+    import ctypes
+    from typing import Any, cast
+
+    k32 = cast(Any, getattr(ctypes, "windll", None))
+    if k32 is None:  # non-Windows: the test is skipped anyway
+        return False
+    kernel32 = k32.kernel32
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    STILL_ACTIVE = 259
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        return False
+    try:
+        code = ctypes.c_uint32()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return False
+        return code.value == STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="job-object tree kill is Windows-only")
+class TestStdioTreeTeardown:
+    async def test_aclose_reclaims_orphaned_grandchild(self, tmp_path: Any) -> None:
+        """The direct child exits on its own; the orphaned grandchild must
+        still die at aclose (kill-on-close job membership, not a parent-pid
+        walk) - terminate() alone never reaches it."""
+        pid_file = tmp_path / "grand_pid.txt"
+        session = StdioMcpSession(sys.executable, ["-c", _ORPHANER_SCRIPT, str(pid_file)])
+        await session.connect()
+        grand_pid = 0
+        try:
+            for _ in range(100):
+                if pid_file.exists():
+                    break
+                await asyncio.sleep(0.05)
+            assert pid_file.exists(), "grandchild never reported its pid"
+            grand_pid = int(pid_file.read_text().strip())
+            for _ in range(100):
+                proc = session._proc
+                if proc is not None and proc.returncode is not None:
+                    break
+                await asyncio.sleep(0.05)
+            assert session._proc is not None and session._proc.returncode is not None, (
+                "direct child never exited"
+            )
+            assert _pid_alive(grand_pid), "grandchild not running before teardown"
+        finally:
+            await session.aclose()
+        assert grand_pid > 0
+        for _ in range(100):
+            if not _pid_alive(grand_pid):
+                break
+            await asyncio.sleep(0.05)
+        assert not _pid_alive(grand_pid), "orphaned grandchild survived the tree kill"
+
+
 class TestSseResultParsing:
     def test_collects_data_lines_per_event(self) -> None:
         text = (

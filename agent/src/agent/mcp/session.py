@@ -35,6 +35,8 @@ from typing import Any, Protocol, runtime_checkable
 
 import httpx
 
+from ._win_job import ProcessTreeJob, assign_tree
+
 #: Protocol version used in the initialize handshake (long-term compatibility line)
 PROTOCOL_VERSION = "2024-11-05"
 
@@ -175,7 +177,14 @@ class _McpProtocol:
 
 class StdioMcpSession(_McpProtocol):
     """stdio subprocess session. command+args are exec'd directly
-    (shell=False, never shell=True)."""
+    (shell=False, never shell=True).
+
+    Teardown kills the whole process tree, not just the direct child: the
+    command is frequently a launcher shim (npx/uvx/.cmd) whose real server is
+    a grandchild. On Windows the child is assigned to a kill-on-close Job
+    Object (_win_job); off-Windows (or when the assignment fails) only the
+    direct child is terminated - the previous behavior.
+    """
 
     def __init__(self, command: str, args: list[str], cwd: str | None = None) -> None:
         super().__init__()
@@ -183,6 +192,7 @@ class StdioMcpSession(_McpProtocol):
         self._args = list(args)
         self._cwd = cwd
         self._proc: asyncio.subprocess.Process | None = None
+        self._tree_job: ProcessTreeJob | None = None
         self._rpc_lock = (
             asyncio.Lock()
         )  # serialize request-response: concurrent reads would steal each other's response lines
@@ -196,6 +206,9 @@ class StdioMcpSession(_McpProtocol):
             stderr=asyncio.subprocess.DEVNULL,  # subprocess logs must not mix into the protocol stream
             cwd=self._cwd,
         )
+        # Job-assign right after spawn: from here on the whole tree dies when
+        # the job handle closes (also on this process's exit).
+        self._tree_job = assign_tree(self._proc.pid)
 
     async def _send(self, payload: dict) -> None:
         proc = self._proc
@@ -239,22 +252,53 @@ class StdioMcpSession(_McpProtocol):
 
     async def aclose(self) -> None:
         proc, self._proc = self._proc, None
-        if proc is None or proc.returncode is not None:
-            return
-        with suppress(Exception):
-            proc.terminate()
-            try:
-                await asyncio.wait_for(proc.wait(), 5)
-            except TimeoutError:
-                proc.kill()
-
-    def close_sync(self) -> None:
-        """Best-effort teardown without an event loop (AgentApp.close is sync):
-        terminate directly, no waiting."""
-        proc, self._proc = self._proc, None
+        job, self._tree_job = self._tree_job, None
         if proc is not None and proc.returncode is None:
             with suppress(Exception):
                 proc.terminate()
+                try:
+                    await asyncio.wait_for(proc.wait(), 5)
+                except TimeoutError:
+                    proc.kill()
+                    # Reap the killed child so the transport is fully torn
+                    # down (kill() does not wait).
+                    with suppress(Exception):
+                        await proc.wait()
+        if proc is not None:
+            self._close_pipes(proc)
+        if job is not None:
+            # Kill-on-close: reclaims shim grandchildren the direct terminate
+            # cannot reach, on every path (and stays quiet when all died).
+            job.close()
+
+    @staticmethod
+    def _close_pipes(proc: asyncio.subprocess.Process) -> None:
+        """Close the child's pipe transports explicitly: a tree member may
+        still hold the write ends, so the read pipes never see EOF and
+        dropped transports would only warn at GC (handle leak)."""
+        with suppress(Exception):
+            if proc.stdin is not None:
+                proc.stdin.close()
+        # No public API closes the subprocess transport itself; every pipe
+        # transport hangs off it.
+        transport = getattr(proc, "_transport", None)
+        if transport is not None:
+            with suppress(Exception):
+                transport.close()
+
+    def close_sync(self) -> None:
+        """Best-effort teardown without an event loop (AgentApp.close is sync):
+        terminate directly, no waiting. The job handle closes synchronously,
+        which is what reclaims the rest of the tree here."""
+        proc, self._proc = self._proc, None
+        job, self._tree_job = self._tree_job, None
+        if proc is not None:
+            if proc.returncode is None:
+                with suppress(Exception):
+                    proc.terminate()
+            self._close_pipes(proc)
+        if job is not None:
+            job.close()
 
 
 def _sse_result(text: str) -> Any:
