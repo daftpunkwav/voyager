@@ -28,6 +28,32 @@ from typing import Any
 # (prevents ../../ escaping the checkpoints directory)
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
+#: Resident tail cap for RunState.steps. The list only feeds last-step displays
+#: and reverse scans over the CURRENT turn (surrender stamp / degraded flag);
+#: the durable execution trail lives in the trajectory projection, not here.
+#: Without a cap a long-lived conversational instance accumulates every step of
+#: its lifetime and every checkpoint save re-serializes all of it (O(lifetime)
+#: per save, O(n^2) cumulative bytes written); trimming the head bounds both.
+#: A hardcoded constant, not a settings key.
+MAX_STATE_STEPS = 200
+
+#: Cap for one top-level string field of a step's detail inside the STATE copy
+#: (llm steps carry the full round text / reasoning, tool steps the verbatim
+#: argument JSON). The event payload keeps the verbatim bytes — the UI reads
+#: the thinking text from the event stream / trajectory projection, never from
+#: the checkpoint — so the state copy only needs enough for the reverse scans
+#: and last-step display. Bounds each step entry so the capped list cannot
+#: still carry megabytes of verbatim text into every checkpoint write.
+MAX_STEP_DETAIL_CHARS = 4000
+
+
+def _capped(value: Any) -> Any:
+    """One detail field for the state copy: long strings truncated with a
+    visible marker, everything else verbatim."""
+    if isinstance(value, str) and len(value) > MAX_STEP_DETAIL_CHARS:
+        return value[:MAX_STEP_DETAIL_CHARS] + " …[截断]"
+    return value
+
 
 def _safe_run_id(run_id: str) -> str:
     if not _RUN_ID_RE.match(run_id):
@@ -116,6 +142,10 @@ class RunState:
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     status: RunStatus = RunStatus.PENDING
     steps: list[Step] = field(default_factory=list)
+    #: Monotone step counter: the tail cap may drop old entries from `steps`,
+    #: so `len(steps) + 1` would collide after a trim; consumers compare
+    #: step.n (turn scoping in engine.turn), which stays strictly increasing.
+    next_n: int = 0
     rounds: int = 0
     tool_calls: int = 0
     delegation_depth: int = (
@@ -132,10 +162,21 @@ class RunState:
     def add_step(
         self, kind: str, name: str, summary: str, detail: dict[str, Any] | None = None
     ) -> Step:
+        # Copy then cap: the detail dict is shared with the event payload, whose
+        # verbatim bytes must not be touched (only this state-local copy is
+        # bounded — see MAX_STEP_DETAIL_CHARS).
         step = Step(
-            n=len(self.steps) + 1, kind=kind, name=name, summary=summary, detail=dict(detail or {})
+            n=self.next_n + 1,
+            kind=kind,
+            name=name,
+            summary=summary,
+            detail={k: _capped(v) for k, v in (detail or {}).items()},
         )
+        self.next_n = step.n
         self.steps.append(step)
+        over = len(self.steps) - MAX_STATE_STEPS
+        if over > 0:
+            del self.steps[:over]
         return step
 
     def to_dict(self) -> dict[str, Any]:
@@ -148,6 +189,9 @@ class RunState:
         data = dict(data)
         data["status"] = RunStatus(data["status"])
         data["steps"] = [Step(**s) for s in data.get("steps", [])]
+        # Legacy checkpoints predate the counter: resume numbering continues
+        # after the loaded tail instead of colliding with it.
+        data.setdefault("next_n", max((s.n for s in data["steps"]), default=0))
         data.setdefault("started_ts", 0.0)  # backward compatibility with old checkpoints
         return cls(**data)
 

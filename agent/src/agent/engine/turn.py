@@ -180,13 +180,15 @@ def _build_turn_messages(
     return messages
 
 
-def _surrender_reason(inst: SubagentInstance, step_base: int) -> str:
+def _surrender_reason(inst: SubagentInstance, step_base_n: int) -> str:
     """The budget-exhaustion stamp among THIS turn's steps (empty when the
-    turn ended normally). The scan is scoped to steps[step_base:] because
-    state.steps is never cleared: an unscoped reverse scan would re-stamp an
-    older turn's reason onto the current one."""
-    for step in reversed(inst.state.steps[step_base:]):
-        if step.kind == "system" and step.name == "surrender":
+    turn ended normally). The scan is scoped by step.n — strictly increasing
+    across trims (the resident steps list drops its head once past
+    MAX_STATE_STEPS, so index slices would misattribute) — because
+    state.steps is never cleared wholesale: an unscoped reverse scan would
+    re-stamp an older turn's reason onto the current one."""
+    for step in reversed(inst.state.steps):
+        if step.kind == "system" and step.name == "surrender" and step.n > step_base_n:
             return str((step.detail or {}).get("reason") or "")
     return ""
 
@@ -308,11 +310,13 @@ async def _run_turn(
     inst: SubagentInstance, user_text: str | None, view: Persona | None, was_paused: bool
 ) -> str:
     # Fresh turn: drop any previous turn's cap-surrender stamp (it must not
-    # claim this turn), and remember the step-trail length so the finally's
-    # reverse scan only sees THIS turn's steps — state.steps is never cleared,
-    # so an unscoped scan would re-stamp an older turn's reason here.
+    # claim this turn), and remember the step counter so the finally's
+    # reverse scan only sees THIS turn's steps — state.steps is never cleared
+    # wholesale (bounded tail only), so an unscoped scan would re-stamp an
+    # older turn's reason here. step.n is monotone across trims; len() would
+    # not be.
     inst.state.surrender_reason = ""
-    step_base = len(inst.state.steps)
+    step_base_n = inst.state.steps[-1].n if inst.state.steps else 0
     if was_paused:
         await inst.events.emit(
             RuntimeEvent.AGENT_RESUMED, run_id=inst.state.run_id, subagent=_speaker_label(inst)
@@ -523,7 +527,7 @@ async def _run_turn(
         finally:
             # Budget-exhaustion endings return normally; stamp the reason so
             # wait/dispatch callers can tell a truncated run from a real one
-            inst.state.surrender_reason = _surrender_reason(inst, step_base)
+            inst.state.surrender_reason = _surrender_reason(inst, step_base_n)
             # The turn is over (success or failure): start()'s finally already
             # persisted the turn-boundary snapshot and no further step events
             # will fire; clear _turn_messages to stop mis-capturing

@@ -466,6 +466,23 @@ class TrajectoryStore:
             self._conn.commit()
         return int(cur.rowcount or 0)
 
+    def purge_steps_older_than_days(self, days: int) -> int:
+        """Startup retention for the steps/runs projection: a display surface
+        whose source rows (agent.step in the event log) are purged after 24h,
+        so old projections can never be re-folded — without this the tables
+        grow monotonically forever, and each step row carries the full detail
+        JSON (round text / reasoning included). Only TERMINAL runs are removed
+        (ended_ts set): alive/paused runs stay listed and resumable. Returns
+        the deleted step-row count."""
+        if days <= 0:
+            return 0
+        cutoff = time.time() - days * 86400.0
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM steps WHERE ts < ?", (cutoff,))
+            self._conn.execute("DELETE FROM runs WHERE ended_ts > 0 AND ended_ts < ?", (cutoff,))
+            self._conn.commit()
+        return int(cur.rowcount or 0)
+
     def raw_round(self, run_id: str, round: int) -> dict[str, Any] | None:
         """Full raw bodies of one round; None when not recorded. `round` is
         the run-scoped key; the returned `round` is the display number

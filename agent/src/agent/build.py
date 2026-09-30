@@ -145,8 +145,9 @@ RAW_LOG_RETENTION_DAYS = 7
 #: Every bounded-growth policy over the agent's runtime data, indexed so
 #: "what bounds X, and where do I change it" starts from one list:
 #:   - events.db display streams: EVENTS_RETENTION below (24h)
-#:   - trajectory.db raw LLM rounds: RAW_LOG_RETENTION_DAYS below
-#:     (7d default; agent.retention.raw_log_days setting)
+#:   - trajectory.db steps/runs projection + raw LLM rounds:
+#:     RAW_LOG_RETENTION_DAYS below (7d default; agent.retention.raw_log_days
+#:     setting; one knob bounds the whole store)
 #:   - meter.db daily rows: startup purge, 90d (build_agent)
 #:   - memory episodes: agent.memory.retention_days setting (0 = keep)
 #:   - tool spill files (workspace/spill): MAX_AGE_SECONDS in
@@ -165,9 +166,12 @@ RAW_LOG_RETENTION_DAYS = 7
 #:   - audit.db (data root): startup purge, 90d (platform_capability.audit_db)
 #:   - llm.db usage rows: startup purge, 90d (llm.store / llm.wiring)
 #:   - graph index.db terminal rows: 500-row startup prune (graph.index_queue)
-#: Deliberately not age-bounded (durable meaning): sessions.db, trajectory
-#: steps/runs, checkpoints (pending/running durable-queue rows and cron
-#: definitions see the queue entry above).
+#: Deliberately not age-bounded (durable meaning): sessions.db, checkpoints
+#: (pending/running durable-queue rows and cron definitions see the queue
+#: entry above). Trajectory steps/runs left this list: their source events
+#: (agent.step) are purged from the log after 24h, so the projection beyond
+#: the raw-log horizon is a stale one-way copy, not rebuildable durable data
+#: (see the trajectory entry above).
 #: Keep the map in sync when a store gains or loses a bound; each entry's
 #: rationale lives with its constant, not here.
 
@@ -1012,11 +1016,16 @@ def build_agent(
     # bodies are full per-round transcripts and would grow without bound.
     # agent.retention.raw_log_days overrides the constant; an unreadable
     # value (isolated tests without the key registered) keeps the default.
+    # The same knob bounds the steps/runs projection: its source events are
+    # purged from the log after 24h, so rows older than the raw horizon are
+    # a stale one-way copy (see TrajectoryStore.purge_steps_older_than_days).
     try:
         raw_days = int(settings.get("agent.retention.raw_log_days"))
     except ServiceError:
         raw_days = RAW_LOG_RETENTION_DAYS
-    trajectory.purge_raw_older_than_days(max(1, raw_days))
+    raw_days = max(1, raw_days)
+    trajectory.purge_raw_older_than_days(raw_days)
+    trajectory.purge_steps_older_than_days(raw_days)
 
     master.sessions.set_raw_fn(_make_raw_round_recorder(trajectory))
     session_index.catch_up()  # fold whatever landed while the process was down
