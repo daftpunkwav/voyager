@@ -52,6 +52,10 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
             # Per-item approval is cumulative (never revokes prior approvals); revocation
             # happens only by removing the whole server.
             approved = sorted(set(prev) | set(names))
+            # Re-read before the write: the preview above is the consent act and
+            # persisted its snapshot into the entry, while upsert_config replaces
+            # the whole record — writing the pre-preview read back would erase it.
+            cfg = deps.mcp.find_config(id) or cfg
         await deps.mcp.upsert_config({**cfg, "approved": approved}, _actor)
         mounted = deps.mcp.remount(id, approved)
         return {

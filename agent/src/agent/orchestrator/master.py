@@ -387,8 +387,13 @@ class Master:
             # (handoff -> claim -> notice -> handoff ...) must degrade to a
             # quiet receipt instead of spending another LLM turn.
             if self._wake_budget is not None and not self._wake_budget.allow(session):
+                # Display name, not the persona struct key: this line lands on
+                # the user's timeline (same quiet-receipt contract as the
+                # announce_delivery branch above).
+                preset = resolve_persona(claimant)
+                shown = preset.display_name if preset is not None else claimant
                 await self.reply(
-                    f"[task-claim] {claimant} 认领了「{title}」,详情见任务板。",
+                    f"[task-claim] {shown} 认领了「{title}」,详情见任务板。",
                     session=session,
                     kind="notice",
                 )

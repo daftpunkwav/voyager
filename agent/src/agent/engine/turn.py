@@ -198,10 +198,14 @@ def _write_back_compaction(
     replaced the condensed middle, so writing the wire view back keeps later
     turns from re-summarizing the same span.
 
-    The delivery joins the visible texts with "\\n\\n", so an entry is already
-    carried by the closing message exactly when it IS one of those segments.
-    Substring containment would also drop any entry that merely happens to
-    appear inside the result (a short "好" inside "好的,这是答案") — a silent
+    The closing message carries the delivery verbatim, so the wire entry that
+    IS the delivery must not double up in history. The delivery is the final
+    round's own text: matched whole against the entry, per "\\n\\n" segment
+    (the entry may be a shorter round text the delivery re-uses as a
+    paragraph), and as a prefix extension — an output-cap delivery is the
+    entry's text plus a trailing truncation-note segment. Substring
+    containment would also drop any entry that merely happens to appear
+    inside the result (a short "好" inside "好的,这是答案") — a silent
     history hole.
 
     _transcript_view folds a teammate's speaker into a leading 【display
@@ -225,9 +229,12 @@ def _write_back_compaction(
         elif role == "assistant":
             text = str(m.get("content", ""))
             # A lead-in the conversational delivery already carries (the
-            # closing message joins the visible round texts into one
-            # self-contained message) would duplicate in history
-            if text and text in delivered_segments:
+            # closing message is self-contained) would duplicate in history
+            if text and (
+                text == result
+                or text in delivered_segments
+                or result.startswith(f"{text}\n\n")  # delivery = entry + truncation note
+            ):
                 continue
             if text:
                 entry: dict[str, Any] = {"role": "assistant", "content": text}

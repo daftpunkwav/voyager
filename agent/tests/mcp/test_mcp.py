@@ -955,6 +955,26 @@ class TestAgentPreviewScope:
         (entry,) = rapp.mcp.configs()
         assert entry["consent"] == ["fetch", "fresh", "search"]  # user act re-baselines
 
+    async def test_per_item_approve_keeps_persisted_consent(self, rapp) -> None:
+        """Per-item approval previews (a consent act, persisted into the entry)
+        and then rewrites the whole config entry: the approve write must carry
+        the consent the preview just persisted, not the stale pre-preview read
+        (upsert_config replaces the whole record)."""
+        await _add(rapp)  # the add-time preview persists consent for search+fetch
+        # the server grew a tool after the add: the approve-time preview is a
+        # NEW consent act and must survive the approve write that follows it
+        rapp.sessions["demo"].TOOLS = [
+            *FakeSession.TOOLS,
+            {"name": "fresh", "description": "New tool"},
+        ]
+        out = await execute(
+            rapp.registry, "approve_mcp_tools", USER_CTX, {"id": "demo", "names": ["search"]}
+        )
+        assert out["approved"] == ["search"]
+        (entry,) = rapp.mcp.configs()
+        assert entry["approved"] == ["search"]
+        assert entry["consent"] == ["fetch", "fresh", "search"]  # the act survived the rewrite
+
     async def test_startup_mounts_only_consented_tools(self, tmp_path) -> None:
         """Startup reconnect mounts through the hot-refresh consent gate: a
         per-item approval mounts only the approved names even though the

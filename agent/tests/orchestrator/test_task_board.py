@@ -561,6 +561,42 @@ class TestTaskClaimNotice:
         finally:
             app.close()
 
+    def test_over_budget_claim_degrades_to_display_name_receipt(self, tmp_path) -> None:
+        """Same quiet-receipt contract as announce_delivery: the over-budget
+        claim notice lands on the user's timeline with the member's display
+        name (never the persona struct key), and spends no LLM turn."""
+        app, fake = self._app(tmp_path, [])
+        try:
+            budget = _ExhaustedBudget()
+            app.master._wake_budget = budget
+
+            async def _scenario() -> None:
+                app.master.sessions.create(session_id="s-claim-quiet", title="t")
+                board = app.master._task_board
+                assert board is not None
+                row = board.publish(
+                    title="讲 real-mock",
+                    brief="三句话",
+                    session="s-claim-quiet",
+                    publisher="orchestrator",
+                )
+                await app.master.notify_task_claim(row, "explainer", "")
+                await _drain(app)
+
+            asyncio.run(_scenario())
+            messages = [e.payload for _, e in app.log.read_after(types=[DomainEvent.AGENT_MESSAGE])]
+            receipts = [
+                p for p in messages if str(p.get("content") or "").startswith("[task-claim]")
+            ]
+            assert len(receipts) == 1
+            assert receipts[0]["kind"] == "notice"
+            assert "Elio" in receipts[0]["content"] and "explainer" not in receipts[0]["content"]
+            # the degraded branch spends nothing: no relay turn, no budget
+            assert fake.calls == []
+            assert budget.recorded == 0
+        finally:
+            app.close()
+
     def test_claim_notice_failure_is_swallowed(self, tmp_path) -> None:
         """A claim wake whose session cannot resolve must not break the claim
         path: the wakeup is dropped with a warning, nothing is raised."""

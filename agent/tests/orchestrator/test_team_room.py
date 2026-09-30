@@ -12,7 +12,7 @@ import pytest
 from agent.build import build_agent
 from agent.capabilities.deps import CapabilityDeps
 from agent.capabilities.team.subagent import subagent_action
-from agent.engine.turn import _transcript_view
+from agent.engine.turn import _transcript_view, _write_back_compaction
 from agent.llm import FakeLLM, LLMReply
 from agent.orchestrator.master import _parse_mention
 from agent.personas import TEAM_KEYS, resolve_persona
@@ -145,6 +145,37 @@ class TestSummaryWriteBack:
         # history keeps raw text: no 【name】 prefix leaks back in (the view
         # re-prefixes on the next turn, exactly once)
         assert all("【" not in str(m.get("content", "")) for m in inst.history)
+
+    def test_write_back_dedups_delivery_shapes(self) -> None:
+        """The delivery is the final round's own text (single-delivery
+        contract): whole, per-segment, and prefix-extension (truncation note)
+        wire entries ride in the closing message and must not double up; a
+        distinct round narration stays."""
+        llm = FakeLLM([LLMReply(text="done")])
+        inst = self._inst(llm, [])
+        messages = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "q"},
+            {"role": "assistant", "content": "第一段\n\n第二段"},  # == delivery
+            {"role": "assistant", "content": "第二段"},  # == one segment
+            {"role": "assistant", "content": "独立旁白"},  # not part of the delivery
+        ]
+        _write_back_compaction(inst, messages, "第一段\n\n第二段")
+        assert [m["content"] for m in inst.history] == ["q", "独立旁白"]
+
+    def test_write_back_dedups_truncated_delivery(self) -> None:
+        """An output-cap delivery is the wire entry's text plus a trailing
+        truncation-note segment: the raw entry must not duplicate beside the
+        closing (which carries answer + note for the next turn)."""
+        llm = FakeLLM([LLMReply(text="done")])
+        inst = self._inst(llm, [])
+        messages = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "q"},
+            {"role": "assistant", "content": "第一段\n\n第二段"},  # delivery minus note
+        ]
+        _write_back_compaction(inst, messages, "第一段\n\n第二段\n\n[输出截断] 答案不完整")
+        assert [m["content"] for m in inst.history] == ["q"]
 
 
 class TestMemberTurn:
