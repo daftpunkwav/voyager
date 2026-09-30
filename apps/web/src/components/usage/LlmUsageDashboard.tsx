@@ -52,7 +52,7 @@ function normalizeUsage(raw: unknown): LlmUsageSummary {
         output: m.output ?? 0,
         total_tokens: m.total_tokens ?? m.input + m.output,
         calls: m.calls ?? 0,
-        cost: m.cost,
+        cost_usd: m.cost_usd,
       }))
     : [];
   const byDay = Array.isArray(u.by_day)
@@ -65,7 +65,7 @@ function normalizeUsage(raw: unknown): LlmUsageSummary {
         prompt_uncached_tokens: d.prompt_uncached_tokens,
         completion_tokens: d.completion_tokens,
         calls: d.calls ?? 0,
-        cost: d.cost,
+        cost_usd: d.cost_usd,
         by_model: d.by_model,
       }))
     : [];
@@ -74,7 +74,6 @@ function normalizeUsage(raw: unknown): LlmUsageSummary {
   return {
     total_input_tokens: totalInput,
     total_output_tokens: totalOutput,
-    total_cost: u.total_cost,
     by_model: byModel,
     by_day: byDay,
     totals: u.totals,

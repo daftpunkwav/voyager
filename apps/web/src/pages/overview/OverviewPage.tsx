@@ -496,14 +496,14 @@ export function OverviewPage() {
                   className={`trending-card ${GLASS_INNER}`}
                   data-testid="overview-trending-card"
                   style={{ ['--card-w' as string]: `${widthPct.toFixed(2)}%` }}
-                  href={safeHttpUrl(r.url)}
+                  href={safeHttpUrl(r.html_url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   onMouseEnter={(event) => handleTrendingCardEnter(r, event)}
                   onMouseLeave={handleTrendingCardLeave}
                   onMouseMove={handleTrendingCardMove}
                 >
-                  <div className={`trending-rank ${GLASS_CHIP}`}>{r.rank ?? index + 1}</div>
+                  <div className={`trending-rank ${GLASS_CHIP}`}>{index + 1}</div>
                   <div className="trending-body">
                     <div className="trending-name">
                       <span className="owner">{owner}</span>

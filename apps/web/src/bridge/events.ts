@@ -30,7 +30,9 @@ export const EventType = {
   AGENT_DELTA: 'agent.delta',
   /** A dispatched teammate's structured delivery card (full content + status) */
   AGENT_DELIVERY: 'agent.delivery',
-  /** Agent observation notice (resource ready etc.; acted = auto-dispatched) */
+  /** Agent observation notice (resource ready etc.; acted = auto-dispatched).
+   *  Reserved: no publisher or subscriber exists yet; mirrors the backend
+   *  platform_contracts.DomainEvent.AGENT_OBSERVE. */
   AGENT_OBSERVE: 'agent.observe',
   /** L1 permission notice (deliberately not surfaced live: no toast, no
    *  timeline entry; the step trail and the activity page carry the calls) */

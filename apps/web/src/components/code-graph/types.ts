@@ -50,12 +50,12 @@ export type GraphNode = CodeGraphNode;
 export type GraphEdge = CodeGraphEdge;
 export type GraphData = CodeGraphData;
 
+/** Project index status as derived from list_index_jobs (api/codeGraph maps
+ *  the raw queue row; fields the queue does not persist are not declared). */
 export interface GraphIndexStatus {
   project_id: string;
+  /** The backend repo_path (the local clone directory). */
   engine_project: string;
-  local_path?: string | null;
-  head_sha?: string | null;
-  branch?: string | null;
   status:
     | 'NONE'
     | 'QUEUED'
@@ -65,12 +65,5 @@ export interface GraphIndexStatus {
     | 'STALE'
     | 'CLONE_FAILED'
     | 'INDEX_FAILED';
-  /** The index_jobs model does not persist the mode; undefined when the data source omits it. */
-  index_mode?: 'fast' | 'moderate' | 'full';
-  node_count?: number | null;
-  edge_count?: number | null;
-  indexed_at?: string | null;
   error?: string | null;
-  error_kind?: 'network' | 'service' | 'cancelled' | 'unknown' | null;
-  cancel_requested?: boolean;
 }

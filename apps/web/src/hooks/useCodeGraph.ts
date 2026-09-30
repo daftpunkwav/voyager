@@ -64,7 +64,7 @@ export function useCodeGraph(
     enabled: Boolean(projectId) && opts.enabled,
     queryFn: async () => {
       const res = await getCodeGraph(requireProjectId(projectId), {
-        max_nodes: opts.maxNodes,
+        limit: opts.maxNodes,
       });
       return { data: res, render: toRenderGraph(res) };
     },
@@ -77,8 +77,8 @@ export function useTriggerIndex(
 ) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (mode: 'fast' | 'moderate' | 'full' = 'moderate') => {
-      return triggerCodeGraphIndex(requireProjectId(projectId), { mode });
+    mutationFn: async () => {
+      return triggerCodeGraphIndex(requireProjectId(projectId));
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['graph-index-status', projectId] });
@@ -93,8 +93,8 @@ export function useRefreshIndex(
 ) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (mode: 'fast' | 'moderate' | 'full' = 'moderate') => {
-      return refreshCodeGraphIndex(requireProjectId(projectId), { mode });
+    mutationFn: async () => {
+      return refreshCodeGraphIndex(requireProjectId(projectId));
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['graph-index-status', projectId] });

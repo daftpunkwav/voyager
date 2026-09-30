@@ -12,7 +12,10 @@
  *   kept as fallback when the backend is down)
  * - Apply notes.ui.* setting changes and notes.ui.changed snapshots from
  *   agents, including open/index actions and the explain quote
- * - Invalidate notes queries on note.* lifecycle events
+ * - Invalidate notes queries on note.* lifecycle events except note.edited:
+ *   the gateway chat stream deliberately excludes it (editor autosave noise,
+ *   see gateway chat.py _STREAM_TYPES), so that entry would never fire; the
+ *   list realigns on the next fetch instead
  */
 
 import { useQueryClient } from '@tanstack/react-query';
@@ -31,7 +34,6 @@ import {
 
 const NOTE_EVENTS = [
   EventType.NOTE_CREATED,
-  EventType.NOTE_EDITED,
   EventType.NOTE_DELETED,
   EventType.NOTE_RESTORED,
   EventType.NOTE_PURGED,
@@ -86,7 +88,7 @@ function useNotesUiBridge() {
 
     const offNotes = subscribe([...NOTE_EVENTS], (event) => {
       void qc.invalidateQueries({ queryKey: ['notes'] });
-      if (event.type === EventType.NOTE_EDITED || event.type === EventType.NOTE_CREATED) {
+      if (event.type === EventType.NOTE_CREATED) {
         const nid = event.payload.note_id;
         if (typeof nid === 'string' && nid) {
           void qc.invalidateQueries({ queryKey: ['note', nid] });

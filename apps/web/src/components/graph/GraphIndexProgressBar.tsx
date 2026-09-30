@@ -7,10 +7,11 @@
  *
  * Responsibilities:
  * - Poll index statuses (more often while tasks are active) and open a tabbed modal
- * - Run cancel, retry and reindex mutations with query cache invalidation
+ * - Run cancel (queued jobs only, by queue id), retry and delete mutations
+ *   with query cache invalidation
  * - List per-task details under the ready / running / failed tabs
  */
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -22,19 +23,15 @@ import {
 } from '@/api/codeGraph';
 import { getGraph } from '@/api/graph';
 import { ModalOverlay } from '@/components/common/ModalOverlay';
-import { Popover } from '@/components/common/Popover';
 import { confirmDialog } from '@/stores/uiStore';
 import { classifyErrorKind } from '@/components/graph/l0EdgeTypes';
 
-type IndexMode = 'fast' | 'moderate' | 'full';
-
 type IndexRow = {
+  id: string;
   project_id: string;
   status: string;
   error?: string | null;
   error_kind?: string | null;
-  index_mode?: string;
-  node_count?: number | null;
   engine_project?: string;
 };
 
@@ -59,63 +56,8 @@ function statusLabel(t: TFunction, status: string): string {
   return key ? t(key) : status;
 }
 
-const MODE_OPTIONS: { id: IndexMode; label: string }[] = [
-  { id: 'fast', label: 'graph:indexMode.fast' },
-  { id: 'moderate', label: 'graph:indexMode.moderate' },
-  { id: 'full', label: 'graph:indexMode.full' },
-];
-
 function shortId(id: string): string {
   return id.length > 10 ? `${id.slice(0, 8)}…` : id;
-}
-
-function ModeMenu({
-  disabled,
-  onPick,
-  label,
-}: {
-  disabled?: boolean;
-  onPick: (mode: IndexMode) => void;
-  label: string;
-}) {
-  const { t } = useTranslation('graph');
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  return (
-    <div className="graph-index-modal__menu" ref={rootRef}>
-      <button
-        type="button"
-        disabled={disabled}
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        {label}
-      </button>
-      <Popover
-        open={open}
-        onClose={() => setOpen(false)}
-        anchorRef={rootRef}
-        direction="down"
-        role="menu"
-        className="graph-index-modal__menu-panel"
-      >
-        {MODE_OPTIONS.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onPick(m.id);
-            }}
-          >
-            {t(m.label)}
-            <span className="muted">{m.id}</span>
-          </button>
-        ))}
-      </Popover>
-    </div>
-  );
 }
 
 function FailedRow({
@@ -127,7 +69,7 @@ function FailedRow({
 }: {
   row: IndexRow;
   label: string;
-  onRetry: (mode: IndexMode) => void;
+  onRetry: () => void;
   onDelete: () => void;
   busy?: boolean;
 }) {
@@ -140,10 +82,7 @@ function FailedRow({
     <li className="graph-index-modal__row is-failed">
       <div className="graph-index-modal__row-main">
         <strong>{label}</strong>
-        <span className="graph-index-modal__phase">
-          {statusLabel(t, row.status)}
-          {row.index_mode ? ` · ${row.index_mode}` : ''}
-        </span>
+        <span className="graph-index-modal__phase">{statusLabel(t, row.status)}</span>
         <button
           type="button"
           className="graph-index-modal__err-toggle"
@@ -160,7 +99,9 @@ function FailedRow({
         )}
       </div>
       <div className="graph-index-modal__actions">
-        <ModeMenu disabled={busy} label={t('graph:index.retry')} onPick={onRetry} />
+        <button type="button" disabled={busy} onClick={onRetry}>
+          {t('graph:index.retry')}
+        </button>
         <button type="button" className="is-danger" disabled={busy} onClick={onDelete}>
           {t('graph:action.delete')}
         </button>
@@ -224,7 +165,7 @@ export function GraphIndexProgressBar() {
   };
 
   const cancel = useMutation({
-    mutationFn: (projectId: string) => cancelCodeGraphIndex(projectId),
+    mutationFn: (jobId: string) => cancelCodeGraphIndex(jobId),
     onSuccess: invalidate,
   });
 
@@ -234,8 +175,7 @@ export function GraphIndexProgressBar() {
   });
 
   const reindex = useMutation({
-    mutationFn: ({ projectId, mode }: { projectId: string; mode: IndexMode }) =>
-      triggerCodeGraphIndex(projectId, { mode }),
+    mutationFn: (projectId: string) => triggerCodeGraphIndex(projectId),
     onSuccess: invalidate,
   });
 
@@ -348,7 +288,7 @@ export function GraphIndexProgressBar() {
                       row={row}
                       label={label}
                       busy={busy}
-                      onRetry={(mode) => reindex.mutate({ projectId: row.project_id, mode })}
+                      onRetry={() => reindex.mutate(row.project_id)}
                       onDelete={() => confirmDelete(row, label)}
                     />
                   );
@@ -357,31 +297,32 @@ export function GraphIndexProgressBar() {
                   <li key={row.project_id} className={`graph-index-modal__row is-${tab}`}>
                     <div className="graph-index-modal__row-main">
                       <strong>{label}</strong>
-                      <span className="graph-index-modal__phase">
-                        {statusLabel(t, row.status)}
-                        {row.index_mode ? ` · ${row.index_mode}` : ''}
-                        {row.node_count != null
-                          ? t('graph:index.nodeCount', { num: row.node_count })
-                          : ''}
-                      </span>
+                      <span className="graph-index-modal__phase">{statusLabel(t, row.status)}</span>
                     </div>
                     <div className="graph-index-modal__actions">
                       {tab === 'running' && (
                         <button
                           type="button"
-                          disabled={busy}
-                          onClick={() => cancel.mutate(row.project_id)}
+                          disabled={busy || row.status !== 'QUEUED'}
+                          title={
+                            row.status !== 'QUEUED'
+                              ? t('graph:index.cancelQueuedOnly')
+                              : undefined
+                          }
+                          onClick={() => cancel.mutate(row.id)}
                         >
                           {t('graph:action.cancel')}
                         </button>
                       )}
                       {tab === 'ready' && (
                         <>
-                          <ModeMenu
+                          <button
+                            type="button"
                             disabled={busy}
-                            label={t('graph:index.reindex')}
-                            onPick={(mode) => reindex.mutate({ projectId: row.project_id, mode })}
-                          />
+                            onClick={() => reindex.mutate(row.project_id)}
+                          >
+                            {t('graph:index.reindex')}
+                          </button>
                           <button
                             type="button"
                             className="is-danger"

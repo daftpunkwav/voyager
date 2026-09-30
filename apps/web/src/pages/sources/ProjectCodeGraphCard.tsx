@@ -1,26 +1,22 @@
 /**
  * @file ProjectCodeGraphCard
- * @description Project detail sidebar card for the code-graph index: status badge, mode selection, trigger/delete, and a link to the graph page.
+ * @description Project detail sidebar card for the code-graph index: status badge, trigger/delete, and a link to the graph page.
  *
  * Responsibilities:
  * - Poll and display the project index status via the code-graph hooks
- * - Trigger indexing in a chosen mode and delete the index, reporting
- *   failures as localized toasts
+ * - Trigger indexing and delete the index, reporting failures as localized
+ *   toasts
  * - Link to the code-graph page once the index is ready
+ *
+ * The backend enqueue_index has no index-mode parameter, so there is one
+ * trigger action instead of a fast/moderate/full selector.
  */
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useDeleteIndex, useIndexStatus, useTriggerIndex } from '@/hooks/useCodeGraph';
 import { confirmDialog, useUIStore } from '@/stores/uiStore';
 import { GLASS_INNER, GLASS_OUTER } from '@/constants/glassTokens';
 import { routes } from '@/utils/routes';
-
-const INDEX_MODE_KEYS: Record<string, string> = {
-  fast: 'sources:graph.mode.fast',
-  moderate: 'sources:graph.mode.moderate',
-  full: 'sources:graph.mode.full',
-};
 
 const INDEX_STATUS_KEYS: Record<string, string> = {
   NONE: 'sources:graph.status.NONE',
@@ -33,7 +29,7 @@ const INDEX_STATUS_KEYS: Record<string, string> = {
   INDEX_FAILED: 'sources:graph.status.INDEX_FAILED',
 };
 
-/** Shows index status stats; supports choosing a mode to trigger or delete the index, and links to the graph page once ready */
+/** Shows index status; supports triggering or deleting the index, and links to the graph page once ready */
 export function CodeGraphIndexCard({ projectId }: { projectId: string }) {
   const { t } = useTranslation('sources');
   const addToast = useUIStore((s) => s.addToast);
@@ -53,7 +49,6 @@ export function CodeGraphIndexCard({ projectId }: { projectId: string }) {
   const delIndex = useDeleteIndex(projectId, {
     onError: onIndexOpError(t('sources:graph.opDelete')),
   });
-  const [mode, setMode] = useState<'fast' | 'moderate' | 'full'>('fast');
   const status = statusQ.data;
 
   const isReady = status?.status === 'READY';
@@ -75,28 +70,6 @@ export function CodeGraphIndexCard({ projectId }: { projectId: string }) {
           </span>
         )}
       </div>
-
-      {status && (
-        <div style={{ padding: '0 16px 8px', fontSize: 12, color: 'var(--text-500)' }}>
-          {status.node_count != null && (
-            <span>
-              {t('sources:graph.stats', {
-                nodes: status.node_count,
-                edges: status.edge_count ?? 0,
-              })}
-            </span>
-          )}
-          {status.index_mode && (
-            <span style={{ marginLeft: 8 }}>
-              {t('sources:graph.modeLabel', {
-                mode: INDEX_MODE_KEYS[status.index_mode]
-                  ? t(INDEX_MODE_KEYS[status.index_mode])
-                  : status.index_mode,
-              })}
-            </span>
-          )}
-        </div>
-      )}
 
       {isFailed && (
         <div
@@ -139,23 +112,11 @@ export function CodeGraphIndexCard({ projectId }: { projectId: string }) {
             alignItems: 'center',
           }}
         >
-          <select
-            className="field input"
-            style={{ height: 28, fontSize: 12, flex: '0 0 auto', minWidth: 72 }}
-            value={mode}
-            disabled={isBusy || trigger.isPending || delIndex.isPending}
-            onChange={(e) => setMode(e.target.value as 'fast' | 'moderate' | 'full')}
-          >
-            <option value="fast">{t('sources:graph.mode.fast')}</option>
-            <option value="moderate">{t('sources:graph.modeOption.moderate')}</option>
-            <option value="full">{t('sources:graph.mode.full')}</option>
-          </select>
-
           <button
             type="button"
             className="btn btn-primary btn-sm"
             disabled={isBusy || trigger.isPending || delIndex.isPending}
-            onClick={() => trigger.mutate(mode)}
+            onClick={() => trigger.mutate()}
             style={{ height: 28, fontSize: 12 }}
           >
             {isBusy

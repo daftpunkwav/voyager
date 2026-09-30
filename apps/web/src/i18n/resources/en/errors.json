@@ -28,5 +28,6 @@
   "backendUnreachable": "Cannot reach the backend service; make sure it is running",
   "unknownRetry": "Unknown error; please try again",
   "client.requestFailed": "Request failed ({{status}})",
-  "client.uploadFailed": "Upload failed ({{status}})"
+  "client.uploadFailed": "Upload failed ({{status}})",
+  "graph.noLocalClone": "This project has no local clone yet; wait for the repository clone to finish before indexing"
 }

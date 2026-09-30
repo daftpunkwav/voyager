@@ -10,7 +10,6 @@
 export interface LlmUsageSummary {
   total_input_tokens: number;
   total_output_tokens: number;
-  total_cost?: number;
   totals?: {
     total_tokens: number;
     input_tokens: number;
@@ -22,7 +21,8 @@ export interface LlmUsageSummary {
      *  absent when the provider does not report the split). */
     reasoning_tokens?: number;
     calls: number;
-    cost?: number;
+    /** Read-side converted cost (get_usage_stats attaches cost_usd only for priced models). */
+    cost_usd?: number;
   };
   top?: {
     model: string;
@@ -40,7 +40,8 @@ export interface LlmUsageSummary {
     /** Output tokens spent on reasoning (thinking models only). */
     reasoning_tokens?: number;
     calls: number;
-    cost?: number;
+    /** Read-side converted cost (get_usage_stats attaches cost_usd only for priced models). */
+    cost_usd?: number;
   }>;
   by_provider?: Array<{
     provider: string;
@@ -48,7 +49,8 @@ export interface LlmUsageSummary {
     output: number;
     total_tokens: number;
     calls: number;
-    cost?: number;
+    /** Read-side converted cost (get_usage_stats attaches cost_usd only for priced models). */
+    cost_usd?: number;
   }>;
   by_day: Array<{
     date: string;
@@ -61,7 +63,8 @@ export interface LlmUsageSummary {
     /** Output tokens spent on reasoning (thinking models only). */
     reasoning_tokens?: number;
     calls: number;
-    cost?: number;
+    /** Read-side converted cost (get_usage_stats attaches cost_usd only for priced models). */
+    cost_usd?: number;
     by_model?: Array<{
       model: string;
       input: number;

@@ -28,5 +28,6 @@
   "backendUnreachable": "无法连接后端服务，请确认后端已启动",
   "unknownRetry": "未知错误，请重试",
   "client.requestFailed": "请求失败({{status}})",
-  "client.uploadFailed": "上传失败({{status}})"
+  "client.uploadFailed": "上传失败({{status}})",
+  "graph.noLocalClone": "该项目还没有本地克隆，请等待仓库克隆完成后再建立索引"
 }

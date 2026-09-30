@@ -54,7 +54,8 @@ export function ImportUrlsModal({ open, onClose }: ImportUrlsModalProps) {
 
   const { data: searchResults = [], isFetching } = useQuery({
     queryKey: ['githubSearch', search],
-    queryFn: async () => (await searchGithubRepos(search)) as StarRepo[],
+    // api/projects.searchGithubRepos already maps rows onto the StarRepo shape
+    queryFn: () => searchGithubRepos(search),
     enabled: open && tab === 'search' && search.trim().length >= 2,
   });
 

@@ -1,11 +1,14 @@
 /**
  * @file IndexStatusBar
  * @description Index status bar embedded in the sidebar: status pill, node
- * budget control, and refresh / fast / standard / full index actions.
+ * budget control, and refresh / index actions.
  *
  * Responsibilities:
- * - Render the status pill with node budget and refresh / fast / standard / full actions
+ * - Render the status pill with node budget and refresh / index actions
  * - Resolve status ids to translated labels, rendering unknown ids as-is
+ *
+ * The backend enqueue_index has no index-mode parameter (one default mode),
+ * so there is a single index action instead of a fast/standard/full trio.
  */
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -29,13 +32,11 @@ function statusLabel(t: TFunction, st: string): string {
   return key ? t(key) : st;
 }
 
-type IndexMode = 'fast' | 'moderate' | 'full';
-
 interface Props {
   status?: GraphIndexStatus;
   loading?: boolean;
-  onIndex: (mode: IndexMode) => void;
-  onRefresh: (mode: IndexMode) => void;
+  onIndex: () => void;
+  onRefresh: () => void;
   onDelete?: () => void;
   nodeBudget: number;
   onBudgetChange: (n: number) => void;
@@ -84,11 +85,6 @@ export function IndexStatusBar({
     <div className="code-graph-statusbar code-graph-statusbar--inline">
       <div className="code-graph-statusbar__row">
         <span className={`status-pill status-pill--${st.toLowerCase()}`}>{statusLabel(t, st)}</span>
-        {status?.index_mode && (
-          <span className="muted">
-            {t('codeGraph:statusBar.mode', { mode: status.index_mode })}
-          </span>
-        )}
       </div>
       {errorText && <p className="error">{errorText}</p>}
       <div className="code-graph-statusbar__row code-graph-statusbar__budget">
@@ -110,35 +106,14 @@ export function IndexStatusBar({
             type="button"
             className="btn btn-ghost btn-sm"
             disabled={loading}
-            onClick={() => onRefresh('fast')}
+            onClick={onRefresh}
             title={t('codeGraph:statusBar.refreshTitle')}
           >
             {t('codeGraph:statusBar.refresh')}
           </button>
         )}
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          disabled={loading}
-          onClick={() => onIndex('fast')}
-        >
-          {t('codeGraph:indexMode.fast')}
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          disabled={loading}
-          onClick={() => onIndex('moderate')}
-        >
-          {t('codeGraph:indexMode.moderate')}
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          disabled={loading}
-          onClick={() => onIndex('full')}
-        >
-          {t('codeGraph:indexMode.full')}
+        <button type="button" className="btn btn-ghost btn-sm" disabled={loading} onClick={onIndex}>
+          {t('codeGraph:statusBar.index')}
         </button>
         {canDelete && (
           <button

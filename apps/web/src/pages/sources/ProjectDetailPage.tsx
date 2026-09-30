@@ -205,7 +205,7 @@ export function ProjectDetailPage({
     openProjectNotes(id);
   };
 
-  const readmeText = readmeData?.content || project?.readme || '';
+  const readmeText = readmeData?.readme || project?.readme || '';
 
   const copyReadme = async () => {
     if (!readmeText) return;
@@ -286,7 +286,6 @@ export function ProjectDetailPage({
             readmeLoading={readmeLoading}
             readmeFetching={readmeFetching}
             readmeError={readmeError}
-            readmeMessage={readmeData?.message}
             fontSize={fontSize}
             onFontSizeChange={setFontSize}
             onRefresh={refetchReadme}

@@ -72,7 +72,11 @@ export async function callCapability<T = unknown>(
   }
   // The success envelope is always {result: ...}; the 'result' in check (not
   // truthiness) matters: result may legitimately be null/0/false/"" and must
-  // not fall through to returning the whole envelope
+  // not fall through to returning the whole envelope.
+  // Exception: long_running capabilities answer 202 {"job": {job_id}} (see
+  // platform_capability.gen_rest). That envelope is NOT unwrapped here —
+  // callers that need the job id read resp-shaped {job: {job_id}} from the
+  // resolved value (enqueue_index, import_repo, enqueue_l0, ...).
   if (body && typeof body === 'object' && 'result' in body) return body.result as T;
   return body as T;
 }

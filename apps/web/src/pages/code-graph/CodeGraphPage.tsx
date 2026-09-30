@@ -224,8 +224,8 @@ export function CodeGraphPage() {
     <IndexStatusBar
       status={status}
       loading={statusQ.isLoading || trigger.isPending || refresh.isPending || delIndex.isPending}
-      onIndex={(mode) => trigger.mutate(mode)}
-      onRefresh={(mode) => refresh.mutate(mode)}
+      onIndex={() => trigger.mutate()}
+      onRefresh={() => refresh.mutate()}
       onDelete={async () => {
         const name = projectQ.data?.name || id || t('codeGraph:delete.fallbackName');
         if (
@@ -236,7 +236,7 @@ export function CodeGraphPage() {
       }}
       nodeBudget={nodeBudget}
       onBudgetChange={setNodeBudget}
-      totalNodes={filtered?.total_nodes ?? status?.node_count ?? undefined}
+      totalNodes={filtered?.total_nodes ?? undefined}
       shownNodes={filtered?.nodes.length}
       shownEdges={filtered?.edges.length}
     />
@@ -282,7 +282,7 @@ export function CodeGraphPage() {
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={() => trigger.mutate('moderate')}
+                onClick={() => trigger.mutate()}
                 disabled={trigger.isPending}
               >
                 {t('codeGraph:page.startIndex')}

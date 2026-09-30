@@ -30,7 +30,7 @@ import {
   listTags,
   setProjectTags,
 } from '@/api/projects';
-import type { Project, ProjectProgress, ProjectReadme } from '@/api/types';
+import type { Project, ProjectProgress } from '@/api/types';
 import { useProjectStore } from '@/stores/projectStore';
 import { invalidateOverviewQueries } from '@/utils/invalidateOverview';
 
@@ -77,9 +77,7 @@ export function useProjectReadme(id: string | undefined, enabled = true) {
     queryKey: ['projectReadme', id],
     queryFn: async () => {
       if (!id) throw new Error('missing id');
-      // message carries a backend note (generation/fallback explanation); kept in
-      // the type so components can consume it
-      return (await getProjectReadme(id)) as ProjectReadme & { message?: string };
+      return getProjectReadme(id);
     },
     enabled: Boolean(id) && enabled,
     staleTime: 5 * 60 * 1000,

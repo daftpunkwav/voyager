@@ -20,26 +20,22 @@ export function useGithubStars(options?: { username?: string; enabled?: boolean 
     queryKey: ['githubStars', username],
     queryFn: async () => {
       const res = await listStars(username);
-      const raw = (res.items ?? []) as Array<{
-        name?: string;
-        html_url?: string;
-        description?: string;
-        stargazers_count?: number;
-        language?: string | null;
-        owner?: { login?: string };
-      }>;
+      // Backend rows are already normalized (github.list_starred):
+      // {owner, name, url, description, stars, language}
+      const raw = res.items ?? [];
       const items = raw.map((r) => {
-        const owner = r.owner?.login ?? '';
+        const owner = r.owner ?? '';
         const repo = r.name ?? '';
+        const link = r.url || `https://github.com/${owner}/${repo}`;
         return {
           full_name: `${owner}/${repo}`,
           owner,
           repo,
           description: r.description ?? '',
-          stars: r.stargazers_count ?? 0,
-          language: r.language,
-          html_url: r.html_url ?? `https://github.com/${owner}/${repo}`,
-          url: r.html_url ?? `https://github.com/${owner}/${repo}`,
+          stars: r.stars ?? 0,
+          language: r.language || null,
+          html_url: link,
+          url: link,
         };
       });
       return { items, total: items.length, cached: false, fetched_at: Date.now() };

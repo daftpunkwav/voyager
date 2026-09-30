@@ -32,13 +32,15 @@ export interface GitHubAccount {
   pat_masked: string;
 }
 
+/** Raw list_starred_repos row (sources.modules.repo.github.list_starred). */
 export interface StarsListResult {
   items: Array<{
-    full_name: string;
+    owner: string;
+    name: string;
+    url: string;
     description: string;
     stars: number;
-    language: string | null;
-    html_url: string;
+    language: string;
   }>;
   total: number;
 }
@@ -67,7 +69,9 @@ export interface Project {
   /** Backend rows carry the owner as a separate column; `name` is the bare repo
    *  name. Optional: manual entries may have it empty. */
   owner?: string | null;
-  full_name: string;
+  /** No backend repo column emits this (owner + name are separate); optional
+   *  and only populated by client-side composition. */
+  full_name?: string;
   description: string;
   language: string | null;
   stars: number;
@@ -116,8 +120,10 @@ export interface ProjectListParams {
 }
 
 export interface ProjectReadme {
-  content: string;
-  html_url?: string;
+  /** Backend get_readme shape: {repo_id, name, readme}. */
+  repo_id: string;
+  name: string;
+  readme: string;
 }
 
 export interface ProjectStats {

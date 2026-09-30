@@ -25,20 +25,12 @@ export function useGraphMutations(onBatchIndexed: () => void) {
   const queryClient = useQueryClient();
 
   const batchIndex = useMutation({
-    mutationFn: (ids: string[]) => batchIndexCodeGraph(ids, 'moderate'),
-    // api/codeGraph.batchIndexCodeGraph returns the payload directly (the envelope is already unwrapped in the api layer)
+    mutationFn: (ids: string[]) => batchIndexCodeGraph(ids),
+    // api/codeGraph.batchIndexCodeGraph resolves each repo's clone path and
+    // enqueues one job per id; it answers {queued, failed} project ids
     onSuccess: (payload) => {
-      const p = payload as {
-        queued?: string[] | number;
-        failed?: string[];
-        items?: unknown[];
-      };
-      const queuedLen = Array.isArray(p.queued)
-        ? p.queued.length
-        : typeof p.queued === 'number'
-          ? p.queued
-          : (p.items?.length ?? 0);
-      const failedLen = Array.isArray(p.failed) ? p.failed.length : 0;
+      const queuedLen = payload.queued.length;
+      const failedLen = payload.failed.length;
       addToast({
         type: failedLen === 0 ? 'success' : 'warning',
         message:

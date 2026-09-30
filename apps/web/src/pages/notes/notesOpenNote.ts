@@ -1,13 +1,17 @@
 /**
  * @file notesOpenNote
- * @description Note open/create lifecycle: URL ?note= driven loading, alignment with remote note.edited events, and the create entry point.
+ * @description Note open/create lifecycle: URL ?note= driven loading and the create entry point.
  *
  * Responsibilities:
  * - Drive the workspace from the ?note= URL param (legacy ?open=
  *   accepted), flushing unsaved work before switching
  * - Load full note bodies via fetchNoteFull and track the persisted
  *   snapshot, opening flag, and meta (pinned/archived)
- * - Subscribe to note.edited so remote edits refresh the open note
+ *
+ * note.edited is deliberately NOT subscribed here: the gateway chat stream
+ * excludes it (editor autosave noise, see gateway chat.py _STREAM_TYPES), so
+ * a live remote-edit push never arrives on the SSE channel. The open note
+ * realigns when it is (re)opened from the URL.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -18,8 +22,6 @@ import { useNotesUiStore } from './notesUiStore';
 import { useUIStore } from '@/stores/uiStore';
 import { routes } from '@/utils/routes';
 import { i18n } from '@/i18n';
-import { subscribe } from '@/bridge/stream';
-import { EventType } from '@/bridge/events';
 import { noteSourceId } from './noteListing';
 import type { NotesSaveState } from './notesAutoSave';
 
@@ -121,28 +123,6 @@ export function useNotesOpener(options: UseNotesOpenerOptions) {
     setSaveState,
     setNewProjectId,
   ]);
-
-  // Remote note.edited: pull the full note to align when the local copy is clean (a dirty local edit is never interrupted)
-  useEffect(() => {
-    return subscribe([EventType.NOTE_EDITED], (event) => {
-      const nid = event.payload.note_id;
-      if (typeof nid !== 'string' || nid !== useNoteStore.getState().editingNoteId) return;
-      if (dirtyRef.current) return;
-      void fetchNoteFull(nid)
-        .then((full) => {
-          const s = useNoteStore.getState();
-          if (dirtyRef.current || s.editingNoteId !== nid) return;
-          if (s.editorTitle === full.title && s.editorContent === full.content) return;
-          startEditing(full.id, full.title, full.content);
-          lastPersistedRef.current = { id: full.id, title: full.title, content: full.content };
-          setNewProjectId(noteSourceId(full));
-          setMeta({ pinned: Boolean(full.pinned), archived: Boolean(full.archived) });
-        })
-        .catch(() => {
-          /* Remote change could not be fetched locally; invalidating the list keeps the next open aligned */
-        });
-    });
-  }, [startEditing, dirtyRef, lastPersistedRef, setNewProjectId]);
 
   /** List/workspace "new" action: resets the draft when already on ?note=new, otherwise navigates there carrying the project. */
   const handleNew = async () => {

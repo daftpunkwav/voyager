@@ -21,7 +21,14 @@
 
 import { callCapability, ServiceError } from '@/bridge/client';
 import { i18n } from '@/i18n';
-import type { PaginatedList, Project, ProjectListParams, ProjectReadme, Tag } from '@/api/types';
+import type {
+  PaginatedList,
+  Project,
+  ProjectListParams,
+  ProjectReadme,
+  StarRepo,
+  Tag,
+} from '@/api/types';
 
 type RepoRow = Record<string, unknown>;
 
@@ -172,6 +179,27 @@ export function setProjectTags(projectId: string, tags: string[]): Promise<unkno
   return callCapability('sources', 'set_repo_meta', { repo_id: projectId, tags });
 }
 
-export function searchGithubRepos(query: string): Promise<unknown> {
-  return callCapability('sources', 'search_remote_repos', { query });
+/** Search GitHub repos (candidates not yet imported). Backend rows are
+ *  {owner,name,url,description,stars,language}; they are normalized onto the
+ *  StarRepo vocabulary here so import dialogs never see the raw row keys. */
+export async function searchGithubRepos(query: string): Promise<StarRepo[]> {
+  const rows = await callCapability<Array<Record<string, unknown>>>('sources', 'search_remote_repos', {
+    query,
+  });
+  const list = Array.isArray(rows) ? rows : [];
+  return list.map((r) => {
+    const owner = String(r.owner ?? '');
+    const name = String(r.name ?? '');
+    const link = String(r.url ?? '');
+    return {
+      full_name: `${owner}/${name}`,
+      owner,
+      repo: name,
+      description: String(r.description ?? ''),
+      stars: Number(r.stars ?? 0),
+      language: r.language ? String(r.language) : null,
+      html_url: link,
+      url: link,
+    };
+  });
 }

@@ -6,8 +6,7 @@
  *
  * Responsibilities:
  * - Render the README Markdown with font-size controls, refresh, and copy
- * - Show loading / fetching / error / backend-hint states for the readme
- *   query
+ * - Show loading / fetching / error / empty states for the readme query
  */
 import type { Dispatch, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -21,8 +20,6 @@ interface ProjectReadmePanelProps {
   readmeLoading: boolean;
   readmeFetching: boolean;
   readmeError: boolean;
-  /** Backend hint for an empty README (readmeData?.message) */
-  readmeMessage: string | undefined;
   fontSize: number;
   /** Font-size adjustment (setFontSize from the coordinator page, passed through as-is) */
   onFontSizeChange: Dispatch<SetStateAction<number>>;
@@ -38,7 +35,6 @@ export function ProjectReadmePanel({
   readmeLoading,
   readmeFetching,
   readmeError,
-  readmeMessage,
   fontSize,
   onFontSizeChange,
   onRefresh,
@@ -103,7 +99,7 @@ export function ProjectReadmePanel({
             <p style={{ color: 'var(--text-400)', margin: '0 0 8px' }}>
               {readmeError
                 ? t('sources:readme.loadFailed')
-                : readmeMessage || t('sources:readme.empty')}
+                : t('sources:readme.empty')}
             </p>
             <button
               type="button"
