@@ -139,23 +139,50 @@ def _exe_free(token: str) -> str:
     return token.removesuffix(".exe")
 
 
-def _matches_prefix(tokens: tuple[str, ...], pattern: str) -> bool:
-    """Token-prefix match. A pattern without the trailing `*` is still a
-    prefix (the documented grammar): `git push` must deny `git push origin
-    main` too — in the deny direction an exact-only reading fails open."""
+#: Characters that, anywhere in the UNMATCHED tail of an allow-prefix match,
+#: mean the command does more than the pattern allowlisted: a command
+#: boundary (`;` `&` `|`), command substitution (backtick / `$`), or a
+#: write-redirect (`>`). Allow-prefix matching checks only the head, so
+#: without this tail check `npm run build && rm -rf /` would ride an
+#: `bash:npm *` allow — a second command the user never allowlisted.
+_SHELL_TAIL_UNSAFE_CHARS = (";", "&", "|", "`", "$", ">", "\n")
+
+
+def _match_prefix_len(tokens: tuple[str, ...], pattern: str) -> int | None:
+    """Token count of the matched pattern head when `tokens` start with it
+    (the prefix grammar), else None. The shared matcher behind the deny and
+    allow directions."""
     parts = pattern.lower().split()
-    if not parts:
-        return False
+    if not parts or not tokens:
+        return None
     if parts == ["*"]:
-        return True
-    if not tokens:
-        return False
+        return len(tokens)  # match-all pattern: the whole command is the head
     head = parts[:-1] if parts[-1] == "*" else parts
     if len(tokens) < len(head):
-        return False
+        return None
     # Executable-name normalization applies to the first token only: later
     # arguments like `setup.exe` are ordinary file names.
-    return _exe_free(tokens[0]) == _exe_free(head[0]) and tokens[1 : len(head)] == tuple(head[1:])
+    if _exe_free(tokens[0]) != _exe_free(head[0]) or tokens[1 : len(head)] != tuple(head[1:]):
+        return None
+    return len(head)
+
+
+def _matches_prefix(tokens: tuple[str, ...], pattern: str) -> bool:
+    """Token-prefix match (deny direction). A pattern without the trailing
+    `*` is still a prefix (the documented grammar): `git push` must deny
+    `git push origin main` too — in the deny direction an exact-only reading
+    fails open."""
+    return _match_prefix_len(tokens, pattern) is not None
+
+
+def allow_tail_safe(tokens: tuple[str, ...], matched_len: int) -> bool:
+    """Whether the part of the command an allow-prefix did NOT match is free
+    of control characters (allow direction only — the deny direction
+    over-matches on purpose). A tail opening a chained command, command
+    substitution, or a write-redirect is a second, never-allowlisted
+    command: withholding the allow there falls back to the D-class
+    rejection, which is the fail-closed direction."""
+    return not any(ch in token for token in tokens[matched_len:] for ch in _SHELL_TAIL_UNSAFE_CHARS)
 
 
 def decide_shell(fs, shell: ShellPolicy, action) -> Decision:
@@ -174,4 +201,9 @@ def decide_shell(fs, shell: ShellPolicy, action) -> Decision:
     return Decision(True, shell.level, "command execution (no confirm; guards above still apply)")
 
 
-__all__ = ["ShellPolicy", "decide_shell"]
+__all__ = [
+    "ShellPolicy",
+    "allow_tail_safe",
+    "command_tokens",
+    "decide_shell",
+]

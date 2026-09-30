@@ -19,7 +19,9 @@ never cached. Shape:
   prefix, applied after the mode lets bash through — effective in every
   mode)
 - allow entries: same syntax; consulted only in no_dangerous (read_only is
-  a hard ceiling)
+  a hard ceiling). An allow argv prefix must cover the WHOLE command: an
+  unmatched tail carrying a command boundary, substitution, or redirect
+  withholds the allow (a chained second command was never allowlisted)
 
 Malformed values degrade independently: an unknown mode reads as full and
 unparsable list entries are skipped, so a corrupt value falls back to the
@@ -34,7 +36,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from agent.policy.shell import _matches_prefix, command_tokens
+from agent.policy.shell import (
+    _match_prefix_len,
+    _matches_prefix,
+    allow_tail_safe,
+    command_tokens,
+)
 
 FULL, NO_DANGEROUS, READ_ONLY = "full", "no_dangerous", "read_only"
 MODES = (FULL, NO_DANGEROUS, READ_ONLY)
@@ -232,7 +239,14 @@ class ToolPermissions:
         tokens: tuple[str, ...] | None = None
         if tool_name == "bash" and (rules.bash_deny_prefixes or rules.bash_allow_prefixes):
             command = arguments.get("command") if isinstance(arguments, dict) else None
-            tokens = command_tokens(command if isinstance(command, str) else "")
+            raw = command if isinstance(command, str) else ""
+            tokens = command_tokens(raw)
+            if not tokens and raw.strip() and rules.bash_deny_prefixes:
+                # Unparseable command (e.g. an unbalanced quote) yields no
+                # tokens, so no argv prefix can be checked. Running it would
+                # let malformed input dodge a deny the user wrote: fail
+                # closed instead.
+                return _denied(tool_name, action)
 
         # 1-3: deny wins in every mode (action level, tool level, argv prefix)
         if action and f"{tool_name}.{action}" in rules.deny:
@@ -259,10 +273,16 @@ class ToolPermissions:
             return None
         if action and f"{tool_name}.{action}" in rules.allow:
             return None
-        if tokens is not None and any(
-            _matches_prefix(tokens, p) for p in rules.bash_allow_prefixes
-        ):
-            return None
+        if tokens is not None:
+            for p in rules.bash_allow_prefixes:
+                matched = _match_prefix_len(tokens, p)
+                # The allow direction is stricter than deny: the unmatched
+                # tail must not open a chained command, substitution, or
+                # redirect, or `npm run build && rm -rf /` would ride an
+                # `npm *` allow. A dirty tail falls through to the D-class
+                # rejection (fail-closed).
+                if matched is not None and allow_tail_safe(tokens, matched):
+                    return None
         if cls == CLASS_R:
             return None
         return _denied(tool_name, action)

@@ -140,6 +140,18 @@ class TestDenyList:
         # a differently-named command still passes
         assert rp.check("bash", {"command": "git fetch origin"}) is None
 
+    def test_unparseable_command_with_deny_prefix_fails_closed(self) -> None:
+        """A command shlex cannot tokenize (unbalanced quote) yields no argv
+        tokens, so no prefix can match: running it anyway would let malformed
+        input dodge the deny — it must be rejected instead."""
+        rp = _resolver({"mode": "full", "deny": ["bash:git push*"], "allow": []})
+        assert rp.check("bash", {"command": 'git push "unbalanced'}) is not None
+        assert rp.check("bash", {"command": "git push 'x"}) is not None
+        # no deny prefixes configured: the unparseable command is not the
+        # prefix gate's business (falls through to the mode/handler)
+        rp2 = _resolver({"mode": "full", "deny": [], "allow": []})
+        assert rp2.check("bash", {"command": 'git push "unbalanced'}) is None
+
 
 class TestModes:
     def test_read_only_hard_ceiling(self) -> None:
@@ -182,6 +194,25 @@ class TestModes:
         rp = _resolver({"mode": "no_dangerous", "deny": [], "allow": ["bash:npm *"]})
         assert rp.check("bash", {"command": "npm test"}) is None
         assert rp.check("bash", {"command": "rm -rf /"}) is not None
+
+    def test_no_dangerous_bash_prefix_allow_rejects_chained_command(self) -> None:
+        """An allow prefix covers the WHOLE command: an unmatched tail opening
+        a second command (&&/;/|), substitution, or a redirect withholds the
+        allow — otherwise `npm test && rm -rf /` rides an `npm *` allow."""
+        rp = _resolver({"mode": "no_dangerous", "deny": [], "allow": ["bash:npm *"]})
+        for command in (
+            "npm test && rm -rf /",
+            "npm test; rm -rf /",
+            "npm test || evil",
+            "npm test | evil",
+            "npm test > ~/.bashrc",
+            "npm run `evil`",
+            "npm run $(evil)",
+        ):
+            assert rp.check("bash", {"command": command}) is not None, command
+        # benign argument extensions still pass
+        for command in ("npm test -- --cov", "npm run build", "npm install left-pad"):
+            assert rp.check("bash", {"command": command}) is None, command
 
     def test_deny_wins_over_allow(self) -> None:
         rp = _resolver(
