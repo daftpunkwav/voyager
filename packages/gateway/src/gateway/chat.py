@@ -65,6 +65,9 @@ _DOMAIN = "gateway"
 #: events ride along for the notes page's cross-surface cache invalidation
 #: (notesUiBridge), matching the source.* precedent — except note.edited,
 #: excluded on purpose: editor autosave would make it high-frequency noise.
+#: llm.fallback / graph.engine.fallback complete the service-health class
+#: (alongside service.health.changed): rare, so forwarding them costs nothing
+#: and a future degradation badge only needs a frontend subscriber.
 #: Types always use the contracts vocabulary constants; "task.*" is a
 #: subscription glob pattern, not a concrete type.
 _STREAM_TYPES = (
@@ -88,6 +91,8 @@ _STREAM_TYPES = (
     DomainEvent.NOTES_UI_CHANGED,
     DomainEvent.WORKSPACE_SWITCHED,
     DomainEvent.SERVICE_HEALTH_CHANGED,
+    DomainEvent.LLM_FALLBACK,
+    DomainEvent.GRAPH_ENGINE_FALLBACK,
 )
 # note.created rows carry the creating session (stamped by the agent runtime
 # via the capability invocation context), so a session-filtered history page

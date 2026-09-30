@@ -113,6 +113,9 @@ class DomainEvent:
     AGENT_STEP = "agent.step"
     AGENT_DELTA = "agent.delta"
     AGENT_DELIVERY = "agent.delivery"
+    #: Reserved vocabulary: registered on both ends (web bridge/events.ts)
+    #: with no publisher or subscriber yet; kept so a future agent
+    #: observation notice does not need a cross-package vocabulary change.
     AGENT_OBSERVE = "agent.observe"
     AGENT_POLICY_NOTIFY = "agent.policy.notify"
     AGENT_NAVIGATE = "agent.navigate"

@@ -2,9 +2,12 @@
 directory picker for choosing the workspace root.
 
 Splits read-only file operations into three endpoints:
-- /api/workspace/list: entries of one directory INSIDE the workspace (the
-  UI file tree; containment is enforced);
-- /api/workspace/read: a capped text preview of one workspace file;
+- /api/workspace/list: entries of one directory INSIDE the workspace (read
+  containment is enforced). Tooling-only today: the web UI consumes only
+  /pick and /switch; list/read exist for the planned workspace file tree
+  and local tooling, so any consumer must keep working without a UI.
+- /api/workspace/read: a capped text preview of one workspace file
+  (tooling-only, same status as /list).
 - /api/workspace/pick: entries of ANY directory on the machine (the
   directory chooser used to pick a new workspace root). Read-only listing
   of the local filesystem is acceptable for this single-user local
@@ -19,7 +22,7 @@ Error semantics (deliberate exception to the global ServiceError envelope):
 the three read endpoints answer request-scoped failures with HTTP 200 and a
 body {"error": {"code": "WORKSPACE.*" | "GATEWAY.INVALID_INPUT",
 "message"}} instead of a 4xx status — this response shape is frozen (the
-web file tree / picker render these results inline), so callers must branch
+web directory picker renders these results inline), so callers must branch
 on body.error, never on the status code alone. POST /api/workspace/switch
 uses the standard ServiceError envelope.
 """

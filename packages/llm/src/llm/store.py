@@ -257,7 +257,9 @@ class ProviderStore:
           local calendar, matching the heatmap's front-end layout)
         - heatmap: per-day call counts + intensity
         - recent: the newest calls first, capped at recent_limit
-        Cost is not reported: prices are not persisted, so nothing is invented.
+        This store never reports cost (prices are not persisted, so nothing
+        is invented here); get_usage_stats may attach cost_usd on the read
+        side when the llm.pricing table covers a model.
         """
         cutoff = time.time() - days * 86400
         with self._lock:
