@@ -265,6 +265,35 @@ def _turn_degraded(inst: SubagentInstance) -> bool:
     return False
 
 
+async def _emit_terminal_event(
+    inst: SubagentInstance, event: str, log_note: str, **payload: Any
+) -> None:
+    """Best-effort terminal-event emit shared by the turn's non-success exits
+    (cancel / failure): telemetry failure must never mask the exit itself, so
+    a dead event channel only logs."""
+    try:
+        await inst.events.emit(event, run_id=inst.state.run_id, **payload)
+    except Exception:
+        log.debug(log_note, exc_info=True)
+
+
+async def _conversational_closure(
+    inst: SubagentInstance, view: Persona | None, text: str, kind: str, log_note: str
+) -> None:
+    """Best-effort conversational closure shared by every exit that ends the
+    turn outside the normal delivery path (pre-start cancel / cancel / pause /
+    failure): the reply sink is success-only, so a turn without a closing chat
+    message leaves the UI waiting in the running state forever. kind="notice"
+    is not a conversation turn (never enters the session history), keeping
+    fork's keep_messages counting and the UI's notice styling correct."""
+    if not (inst.task.conversational and inst.reply_sink is not None):
+        return
+    try:
+        await inst.reply_sink(text, kind, speaker=view.key if view is not None else "")
+    except Exception:
+        log.debug(log_note, exc_info=True)
+
+
 async def run_turn(
     inst: SubagentInstance, user_text: str | None = None, *, member: str = ""
 ) -> str:
@@ -285,15 +314,13 @@ async def run_turn(
         # reply at all (the sink is success-only), and master._turn would read
         # the PREVIOUS turn's assistant text out of history as this turn's
         # reply. Same notice shape as the CancelledError branch below.
-        if inst.task.conversational and inst.reply_sink is not None:
-            try:
-                await inst.reply_sink(
-                    "[已取消] 本回合尚未开始即被取消;可重新发送或换个说法继续。",
-                    "notice",
-                    speaker=view.key if view is not None else "",
-                )
-            except Exception:  # best effort: the cancel itself is unaffected
-                log.debug("failed to emit pre-start cancel closure message", exc_info=True)
+        await _conversational_closure(
+            inst,
+            view,
+            "[已取消] 本回合尚未开始即被取消;可重新发送或换个说法继续。",
+            "notice",
+            "failed to emit pre-start cancel closure message",
+        )
         return "[cancelled] 已在开始执行前被取消,未执行任何步骤。"
     was_paused = inst.state.status is RunStatus.PAUSED
     inst.state.status = RunStatus.RUNNING
@@ -450,30 +477,21 @@ async def _run_turn(
                         break
             if inst.state.status is RunStatus.RUNNING:
                 inst.state.status = RunStatus.CANCELLED
-            try:
-                await inst.events.emit(
-                    RuntimeEvent.RUN_CANCELLED,
-                    run_id=inst.state.run_id,
-                    subagent=_speaker_label(inst),
-                )
-            except Exception:  # best effort: the event channel may be gone during shutdown
-                log.debug(
-                    "failed to emit RunCancelled event (cancel semantics unaffected)", exc_info=True
-                )
+            await _emit_terminal_event(
+                inst,
+                RuntimeEvent.RUN_CANCELLED,
+                "failed to emit RunCancelled event (cancel semantics unaffected)",
+                subagent=_speaker_label(inst),
+            )
             # Conversational closure: without a closing chat message the UI waits
             # in the running state forever (the reply sink is success-only).
-            if inst.task.conversational and inst.reply_sink is not None:
-                try:
-                    # kind=notice: not a conversation turn (never enters the
-                    # session history), so fork's keep_messages counting and
-                    # the UI's notice styling both stay correct.
-                    await inst.reply_sink(
-                        "[已中断] 本回合被中断;可重新发送或换个说法继续。",
-                        "notice",
-                        speaker=view.key if view is not None else "",
-                    )
-                except Exception:  # best effort, same as the event above
-                    log.debug("failed to emit cancel closure message", exc_info=True)
+            await _conversational_closure(
+                inst,
+                view,
+                "[已中断] 本回合被中断;可重新发送或换个说法继续。",
+                "notice",
+                "failed to emit cancel closure message",
+            )
             raise
         except PauseRequested:
             # Cooperative pause: stop at a paired boundary, persist a
@@ -482,6 +500,11 @@ async def _run_turn(
             # from a half-executed tool batch.
             inst.state.status = RunStatus.PAUSED
             try:
+                # The AGENT_PAUSED emit is bundled with the resume bookkeeping
+                # below in ONE best-effort unit (not the shared
+                # _emit_terminal_event): an emit failure also skips the
+                # snapshot. Keep the coupling unless that trade-off is
+                # revisited deliberately.
                 await inst.events.emit(
                     RuntimeEvent.AGENT_PAUSED,
                     run_id=inst.state.run_id,
@@ -510,36 +533,32 @@ async def _run_turn(
             # state on agent.message, so a paused turn that returns before the
             # closing append would leave the exchange hanging forever. Task
             # dispatches announce the pause through their own [paused] reply.
-            if inst.task.conversational and inst.reply_sink is not None:
-                try:
-                    await inst.reply_sink(
-                        "[已暂停] 已在当前步骤完成后暂停并保存检查点;恢复后继续。",
-                        "notice",
-                        speaker=view.key if view is not None else "",
-                    )
-                except Exception:  # best effort: the pause itself is unaffected
-                    log.debug("failed to emit pause closure message", exc_info=True)
+            await _conversational_closure(
+                inst,
+                view,
+                "[已暂停] 已在当前步骤完成后暂停并保存检查点;恢复后继续。",
+                "notice",
+                "failed to emit pause closure message",
+            )
             return "[已暂停] 已在当前步骤完成后暂停并保存检查点;用 resume_run 继续。"
         except Exception as exc:  # record failure and report; never break the scheduler
             inst.state.status = RunStatus.FAILED
             inst.state.error = f"{type(exc).__name__}: {exc}"
-            try:
-                await inst.events.emit(
-                    RuntimeEvent.RUN_FAILED, run_id=inst.state.run_id, error=inst.state.error
-                )
-            except Exception:  # best effort: telemetry must not mask the real failure
-                log.debug("failed to emit RunFailed event", exc_info=True)
+            await _emit_terminal_event(
+                inst,
+                RuntimeEvent.RUN_FAILED,
+                "failed to emit RunFailed event",
+                error=inst.state.error,
+            )
             # Conversational closure: a failed turn must still end the chat
             # exchange, otherwise the UI stays in the running state forever.
-            if inst.task.conversational and inst.reply_sink is not None:
-                try:
-                    await inst.reply_sink(
-                        f"[回合失败] {inst.state.error}",
-                        "error",
-                        speaker=view.key if view is not None else "",
-                    )
-                except Exception:  # best effort: closure must not mask the failure
-                    log.debug("failed to emit failure closure message", exc_info=True)
+            await _conversational_closure(
+                inst,
+                view,
+                f"[回合失败] {inst.state.error}",
+                "error",
+                "failed to emit failure closure message",
+            )
             raise
         except BaseException as exc:  # catch-all terminal state: the instance never stays RUNNING
             inst.state.status = RunStatus.FAILED
@@ -605,12 +624,12 @@ async def _run_turn(
             # the failure.
             inst.state.status = RunStatus.FAILED
             inst.state.error = result
-            try:
-                await inst.events.emit(
-                    RuntimeEvent.RUN_FAILED, run_id=inst.state.run_id, error=result
-                )
-            except Exception:  # best effort: the failure is already on the state
-                log.debug("failed to emit degraded RunFailed event", exc_info=True)
+            await _emit_terminal_event(
+                inst,
+                RuntimeEvent.RUN_FAILED,
+                "failed to emit degraded RunFailed event",
+                error=result,
+            )
         else:
             inst.state.status = RunStatus.COMPLETED
             await inst.events.emit(

@@ -22,6 +22,7 @@ import asyncio
 import itertools
 import re
 import time
+from collections.abc import Sequence
 from typing import Any
 
 from agent.context.builder import TURN_CONTEXT_HEADER
@@ -46,7 +47,7 @@ from agent.engine.modes.base import (
 )
 from agent.engine.modes.registry import register_mode
 from agent.engine.modes.streaming import complete_streaming, delta_timer, run_phase
-from agent.llm import LLMClient, TextPart, ToolCall, content_to_text
+from agent.llm import LLMClient, LLMReply, TextPart, ToolCall, content_to_text
 from agent.prompts import P, render
 from agent.runtime.deadline import Deadline
 from agent.runtime.events import RuntimeEvent
@@ -164,6 +165,36 @@ async def _surrender_step(on_step: StepCb, reason: str, text: str) -> None:
     and wait/dispatch callers can tell a truncated run from a completed one
     instead of trusting the COMPLETED status alone."""
     await on_step("system", "surrender", text[:120], {"reason": reason})
+
+
+def _loop_abort_text(tool: str, loops: LoopDetector) -> str:
+    """The loop-abort report for one tripped call; one construction site keeps
+    the detector's window/threshold vocabulary from drifting apart per path."""
+    return render(
+        P.modes.loop_abort,
+        tool=tool,
+        window=loops.window,
+        threshold=loops.threshold,
+    )
+
+
+def _assistant_entry(reply: LLMReply, calls: Sequence[ToolCall]) -> dict[str, Any]:
+    """One assistant wire entry carrying tool_calls (with ids), plus the stored
+    thinking blocks for verbatim echo-back while tool use continues. Attached
+    only when present so chat-format payloads never gain unknown message
+    fields; the model stamp matters because a lenient endpoint's unsigned
+    blocks would 400 a strict one — the llm layer only echoes blocks back to
+    the model that issued them (thinking_source)."""
+    entry: dict[str, Any] = {
+        "role": "assistant",
+        "content": reply.text or "",
+        "tool_calls": [{"id": c.id, "name": c.name, "arguments": c.arguments} for c in calls],
+    }
+    if reply.thinking_blocks:
+        entry["thinking_blocks"] = [dict(b) for b in reply.thinking_blocks]
+        if reply.model:
+            entry["thinking_source"] = reply.model
+    return entry
 
 
 async def _run_tool(
@@ -411,29 +442,10 @@ async def run_react(
                     tool=skipped_trip.name, threshold=loops.threshold, window=loops.window
                 )
                 if skipped_reminder is None:
-                    text = render(
-                        P.modes.loop_abort,
-                        tool=skipped_trip.name,
-                        window=loops.window,
-                        threshold=loops.threshold,
-                    )
+                    text = _loop_abort_text(skipped_trip.name, loops)
                     await _surrender_step(on_step, "loop_abort", text)
                     return text
-            truncated_entry: dict[str, Any] = {
-                "role": "assistant",
-                "content": reply.text or "",
-                "tool_calls": [
-                    {"id": call.id, "name": call.name, "arguments": call.arguments}
-                    for call in reply.tool_calls
-                ],
-            }
-            if reply.thinking_blocks:
-                truncated_entry["thinking_blocks"] = [dict(b) for b in reply.thinking_blocks]
-                # Which model produced these blocks: unsigned blocks from a
-                # lenient endpoint would 400 a strict one, so the llm layer
-                # only echoes blocks back to the model that issued them.
-                if reply.model:
-                    truncated_entry["thinking_source"] = reply.model
+            truncated_entry = _assistant_entry(reply, reply.tool_calls)
             messages.append(truncated_entry)
             for call in reply.tool_calls:
                 messages.append(
@@ -545,33 +557,12 @@ async def run_react(
                 break
             executable.append(call)
         if tripped is not None and not executable:
-            return render(
-                P.modes.loop_abort,
-                tool=tripped.name,
-                window=loops.window,
-                threshold=loops.threshold,
-            )
+            return _loop_abort_text(tripped.name, loops)
         # Neutral back-fill: one assistant entry carrying this round's tool_calls
         # (with ids), then one result entry per call carrying the same
         # tool_call_id; wire formats per provider (OpenAI tool_call_id /
         # Anthropic tool_use_id) are translated by the packages/llm client.
-        # Stored thinking blocks ride along for verbatim echo-back while tool
-        # use continues (extended thinking); attached only when present so
-        # chat-format payloads never gain unknown message fields.
-        assistant_entry: dict[str, Any] = {
-            "role": "assistant",
-            "content": reply.text or "",
-            "tool_calls": [
-                {"id": call.id, "name": call.name, "arguments": call.arguments}
-                for call in executable
-            ],
-        }
-        if reply.thinking_blocks:
-            assistant_entry["thinking_blocks"] = [dict(b) for b in reply.thinking_blocks]
-            # Same provenance stamp as the truncated-calls path above
-            if reply.model:
-                assistant_entry["thinking_source"] = reply.model
-        messages.append(assistant_entry)
+        messages.append(_assistant_entry(reply, executable))
         tool_calls_used += len(executable)
         # Consecutive-safe partitioning (claude-code style): runs of
         # concurrent-safe calls execute in parallel, a write/unsafe call forms
@@ -624,12 +615,7 @@ async def run_react(
                     messages.append({"role": "user", "content": reminder})
                     await on_step("llm", "loop-advisory", reminder[:120], {"advisory": True})
                     continue
-                text = render(
-                    P.modes.loop_abort,
-                    tool=tripped.name,
-                    window=loops.window,
-                    threshold=loops.threshold,
-                )
+                text = _loop_abort_text(tripped.name, loops)
                 await _surrender_step(on_step, "loop_abort", text)
                 return text
             text = render(P.modes.react.tool_cap, max_tool_calls=limits.max_tool_calls)
