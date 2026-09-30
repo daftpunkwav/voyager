@@ -568,7 +568,10 @@ DEFS = [
         description="Rolling prune: minimum recoverable tokens before old tool results are cleared",
     ),
     # External MCP: stdio/URL servers the user added in the settings page.
-    # One record: {id,name,kind,command,args,url,approval,approved,enabled};
+    # One record: {id,name,kind,command,args,url,approval,approved,enabled,
+    # consent}; "consent" is the persisted seen-tools snapshot (the names
+    # present at the user's last preview) that startup mounting baselines
+    # from, so a restart cannot let the server widen its own surface.
     # remote schemas / local absolute paths never enter this JSON; connection
     # details live in runtime state.
     # user_only: prompt injection cannot change the server list.

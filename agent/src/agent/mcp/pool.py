@@ -181,7 +181,7 @@ class McpClientPool:
         raw_instructions = getattr(self._sessions[sid], "instructions", "")
         self._instructions[sid] = str(raw_instructions) if raw_instructions else ""
 
-    async def preview(self, sid: str, *, rebase: bool = True) -> list[dict]:
+    async def preview(self, sid: str, *, rebase: bool = True, actor: Any = None) -> list[dict]:
         """Connect (if not yet) and run tools/list, returning the remote tool
         list.
 
@@ -194,6 +194,14 @@ class McpClientPool:
         capability): the listing returns, but consent is NOT re-baselined and
         nothing remounts — a new remote tool stays behind the user's own
         explicit preview, so the agent cannot widen its own tool surface.
+
+        `actor` is the consent act's principal: when a rebase happens with an
+        actor present, the consent snapshot is persisted into the config
+        entry (a user_only write through that actor, audit chain intact) so
+        the baseline survives a restart. Without an actor the snapshot stays
+        in-memory only (tests). A persist failure aborts the consent act
+        (nothing rebases, nothing mounts) and propagates: a consent that
+        cannot be recorded must not silently apply.
 
         validate_server_config runs before connecting: a dirty config (left
         over from settings written directly, bypassing add validation) is
@@ -228,8 +236,13 @@ class McpClientPool:
         if rebase:
             # User consent point: the previewed list is what approval covers;
             # the hot-refresh path mounts only these names (new remote tools
-            # wait for the next explicit preview)
-            self._seen_tools[sid] = {str(t.get("name") or "") for t in tools}
+            # wait for the next explicit preview). Persist before mutating
+            # in-memory state: if the write fails nothing rebases and nothing
+            # mounts (fail-closed, retryable).
+            seen = {str(t.get("name") or "") for t in tools}
+            if actor is not None:
+                await self._persist_consent(sid, seen, actor)
+            self._seen_tools[sid] = seen
             self._new_tools.pop(sid, None)
             # Already approved: a successful tools/list remounts (so a server
             # fixed after a failed startup rejoins the tool surface via
@@ -238,6 +251,17 @@ class McpClientPool:
             if approved:
                 self.remount(sid, approved)
         return tools
+
+    async def _persist_consent(self, sid: str, names: set[str], actor: Any) -> None:
+        """Write the consent snapshot into the config entry so the baseline
+        survives a restart. agent.mcp.servers is user_only: this write must
+        carry the actor of the consent act itself (the user previewing); a
+        system actor is rejected by the settings store, which is correct —
+        consent is never recorded on the system's say-so."""
+        cfg = self.find_config(sid)
+        if cfg is None:
+            return
+        await self.upsert_config({**cfg, "consent": sorted(names)}, actor)
 
     async def drop_session(self, sid: str) -> None:
         """Disconnect and drop one server's session; no-op when not connected."""
@@ -279,10 +303,13 @@ class McpClientPool:
         entries without an id (direct settings writes) are skipped the same way.
         Mounting goes through the hot-refresh path (_refresh_one): the consent
         snapshot decides what mounts and a server that grew new tools since the
-        last consent does not silently widen the surface at startup — fresh
-        names land in _new_tools awaiting an explicit preview, same as a
-        refresh cycle. When auto_refresh is enabled (composition root), a
-        periodic tools/list refresh loop starts after the initial reconnect.
+        last consent does not silently widen the surface at startup — the
+        baseline comes from the consent snapshot persisted at the user's last
+        preview (config entry field "consent"), and fresh names land in
+        _new_tools awaiting an explicit preview, same as a refresh cycle. An
+        entry without a persisted snapshot stays unmounted until that preview.
+        When auto_refresh is enabled (composition root), a periodic tools/list
+        refresh loop starts after the initial reconnect.
         """
         if self._started:
             return
@@ -370,16 +397,21 @@ class McpClientPool:
         # _seen_tools wholesale (a fresh consent act), refresh never widens
         # consent — only the seen names mount, new ones wait in _new_tools
         # for the next explicit preview.
+        current = {str(t.get("name") or "") for t in tools}
         seen = self._seen_tools.get(sid)
         if seen is None:
-            # approved-but-never-previewed entry (e.g. hand-written settings):
-            # this list becomes the consent baseline
-            self._seen_tools[sid] = {str(t.get("name") or "") for t in tools}
-        else:
-            fresh = sorted({str(t.get("name") or "") for t in tools} - seen)
-            if fresh:
-                self._new_tools[sid] = fresh
-        mounted = [t for t in tools if str(t.get("name") or "") in self._seen_tools[sid]]
+            # Cold consent state (process start): baseline from the persisted
+            # consent snapshot, never from the server's current listing — a
+            # remote server that grew tools since the last consent must not
+            # widen its own surface across a restart. An entry with no
+            # snapshot (never user-previewed, e.g. hand-written settings)
+            # baselines empty: nothing mounts until an explicit preview.
+            seen = {str(n) for n in (cfg.get("consent") or []) if isinstance(n, str)}
+            self._seen_tools[sid] = seen
+        fresh = sorted(current - seen)
+        if fresh:
+            self._new_tools[sid] = fresh
+        mounted = [t for t in tools if str(t.get("name") or "") in seen]
         approved = list(cfg.get("approved") or [])
         if approved:
             self.remount(sid, approved, tools=mounted)

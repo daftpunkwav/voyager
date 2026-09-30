@@ -72,7 +72,7 @@ async def extension_action(
         # agent's say-so. User/system actors keep the consent act.
         rebase = actor is None or actor.kind is not ActorKind.AGENT
         preview = await deps.mcp.preview(
-            id, rebase=rebase
+            id, rebase=rebase, actor=actor
         )  # raises AGENT.UNAVAILABLE with a readable message
         return {"id": id, "preview": preview}
     if key == "hook.list":

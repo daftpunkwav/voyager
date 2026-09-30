@@ -40,7 +40,7 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
         if "*" in names or "*" in prev:
             approved = ["*"]  # keep package-level approval once granted; never silently narrow it
         else:
-            remote_names = {t.get("name") for t in await deps.mcp.preview(id)}
+            remote_names = {t.get("name") for t in await deps.mcp.preview(id, actor=_actor)}
             unknown = [n for n in names if n not in remote_names]
             if unknown:
                 raise ServiceError(

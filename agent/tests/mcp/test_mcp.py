@@ -279,7 +279,8 @@ class TestRemove:
 
 class TestRestart:
     async def test_start_reconnects_approved(self, tmp_path) -> None:
-        """Settings pre-seeded with approved=['*'] -> a fresh build_agent plus mcp.start() mounts automatically."""
+        """Settings pre-seeded with approved=['*'] plus the persisted consent
+        snapshot -> a fresh build_agent plus mcp.start() mounts automatically."""
         from platform_settings import SettingsStore
 
         shared = SettingsStore(tmp_path / "shared.db")
@@ -294,6 +295,7 @@ class TestRestart:
             "approval": "package",
             "approved": ["*"],
             "enabled": True,
+            "consent": ["search", "fetch"],
         }
         app = build_agent(
             data_dir=tmp_path / "rd",
@@ -313,6 +315,104 @@ class TestRestart:
             await app.mcp.start()
             names = [n for n in app.spawner._toolbelt.names() if n.startswith("mcp__")]
             assert len(names) == 2
+        finally:
+            app.close()
+            shared.close()
+
+    async def test_start_without_consent_snapshot_mounts_nothing(self, tmp_path) -> None:
+        """Fail-closed: approved=['*'] but no persisted consent snapshot (the
+        entry was never user-previewed) -> startup mounts nothing, and the
+        server's current listing lands in new_tools awaiting that preview."""
+        from platform_settings import SettingsStore
+
+        shared = SettingsStore(tmp_path / "shared.db")
+        sessions: dict[str, FakeSession] = {}
+        app = build_agent(
+            data_dir=tmp_path / "rd",
+            workspace_dir=tmp_path / "ws",
+            llm=FakeLLM(),
+            settings_store=shared,
+            mcp_connect=fake_connect(sessions),
+        )
+        await shared.set(
+            "agent.mcp.servers",
+            [
+                {
+                    "id": "demo",
+                    "name": "demo",
+                    "kind": "stdio",
+                    "command": "npx",
+                    "args": [],
+                    "url": "",
+                    "approval": "package",
+                    "approved": ["*"],
+                    "enabled": True,
+                }
+            ],
+            LOCAL_USER,
+        )
+        try:
+            await app.mcp.start()
+            names = [n for n in app.spawner._toolbelt.names() if n.startswith("mcp__")]
+            assert names == []  # never consented: the server cannot self-mount
+            state = {s["id"]: s for s in app.mcp.list_state()}
+            assert state["demo"]["new_tools"] == ["fetch", "search"]
+        finally:
+            app.close()
+            shared.close()
+
+    async def test_restart_widening_blocked_by_persisted_consent(self, tmp_path) -> None:
+        """The fix for consent-widening-across-restart: user previews A,B then
+        approves '*'; the server later adds C; a fresh process must mount only
+        A,B — C waits in new_tools for an explicit preview."""
+        from platform_settings import SettingsStore
+
+        # the server learned a new tool while the agent was down
+        class GrownSession(FakeSession):
+            TOOLS: ClassVar[list[dict]] = [
+                *FakeSession.TOOLS,
+                {"name": "fresh", "description": "Added while the agent was down"},
+            ]
+
+        shared = SettingsStore(tmp_path / "shared.db")
+        sessions: dict[str, FakeSession] = {}
+
+        async def grown_connect(cfg: dict) -> FakeSession:
+            session = GrownSession()
+            sessions[cfg["id"]] = session
+            return session
+
+        app = build_agent(
+            data_dir=tmp_path / "rd",
+            workspace_dir=tmp_path / "ws",
+            llm=FakeLLM(),
+            settings_store=shared,
+            mcp_connect=grown_connect,
+        )
+        await shared.set(
+            "agent.mcp.servers",
+            [
+                {
+                    "id": "demo",
+                    "name": "demo",
+                    "kind": "stdio",
+                    "command": "npx",
+                    "args": [],
+                    "url": "",
+                    "approval": "package",
+                    "approved": ["*"],
+                    "enabled": True,
+                    "consent": ["search", "fetch"],
+                }
+            ],
+            LOCAL_USER,
+        )
+        try:
+            await app.mcp.start()
+            names = {n for n in app.spawner._toolbelt.names() if n.startswith("mcp__")}
+            assert names == {"mcp__demo__search", "mcp__demo__fetch"}  # fresh NOT mounted
+            state = {s["id"]: s for s in app.mcp.list_state()}
+            assert state["demo"]["new_tools"] == ["fresh"]
         finally:
             app.close()
             shared.close()
@@ -527,6 +627,7 @@ class TestRestart:
                     "approval": "package",
                     "approved": ["*"],
                     "enabled": True,
+                    "consent": ["search", "fetch"],
                 },
             ],
             LOCAL_USER,
@@ -825,6 +926,35 @@ class TestAgentPreviewScope:
         )
         assert rapp.mcp.list_state()[0]["new_tools"] == ["fresh"]  # still awaiting the user
 
+    async def test_user_preview_persists_consent_snapshot(self, rapp) -> None:
+        """The consent act writes the seen-set into the config entry (field
+        "consent") so the startup baseline survives a restart; an agent's
+        read-only preview leaves the persisted snapshot untouched."""
+        from platform_actor import ActorContext
+        from platform_contracts import ActorKind, ActorRef
+
+        agent_ctx = ActorContext(actor=ActorRef(kind=ActorKind.AGENT, id="agent.main", scopes=()))
+        await self._mount_all(rapp)
+        (entry,) = rapp.mcp.configs()
+        assert entry["consent"] == ["fetch", "search"]  # persisted at approve-time preview
+        rapp.sessions["demo"].TOOLS = [
+            *FakeSession.TOOLS,
+            {"name": "fresh", "description": "New tool"},
+        ]
+        await execute(
+            rapp.registry,
+            "extension",
+            agent_ctx,
+            {"kind": "mcp", "action": "preview", "id": "demo"},
+        )
+        (entry,) = rapp.mcp.configs()
+        assert entry["consent"] == ["fetch", "search"]  # agent look persists nothing
+        await execute(
+            rapp.registry, "extension", USER_CTX, {"kind": "mcp", "action": "preview", "id": "demo"}
+        )
+        (entry,) = rapp.mcp.configs()
+        assert entry["consent"] == ["fetch", "fresh", "search"]  # user act re-baselines
+
     async def test_startup_mounts_only_consented_tools(self, tmp_path) -> None:
         """Startup reconnect mounts through the hot-refresh consent gate: a
         per-item approval mounts only the approved names even though the
@@ -853,6 +983,7 @@ class TestAgentPreviewScope:
                     "approval": "item",
                     "approved": ["search"],
                     "enabled": True,
+                    "consent": ["search", "fetch"],
                 }
             ],
             LOCAL_USER,

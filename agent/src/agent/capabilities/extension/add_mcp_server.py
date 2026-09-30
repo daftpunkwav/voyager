@@ -53,7 +53,7 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
             )
         await deps.mcp.upsert_config({**cfg, "approved": []}, _actor)
         try:
-            preview = await deps.mcp.preview(cfg["id"])
+            preview = await deps.mcp.preview(cfg["id"], actor=_actor)
         except ServiceError as exc:
             # Keep the config even if the connection fails: the user can fix the
             # environment and retry via "refresh tool list"; never drop a half-added config.
