@@ -1356,6 +1356,38 @@ class TestMessageTranslation:
         assert "dump" not in exc.value.detail_suffix()
         assert sentinel.read_text(encoding="utf-8") == '{"earlier": "rejection"}'
 
+    async def test_dump_dir_is_bounded_to_the_newest_files(self, tmp_path, monkeypatch) -> None:
+        """A sustained failure must not grow the dump dir without limit
+        (unbounded confidential conversation plaintext on disk): pruning after
+        each successful write keeps only the newest _DUMP_KEEP_MAX files - the
+        newest dumps are the diagnosable ones."""
+        from llm.client import _DUMP_KEEP_MAX, ProviderError
+
+        dump_dir = tmp_path / "dump"
+        dump_dir.mkdir()
+        for i in range(_DUMP_KEEP_MAX + 5):
+            p = dump_dir / f"llm-{1_760_000_000_000_000_000 + i}.json"
+            p.write_text('{"old": true}', encoding="utf-8")
+            os.utime(p, (1_000_000.0 + i, 1_000_000.0 + i))  # monotone, all ancient
+        monkeypatch.setenv("LLM_DEBUG_DUMP_DIR", str(dump_dir))
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, json={"error": {"message": "nope"}})
+
+        self._patch(monkeypatch, handler)
+        with pytest.raises(ProviderError):
+            await client_mod.complete(
+                self._ANTHROPIC,
+                api_key="sk",
+                model="m",
+                messages=[{"role": "user", "content": "hi"}],
+            )
+        dumps = sorted(dump_dir.glob("llm-*.json"), key=lambda p: p.stat().st_mtime)
+        assert len(dumps) == _DUMP_KEEP_MAX
+        # the oldest pre-existing files were dropped, the fresh dump survived
+        assert not (dump_dir / "llm-1760000000000000000.json").exists()
+        assert json.loads(dumps[-1].read_text(encoding="utf-8"))["status"] == 400
+
     async def test_anthropic_flattens_bare_tool_role(self, monkeypatch) -> None:
         seen = {}
 

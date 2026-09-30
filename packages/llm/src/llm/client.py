@@ -684,6 +684,34 @@ async def _post(
     return resp
 
 
+#: Cap on dump files kept in LLM_DEBUG_DUMP_DIR. A long provider failure
+#: would otherwise accumulate unbounded confidential (conversation plaintext)
+#: files on disk; the newest dumps are the diagnosable ones, so pruning keeps
+#: the newest _DUMP_KEEP_MAX and deletes the rest. Pruning runs after each
+#: successful dump write (rejections only - never a hot path).
+_DUMP_KEEP_MAX = 200
+
+
+def _prune_dump_dir(dump_dir: Path) -> None:
+    """Keep only the newest _DUMP_KEEP_MAX dump files. Every failure is
+    contained (best-effort diagnostics): a prune failure must never break the
+    dump that triggered it, the call path, or later dumps."""
+    try:
+        dumps = sorted(
+            (p for p in dump_dir.glob("llm-*.json") if p.is_file()),
+            key=lambda p: p.stat().st_mtime,
+        )
+    except OSError as exc:
+        log.debug("llm debug dump prune scan failed: %s", exc)
+        return
+    for old in dumps[: max(0, len(dumps) - _DUMP_KEEP_MAX)]:
+        try:
+            old.unlink()
+        except OSError as exc:  # a concurrent prune may have taken it already
+            log.debug("llm debug dump prune failed for %s: %s", old, exc)
+            continue
+
+
 def _dump_rejected_request(url: str, body: dict[str, Any], status: int, response_text: str) -> str:
     """Write the full rejected request/response pair when LLM_DEBUG_DUMP_DIR is
     set: the only way to see what a strict provider actually disliked (its
@@ -695,9 +723,11 @@ def _dump_rejected_request(url: str, body: dict[str, Any], status: int, response
     so every dump file is user-confidential material on disk. Headers are
     never written (the api key must not land on disk), the feature stays
     opt-in behind the env var, and files are created 0o600 (Unix; Windows
-    relies on the profile ACL, same as the session-token secret). Returns the
-    dump file path (empty when dumping is off or the write failed) so callers
-    can reference it in user-facing error details."""
+    relies on the profile ACL, same as the session-token secret). The
+    directory is bounded (_prune_dump_dir): a sustained failure cannot grow
+    it without limit. Returns the dump file path (empty when dumping is off
+    or the write failed) so callers can reference it in user-facing error
+    details."""
     dump_dir = os.environ.get("LLM_DEBUG_DUMP_DIR")
     if not dump_dir:
         return ""
@@ -722,6 +752,7 @@ def _dump_rejected_request(url: str, body: dict[str, Any], status: int, response
         fd = os.open(dump_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(payload)
+        _prune_dump_dir(path)
         return str(dump_path)
     except Exception as exc:  # noqa: BLE001 - diagnostics never break the call path
         log.debug("llm debug dump failed: %s", exc)
