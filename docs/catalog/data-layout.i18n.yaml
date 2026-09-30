@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   git hash-object docs/catalog/data-layout.md docs/catalog/data-layout.zh.md
-docs/catalog/data-layout.md: 61e85a2cce638d5e0a31171c22a41e3b9e089fa8
-docs/catalog/data-layout.zh.md: 89d6f17999d3f9c28c0ee7267f2290fe373e8ffe
+docs/catalog/data-layout.md: 88e444e48455b0160d482a61c0d465b56cb6033f
+docs/catalog/data-layout.zh.md: 2fc0ffbcb75c9f5b9b8f628a707a50a0db87449a

@@ -11,32 +11,33 @@ All runtime state lives under `data/`. The layout below is what the code creates
 | `data/runtime/events.db` | `platform_eventbus.EventLog` | the append-only event log | `agent.delta`/`agent.step`/`task.progress` rows purge after 24 h; other types accumulate |
 | `data/runtime/settings.db` | `platform_settings.SettingsStore` | setting values | — |
 | `data/runtime/secrets.db` | `platform_secrets.SecretStore` | Fernet-encrypted secrets | — |
-| `data/runtime/audit.db` | `platform_capability.SqliteAuditSink` | capability call audit | — |
+| `data/runtime/audit.db` | `platform_capability.SqliteAuditSink` | capability call audit | 90 days (startup purge) |
 | `data/runtime/machine.token` | `platform_actor.LocalTokenIssuer` | local bearer token | — |
+| `data/runtime/host.lock` | `host.dev` launcher | single-instance lock (pid line; released when the process exits) | — |
 
 ## Agent stores (`agent/src/agent/`, under `data/runtime/agent/`)
 
 | Path | Owner | Contents | Retention |
 |---|---|---|---|
 | `sessions.db` | `sessions/store.py SessionStore` | chat sessions, active pointer | — |
-| `trajectory.db` | `runtime/trajectory.py TrajectoryStore` | `steps`/`runs` projections, `raw_rounds` | raw rounds purge after 7 days |
+| `trajectory.db` | `runtime/trajectory.py TrajectoryStore` | `steps`/`runs` projections, `raw_rounds` | raw rounds purge after 7 days (`agent.retention.raw_log_days`) |
 | `session_index.db` | `runtime/session_index.py SessionIndex` | FTS5 index over chat messages | — |
-| `queue.db` | `runtime/queue_store.py QueueStore` | durable queue (cron) | — |
+| `queue.db` | `runtime/queue_store.py QueueStore` | durable queue (cron) | finished one-shot rows purge at startup after 30 days |
 | `meter.db` | `runtime/meter_store.py MeterStore` | LLM/tool usage | 90 days |
 | `memory/profile.db`, `memory/episodic.db`, `memory/semantic.db` | `memory/` stores | profile, episodic trail, facts | `agent.memory.retention_days` (purge call) |
 | `checkpoints/` | `runtime/state.py CheckpointStore` | resume snapshots | startup sweeps |
 | `subagents/*.json` | `engine/registry.py SubagentRegistry` | user-defined subagent definitions | — |
-| `write_journal/` | write journal | content-addressed write backups | — |
+| `write_journal/` | write journal | content-addressed write backups | entries purge at startup after 30 days; unreferenced blobs GC'd |
 
 ## Domain stores (`data/runtime/<domain>/`)
 
 | Path | Owner | Contents |
 |---|---|---|
-| `data/runtime/llm/llm.db` | `packages/llm` `ProviderStore` | providers, usage |
+| `data/runtime/llm/llm.db` | `packages/llm` `ProviderStore` | providers, usage (usage rows purge after 90 days) |
 | `data/runtime/notes/notes.db` | `packages/notes` `NoteStore` | notes, versions, links, tags, trash |
 | `data/runtime/notes/assets.db` | `packages/notes` `AssetStore` | attachment metadata (binaries in workspace) |
 | `data/runtime/graph/graph.db` | `packages/graph` `GraphStore` | nodes, edges |
-| `data/runtime/graph/index.db` | `packages/graph` `IndexQueue` | index jobs |
+| `data/runtime/graph/index.db` | `packages/graph` `IndexQueue` | index jobs (terminal rows prune at startup, 500-row cap) |
 | `data/runtime/graph/engine-python/` | `packages/graph` Python engine | engine data root |
 | `data/runtime/sources/repo.db`, `doc.db`, `web.db` | `packages/sources` | per-kind source records |
 | `data/runtime/office/office.db` | `packages/office` `DocumentStore` | documents (`doc`/`slides`) |

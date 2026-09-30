@@ -29,6 +29,8 @@ Toolchain, startup, and repository conventions.
 | `npm run gate:py` | all of the above |
 | `npm run gate:web` | `tsc --noEmit` + `eslint --max-warnings 0` + `vitest run` + i18n key check + `prettier --check` |
 | `npm run gate` | `gate:py && gate:web` |
+| `npm run audit:py` | pip-audit over the uv lockfile resolution (`scripts/pip_audit.py`) |
+| `npm run audit:web` | `npm audit --audit-level=high` |
 | `npm run eval` | agent eval suite (`agent/tests/eval`), env-gated for real models; `eval:update` re-records the baseline |
 
 ## Conventions

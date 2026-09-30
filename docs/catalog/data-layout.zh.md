@@ -11,32 +11,33 @@
 | `data/runtime/events.db` | `platform_eventbus.EventLog` | 只追加事件日志 | `agent.delta`/`agent.step`/`task.progress` 行 24 小时后清理;其他类型持续累积 |
 | `data/runtime/settings.db` | `platform_settings.SettingsStore` | 设置值 | — |
 | `data/runtime/secrets.db` | `platform_secrets.SecretStore` | Fernet 加密密钥 | — |
-| `data/runtime/audit.db` | `platform_capability.SqliteAuditSink` | 能力调用审计 | — |
+| `data/runtime/audit.db` | `platform_capability.SqliteAuditSink` | 能力调用审计 | 90 天(启动清理) |
 | `data/runtime/machine.token` | `platform_actor.LocalTokenIssuer` | 本地 bearer token | — |
+| `data/runtime/host.lock` | `host.dev` 启动器 | 单实例锁(pid 行;进程退出即释放) | — |
 
 ## Agent 存储(`agent/src/agent/`,位于 `data/runtime/agent/`)
 
 | 路径 | 归属 | 内容 | 保留 |
 |---|---|---|---|
 | `sessions.db` | `sessions/store.py SessionStore` | 聊天会话、活动指针 | — |
-| `trajectory.db` | `runtime/trajectory.py TrajectoryStore` | `steps`/`runs` 投影、`raw_rounds` | 原始轮 7 天后清理 |
+| `trajectory.db` | `runtime/trajectory.py TrajectoryStore` | `steps`/`runs` 投影、`raw_rounds` | 原始轮 7 天后清理(`agent.retention.raw_log_days`) |
 | `session_index.db` | `runtime/session_index.py SessionIndex` | 聊天消息的 FTS5 索引 | — |
-| `queue.db` | `runtime/queue_store.py QueueStore` | 持久队列(cron) | — |
+| `queue.db` | `runtime/queue_store.py QueueStore` | 持久队列(cron) | 已完结的一次性任务行启动时清理(30 天) |
 | `meter.db` | `runtime/meter_store.py MeterStore` | LLM/工具用量 | 90 天 |
 | `memory/profile.db`、`memory/episodic.db`、`memory/semantic.db` | `memory/` 各库 | 画像、情景轨迹、事实 | `agent.memory.retention_days`(purge 调用) |
 | `checkpoints/` | `runtime/state.py CheckpointStore` | 恢复快照 | 启动清扫 |
 | `subagents/*.json` | `engine/registry.py SubagentRegistry` | 用户自定义子代理定义 | — |
-| `write_journal/` | 写日志 | 内容寻址的写入备份 | — |
+| `write_journal/` | 写日志 | 内容寻址的写入备份 | 条目启动时清理(30 天);无引用 blob 随之回收 |
 
 ## 域存储(`data/runtime/<domain>/`)
 
 | 路径 | 归属 | 内容 |
 |---|---|---|
-| `data/runtime/llm/llm.db` | `packages/llm` `ProviderStore` | 供应商、用量 |
+| `data/runtime/llm/llm.db` | `packages/llm` `ProviderStore` | 供应商、用量(用量行 90 天后清理) |
 | `data/runtime/notes/notes.db` | `packages/notes` `NoteStore` | 笔记、版本、链接、标签、回收站 |
 | `data/runtime/notes/assets.db` | `packages/notes` `AssetStore` | 附件元数据(二进制在工作区) |
 | `data/runtime/graph/graph.db` | `packages/graph` `GraphStore` | 节点、边 |
-| `data/runtime/graph/index.db` | `packages/graph` `IndexQueue` | 索引任务 |
+| `data/runtime/graph/index.db` | `packages/graph` `IndexQueue` | 索引任务(终态行启动时修剪,500 行上限) |
 | `data/runtime/graph/engine-python/` | `packages/graph` Python 引擎 | 引擎数据根 |
 | `data/runtime/sources/repo.db`、`doc.db`、`web.db` | `packages/sources` | 各类来源记录 |
 | `data/runtime/office/office.db` | `packages/office` `DocumentStore` | 文档(`doc`/`slides`) |

@@ -11,11 +11,11 @@
 1. **扫描**(`scan.py`)— `scan(root, prefix)` 把每个 `packages/*/service.json` 读为 `ServiceCard`(`domain`、`module`、`port`、`capabilities`、`subscribes`、`publishes`、`needs`、`depends_on`、`enabled_by_default`、`role`)。发现只读卡片,不读代码。`_` 前缀目录与 `SKIP_DIR_NAMES = {"platform", "host"}` 被跳过。
 2. **规划**(`plan.py`)— `select_enabled` 解析启用集合:`ENABLE_DOMAINS` 环境变量 → `host.domains.enabled` 设置 → 卡片 `enabled_by_default`。`topo_order` 按 `depends_on` 排序(Kahn;成环拒绝启动)。gateway 角色卡片注册其设置。
 3. **组装**(`assemble.py`)— `build()`(以 `uvicorn host.assemble:build --factory` 服务)在 `data/runtime/` 下构造共享设施,接线每个启用的域,构建 agent,然后把一切交给 `gateway.rest.create_app`。
-4. **开发入口**(`dev.py`)— `python -m host.dev` 在 `apps/web` 拉起 `npm run dev`,并在 `127.0.0.1:8000` 运行 uvicorn;Ctrl+C 同时收掉两者。
+4. **开发入口**(`dev.py`)— `python -m host.dev` 在 `apps/web` 拉起 `npm run dev`,并在 `127.0.0.1:8000` 运行 uvicorn;Ctrl+C 同时收掉两者。第二个启动实例会直接退出:`data/runtime/host.lock` 上的 OS 级锁保证持久队列/cron 任务只有一个运行者。
 
 ## 共享设施
 
-`build()` 每进程构造一次,位于 `data/runtime/`:`EventLog`(`events.db`,`agent.delta` 保留 24 小时)、`EventBus`、`SecretStore`(`secrets.db`)、`SettingsStore`(`settings.db`)、`SqliteAuditSink`(`audit.db`)、`LocalTokenIssuer`(`machine.token`)、`[CostQuota(日预算 50 000)]`。`os.environ` 在 import 时从仓库 `.env` 播种。每个域获得 `data_dir = data/runtime/<domain>/`;agent 获得 `data/runtime/agent/`。
+`build()` 每进程构造一次,位于 `data/runtime/`:`EventLog`(`events.db`,`agent.delta`/`agent.step`/`task.progress` 保留 24 小时)、`EventBus`、`SecretStore`(`secrets.db`)、`SettingsStore`(`settings.db`)、`SqliteAuditSink`(`audit.db`)、`LocalTokenIssuer`(`machine.token`)、`[CostQuota(日预算 50 000)]`。`os.environ` 在 import 时从仓库 `.env` 播种。每个域获得 `data_dir = data/runtime/<domain>/`;agent 获得 `data/runtime/agent/`。
 
 ## Wiring 注入
 

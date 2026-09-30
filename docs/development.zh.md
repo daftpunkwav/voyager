@@ -29,6 +29,8 @@
 | `npm run gate:py` | 以上全部 |
 | `npm run gate:web` | `tsc --noEmit` + `eslint --max-warnings 0` + `vitest run` + i18n 键检查 + `prettier --check` |
 | `npm run gate` | `gate:py && gate:web` |
+| `npm run audit:py` | 对 uv lockfile 解析结果跑 pip-audit(`scripts/pip_audit.py`) |
+| `npm run audit:web` | `npm audit --audit-level=high` |
 | `npm run eval` | agent eval 套件(`agent/tests/eval`,真模型需环境变量门控);`eval:update` 重录基线 |
 
 ## 约定

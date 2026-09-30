@@ -11,11 +11,11 @@ Source: `packages/host/src/host/`
 1. **Scan** (`scan.py`) — `scan(root, prefix)` reads each `packages/*/service.json` into a `ServiceCard` (`domain`, `module`, `port`, `capabilities`, `subscribes`, `publishes`, `needs`, `depends_on`, `enabled_by_default`, `role`). Discovery reads the card, never code. `_`-prefixed directories and `SKIP_DIR_NAMES = {"platform", "host"}` are skipped.
 2. **Plan** (`plan.py`) — `select_enabled` resolves the enabled set: `ENABLE_DOMAINS` env → `host.domains.enabled` setting → card `enabled_by_default`. `topo_order` orders them by `depends_on` (Kahn; a cycle refuses boot). Gateway-role cards register their settings.
 3. **Assemble** (`assemble.py`) — `build()` (served as `uvicorn host.assemble:build --factory`) constructs shared facilities under `data/runtime/`, wires each enabled domain, builds the agent, and hands everything to `gateway.rest.create_app`.
-4. **Dev entry** (`dev.py`) — `python -m host.dev` spawns `npm run dev` in `apps/web` and runs uvicorn on `127.0.0.1:8000`; Ctrl+C tears down both.
+4. **Dev entry** (`dev.py`) — `python -m host.dev` spawns `npm run dev` in `apps/web` and runs uvicorn on `127.0.0.1:8000`; Ctrl+C tears down both. A second launcher exits: an OS-level lock on `data/runtime/host.lock` keeps the durable queue/cron jobs single-runner.
 
 ## Shared facilities
 
-`build()` constructs, once per process, under `data/runtime/`: `EventLog` (`events.db`, retention for `agent.delta` at 24 h), `EventBus`, `SecretStore` (`secrets.db`), `SettingsStore` (`settings.db`), `SqliteAuditSink` (`audit.db`), `LocalTokenIssuer` (`machine.token`), `[CostQuota(daily budget 50 000)]`. `os.environ` is seeded from the repo `.env` at import. Each domain gets `data_dir = data/runtime/<domain>/`; the agent gets `data/runtime/agent/`.
+`build()` constructs, once per process, under `data/runtime/`: `EventLog` (`events.db`, retention for `agent.delta`/`agent.step`/`task.progress` at 24 h), `EventBus`, `SecretStore` (`secrets.db`), `SettingsStore` (`settings.db`), `SqliteAuditSink` (`audit.db`), `LocalTokenIssuer` (`machine.token`), `[CostQuota(daily budget 50 000)]`. `os.environ` is seeded from the repo `.env` at import. Each domain gets `data_dir = data/runtime/<domain>/`; the agent gets `data/runtime/agent/`.
 
 ## Wiring injection
 
