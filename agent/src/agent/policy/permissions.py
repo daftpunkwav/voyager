@@ -37,10 +37,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from agent.policy.shell import (
-    _match_prefix_len,
-    _matches_prefix,
     allow_tail_safe,
     command_tokens,
+    match_prefix_len,
+    matches_prefix,
 )
 
 FULL, NO_DANGEROUS, READ_ONLY = "full", "no_dangerous", "read_only"
@@ -253,7 +253,7 @@ class ToolPermissions:
             return _denied(tool_name, action)
         if tool_name in rules.deny:
             return _denied(tool_name, action)
-        if tokens is not None and any(_matches_prefix(tokens, p) for p in rules.bash_deny_prefixes):
+        if tokens is not None and any(matches_prefix(tokens, p) for p in rules.bash_deny_prefixes):
             return _denied(tool_name, action)
 
         # 4: full mode — the deny list above is the only gate
@@ -275,7 +275,7 @@ class ToolPermissions:
             return None
         if tokens is not None:
             for p in rules.bash_allow_prefixes:
-                matched = _match_prefix_len(tokens, p)
+                matched = match_prefix_len(tokens, p)
                 # The allow direction is stricter than deny: the unmatched
                 # tail must not open a chained command, substitution, or
                 # redirect, or `npm run build && rm -rf /` would ride an

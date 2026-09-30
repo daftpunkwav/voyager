@@ -249,5 +249,8 @@ async def empty_trash(max_age_days: int | None = None) -> dict:
     if deps.purge_assets:
         for nid in purged:
             deps.purge_assets(nid)
-    await emit(DomainEvent.NOTE_PURGED_BATCH, purged[0], purged_count=len(purged), note_ids=purged)
+    # Batch event: no single-note subject, so no note_id field (the ids ride
+    # in note_ids) — a fabricated first-id note_id would read as single-note
+    # semantics to consumers.
+    await emit(DomainEvent.NOTE_PURGED_BATCH, note_ids=purged, purged_count=len(purged))
     return {"purged_count": len(purged)}

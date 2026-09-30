@@ -73,7 +73,11 @@ def get_any(nid: str) -> dict:
     return note
 
 
-async def emit(type_: str, note_id: str, **payload) -> None:
+async def emit(type_: str, note_id: str = "", **payload) -> None:
+    """Publish one note.* domain event. `note_id` is the single-note subject;
+    batch events (no single subject) omit it and carry their own payload
+    fields (e.g. note_ids) — an empty or fabricated note_id on a batch event
+    would mislead consumers into single-note semantics."""
     deps = require_deps()
     if deps.bus is not None:
         # Attribute the event to the chat turn that caused it (session-filtered
@@ -81,10 +85,11 @@ async def emit(type_: str, note_id: str, **payload) -> None:
         session = current_chat_session.get()
         if session:
             payload["session"] = session
+        body: dict = dict(payload)
+        if note_id:
+            body["note_id"] = note_id
         try:
-            await deps.bus.publish(
-                Event(type=type_, actor=ACTOR, payload={"note_id": note_id, **payload})
-            )
+            await deps.bus.publish(Event(type=type_, actor=ACTOR, payload=body))
         except Exception:
             # The note write already succeeded: a broken event channel (event-log
             # DB error) must not report the whole capability as failed after the

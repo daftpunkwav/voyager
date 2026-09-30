@@ -22,7 +22,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-from platform_contracts import ErrorSuffix, ServiceError
+from platform_contracts import ActorKind, ErrorSuffix, ServiceError
 
 from agent.mcp.mount import remount, unmount
 from agent.mcp.session import McpSession, default_connect
@@ -190,10 +190,12 @@ class McpClientPool:
         approval covers) and remounts, so a server fixed after a failed
         startup rejoins the tool surface through this same method.
 
-        `rebase=False` is the agent-initiated read-only look (extension
-        capability): the listing returns, but consent is NOT re-baselined and
-        nothing remounts — a new remote tool stays behind the user's own
-        explicit preview, so the agent cannot widen its own tool surface.
+        Consent rebase is the pool's single-point policy: an AGENT actor
+        never re-baselines (its listing is a read-only look — a new remote
+        tool stays behind the user's own explicit preview, so the agent
+        cannot widen its own tool surface), everyone else keeps the consent
+        act. Callers may still pass `rebase=False` to narrow further, never
+        to widen: the actor gate holds regardless.
 
         `actor` is the consent act's principal: when a rebase happens with an
         actor present, the consent snapshot is persisted into the config
@@ -233,7 +235,11 @@ class McpClientPool:
             self._errors[sid] = message
             raise ServiceError("agent", ErrorSuffix.UNAVAILABLE, message) from exc
         self._record_tools(sid, tools)
-        if rebase:
+        # Single-point consent policy: an agent actor's listing never
+        # re-baselines consent and never remounts, no matter what the caller
+        # asked for — the self-escalation boundary lives here, not at the
+        # call sites.
+        if rebase and (actor is None or actor.kind is not ActorKind.AGENT):
             # User consent point: the previewed list is what approval covers;
             # the hot-refresh path mounts only these names (new remote tools
             # wait for the next explicit preview). Persist before mutating
@@ -426,8 +432,15 @@ class McpClientPool:
         }
 
     def list_state(self) -> list[dict]:
-        """Settings-page data source: config + runtime state (connected / error /
-        preview / mounted).
+        """Settings-page face: an explicit projection of the stored config
+        entry (the fields the settings UI reads) plus runtime state (connected
+        / error / preview / mounted / new_tools).
+
+        The projection, not `{**cfg}`: the storage entry may carry internal
+        fields (the persisted "consent" audit snapshot) that are not part of
+        the settings-page contract — dumping the record wholesale would leak
+        them into the face and make every internal field an accidental API
+        surface. The stored entry shape is untouched.
 
         Dirty entries without an id are skipped so one KeyError cannot break
         the settings list API.
@@ -435,7 +448,15 @@ class McpClientPool:
         mounted_all = self._toolbelt.names() if self._toolbelt else []
         return [
             {
-                **cfg,
+                "id": sid,
+                "name": str(cfg.get("name") or ""),
+                "kind": str(cfg.get("kind") or ""),
+                "command": str(cfg.get("command") or ""),
+                "args": [str(a) for a in (cfg.get("args") or [])],
+                "url": str(cfg.get("url") or ""),
+                "approval": str(cfg.get("approval") or "item"),
+                "approved": list(cfg.get("approved") or []),
+                "enabled": bool(cfg.get("enabled", True)),
                 "connected": sid in self._sessions,
                 "error": self._errors.get(sid, ""),
                 "preview": self._latest_tools.get(sid, []),

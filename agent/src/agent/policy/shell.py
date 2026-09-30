@@ -5,7 +5,7 @@ The confirm era is over: every command executes unless a guard hard-rejects
 (skills subtree, read-only roots) — the reported default level stays L2 for
 intent visibility, but invoke.py no longer confirms it. Bash command-prefix
 rules live in the permission resolver (policy/permissions.py, "bash:" deny /
-allow entries), which reuses command_tokens/_matches_prefix from here.
+allow entries), which reuses command_tokens/matches_prefix from here.
 """
 
 from __future__ import annotations
@@ -148,10 +148,11 @@ def _exe_free(token: str) -> str:
 _SHELL_TAIL_UNSAFE_CHARS = (";", "&", "|", "`", "$", ">", "\n")
 
 
-def _match_prefix_len(tokens: tuple[str, ...], pattern: str) -> int | None:
+def match_prefix_len(tokens: tuple[str, ...], pattern: str) -> int | None:
     """Token count of the matched pattern head when `tokens` start with it
     (the prefix grammar), else None. The shared matcher behind the deny and
-    allow directions."""
+    allow directions. Public: permissions.py consumes the grammar directly —
+    this module owns the argv-prefix grammar, not its internals."""
     parts = pattern.lower().split()
     if not parts or not tokens:
         return None
@@ -167,12 +168,12 @@ def _match_prefix_len(tokens: tuple[str, ...], pattern: str) -> int | None:
     return len(head)
 
 
-def _matches_prefix(tokens: tuple[str, ...], pattern: str) -> bool:
+def matches_prefix(tokens: tuple[str, ...], pattern: str) -> bool:
     """Token-prefix match (deny direction). A pattern without the trailing
     `*` is still a prefix (the documented grammar): `git push` must deny
     `git push origin main` too — in the deny direction an exact-only reading
     fails open."""
-    return _match_prefix_len(tokens, pattern) is not None
+    return match_prefix_len(tokens, pattern) is not None
 
 
 def allow_tail_safe(tokens: tuple[str, ...], matched_len: int) -> bool:
@@ -206,4 +207,6 @@ __all__ = [
     "allow_tail_safe",
     "command_tokens",
     "decide_shell",
+    "match_prefix_len",
+    "matches_prefix",
 ]

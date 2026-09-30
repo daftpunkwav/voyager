@@ -16,7 +16,7 @@ capability.
 from __future__ import annotations
 
 from platform_capability import Registry, capability
-from platform_contracts import ActorKind, ActorRef, ErrorSuffix, ServiceError
+from platform_contracts import ActorRef, ErrorSuffix, ServiceError
 
 from agent.capabilities.deps import CapabilityDeps
 
@@ -65,14 +65,12 @@ async def extension_action(
     if key == "mcp.list":
         return deps.mcp.list_state()
     if key == "mcp.preview":
-        # Consent fork by actor: an agent-initiated preview is a read-only
-        # look — the listing returns without re-baselining consent and
-        # without remounting, so new remote tools stay behind the user's own
-        # explicit preview instead of entering the tool surface on the
-        # agent's say-so. User/system actors keep the consent act.
-        rebase = actor is None or actor.kind is not ActorKind.AGENT
+        # Consent policy lives in the pool: an agent actor's listing is a
+        # read-only look (no consent re-baseline, no remount — new remote
+        # tools stay behind the user's own explicit preview), user/system
+        # actors keep the consent act.
         preview = await deps.mcp.preview(
-            id, rebase=rebase, actor=actor
+            id, actor=actor
         )  # raises AGENT.UNAVAILABLE with a readable message
         return {"id": id, "preview": preview}
     if key == "hook.list":

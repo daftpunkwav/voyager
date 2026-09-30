@@ -17,7 +17,6 @@ import json
 import logging
 import platform
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -953,18 +952,8 @@ def build_agent(
     )
     jobs_view = JobsView(event_log)
 
-    @dataclass
-    class _CapabilityDeps(CapabilityDeps):
-        """Build-local deps extension: the master-bound delivery announcer the
-        resume close-out reads (agent_instance resume continue_run closes a
-        board-backed run through the same card path as dispatch). Kept as a
-        subclass because the shared CapabilityDeps dataclass stays closed;
-        every other capability is unaffected (still a CapabilityDeps)."""
-
-        board_announce: Any = None  # master.announce_delivery (bound)
-
     registry = build_agent_registry(
-        _CapabilityDeps(
+        CapabilityDeps(
             settings=settings,
             memory=memory,
             skills=skills,

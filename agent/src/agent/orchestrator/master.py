@@ -244,6 +244,32 @@ class Master:
 
     # -- team delivery announcements --------------------------------------------
 
+    async def _quiet_receipt(
+        self, session: str, tag: str, member_key: str, detail: str, *, trace_id: str = ""
+    ) -> bool:
+        """The wake-budget gate shared by agent-triggered wakeups (delivery
+        reports, task claims). Over budget the wakeup degrades to a one-line
+        quiet receipt instead of spending another LLM turn — a burst of
+        agent-triggered notices must not feed itself. Under budget the session
+        is recorded and the caller proceeds with the full notice turn.
+
+        Returns True when the receipt path was taken (the caller must not run
+        the relay). The member's display name, not the persona struct key:
+        this line lands on the user's timeline."""
+        if self._wake_budget is not None and not self._wake_budget.allow(session):
+            preset = resolve_persona(member_key)
+            shown = preset.display_name if preset is not None else member_key
+            await self.reply(
+                f"[{tag}] {shown} {detail}",
+                trace_id=trace_id,
+                session=session,
+                kind="notice",
+            )
+            return True
+        if self._wake_budget is not None:
+            self._wake_budget.record(session)
+        return False
+
     async def announce_delivery(
         self,
         inst: DeliveryRun,
@@ -329,28 +355,19 @@ class Master:
         # over-budget burst must not spend LLM calls on discarded summaries).
         # A relay failure must never break the completion path either.
         sid = inst.task.session
-        if self._wake_budget is not None and not self._wake_budget.allow(sid):
-            try:
-                # Display name, not the persona struct key: this line lands on
-                # the user's timeline (the delivery card shows the display
-                # name everywhere else).
-                preset = resolve_persona(member)
-                shown = preset.display_name if preset is not None else member
-                await self.reply(
-                    f"[team-report] {shown} "
-                    + ("已完成" if ok else "执行失败")
-                    + ",详情见上方交付卡。",
-                    trace_id=trace_id,
-                    session=sid,
-                    kind="notice",
-                )
-            except Exception:
-                log.warning(
-                    "quiet delivery receipt failed to publish (session %s)", sid, exc_info=True
-                )
+        try:
+            gated = await self._quiet_receipt(
+                sid,
+                "team-report",
+                member,
+                ("已完成" if ok else "执行失败") + ",详情见上方交付卡。",
+                trace_id=trace_id,
+            )
+        except Exception:
+            log.warning("quiet delivery receipt failed to publish (session %s)", sid, exc_info=True)
             return
-        if self._wake_budget is not None:
-            self._wake_budget.record(sid)
+        if gated:
+            return
         if ok:
             summary = await synthesize_result(self._llm, member, result)
             body = render(P.orchestrator.team_report_done, member=member, summary=summary)
@@ -382,24 +399,15 @@ class Master:
             note_line=render(P.orchestrator.task_claim_note, note=note) if note else "",
         )
         try:
-            # Same anti-self-excitation gate as announce_delivery: a claim
-            # notice is an agent-triggered wakeup, and an over-budget burst
-            # (handoff -> claim -> notice -> handoff ...) must degrade to a
-            # quiet receipt instead of spending another LLM turn.
-            if self._wake_budget is not None and not self._wake_budget.allow(session):
-                # Display name, not the persona struct key: this line lands on
-                # the user's timeline (same quiet-receipt contract as the
-                # announce_delivery branch above).
-                preset = resolve_persona(claimant)
-                shown = preset.display_name if preset is not None else claimant
-                await self.reply(
-                    f"[task-claim] {shown} 认领了「{title}」,详情见任务板。",
-                    session=session,
-                    kind="notice",
-                )
+            # Same anti-self-excitation gate as announce_delivery (the shared
+            # _quiet_receipt helper): a claim notice is an agent-triggered
+            # wakeup, and an over-budget burst (handoff -> claim -> notice ->
+            # handoff ...) must degrade to a quiet receipt instead of spending
+            # another LLM turn.
+            if await self._quiet_receipt(
+                session, "task-claim", claimant, f"认领了「{title}」,详情见任务板。"
+            ):
                 return
-            if self._wake_budget is not None:
-                self._wake_budget.record(session)
             await self.handle_notice(session, body)
         except Exception:
             log.warning(

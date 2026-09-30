@@ -102,9 +102,10 @@ async def agent_instance_action(
         # Board-backed runs close out like dispatches: without the re-attached
         # row the resumed run would finish with no delivery card and a board
         # row stuck on running. The announcer is build-injected
-        # (master.announce_delivery); a deps without it keeps the legacy
+        # (master.announce_delivery, a declared CapabilityDeps field like the
+        # other master-bound callables); a deps without it keeps the legacy
         # behavior (plain resume, no board close-out).
-        announce = getattr(deps, "board_announce", None)
+        announce = deps.board_announce
         board_id = _reattach_board_task(deps, inst, run_id) if announce is not None else ""
         out = {
             "resumed": inst.id,
