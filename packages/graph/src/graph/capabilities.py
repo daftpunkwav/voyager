@@ -294,7 +294,7 @@ def drop_project_graph(project: str) -> dict:
     return _require_deps().store.drop_project(project)
 
 
-# ---------- Planned tools ----------
+# ---------- Navigation, batch writes, and maintenance ----------
 
 
 @capability(

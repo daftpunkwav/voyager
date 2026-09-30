@@ -3,9 +3,11 @@ assembly order.
 
 Assembles every component into the shared AgentApp (bus / log / settings /
 memory / master / loop / skills / hooks / pages / asker / spawner /
-capability registry / mcp pool / meter / plugins / user-hook reloader) and
-registers the built-in tools; tools that bind the master (spawn_subagent,
-session and governance tools) are registered after the master exists.
+capability registry / mcp pool / meter / plugins / user-hook reloader /
+session store / trajectory / session index / queue store / scheduler /
+checkpoints / write journal / trace dispatcher) and registers the built-in
+tools; tools that bind the master (spawn_subagent, session and governance
+tools) are registered after the master exists.
 Also used by tests (injected FakeLLM / temp directories).
 """
 

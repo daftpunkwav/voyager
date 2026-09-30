@@ -217,10 +217,8 @@ class GraphStore:
         """Induced subgraph around node_id up to `depth` hops: every node
         within `depth` hops, plus every edge incident to those nodes (so the
         outermost ring's own edges are included). This is the single BFS in
-        the store: expand_neighbors used to carry a second, divergent depth
-        semantics (star expansion, dropping the outermost ring's edges) and
-        was reconciled into this implementation, so the two entry points
-        cannot drift apart again.
+        the store: expand_neighbors delegates here, so both entry points
+        share one depth semantics.
 
         `edge_filter` restricts the returned edges to one type; it never
         restricts traversal — the walk follows all edges regardless of the

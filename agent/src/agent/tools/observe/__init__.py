@@ -1,6 +1,7 @@
 """Observe tool group: the agent's operational self-observation (events,
 quota) in one tool. Zero-logic aggregation; the tool binds the observe
-capability (the roster tools moved into the aggregated tools tool)."""
+capability (schema derived from it). Roster introspection (list / describe /
+search) lives in the aggregated tools tool, not here."""
 
 from __future__ import annotations
 

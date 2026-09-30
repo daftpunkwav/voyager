@@ -129,8 +129,15 @@ class Memory:
         return {"enabled": not self._vector_note, "note": self._vector_note}
 
     def purge(self, retention_days: int) -> dict[str, int]:
+        """Lazy day-based cleanup: delete episodes and semantic facts older
+        than retention_days, returning per-store deletion counts.
+
+        The counterpart of clear's explicit wipe: purge serves the retention
+        setting (agent.memory.retention_days). Non-positive days mean
+        agent-managed retention — nothing is removed.
+        """
         if retention_days <= 0:
-            return {"episodic": 0, "semantic": 0}  # agent-managed retention
+            return {"episodic": 0, "semantic": 0}
         return {
             "episodic": self.episodic.purge(retention_days),
             "semantic": self.semantic.purge(retention_days),

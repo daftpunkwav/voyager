@@ -89,7 +89,8 @@ class HttpPolicy:
     """Per-call overrides for the user-tunable transport knobs (mirrored by
     the llm.request_timeout_s / llm.retry_attempts / llm.retry_backoff_s
     settings, hot-read by the capabilities layer). None fields fall back to
-    the module constants above, so bare callers keep today's behavior."""
+    the module constants above, so callers without a policy keep the
+    module-default behavior."""
 
     request_timeout_s: float | None = None
     retry_attempts: int | None = None
