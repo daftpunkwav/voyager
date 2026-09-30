@@ -48,10 +48,10 @@ def wire(
     web_store = WebStore(data_dir / "web.db")
     # Startup crash recovery: the import/parse queues are in-memory, so rows
     # left in-flight by a hard kill would sit in 'importing'/'parsing'
-    # forever — never re-enqueued, never failed. Mark them failed (same
-    # wording as graph's index scheduler); re-import is the retry path.
-    # Rows queued-but-never-started are still 'importing' here, so they
-    # recover through the same exit.
+    # forever — never re-enqueued, never failed. Mark them failed (graph's
+    # index scheduler writes the same base wording, without this retry
+    # hint); re-import is the retry path. Rows queued-but-never-started are
+    # still 'importing' here, so they recover through the same exit.
     _INTERRUPTED = "interrupted by restart; re-import to retry"
     repo_store.fail_in_flight(_INTERRUPTED)
     doc_store.fail_in_flight(_INTERRUPTED)

@@ -147,6 +147,104 @@ def _transcript_view(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def _build_turn_messages(
+    inst: SubagentInstance, user_text: str | None, view: Persona | None, member_prompt: str
+) -> list[dict[str, Any]]:
+    """Assemble this turn's wire messages: system head + transcript view +
+    trailing per-turn context row.
+
+    Two shapes: a mid-turn resume continues from the snapshot's messages
+    (pending history already inside; the system entry is recomputed so
+    style/profile changes apply to the resume, and the snapshot's context
+    row is swapped for a fresh one) — resume carries no new input, the only
+    entry point resume_run->start passes no user_text. Otherwise the history
+    is rebuilt fresh: the turn's input is appended first, then the shared
+    transcript view, then the context row.
+    """
+    if inst.resume_messages and view is None:
+        messages = [dict(m) for m in inst.resume_messages]
+        inst.resume_messages = None
+        if messages and messages[0].get("role") == "system":
+            messages[0] = inst._system_message()
+        _refresh_turn_context_row(messages, _turn_context_row(inst, inst.persona, user_text or ""))
+        return messages
+    if user_text:
+        inst.history.append({"role": "user", "content": user_text})
+    messages = [
+        inst._system_message(member_prompt),
+        *_transcript_view(inst.history),
+    ]
+    row = _turn_context_row(inst, view.key if view is not None else inst.persona, user_text or "")
+    if row is not None:
+        messages.append(row)
+    return messages
+
+
+def _surrender_reason(inst: SubagentInstance, step_base: int) -> str:
+    """The budget-exhaustion stamp among THIS turn's steps (empty when the
+    turn ended normally). The scan is scoped to steps[step_base:] because
+    state.steps is never cleared: an unscoped reverse scan would re-stamp an
+    older turn's reason onto the current one."""
+    for step in reversed(inst.state.steps[step_base:]):
+        if step.kind == "system" and step.name == "surrender":
+            return str((step.detail or {}).get("reason") or "")
+    return ""
+
+
+def _write_back_compaction(
+    inst: SubagentInstance, messages: list[dict[str, Any]], result: str
+) -> None:
+    """Persist mid-turn compaction into the shared history: the summary has
+    replaced the condensed middle, so writing the wire view back keeps later
+    turns from re-summarizing the same span.
+
+    The delivery joins the visible texts with "\\n\\n", so an entry is already
+    carried by the closing message exactly when it IS one of those segments.
+    Substring containment would also drop any entry that merely happens to
+    appear inside the result (a short "好" inside "好的,这是答案") — a silent
+    history hole.
+
+    _transcript_view folds a teammate's speaker into a leading 【display
+    name】 prefix and keeps the wire view key-clean, so the key never
+    survives onto these messages: recover it here (display name -> persona
+    key) and strip the prefix again, so history keeps its invariant "raw
+    text + optional speaker" and the next turn's view prefixes exactly once.
+    The trailing turn-context row is transient per-turn state: it never
+    enters history (the next turn renders a fresh one).
+    """
+    rebuilt: list[dict[str, Any]] = []
+    delivered_segments = result.split("\n\n") if result else []
+    by_display = {p.display_name: k for k, p in PERSONAS.items()}
+    for m in messages[1:]:  # skip system; tool entries and empty tool-turn text stay out of history
+        role = m.get("role")
+        if role == "user":
+            text = str(m.get("content", ""))
+            if text.startswith(TURN_CONTEXT_HEADER):
+                continue
+            rebuilt.append({"role": "user", "content": text})
+        elif role == "assistant":
+            text = str(m.get("content", ""))
+            # A lead-in the conversational delivery already carries (the
+            # closing message joins the visible round texts into one
+            # self-contained message) would duplicate in history
+            if text and text in delivered_segments:
+                continue
+            if text:
+                entry: dict[str, Any] = {"role": "assistant", "content": text}
+                speaker = str(m.get("speaker") or "")
+                if not speaker:
+                    prefixed = re.match(r"^【([^】]+)】", text)
+                    if prefixed is not None:
+                        key = by_display.get(prefixed.group(1))
+                        if key is not None:
+                            speaker = key
+                            entry["content"] = text[prefixed.end() :].lstrip()
+                if speaker:
+                    entry["speaker"] = speaker
+                rebuilt.append(entry)
+    inst.history[:] = rebuilt
+
+
 class PauseRequested(Exception):
     """Raised at a step boundary when the instance was flagged for a
     cooperative pause; run_turn turns it into the PAUSED state + event."""
@@ -210,31 +308,7 @@ async def _run_turn(
         # as the memory read policy's recall query (the relevance layer),
         # and page/digest state renders into the per-turn context row
         inst.system_prompt = inst.build_system(inst.task, inst.persona, user_text or "")
-    if inst.resume_messages and view is None:
-        # Mid-turn resume: pending_messages already contains system /
-        # history / this turn's tool entries, so skip history rebuild and
-        # continue from the next complete after the crash point; the system
-        # entry is recomputed so style/profile changes apply to the resume,
-        # and the snapshot's context row is swapped for a fresh one.
-        # Resume carries no new input: the only entry point resume_run->start
-        # passes no user_text.
-        messages = [dict(m) for m in inst.resume_messages]
-        inst.resume_messages = None
-        if messages and messages[0].get("role") == "system":
-            messages[0] = inst._system_message()
-        _refresh_turn_context_row(messages, _turn_context_row(inst, inst.persona, user_text or ""))
-    else:
-        if user_text:
-            inst.history.append({"role": "user", "content": user_text})
-        messages = [
-            inst._system_message(member_prompt),
-            *_transcript_view(inst.history),
-        ]
-        row = _turn_context_row(
-            inst, view.key if view is not None else inst.persona, user_text or ""
-        )
-        if row is not None:
-            messages.append(row)
+    messages = _build_turn_messages(inst, user_text, view, member_prompt)
     inst._turn_messages = messages  # live reference for mid-turn snapshots (on_step)
     belt = inst.toolbelt
     if view is not None and view.tool_allow is not None:
@@ -401,10 +475,7 @@ async def _run_turn(
         finally:
             # Budget-exhaustion endings return normally; stamp the reason so
             # wait/dispatch callers can tell a truncated run from a real one
-            for step in reversed(inst.state.steps[step_base:]):
-                if step.kind == "system" and step.name == "surrender":
-                    inst.state.surrender_reason = str((step.detail or {}).get("reason") or "")
-                    break
+            inst.state.surrender_reason = _surrender_reason(inst, step_base)
             # The turn is over (success or failure): start()'s finally already
             # persisted the turn-boundary snapshot and no further step events
             # will fire; clear _turn_messages to stop mis-capturing
@@ -419,53 +490,7 @@ async def _run_turn(
             # condensed middle, so write it back into history and later turns
             # will not re-summarize the same span; without the write-back every
             # turn would re-condense the same history.
-            rebuilt: list[dict[str, Any]] = []
-            # The delivery joins the visible texts with "\n\n", so an entry is
-            # already carried by the closing message exactly when it IS one of
-            # those segments. Substring containment would also drop any entry
-            # that merely happens to appear inside the result (a short "好"
-            # inside "好的,这是答案") — a silent history hole.
-            delivered_segments = result.split("\n\n") if result else []
-            # _transcript_view folds a teammate's speaker into a leading
-            # 【display name】 prefix and keeps the wire view key-clean, so
-            # the key never survives onto these messages: recover it here
-            # (display name -> persona key) and strip the prefix again, so
-            # history keeps its invariant "raw text + optional speaker" and
-            # the next turn's view prefixes exactly once. The trailing
-            # turn-context row is transient per-turn state: it never enters
-            # history (the next turn renders a fresh one).
-            by_display = {p.display_name: k for k, p in PERSONAS.items()}
-            for m in messages[
-                1:
-            ]:  # skip system; tool entries and empty tool-turn text stay out of history
-                role = m.get("role")
-                if role == "user":
-                    text = str(m.get("content", ""))
-                    if text.startswith(TURN_CONTEXT_HEADER):
-                        continue
-                    rebuilt.append({"role": "user", "content": text})
-                elif role == "assistant":
-                    text = str(m.get("content", ""))
-                    # A lead-in the conversational delivery already carries
-                    # (the closing message joins the visible round texts into
-                    # one self-contained message) would duplicate in the
-                    # model-facing history
-                    if text and text in delivered_segments:
-                        continue
-                    if text:
-                        entry = {"role": "assistant", "content": text}
-                        speaker = str(m.get("speaker") or "")
-                        if not speaker:
-                            prefixed = re.match(r"^【([^】]+)】", text)
-                            if prefixed is not None:
-                                key = by_display.get(prefixed.group(1))
-                                if key is not None:
-                                    speaker = key
-                                    entry["content"] = text[prefixed.end() :].lstrip()
-                        if speaker:
-                            entry["speaker"] = speaker
-                        rebuilt.append(entry)
-            inst.history[:] = rebuilt
+            _write_back_compaction(inst, messages, result)
         closing: dict[str, Any] = {"role": "assistant", "content": result}
         if view is not None:
             # The group transcript attributes this turn's words to the member

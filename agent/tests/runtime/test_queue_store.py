@@ -3,6 +3,7 @@ one-shot retry and cancellation."""
 
 from __future__ import annotations
 
+import sqlite3
 import time
 
 import pytest
@@ -107,10 +108,8 @@ class TestQueue:
         jid = store.enqueue(kind="flaky", delay_s=0)
         store.mark_started(jid)
         store.mark_failed(jid, "boom")
-        assert (
-            any(j.id == jid and j.run_at > time.time() for j in store.due(now=time.time())) is False
-            or True
-        )
+        # The retry is scheduled ~30s out, so the job is not due again now
+        assert all(j.id != jid for j in store.due(now=time.time()))
         rows = store.list(statuses=("pending", "running", "failed", "done", "cancelled"))
         job = next(j for j in rows if j.id == jid)
         assert job.run_at >= time.time() + 25  # one retry, 30s out
@@ -128,6 +127,40 @@ class TestQueue:
         assert store.recover() == 0  # idempotent
         assert store.cancel(jid) is True
         assert store.due(now=time.time() + 120) == []
+        store.close()
+
+    def test_legacy_db_without_attempts_column_upgrades_in_place(self, tmp_path) -> None:
+        """A queue.db created before the retry count moved out of the
+        last_error prefix upgrades at open; existing rows count as not yet
+        retried, so the first mark_failed still grants the single retry."""
+        db = tmp_path / "queue.db"
+        conn = sqlite3.connect(db)
+        conn.executescript(
+            """
+            CREATE TABLE jobs (
+                id          TEXT PRIMARY KEY,
+                kind        TEXT NOT NULL,
+                payload     TEXT NOT NULL DEFAULT '{}',
+                cron        TEXT NOT NULL DEFAULT '',
+                run_at      REAL NOT NULL,
+                priority    INTEGER NOT NULL DEFAULT 0,
+                status      TEXT NOT NULL DEFAULT 'pending',
+                created_ts  REAL NOT NULL,
+                last_run_ts REAL NOT NULL DEFAULT 0,
+                last_error  TEXT NOT NULL DEFAULT ''
+            );
+            """
+        )
+        conn.execute(
+            "INSERT INTO jobs (id, kind, run_at, created_ts, status)"
+            " VALUES ('legacy', 'k', 0, 0, 'pending')"
+        )
+        conn.commit()
+        conn.close()
+        store = QueueStore(db)
+        store.mark_failed("legacy", "boom")  # first failure: one retry ~30s out
+        rows = store.list(statuses=("pending",))
+        assert any(j.id == "legacy" and j.run_at > time.time() for j in rows)
         store.close()
 
     def test_purge_finished_keeps_live_rows_and_cron(self, tmp_path) -> None:

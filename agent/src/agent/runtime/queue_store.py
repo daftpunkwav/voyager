@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     status      TEXT NOT NULL DEFAULT 'pending',
     created_ts  REAL NOT NULL,
     last_run_ts REAL NOT NULL DEFAULT 0,
-    last_error  TEXT NOT NULL DEFAULT ''
+    last_error  TEXT NOT NULL DEFAULT '',
+    attempts    INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_due ON jobs(status, priority DESC, run_at);
 """
@@ -178,7 +179,20 @@ class QueueStore:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self._conn.executescript(_SCHEMA)
+        self._migrate()
         self._lock = threading.Lock()
+
+    def _migrate(self) -> None:
+        """Idempotent in-place upgrade of databases created before the retry
+        count moved out of last_error: ALTER TABLE adds the missing column
+        (older rows default to attempts=0 = "not yet retried", matching the
+        previous empty-error semantics). Same pattern as the other stores
+        (llm.store, notes.store, graph.index_queue)."""
+        try:
+            self._conn.execute("ALTER TABLE jobs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
+            self._conn.commit()
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
     def enqueue(
         self,
@@ -212,7 +226,7 @@ class QueueStore:
                 " VALUES (?,?,?,?,?,?, 'pending', ?)"
                 " ON CONFLICT(id) DO UPDATE SET kind=excluded.kind, payload=excluded.payload,"
                 " cron=excluded.cron, run_at=excluded.run_at, priority=excluded.priority,"
-                " status='pending', last_error=''",
+                " status='pending', last_error='', attempts=0",
                 (jid, kind, blob, cron, when, priority, time.time()),
             )
             self._conn.commit()
@@ -291,36 +305,41 @@ class QueueStore:
         """A failed one-shot goes back to pending once (retry ~30s later); a
         failed cron job reschedules like a done one. After a retry the
         caller may give up by deleting; this store keeps retries bounded via
-        max_attempts bookkeeping left to the executor (single retry keeps the
-        schema minimal)."""
+        the attempts column (one mark_failed delivery = one attempt: the
+        first failure retries, the second gives up — a single retry keeps
+        the schema minimal)."""
         with self._lock:
             row = self._conn.execute(
-                "SELECT cron, run_at, last_error FROM jobs WHERE id = ?", (job_id,)
+                "SELECT cron, run_at, attempts FROM jobs WHERE id = ?", (job_id,)
             ).fetchone()
             if row is None:
                 return
-            cron, run_at, prev_error = row[0], row[1], row[2]
-            retried = "retry:" not in prev_error
+            cron, run_at, attempts = row[0], row[1], row[2]
+            retried = attempts == 0
+            attempts += 1
             if cron:
                 nxt = next_cron_time(cron, time.time())
                 self._conn.execute(
-                    "UPDATE jobs SET status = ?, run_at = ?, last_error = ? WHERE id = ?",
+                    "UPDATE jobs SET status = ?, run_at = ?, last_error = ?, attempts = ?"
+                    " WHERE id = ?",
                     (
                         "pending" if nxt is not None else "failed",
                         nxt or run_at,
-                        (("retry:" if retried else "give-up:") + error[:500]),
+                        error[:500],
+                        attempts,
                         job_id,
                     ),
                 )
             elif retried:
                 self._conn.execute(
-                    "UPDATE jobs SET status = 'pending', run_at = ?, last_error = ? WHERE id = ?",
-                    (time.time() + 30.0, "retry:" + error[:500], job_id),
+                    "UPDATE jobs SET status = 'pending', run_at = ?, last_error = ?,"
+                    " attempts = ? WHERE id = ?",
+                    (time.time() + 30.0, error[:500], attempts, job_id),
                 )
             else:
                 self._conn.execute(
-                    "UPDATE jobs SET status = 'failed', last_error = ? WHERE id = ?",
-                    ("give-up:" + error[:500], job_id),
+                    "UPDATE jobs SET status = 'failed', last_error = ?, attempts = ? WHERE id = ?",
+                    (error[:500], attempts, job_id),
                 )
             self._conn.commit()
 

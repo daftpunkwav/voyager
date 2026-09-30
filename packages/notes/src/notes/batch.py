@@ -17,6 +17,14 @@ from .runtime import DOMAIN, registry, require_alive
 from .transfer import export_markdown
 
 _BATCH_ACTIONS = ("archive", "unarchive", "delete", "export", "pin", "unpin")
+#: update_note kwargs per state-flip action; delete/export have their own
+#: handlers (delete_note / export_markdown) in the loop below.
+_BATCH_UPDATE_KWARGS = {
+    "archive": {"archived": True},
+    "unarchive": {"archived": False},
+    "pin": {"pinned": True},
+    "unpin": {"pinned": False},
+}
 _BATCH_MAX = 100
 
 
@@ -61,14 +69,9 @@ async def batch_notes(ids: list[str], action: str) -> dict:
     paths: list[str] = []
     for nid in nids:
         try:
-            if action == "archive":
-                await update_note(nid, archived=True)
-            elif action == "unarchive":
-                await update_note(nid, archived=False)
-            elif action == "pin":
-                await update_note(nid, pinned=True)
-            elif action == "unpin":
-                await update_note(nid, pinned=False)
+            update_kwargs = _BATCH_UPDATE_KWARGS.get(action)
+            if update_kwargs is not None:
+                await update_note(nid, **update_kwargs)
             elif action == "delete":
                 await delete_note(nid)
             else:

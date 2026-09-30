@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import platform
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -311,6 +312,125 @@ def _build_tools(
     return registry
 
 
+def _build_llm_stack(
+    llm: LLMClient,
+    purpose_llms: dict[str, LLMClient] | None,
+    meter: Meter,
+    settings: SettingsStore,
+) -> tuple[LLMClient, LLMClient, LLMClient, LLMClient]:
+    """Wrap the clients with the shared middleware and resolve the
+    per-purpose transports: returns (chat, arbiter, distill, context_planner).
+
+    Daily token quota (resource dimension): the main conversation, dispatches,
+    and the arbitration judge all go through the same metered_llm wrapper,
+    hot-reading agent.resource.daily_tokens before each complete; once the
+    daily total exceeds the cap no real call is made (0 = unlimited). Wire
+    max_tokens injects the configured per-model output budget into every
+    call (agent.context.max_output_tokens + model_profiles) so the request
+    honors user settings instead of the transport's built-in default —
+    capped innermost, so the quota gate still sees the original shape.
+
+    Purpose routing: arbiter, distillation, and the context editor's
+    planning call may run on lighter models resolved by the host routing
+    layer; without an injected transport everything shares the chat model
+    as before.
+    """
+    routes = purpose_llms or {}
+
+    def _metered(client: LLMClient) -> LLMClient:
+        return metered_llm(
+            client, meter, quota_fn=lambda: settings.get("agent.resource.daily_tokens") or 0
+        )
+
+    def _capped(client: LLMClient) -> LLMClient:
+        return output_capped_llm(client, settings)
+
+    chat_llm = _metered(_capped(llm))
+    arbiter_llm = _metered(_capped(routes["arbiter"])) if "arbiter" in routes else chat_llm
+    distiller_llm = _metered(_capped(routes["distill"])) if "distill" in routes else chat_llm
+    planner_llm = (
+        _metered(_capped(routes["context_planner"])) if "context_planner" in routes else chat_llm
+    )
+    return chat_llm, arbiter_llm, distiller_llm, planner_llm
+
+
+def _build_trace_dispatcher(settings: SettingsStore) -> TraceDispatcher:
+    """Observability exporters per agent.observability.exporter ("memory" |
+    "otlp" | "langfuse" | "all"); unset endpoints keep the local defaults."""
+    exporter_type = str(settings.get("agent.observability.exporter") or "memory").lower()
+    span_exporters: list[Any] = []
+    if exporter_type in ("otlp", "all"):
+        otlp_endpoint = str(
+            settings.get("agent.observability.otlp_endpoint") or "http://localhost:4318/v1/traces"
+        )
+        span_exporters.append(OtlpHttpSpanExporter(endpoint=otlp_endpoint))
+    if exporter_type in ("langfuse", "all"):
+        lf_host = str(
+            settings.get("agent.observability.langfuse_host") or "https://cloud.langfuse.com"
+        )
+        lf_pk = str(settings.get("agent.observability.langfuse_public_key") or "")
+        lf_sk = str(settings.get("agent.observability.langfuse_secret_key") or "")
+        span_exporters.append(
+            LangfuseSpanExporter(host=lf_host, public_key=lf_pk, secret_key=lf_sk)
+        )
+    return TraceDispatcher(span_exporters)
+
+
+def _make_raw_round_recorder(
+    trajectory: TrajectoryStore,
+) -> Callable[[str], Callable[[str, int, list, object], Awaitable[None]]]:
+    """Factory for the per-session raw LLM round recorder handed to
+    master.sessions.set_raw_fn: the exact request transcript plus the
+    response, stored in the trajectory store for the UI's raw log view.
+    Bodies are serialized once here, verbatim (retention is handled by
+    purge_raw_older_than_days, not a size cap)."""
+
+    def _raw_round_fn(session_id: str):
+        async def _record(run_id: str, round_n: int, messages: list, reply: object) -> None:
+            # Provider response metadata (finish_reason / request id / service
+            # tier / created); empty values dropped so the stored shape stays
+            # tight.
+            meta = getattr(reply, "meta", None)
+            meta_dict = {k: v for k, v in meta.items() if v} if isinstance(meta, dict) else {}
+            response = json.dumps(
+                {
+                    "text": getattr(reply, "text", "") or "",
+                    "reasoning": getattr(reply, "reasoning", "") or "",
+                    "tool_calls": [
+                        {"name": c.name, "arguments": c.arguments}
+                        for c in (getattr(reply, "tool_calls", None) or [])
+                    ],
+                    "degraded": bool(getattr(reply, "degraded", False)),
+                    "model": getattr(reply, "model", ""),
+                    "meta": meta_dict,
+                },
+                ensure_ascii=False,
+                default=str,
+            )
+            # The exact provider request body (stream flags, temperature,
+            # reasoning fields, tools) as reported by the llm domain's final
+            # stream chunk; empty when the client did not report one (FakeLLM,
+            # non-streaming paths).
+            wire_body = getattr(reply, "request_body", None)
+            wire_request = (
+                json.dumps(wire_body, ensure_ascii=False, default=str)
+                if isinstance(wire_body, dict)
+                else ""
+            )
+            trajectory.record_raw_round(
+                run_id=run_id,
+                session=session_id,
+                round=round_n,
+                request=json.dumps(messages, ensure_ascii=False, default=str),
+                response=response,
+                wire_request=wire_request,
+            )
+
+        return _record
+
+    return _raw_round_fn
+
+
 def build_agent(
     *,
     data_dir: str | Path = "data/runtime",
@@ -390,29 +510,10 @@ def build_agent(
         pricing_overrides_fn=lambda: settings.get("agent.pricing.overrides"),
     )
 
-    # Daily token quota (resource dimension): the main conversation, dispatches,
-    # and the arbitration judge all go through the same
-    # metered_llm wrapper, hot-reading agent.resource.daily_tokens before each
-    # complete; once the daily total exceeds the cap no real call is made
-    # (0 = unlimited).
-    def _metered(client: LLMClient) -> LLMClient:
-        return metered_llm(
-            client, meter, quota_fn=lambda: settings.get("agent.resource.daily_tokens") or 0
-        )
-
-    # Wire max_tokens: inject the configured per-model output budget into
-    # every call (agent.context.max_output_tokens + model_profiles) so the
-    # request honors user settings instead of the transport's built-in
-    # default. Innermost, so the quota gate still sees the original shape.
-    def _capped(client: LLMClient) -> LLMClient:
-        return output_capped_llm(client, settings)
-
-    chat_llm = _metered(_capped(llm))
-    # Purpose routing: arbiter, distillation, and the context
-    # editor's planning call may run on lighter models resolved by the host
-    # routing layer; without an injected transport everything shares the chat
-    # model as before
-    routes = purpose_llms or {}
+    # Shared middleware stack (quota + output cap) and per-purpose routing
+    chat_llm, arbiter_llm, distiller_llm, planner_llm = _build_llm_stack(
+        llm, purpose_llms, meter, settings
+    )
 
     def _confirm_timeout_s() -> float:
         """Confirmation dialog timeout derived from the live tool deadline.
@@ -429,11 +530,6 @@ def build_agent(
             tool_s = 90.0
         return max(10.0, tool_s - 15.0)
 
-    arbiter_llm = _metered(_capped(routes["arbiter"])) if "arbiter" in routes else chat_llm
-    distiller_llm = _metered(_capped(routes["distill"])) if "distill" in routes else chat_llm
-    planner_llm = (
-        _metered(_capped(routes["context_planner"])) if "context_planner" in routes else chat_llm
-    )
     events = RuntimeEvents(bus)
 
     async def _confirm(prompt: str) -> bool:
@@ -902,55 +998,7 @@ def build_agent(
         raw_days = RAW_LOG_RETENTION_DAYS
     trajectory.purge_raw_older_than_days(max(1, raw_days))
 
-    def _raw_round_fn(session_id: str):
-        """Per-session raw LLM round recorder: the exact request transcript
-        plus the response, stored in the trajectory store for the UI's raw
-        log view. Bodies are serialized once here, verbatim (retention is
-        handled by purge_raw_older_than_days, not a size cap)."""
-
-        async def _record(run_id: str, round_n: int, messages: list, reply: object) -> None:
-            # Provider response metadata (finish_reason / request id / service
-            # tier / created); empty values dropped so the stored shape stays
-            # tight.
-            meta = getattr(reply, "meta", None)
-            meta_dict = {k: v for k, v in meta.items() if v} if isinstance(meta, dict) else {}
-            response = json.dumps(
-                {
-                    "text": getattr(reply, "text", "") or "",
-                    "reasoning": getattr(reply, "reasoning", "") or "",
-                    "tool_calls": [
-                        {"name": c.name, "arguments": c.arguments}
-                        for c in (getattr(reply, "tool_calls", None) or [])
-                    ],
-                    "degraded": bool(getattr(reply, "degraded", False)),
-                    "model": getattr(reply, "model", ""),
-                    "meta": meta_dict,
-                },
-                ensure_ascii=False,
-                default=str,
-            )
-            # The exact provider request body (stream flags, temperature,
-            # reasoning fields, tools) as reported by the llm domain's final
-            # stream chunk; empty when the client did not report one (FakeLLM,
-            # non-streaming paths).
-            wire_body = getattr(reply, "request_body", None)
-            wire_request = (
-                json.dumps(wire_body, ensure_ascii=False, default=str)
-                if isinstance(wire_body, dict)
-                else ""
-            )
-            trajectory.record_raw_round(
-                run_id=run_id,
-                session=session_id,
-                round=round_n,
-                request=json.dumps(messages, ensure_ascii=False, default=str),
-                response=response,
-                wire_request=wire_request,
-            )
-
-        return _record
-
-    master.sessions.set_raw_fn(_raw_round_fn)
+    master.sessions.set_raw_fn(_make_raw_round_recorder(trajectory))
     session_index.catch_up()  # fold whatever landed while the process was down
     trigger_handler = make_trigger_handler(master, subagent_registry, settings=settings)
     handlers, relay, hook_patterns = bind_event_loop(
@@ -977,24 +1025,8 @@ def build_agent(
     # forbidden
     user_hooks.set_subscription_sync(loop.sync_extra_patterns)
 
-    # Observability and Tracing exporter wiring
-    exporter_type = str(settings.get("agent.observability.exporter") or "memory").lower()
-    span_exporters: list[Any] = []
-    if exporter_type in ("otlp", "all"):
-        otlp_endpoint = str(
-            settings.get("agent.observability.otlp_endpoint") or "http://localhost:4318/v1/traces"
-        )
-        span_exporters.append(OtlpHttpSpanExporter(endpoint=otlp_endpoint))
-    if exporter_type in ("langfuse", "all"):
-        lf_host = str(
-            settings.get("agent.observability.langfuse_host") or "https://cloud.langfuse.com"
-        )
-        lf_pk = str(settings.get("agent.observability.langfuse_public_key") or "")
-        lf_sk = str(settings.get("agent.observability.langfuse_secret_key") or "")
-        span_exporters.append(
-            LangfuseSpanExporter(host=lf_host, public_key=lf_pk, secret_key=lf_sk)
-        )
-    dispatcher = TraceDispatcher(span_exporters)
+    # Observability and tracing exporters, then attach the dispatcher
+    dispatcher = _build_trace_dispatcher(settings)
     dispatcher.attach()
 
     return AgentApp(
