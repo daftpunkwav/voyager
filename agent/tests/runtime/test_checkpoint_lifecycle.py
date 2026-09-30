@@ -211,3 +211,28 @@ class TestCheckpointTmpPurge:
             assert list(cp_dir.glob(".*.json.*.tmp")) == []
         finally:
             app.memory.close()
+
+
+class TestCheckpointSaveDegradation:
+    """Checkpoint persistence is best effort: an environmental write failure
+    (disk full / permission) is logged and degraded, never propagated into the
+    turn the snapshot is protecting (a mid-run save fires from on_step, a
+    terminal save from start()'s finally - raising there would kill or fail
+    real, already-executed work)."""
+
+    async def test_save_failure_does_not_fail_the_turn(self, tmp_path, monkeypatch) -> None:
+        from agent.engine import Mode, TaskBook
+
+        app = build_agent(data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=FakeLLM())
+        try:
+
+            def _disk_full(state):
+                raise OSError("simulated disk full")
+
+            monkeypatch.setattr(app.checkpoints, "save", _disk_full)
+            inst = app.spawner.spawn(TaskBook(goal="survive", mode=Mode.REACT))
+            result = await app.spawner.start(inst)
+            assert result
+            assert inst.state.status is RunStatus.COMPLETED
+        finally:
+            app.memory.close()

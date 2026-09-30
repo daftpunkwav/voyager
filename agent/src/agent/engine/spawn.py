@@ -95,9 +95,22 @@ class Spawner:
         return self._budget_fn() if self._budget_fn is not None else ContextBudget()
 
     def _persist_checkpoint(self, inst: SubagentInstance) -> None:
-        """checkpoint_persist injection target: same save semantics as start()'s finally."""
+        """checkpoint_persist injection target: same save semantics as start()'s
+        finally.
+
+        Best effort: a checkpoint write failure (disk full / permission) must
+        not kill the work the snapshot is protecting - mid-run it would
+        otherwise propagate out of on_step and fail the whole turn. Recovery
+        degrades to the last good snapshot (or a full re-run when none was
+        ever written); the warning keeps the degradation visible. Only
+        environmental errors are swallowed: a serialization bug
+        (TypeError/ValueError) would fire on every step and must stay loud.
+        """
         if self._checkpoints is not None:
-            self._checkpoints.save(inst.state)
+            try:
+                self._checkpoints.save(inst.state)
+            except OSError as exc:
+                log.warning("checkpoint save failed for run %s: %s", inst.state.run_id, exc)
 
     def _narrowed_belt(self, task: TaskBook) -> Toolbelt:
         """Trim + read-only narrowing, shared by spawn and resume rebuilds
@@ -170,7 +183,20 @@ class Spawner:
         finally:
             if self._checkpoints is not None and instance.state.status is not RunStatus.PAUSED:
                 instance.state.resume = instance.build_resume_snapshot().to_dict()
-                self._checkpoints.save(instance.state)
+                try:
+                    self._checkpoints.save(instance.state)
+                except OSError as exc:
+                    # Best effort (disk full / permission): the turn itself is
+                    # already finished, so a failed terminal snapshot must not
+                    # turn a completed run into a failure. Residual risk,
+                    # accepted and logged: the on-disk checkpoint stays at its
+                    # last mid-run state, so a restart would offer a resume
+                    # that re-runs the tail of an already-completed turn.
+                    log.warning(
+                        "terminal checkpoint save failed for run %s: %s",
+                        instance.state.run_id,
+                        exc,
+                    )
             # The turn has terminated (success or failure): evict oldest terminal
             # instances when over the residency cap
             self._trim_terminal_instances()

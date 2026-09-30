@@ -20,6 +20,7 @@ from platform_contracts import DomainEvent, RuntimeEvent
 from agent.context.builder import TURN_CONTEXT_HEADER
 from agent.context.editor import SUMMARY_MARK
 from agent.engine.modes import ABORT_PREFIXES, Mode, ModeLimits, run_mode
+from agent.engine.modes.streaming import CANCEL_ANCHOR
 from agent.personas import PERSONAS, Persona, resolve_persona
 from agent.runtime.current import current_instance
 from agent.runtime.state import RunStatus
@@ -427,6 +428,26 @@ async def _run_turn(
             # effort: telemetry failure must not mask the cancellation itself.
             # When stopped via cancel_run the status is already CANCELLED; the
             # terminal state recorded here is not rolled back.
+            # Streaming cancel anchor (see complete_streaming): the user already
+            # saw the streamed prefix, but it lives only on the wire list, which
+            # dies with this turn (the finally clears _turn_messages and the
+            # cancel path never runs the compaction write-back). Persisting the
+            # anchored entry into history keeps the next turn's request
+            # containing what the user has on screen instead of silently
+            # drifting. Conversational only: task instances never stream
+            # (on_delta is conversational-gated), so they never carry an anchor.
+            if inst.task.conversational and inst._turn_messages is not None:
+                for m in reversed(inst._turn_messages):
+                    text = str(m.get("content") or "")
+                    if m.get("role") == "assistant" and text.endswith(CANCEL_ANCHOR):
+                        entry: dict[str, Any] = {"role": "assistant", "content": text}
+                        if view is not None:
+                            # Member turn: the speaker stamp keeps the next
+                            # turn's transcript view attributing the prefix
+                            entry["speaker"] = view.key
+                        inst.history.append(entry)
+                        inst._bound_history()
+                        break
             if inst.state.status is RunStatus.RUNNING:
                 inst.state.status = RunStatus.CANCELLED
             try:

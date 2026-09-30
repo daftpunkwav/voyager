@@ -5,9 +5,15 @@ request contains what the user saw."""
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any
 
+import pytest
+from agent.engine import Mode, TaskBook
 from agent.engine.modes.streaming import CANCEL_ANCHOR, complete_streaming, delta_timer
+from agent.llm import FakeLLM
+from agent.main import build_agent
+from agent.runtime.state import RunStatus
 
 
 class _Event:
@@ -69,3 +75,66 @@ async def test_cancel_before_any_delta_leaves_history_untouched() -> None:
     except asyncio.CancelledError:
         pass
     assert [m for m in messages if m.get("role") == "assistant"] == []
+
+
+class _CancelMidStreamLLM(FakeLLM):
+    """complete_stream yields three flushed chunks, then cancels mid-round;
+    the plain complete path fails loudly (streaming is the surface under
+    test and a fallback would silently pass nothing)."""
+
+    def complete(self, *args: Any, **kw: Any):
+        raise AssertionError("non-streaming fallback must not run")
+
+    def complete_stream(self, messages, specs):
+        async def stream():
+            for chunk in ("hel", "lo wo", "rld"):
+                yield SimpleNamespace(final=None, text_delta=chunk, reasoning_delta="")
+                await asyncio.sleep(0.13)  # past the coalescing interval: flushed
+            raise asyncio.CancelledError()
+
+        return stream()
+
+
+def _shown_text(app, run_id: str) -> str:
+    """What the user has been shown so far: the coalesced AgentDelta payloads
+    in log order (the same batches complete_streaming counts as `emitted`)."""
+    return "".join(
+        str(e.payload.get("text") or "")
+        for _, e in app.log.read_after(after_seq=0)
+        if e.type == "agent.delta" and e.payload.get("run_id") == run_id
+    )
+
+
+async def test_hard_cancel_keeps_shown_prefix_in_history(tmp_path) -> None:
+    """Turn-level anchor persistence: a hard cancel mid-stream must carry the
+    anchored prefix from the wire list (which dies with the turn) into
+    inst.history, so the next turn's request still contains what the user has
+    on screen instead of silently dropping it. The cancel lands only after a
+    delta reached the UI, and the anchored content is asserted against the
+    observed deltas - the wall-clock arrival of coalesced batches must not
+    leak into the contract."""
+    app = build_agent(
+        data_dir=tmp_path / "rd", workspace_dir=tmp_path / "ws", llm=_CancelMidStreamLLM()
+    )
+    try:
+        inst = app.spawner.spawn(
+            TaskBook(goal="chat", mode=Mode.REACT, conversational=True), name="chat"
+        )
+        task = asyncio.create_task(app.spawner.start(inst, "hello"))
+        deadline = asyncio.get_running_loop().time() + 10.0
+        while not _shown_text(app, inst.state.run_id):
+            assert asyncio.get_running_loop().time() < deadline, "no delta ever reached the UI"
+            await asyncio.sleep(0.05)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, timeout=5)
+        assert inst.state.status is RunStatus.CANCELLED
+        shown = _shown_text(app, inst.state.run_id)
+        assert shown
+        assistant = [m for m in inst.history if m.get("role") == "assistant"]
+        assert len(assistant) == 1
+        assert assistant[0]["content"] == shown + CANCEL_ANCHOR
+        # The user's input stays the head of the exchange (pre-existing rule)
+        assert inst.history[0] == {"role": "user", "content": "hello"}
+    finally:
+        app.memory.close()

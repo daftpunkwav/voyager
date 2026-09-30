@@ -209,12 +209,18 @@ class CheckpointStore:
 
         The target path is not truncated before replace succeeds, so a mid-write crash leaves
         at most an orphan .tmp and never a half-written <run_id>.json (a half-written file
-        would be skipped by list_alive and lose that checkpoint forever). All persistence
-        paths (mid-save / end of turn) funnel through this method.
+        would be skipped by list_alive and lose that checkpoint forever). The temp file is
+        fsynced before the replace: rename is metadata-only, so without the flush a host power
+        loss can land the rename on disk while the data blocks do not survive, leaving the
+        checkpoint empty or stale exactly when crash recovery needs it. All persistence paths
+        (mid-save / end of turn) funnel through this method.
         """
         path = self._root / f"{_safe_run_id(state.run_id)}.json"
         tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex[:8]}.tmp")
-        tmp.write_text(json.dumps(state.to_dict(), ensure_ascii=False), encoding="utf-8")
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(json.dumps(state.to_dict(), ensure_ascii=False))
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp, path)
         return path
 
