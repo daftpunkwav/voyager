@@ -97,9 +97,7 @@ export function ProjectReadmePanel({
         ) : (
           <div className="pd-readme-empty">
             <p style={{ color: 'var(--text-400)', margin: '0 0 8px' }}>
-              {readmeError
-                ? t('sources:readme.loadFailed')
-                : t('sources:readme.empty')}
+              {readmeError ? t('sources:readme.loadFailed') : t('sources:readme.empty')}
             </p>
             <button
               type="button"

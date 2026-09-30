@@ -305,9 +305,7 @@ export function GraphIndexProgressBar() {
                           type="button"
                           disabled={busy || row.status !== 'QUEUED'}
                           title={
-                            row.status !== 'QUEUED'
-                              ? t('graph:index.cancelQueuedOnly')
-                              : undefined
+                            row.status !== 'QUEUED' ? t('graph:index.cancelQueuedOnly') : undefined
                           }
                           onClick={() => cancel.mutate(row.id)}
                         >

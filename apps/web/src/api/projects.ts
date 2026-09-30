@@ -183,9 +183,13 @@ export function setProjectTags(projectId: string, tags: string[]): Promise<unkno
  *  {owner,name,url,description,stars,language}; they are normalized onto the
  *  StarRepo vocabulary here so import dialogs never see the raw row keys. */
 export async function searchGithubRepos(query: string): Promise<StarRepo[]> {
-  const rows = await callCapability<Array<Record<string, unknown>>>('sources', 'search_remote_repos', {
-    query,
-  });
+  const rows = await callCapability<Array<Record<string, unknown>>>(
+    'sources',
+    'search_remote_repos',
+    {
+      query,
+    }
+  );
   const list = Array.isArray(rows) ? rows : [];
   return list.map((r) => {
     const owner = String(r.owner ?? '');

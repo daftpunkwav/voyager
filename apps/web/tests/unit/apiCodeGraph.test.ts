@@ -17,8 +17,7 @@ vi.mock('@/bridge/client', () => ({
 }));
 
 vi.mock('@/api/projects', () => ({
-  getProject: (repoId: string) =>
-    callCapabilityMock('sources', 'get_repo', { repo_id: repoId }),
+  getProject: (repoId: string) => callCapabilityMock('sources', 'get_repo', { repo_id: repoId }),
 }));
 
 vi.mock('@/i18n', () => ({
