@@ -20,6 +20,7 @@ from sources.capabilities import SourcesDeps, init_all, registry
 from sources.modules.doc.store import DocStore
 from sources.modules.repo import github as github_mod
 from sources.modules.repo.store import RepoStore
+from sources.modules.repo.worker import CloneJob
 from sources.modules.web.store import WebStore
 
 USER_CTX = ActorContext(actor=LOCAL_USER)
@@ -275,7 +276,7 @@ class TestRepoWorker:
             d.repo_store, EventBus(log), d.repo_queue, tmp_path / "ws", clone_fn=fake_clone
         )
         await worker.start()
-        d.repo_queue.put_nowait(rid)
+        d.repo_queue.put_nowait(CloneJob(rid))
         # Poll for the terminal event, not a fixed sleep: stop() cancels the
         # worker, and source.ready is emitted after the status flip.
         for _ in range(200):
@@ -297,7 +298,7 @@ class TestRepoWorker:
 
         worker = RepoWorker(d.repo_store, None, d.repo_queue, tmp_path / "ws", clone_fn=boom)
         await worker.start()
-        d.repo_queue.put_nowait(rid)
+        d.repo_queue.put_nowait(CloneJob(rid))
         # Poll until the worker persisted the failure (fixed sleeps race a
         # loaded session; stop() would cancel mid-job).
         for _ in range(200):
@@ -322,7 +323,7 @@ class TestRepoWorker:
             d.repo_store, None, d.repo_queue, tmp_path / "ws", clone_fn=must_not_clone
         )
         await worker.start()
-        d.repo_queue.put_nowait(rid)
+        d.repo_queue.put_nowait(CloneJob(rid))
         for _ in range(200):
             await asyncio.sleep(0.02)
             if d.repo_store.get(rid)["status"] == "failed":

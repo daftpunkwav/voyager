@@ -13,6 +13,7 @@ import logging
 import re
 import shutil
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from platform_contracts import ActorKind, ActorRef, DomainEvent, Event
@@ -27,6 +28,26 @@ _ACTOR = ActorRef(kind=ActorKind.SYSTEM, id="sources.repo.worker")
 
 #: (owner, name, dest) -> None; default implementation is git clone --depth 1
 CloneFn = Callable[[str, str, Path], Awaitable[None]]
+
+
+@dataclass(frozen=True, slots=True)
+class CloneJob:
+    """Queue message: clone (or re-clone) the stored repo row ``rid``."""
+
+    rid: str
+
+
+@dataclass(frozen=True, slots=True)
+class RemoveJob:
+    """Queue message: delete the local clone directory (queued by remove_repo
+    after the DB row is gone)."""
+
+    local_path: str
+
+
+#: The one queue contract between the enqueue side (capabilities) and the
+#: worker loop; message kinds are named, not inferred from shape.
+RepoJob = CloneJob | RemoveJob
 
 #: Worker-side re-validation of the store's owner/name: both the clone URL and
 #: the destination directory (workspace/repo/<owner>__<name>, rmtree'd before
@@ -79,7 +100,7 @@ class RepoWorker:
         self,
         store: RepoStore,
         bus: EventBus | None,
-        queue: asyncio.Queue,
+        queue: asyncio.Queue[RepoJob],
         workspace: Path,
         *,
         clone_fn: CloneFn | None = None,
@@ -103,12 +124,11 @@ class RepoWorker:
     async def _loop(self) -> None:
         while True:
             item = await self._queue.get()
-            # Clone jobs are str(rid); removal jobs are ("remove", rid, local_path)
             try:
-                if isinstance(item, tuple) and item[0] == "remove":
-                    await self._run_remove(item[2])
+                if isinstance(item, RemoveJob):
+                    await self._run_remove(item.local_path)
                 else:
-                    await self._run_one(item)
+                    await self._run_one(item.rid)
             except Exception as exc:  # the worker must not die on a single bad job
                 log.warning("worker task failed: item=%r error=%s", item, exc, exc_info=True)
 

@@ -174,13 +174,32 @@ def build_chat_router(
 
     def _read(**kw):
         """Log page in the direction the cursor names: before_seq reads
-        backward, after_seq reads forward (the one dispatch `_page`'s read
-        argument is built on; shared by history and trajectory)."""
+        backward, after_seq reads forward (the one dispatch the paging
+        helpers' read argument is built on; shared by history and
+        trajectory)."""
         if "before_seq" in kw:
             return log.read_before(**kw)
         return log.read_after(**kw)
 
-    def _page(
+    def _page_unfiltered(
+        read: Callable[..., list],
+        types: tuple,
+        after_seq: int,
+        before_seq: int | None,
+        max_rows: int,
+    ) -> list:
+        """One bounded read in the direction the cursor names (no session
+        filter): before_seq reads backward, after_seq > 0 reads forward, no
+        cursor reads the newest window off the log tail."""
+        if before_seq is not None:
+            rows = read(before_seq=before_seq, types=types, limit=max_rows + 1)
+        elif after_seq > 0:
+            rows = read(after_seq=after_seq, types=types, limit=max_rows + 1)
+        else:
+            rows = read(before_seq=log.latest_seq() + 1, types=types, limit=max_rows + 1)
+        return rows[-(max_rows + 1) :] if after_seq > 0 else rows
+
+    def _page_filtered(
         read: Callable[..., list],
         types: tuple,
         session: str,
@@ -188,31 +207,18 @@ def build_chat_router(
         before_seq: int | None,
         max_rows: int,
     ) -> list:
-        """One page under the shared cursor contract, optionally filtered by
-        session.
+        """Chunked scan collecting one session's rows.
 
-        `read` dispatches on kwarg: callers pass a lambda that routes
-        before_seq=... to log.read_before and after_seq=... to log.read_after.
-        Unfiltered reads stay the single bounded read they always were. A
-        session filter scans the log in chunks (forward from after_seq, or
-        backward toward the tail / before_seq) until max_rows+1 matches are
-        collected or the log ends, so `has_more` and the trim direction keep
-        their original meaning. A sparse session can scan the whole log, so
-        event-loop callers must run this via asyncio.to_thread.
+        The scan goes forward from after_seq, or backward toward the tail /
+        before_seq, until max_rows+1 matches are collected or the log ends,
+        so `has_more` and the trim direction keep their original meaning. A
+        sparse session can scan the whole log, so event-loop callers must run
+        this via asyncio.to_thread.
         """
-        if not session:
-            if before_seq is not None:
-                rows = read(before_seq=before_seq, types=types, limit=max_rows + 1)
-            elif after_seq > 0:
-                rows = read(after_seq=after_seq, types=types, limit=max_rows + 1)
-            else:
-                rows = read(before_seq=log.latest_seq() + 1, types=types, limit=max_rows + 1)
-            return rows[-(max_rows + 1) :] if after_seq > 0 else rows
-
         matched: list[tuple[int, Event]] = []
-        # Direction check mirrors the unfiltered branch above: before_seq wins
-        # when both cursors arrive, so the paging direction never flips merely
-        # because a session filter is present.
+        # Direction check mirrors _page_unfiltered: before_seq wins when both
+        # cursors arrive, so the paging direction never flips merely because
+        # a session filter is present.
         if before_seq is None and after_seq > 0:  # forward: stop at the first max_rows+1 matches
             cursor = after_seq
             while len(matched) <= max_rows:
@@ -231,6 +237,27 @@ def build_chat_router(
             cursor = rows[0][0]
             matched[:0] = [(s, e) for s, e in rows if _in_session(e, session)]
         return matched[-(max_rows + 1) :]
+
+    def _page(
+        read: Callable[..., list],
+        types: tuple,
+        session: str,
+        after_seq: int,
+        before_seq: int | None,
+        max_rows: int,
+    ) -> list:
+        """One page under the shared cursor contract, optionally filtered by
+        session.
+
+        `read` dispatches on kwarg: callers pass a lambda that routes
+        before_seq=... to log.read_before and after_seq=... to log.read_after.
+        Without a session this stays the single bounded read it always was
+        (_page_unfiltered); with one, the log is scanned in chunks
+        (_page_filtered). Callers run this via asyncio.to_thread.
+        """
+        if not session:
+            return _page_unfiltered(read, types, after_seq, before_seq, max_rows)
+        return _page_filtered(read, types, session, after_seq, before_seq, max_rows)
 
     @router.post("/api/chat/messages")
     async def post_message(request: Request) -> dict:

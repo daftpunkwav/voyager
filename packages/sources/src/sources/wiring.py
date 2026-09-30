@@ -22,7 +22,7 @@ from .files import build_files_router
 from .modules.doc.store import DocStore
 from .modules.doc.worker import DocWorker
 from .modules.repo.store import RepoStore
-from .modules.repo.worker import RepoWorker
+from .modules.repo.worker import RepoJob, RepoWorker
 from .modules.web.store import WebStore
 from .settings import DEFS
 
@@ -48,7 +48,7 @@ def wire(
     web_store = WebStore(data_dir / "web.db")
     owns_secrets = secrets is None
     secrets = secrets or SecretStore(data_dir / "secrets.db")
-    repo_queue: asyncio.Queue = asyncio.Queue()
+    repo_queue: asyncio.Queue[RepoJob] = asyncio.Queue()
     doc_queue: asyncio.Queue = asyncio.Queue()
     init_all(
         SourcesDeps(

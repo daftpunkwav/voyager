@@ -25,6 +25,7 @@ from .modules.doc import capabilities as doc_caps
 from .modules.doc.store import DocStore
 from .modules.repo import capabilities as repo_caps
 from .modules.repo.store import RepoStore
+from .modules.repo.worker import RepoJob
 from .modules.web import capabilities as web_caps
 from .modules.web.store import WebStore
 
@@ -49,7 +50,7 @@ class SourcesDeps:
     web_store: WebStore
     secrets: SecretStore
     bus: EventBus | None
-    repo_queue: asyncio.Queue
+    repo_queue: asyncio.Queue[RepoJob]
     doc_queue: asyncio.Queue
     workspace: Path
     settings: SettingsStore | None = None  # doc submodule reads the parse cap

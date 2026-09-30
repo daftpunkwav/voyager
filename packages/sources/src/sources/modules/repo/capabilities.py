@@ -30,6 +30,7 @@ from .._shared.events import with_session
 from .._shared.paths import within as _within
 from . import github
 from .store import RepoStore
+from .worker import CloneJob, RemoveJob
 
 _DOMAIN = "sources"
 registry = Registry(_DOMAIN)
@@ -104,7 +105,7 @@ async def import_repo(url: str, category: str = "", clone: bool = True) -> JobRe
             )
         )
     if clone:
-        deps.queue.put_nowait(rid)
+        deps.queue.put_nowait(CloneJob(rid))
     else:
         deps.store.set_status(rid, "ready")
     return JobRef(job_id=rid)
@@ -187,7 +188,7 @@ async def remove_repo(repo_id: str) -> dict:
         # (same queue as cloning, order preserved). Jail check before
         # queueing: the worker rmtrees the stored path without further
         # validation, so a tampered/stale row must never escape workspace/.
-        deps.queue.put_nowait(("remove", repo_id, repo["local_path"]))
+        deps.queue.put_nowait(RemoveJob(repo["local_path"]))
     if deps.bus is not None:
         # Same removal receipt as the doc/web submodules: sources-page query
         # invalidation and the activity feed both key on source.removed
