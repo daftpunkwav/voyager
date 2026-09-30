@@ -149,9 +149,22 @@ async def agent_instance_action(
                     if board_id:
                         await finish_board_run(announce, inst, error=err)
                 else:
-                    # Same completion wrapper as dispatch: ok/degraded judgment
-                    # plus the structured delivery card for board-backed runs
-                    if board_id:
+                    if inst.status is RunStatus.CANCELLED:
+                        # Cancelled while queued for a slot: start() returned
+                        # normally with nothing run. The row closes as
+                        # cancelled, not failed (same branch as dispatch).
+                        if board_id:
+                            with suppress(Exception):
+                                await finish_board_run(announce, inst, error="cancelled")
+                    elif inst.status is RunStatus.PAUSED:
+                        # The resumed run paused again: no outcome yet, so the
+                        # row stays open for the next resume (same as
+                        # dispatch's paused branch); the AGENT_PAUSED event
+                        # already announced the pause.
+                        pass
+                    elif board_id:
+                        # Same completion wrapper as dispatch: ok/degraded
+                        # judgment plus the structured delivery card
                         await finish_board_run(announce, inst, result=result)
 
             task = asyncio.create_task(_run())
