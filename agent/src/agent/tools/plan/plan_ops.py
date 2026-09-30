@@ -86,14 +86,12 @@ async def plan_submit(gates: PlanGates, asker: AskUser, plan: str) -> str:
         # The plan must survive the turn: the tool result carries it through
         # the rest of this turn (the submission lives in tool_call arguments,
         # which the turn-end history write-back drops), and the history
-        # entry keeps it available to every later turn. Both surfaces get
-        # the entry because the turn end either keeps history as-is (normal
-        # path) or rebuilds it from the live messages (summary path).
+        # entry keeps it available to every later turn. The engine-owned
+        # record_entry lands it on both surfaces (history + live wire) so
+        # the turn-end write-back, which rebuilds history from the wire,
+        # keeps it either way.
         if inst is not None:
-            entry = {"role": "user", "content": f"{_APPROVED_MARK}\n{body}"}
-            inst.history.append(entry)
-            if inst._turn_messages is not None:
-                inst._turn_messages.append(dict(entry))
+            inst.record_entry({"role": "user", "content": f"{_APPROVED_MARK}\n{body}"})
         return (
             "计划已获批准,已退出计划模式。计划全文如下,请从第一步开始严格按计划执行"
             "(后续轮次对照此计划逐项推进,已完成的步骤不再重复):\n\n"

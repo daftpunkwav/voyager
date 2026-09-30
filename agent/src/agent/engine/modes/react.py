@@ -218,6 +218,7 @@ async def run_react(
     compress_budget: int = COMPRESS_BUDGET,
     governor: ContextGovernor | None = None,
     deadline: Deadline | None = None,
+    delivery_meta: dict[str, Any] | None = None,
 ) -> str:
     tool_calls_used = 0
     tokens_used = 0
@@ -227,6 +228,11 @@ async def run_react(
     # plumbing, and the "no tool needed" justification the model writes under it
     # must never replace the real answer the user already saw streaming
     pending_answer: str | None = None
+    # The wire entry carrying that pre-nudge answer (appended just below when
+    # the nudge fires): recorded into delivery_meta at delivery time so the
+    # caller can exclude exactly this entry from history without re-inferring
+    # the delivery's shape from text
+    pending_entry: dict[str, Any] | None = None
     # Whether this run already appended the idle-continue nudge: gates the
     # continue check instead of scanning the transcript for the mark, so a
     # user message containing "[react]" or a stale nudge row from session
@@ -484,7 +490,8 @@ async def run_react(
                 # could no longer offer to continue.
                 if text and not reply.degraded:
                     pending_answer = user_text
-                messages.append({"role": "assistant", "content": text})
+                pending_entry = {"role": "assistant", "content": text}
+                messages.append(pending_entry)
                 messages.append(
                     {
                         "role": "user",
@@ -497,6 +504,13 @@ async def run_react(
                 # The continuation only confirmed "no tools needed": deliver the
                 # pre-nudge answer, not the forced justification
                 final = pending_answer
+                # Delivery provenance: the delivered text IS the pending wire
+                # entry (identity, not text matching) — the caller's history
+                # write-back excludes exactly this entry so the closing message
+                # does not double it up. The normal path delivers this round's
+                # own text, which never reached the wire: nothing covered.
+                if delivery_meta is not None and pending_entry is not None:
+                    delivery_meta["covered"] = [pending_entry]
             else:
                 final = user_text
             # One delivered message per turn: the final answer only. Round

@@ -50,27 +50,26 @@ async def test_approval_closes_gate_and_records_plan() -> None:
 
 
 async def test_approval_persists_plan_into_instance_history() -> None:
-    """The approved plan lands in the instance's cross-turn history (and the
-    live transcript when one is open) so later turns can execute against it —
-    gate.plan alone is in-memory and write-only."""
+    """The approved plan is handed to the engine-owned recorder so it lands on
+    both surfaces (cross-turn history + live transcript) — gate.plan alone is
+    in-memory and write-only."""
     from types import SimpleNamespace
 
     from agent.runtime.current import current_instance
 
     gates, _asker, handler = _tool_with(["批准执行"])
     gates.set("s1", True)
-    inst = SimpleNamespace(session="s1", history=[], _turn_messages=[{"role": "user"}])
+    recorded: list[dict] = []
+    inst = SimpleNamespace(session="s1", history=[], record_entry=recorded.append)
     token = current_instance.set(inst)
     try:
         await handler(action="exit", plan="# step 1\n# step 2")
     finally:
         current_instance.reset(token)
-    assert len(inst.history) == 1
-    assert inst.history[0]["role"] == "user"
-    assert "【已批准计划】" in inst.history[0]["content"]
-    assert "# step 2" in inst.history[0]["content"]
-    # the live transcript gets its own copy (turn end may rebuild from it)
-    assert inst._turn_messages[-1]["content"] == inst.history[0]["content"]
+    assert len(recorded) == 1
+    assert recorded[0]["role"] == "user"
+    assert "【已批准计划】" in recorded[0]["content"]
+    assert "# step 2" in recorded[0]["content"]
 
 
 async def test_approval_without_instance_still_records_gate_plan() -> None:

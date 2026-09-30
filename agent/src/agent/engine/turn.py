@@ -192,21 +192,20 @@ def _surrender_reason(inst: SubagentInstance, step_base: int) -> str:
 
 
 def _write_back_compaction(
-    inst: SubagentInstance, messages: list[dict[str, Any]], result: str
+    inst: SubagentInstance,
+    messages: list[dict[str, Any]],
+    covered: list[dict[str, Any]],
 ) -> None:
     """Persist mid-turn compaction into the shared history: the summary has
     replaced the condensed middle, so writing the wire view back keeps later
     turns from re-summarizing the same span.
 
-    The closing message carries the delivery verbatim, so the wire entry that
-    IS the delivery must not double up in history. The delivery is the final
-    round's own text: matched whole against the entry, per "\\n\\n" segment
-    (the entry may be a shorter round text the delivery re-uses as a
-    paragraph), and as a prefix extension — an output-cap delivery is the
-    entry's text plus a trailing truncation-note segment. Substring
-    containment would also drop any entry that merely happens to appear
-    inside the result (a short "好" inside "好的,这是答案") — a silent
-    history hole.
+    `covered` is the delivery provenance run_mode reports back (react fills
+    it): wire entries whose text the closing message carries verbatim. They
+    are excluded here BY IDENTITY — the closing message is appended right
+    after, so a covered entry would otherwise double up in history. The mode
+    owns the knowledge of what its delivery was assembled from; this side
+    never re-infers it from text shapes.
 
     _transcript_view folds a teammate's speaker into a leading 【display
     name】 prefix and keeps the wire view key-clean, so the key never
@@ -217,7 +216,6 @@ def _write_back_compaction(
     enters history (the next turn renders a fresh one).
     """
     rebuilt: list[dict[str, Any]] = []
-    delivered_segments = result.split("\n\n") if result else []
     by_display = {p.display_name: k for k, p in PERSONAS.items()}
     for m in messages[1:]:  # skip system; tool entries and empty tool-turn text stay out of history
         role = m.get("role")
@@ -227,15 +225,12 @@ def _write_back_compaction(
                 continue
             rebuilt.append({"role": "user", "content": text})
         elif role == "assistant":
-            text = str(m.get("content", ""))
-            # A lead-in the conversational delivery already carries (the
-            # closing message is self-contained) would duplicate in history
-            if text and (
-                text == result
-                or text in delivered_segments
-                or result.startswith(f"{text}\n\n")  # delivery = entry + truncation note
-            ):
+            # A wire entry the closing delivery was assembled from (identity
+            # match against the mode-reported provenance) rides in the
+            # closing message and must not double up
+            if any(m is c for c in covered):
                 continue
+            text = str(m.get("content", ""))
             if text:
                 entry: dict[str, Any] = {"role": "assistant", "content": text}
                 speaker = str(m.get("speaker") or "")
@@ -396,6 +391,10 @@ async def _run_turn(
             # read this to stamp their events with the session, so history
             # pages and SSE routing attribute them to the right chat lane
             session_token = current_chat_session.set(inst.session)
+            # Delivery provenance the mode fills in (which wire entries the
+            # closing message carries): the compaction write-back excludes
+            # exactly those instead of re-inferring the delivery's shape
+            delivery: dict[str, Any] = {"covered": []}
             try:
                 member_mode = Mode(view.default_mode) if view is not None else None
             except ValueError:  # broken mode in a persona file: ride react
@@ -415,6 +414,7 @@ async def _run_turn(
                 governor=inst.governor(),
                 deadline=inst.deadline,
                 conversational=inst.task.conversational,
+                delivery_meta=delivery,
             )
         except asyncio.CancelledError:
             # Hard cancellation (stop/shutdown): record the terminal state and
@@ -536,9 +536,9 @@ async def _run_turn(
         if any(SUMMARY_MARK in str(m.get("content") or "") for m in messages):
             # Persist compaction across turns: the summary has replaced the
             # condensed middle, so write it back into history and later turns
-            # will not re-summarize the same span; without the write-back every
+            # will not re-summarize the same history; without the write-back every
             # turn would re-condense the same history.
-            _write_back_compaction(inst, messages, result)
+            _write_back_compaction(inst, messages, delivery["covered"])
         closing: dict[str, Any] = {"role": "assistant", "content": result}
         if view is not None:
             # The group transcript attributes this turn's words to the member

@@ -304,3 +304,30 @@ def test_compaction_writeback_keeps_substring_but_unequal_entries() -> None:
     assert result == "新的回答"
     assistant = [m["content"] for m in inst.history if m.get("role") == "assistant"]
     assert assistant == ["回答", "新的回答"]
+
+
+def test_record_entry_lands_on_history_and_live_wire() -> None:
+    """The engine-owned recorder is the only outside write path into the turn
+    surfaces: the persistent history always gets the entry, and a live turn's
+    wire view mirrors its own copy (a turn-end write-back rebuilds history
+    from the wire, so a single-surface entry would be lost)."""
+    events = _RecordingEvents()
+    inst = SubagentInstance(
+        task=TaskBook(goal="g"),
+        toolbelt=Toolbelt({}, PolicyEngine()),
+        llm=FakeLLM(default="done"),
+        system_prompt="s",
+        events=events,  # type: ignore[arg-type]  # duck-typed event stub
+        state=RunState(task="g"),
+    )
+    assert inst.in_live_turn() is False  # no turn running
+    entry = {"role": "user", "content": "approved plan"}
+    inst.record_entry(entry)
+    assert inst.history[-1] is entry
+    # live turn: the wire view exists and mirrors the entry
+    wire: list[dict] = [{"role": "user", "content": "q"}]
+    inst._turn_messages = wire
+    assert inst.in_live_turn() is True
+    inst.record_entry({"role": "user", "content": "approved plan"})
+    assert wire[-1] == {"role": "user", "content": "approved plan"}
+    assert wire[-1] is not inst.history[-1]  # own copy on the wire surface

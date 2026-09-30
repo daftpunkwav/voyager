@@ -320,6 +320,7 @@ async def run_mode(
     governor: ContextGovernor | None = None,
     deadline: Deadline | None = None,
     conversational: bool = False,
+    delivery_meta: dict[str, Any] | None = None,
 ) -> str:
     """Uniform entry: each mode module registers its runner at import time
     (modes/registry.py), so this dispatcher never imports them and the
@@ -346,6 +347,10 @@ async def run_mode(
         # The raw round log is a REACT-only surface: other modes' intermediate
         # products never face the user, so recording them buys nothing.
         kwargs["on_raw"] = on_raw
+        # Delivery provenance likewise: react is the only runner whose closing
+        # delivery can be a wire entry (the pre-nudge answer), so it is the
+        # only one that fills the dict.
+        kwargs["delivery_meta"] = delivery_meta
     if mode in (Mode.COT, Mode.PLAN_EXECUTE):
         # Only the modes with a closing synthesis phase shape their final
         # answer by it (chat reply vs task report); other runners have no

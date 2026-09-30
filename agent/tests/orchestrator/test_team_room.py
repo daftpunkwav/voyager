@@ -146,36 +146,37 @@ class TestSummaryWriteBack:
         # re-prefixes on the next turn, exactly once)
         assert all("【" not in str(m.get("content", "")) for m in inst.history)
 
-    def test_write_back_dedups_delivery_shapes(self) -> None:
-        """The delivery is the final round's own text (single-delivery
-        contract): whole, per-segment, and prefix-extension (truncation note)
-        wire entries ride in the closing message and must not double up; a
-        distinct round narration stays."""
+    def test_write_back_dedups_covered_delivery_entry(self) -> None:
+        """The delivery provenance (react-reported wire entries the closing
+        message was assembled from) is excluded by identity: the covered entry
+        must not double up beside the closing, while every unrelated entry —
+        including one whose text merely appears inside the delivery — stays."""
         llm = FakeLLM([LLMReply(text="done")])
         inst = self._inst(llm, [])
+        covered_entry = {"role": "assistant", "content": "第一段\n\n第二段"}
         messages = [
             {"role": "system", "content": "sys"},
             {"role": "user", "content": "q"},
-            {"role": "assistant", "content": "第一段\n\n第二段"},  # == delivery
-            {"role": "assistant", "content": "第二段"},  # == one segment
+            covered_entry,  # the delivered pending answer (covered by identity)
+            {"role": "assistant", "content": "第二段"},  # merely a paragraph of it
             {"role": "assistant", "content": "独立旁白"},  # not part of the delivery
         ]
-        _write_back_compaction(inst, messages, "第一段\n\n第二段")
-        assert [m["content"] for m in inst.history] == ["q", "独立旁白"]
+        _write_back_compaction(inst, messages, [covered_entry])
+        assert [m["content"] for m in inst.history] == ["q", "第二段", "独立旁白"]
 
-    def test_write_back_dedups_truncated_delivery(self) -> None:
-        """An output-cap delivery is the wire entry's text plus a trailing
-        truncation-note segment: the raw entry must not duplicate beside the
-        closing (which carries answer + note for the next turn)."""
+    def test_write_back_keeps_entries_when_delivery_covers_nothing(self) -> None:
+        """A normal final answer is the final round's own text, which never
+        reached the wire: with an empty provenance nothing is dropped — text
+        resemblance alone must never exclude an entry."""
         llm = FakeLLM([LLMReply(text="done")])
         inst = self._inst(llm, [])
         messages = [
             {"role": "system", "content": "sys"},
             {"role": "user", "content": "q"},
-            {"role": "assistant", "content": "第一段\n\n第二段"},  # delivery minus note
+            {"role": "assistant", "content": "独立旁白"},
         ]
-        _write_back_compaction(inst, messages, "第一段\n\n第二段\n\n[输出截断] 答案不完整")
-        assert [m["content"] for m in inst.history] == ["q"]
+        _write_back_compaction(inst, messages, [])
+        assert [m["content"] for m in inst.history] == ["q", "独立旁白"]
 
 
 class TestMemberTurn:

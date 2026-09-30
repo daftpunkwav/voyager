@@ -57,9 +57,9 @@ async def compact_context(*, instance: SubagentInstance) -> dict[str, Any] | Non
     When the view is the persisted cross-turn history (no live turn), the
     lossy mechanical fallback is off: a failed plan must leave history
     untouched rather than blind-truncate it to a handful of entries with no
-    summary row. The live-view discriminator mirrors context_view itself."""
+    summary row."""
     view = instance.context_view()
-    persistent = instance._turn_messages is None
+    persistent = not instance.in_live_turn()
     return await instance.governor().compact(view, allow_mechanical=not persistent)
 
 

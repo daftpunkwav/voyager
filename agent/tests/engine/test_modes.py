@@ -498,6 +498,50 @@ class TestReAct:
         assert result.startswith("回答前半")
         assert "[输出被截断]" in result
 
+    async def test_delivery_provenance_records_pending_wire_entry(self) -> None:
+        """The pre-nudge answer's wire entry is reported back as the delivery's
+        source, by identity: the caller's history write-back excludes exactly
+        that entry without re-inferring the delivery's assembly from text.
+        A truncated pre-nudge answer keeps the marker on the RETURN value
+        while the covered entry carries the raw wire text."""
+        llm = FakeLLM(
+            [
+                LLMReply(text="第一段\n\n第二段"),
+                LLMReply(text="无需工具。"),
+            ]
+        )
+        messages = [{"role": "user", "content": "讲讲"}]
+        delivery: dict[str, Any] = {"covered": []}
+        result = await run_mode(
+            Mode.REACT,
+            llm=llm,
+            toolbelt=_belt(),
+            messages=messages,
+            limits=ModeLimits(),
+            continue_if_idle=True,
+            delivery_meta=delivery,
+        )
+        assert result == "第一段\n\n第二段"
+        assert len(delivery["covered"]) == 1
+        assert delivery["covered"][0] in messages  # the very wire entry object
+        assert delivery["covered"][0]["content"] == "第一段\n\n第二段"
+
+    async def test_delivery_provenance_empty_for_normal_answer(self) -> None:
+        """A normal final answer is this round's own text, which never reached
+        the wire: nothing is reported covered, so nothing gets excluded."""
+        llm = FakeLLM([LLMReply(text="完整回答")])
+        delivery: dict[str, Any] = {"covered": []}
+        result = await run_mode(
+            Mode.REACT,
+            llm=llm,
+            toolbelt=_belt(),
+            messages=_msgs(),
+            limits=ModeLimits(),
+            delivery_meta=delivery,
+        )
+        assert result == "完整回答"
+        assert delivery["covered"] == []
+
     async def test_nudge_then_tools_still_returns_post_tool_answer(self) -> None:
         """After the nudge the model picks up a tool: the post-tool answer wins,
         the pre-nudge text must not shadow it."""

@@ -281,6 +281,24 @@ class SubagentInstance:
         (context_status / compact_context) and the human capability path."""
         return self._turn_messages if self._turn_messages is not None else self.history
 
+    def in_live_turn(self) -> bool:
+        """Whether a turn is currently live (context_view returns its wire
+        view, not the persisted history): the discriminator callers outside
+        the engine need to treat the transcript with the right permanence —
+        e.g. a compaction on the persisted history must never take the lossy
+        mechanical fallback. Replaces direct reads of the private wire list."""
+        return self._turn_messages is not None
+
+    def record_entry(self, entry: dict[str, Any]) -> None:
+        """Append one history entry from outside the turn machinery (the plan
+        gate's approved-plan record): the persistent history always gets it,
+        and a live turn's wire view mirrors it, because a turn-end compaction
+        write-back rebuilds history FROM the wire — an entry on only one
+        surface would be lost by that rebuild."""
+        self.history.append(entry)
+        if self._turn_messages is not None:
+            self._turn_messages.append(dict(entry))
+
     def governor(self) -> ContextGovernor:
         """Per-turn context authority from the spawn-time budget snapshot;
         rebuilt per call so callers never hold a stale one."""
