@@ -258,6 +258,53 @@ class TestCancelNoticeAndPending:
         assert "[cancelled]" in result
         assert child.state.status is RS.CANCELLED
 
+    async def test_cancelled_queued_turn_skips_stale_close_out(
+        self, tmp_path, agent_replies, wait_until
+    ) -> None:
+        """A conversational turn cancelled before it started (the stop landed
+        while the turn sat queued for a scheduler slot): master._turn must not
+        read the PREVIOUS turn's assistant text out of history as this turn's
+        reply — that would pin the old answer onto the new message in working
+        memory and make evaluation score the stale pair. A cooperatively
+        paused turn ends without a closing answer too, so it gets the same
+        guard."""
+        app = _app(tmp_path)
+        await app.master.handle_user_message("first")
+        while app.master._bg:
+            await asyncio.gather(*list(app.master._bg))
+        chat = app.master.chat
+        assert chat is not None
+        assistants = [e for e in app.memory.working.recent(50) if e["role"] == "assistant"]
+        assert assistants  # the first turn really closed
+
+        for status, ending in (
+            (RunStatus.CANCELLED, "[cancelled] 已在开始执行前被取消,未执行任何步骤。"),
+            (RunStatus.PAUSED, "[已暂停] 已在当前步骤完成后暂停并保存检查点;用 resume_run 继续。"),
+        ):
+
+            async def no_answer_run_turn(
+                user_text: str | None = None,
+                *,
+                member: str = "",
+                _status: RunStatus = status,
+                _ending: str = ending,
+            ) -> str:
+                # the stop/pause lands while the turn is out of the runner
+                chat.state.status = _status
+                return _ending
+
+            chat.run_turn = no_answer_run_turn  # type: ignore[method-assign]
+            try:
+                await app.master.handle_user_message(f"question-{status.value}")
+                while app.master._bg:
+                    await asyncio.gather(*list(app.master._bg))
+            finally:
+                del chat.run_turn  # restore the real runner
+            after = [e for e in app.memory.working.recent(50) if e["role"] == "assistant"]
+            assert after == assistants  # no stale re-record
+
+        app.memory.close()
+
     async def test_parent_link_survives_snapshot_roundtrip(self, tmp_path) -> None:
         app = _app(tmp_path)
         inst = app.spawner.spawn(TaskBook(goal="x"), name="snap")

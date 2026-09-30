@@ -276,6 +276,19 @@ async def run_turn(
     # running to completion once the slot opens (start()'s entry check only
     # covers cancels that land before start was called).
     if inst.state.status is RunStatus.CANCELLED:
+        # Conversational closure: the queued message would otherwise get no
+        # reply at all (the sink is success-only), and master._turn would read
+        # the PREVIOUS turn's assistant text out of history as this turn's
+        # reply. Same notice shape as the CancelledError branch below.
+        if inst.task.conversational and inst.reply_sink is not None:
+            try:
+                await inst.reply_sink(
+                    "[已取消] 本回合尚未开始即被取消;可重新发送或换个说法继续。",
+                    "notice",
+                    speaker=view.key if view is not None else "",
+                )
+            except Exception:  # best effort: the cancel itself is unaffected
+                log.debug("failed to emit pre-start cancel closure message", exc_info=True)
         return "[cancelled] 已在开始执行前被取消,未执行任何步骤。"
     was_paused = inst.state.status is RunStatus.PAUSED
     inst.state.status = RunStatus.RUNNING
@@ -460,6 +473,20 @@ async def _run_turn(
                 log.warning("pause bookkeeping failed for %s", inst.name, exc_info=True)
             finally:
                 inst.pause_requested = False
+            # Conversational closure: same rationale as the cancel branch — the
+            # reply sink is success-only and the chat UI clears its typing
+            # state on agent.message, so a paused turn that returns before the
+            # closing append would leave the exchange hanging forever. Task
+            # dispatches announce the pause through their own [paused] reply.
+            if inst.task.conversational and inst.reply_sink is not None:
+                try:
+                    await inst.reply_sink(
+                        "[已暂停] 已在当前步骤完成后暂停并保存检查点;恢复后继续。",
+                        "notice",
+                        speaker=view.key if view is not None else "",
+                    )
+                except Exception:  # best effort: the pause itself is unaffected
+                    log.debug("failed to emit pause closure message", exc_info=True)
             return "[已暂停] 已在当前步骤完成后暂停并保存检查点;用 resume_run 继续。"
         except Exception as exc:  # record failure and report; never break the scheduler
             inst.state.status = RunStatus.FAILED

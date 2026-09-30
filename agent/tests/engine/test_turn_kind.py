@@ -187,6 +187,72 @@ def test_normal_task_turn_completes() -> None:
     assert not [1 for t, _ in events.emitted if t == RuntimeEvent.RUN_FAILED]
 
 
+def test_cancelled_before_start_closes_the_chat_exchange() -> None:
+    """A conversational turn cancelled while queued for a scheduler slot exits
+    at run_turn's entry check: the queued message must still get a reply (the
+    sink is success-only — silence reads as the agent ignoring the user), the
+    status stays terminal, and no LLM round runs."""
+
+    async def _run() -> None:
+        sinks: list[tuple[str, str]] = []
+
+        async def sink(text: str, kind: str = "message", speaker: str = "") -> None:
+            sinks.append((text, kind))
+
+        llm = FakeLLM(default="must never run")
+        events = _RecordingEvents()
+        inst = SubagentInstance(
+            task=TaskBook(goal="chat", conversational=True),
+            toolbelt=Toolbelt({}, PolicyEngine()),
+            llm=llm,
+            system_prompt="s",
+            events=events,  # type: ignore[arg-type]  # duck-typed event stub
+            state=RunState(task="chat"),
+            reply_sink=sink,
+        )
+        inst.state.status = RunStatus.CANCELLED  # the stop landed while queued
+        result = await inst.run_turn("hello")
+        assert result.startswith("[cancelled]")
+        assert sinks == [("[已取消] 本回合尚未开始即被取消;可重新发送或换个说法继续。", "notice")]
+        assert inst.state.status is RunStatus.CANCELLED
+        assert llm.calls == []  # nothing executed
+
+    asyncio.run(_run())
+
+
+def test_paused_chat_turn_closes_the_exchange() -> None:
+    """A conversational turn paused at a step boundary returns before the
+    closing append: the user's message must still get a closing notice, or the
+    chat UI (typing state clears on agent.message only) hangs forever."""
+
+    async def _run() -> None:
+        sinks: list[tuple[str, str]] = []
+
+        async def sink(text: str, kind: str = "message", speaker: str = "") -> None:
+            sinks.append((text, kind))
+
+        events = _RecordingEvents()
+        inst = SubagentInstance(
+            task=TaskBook(goal="chat", conversational=True),
+            toolbelt=Toolbelt({}, PolicyEngine()),
+            llm=FakeLLM(default="partial answer"),
+            system_prompt="s",
+            events=events,  # type: ignore[arg-type]  # duck-typed event stub
+            state=RunState(task="chat"),
+            reply_sink=sink,
+        )
+        inst.pause_requested = True  # the pause fires at the first step boundary
+        result = await inst.run_turn("hello")
+        assert result.startswith("[已暂停]")
+        assert inst.state.status is RunStatus.PAUSED
+        assert len(sinks) == 1 and sinks[0][1] == "notice"
+        assert sinks[0][0].startswith("[已暂停]")
+        # the pause closed the exchange without an assistant turn in history
+        assert not [m for m in inst.history if m.get("role") == "assistant"]
+
+    asyncio.run(_run())
+
+
 class _SummarizingGovernor:
     """One-shot compaction stub: replaces the transcript the way the editor
     does (a SUMMARY_MARK row stands in for the condensed span) so run_turn's

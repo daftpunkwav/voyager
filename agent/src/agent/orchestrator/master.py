@@ -684,6 +684,15 @@ class Master:
         inst.deadline = Deadline.from_settings(self._settings)
         await self._spawner.start(inst, text, member=member)
         self._digests.upsert(inst)
+        # CANCELLED (stopped while queued) and PAUSED (cooperative pause at a
+        # step boundary) both end the turn without a closing answer: history
+        # still ends with the PREVIOUS turn's reply, and recording that here
+        # would pin the old answer onto this user message (working memory) and
+        # make evaluation score the stale pair. The engine already announced
+        # both endings through the reply sink, and the last persisted snapshot
+        # already holds this unchanged history.
+        if inst.state.status in (RunStatus.CANCELLED, RunStatus.PAUSED):
+            return
         self.sessions.persist(inst.session)
         reply = _last_assistant_text(inst.history)
         if self._memory is not None and reply:
