@@ -10,7 +10,7 @@ Documents live in category directories:
 |---|---|---|
 | `docs/` root | Overview | The [index](README.md), [architecture](architecture.md), [development](development.md), [testing](testing.md) |
 | `subsystems/` | Subsystem references | One page per backend subsystem or domain: what it is, its types, endpoints, storage, and events. Index in [subsystems/README.md](subsystems/README.md) |
-| `catalog/` | Catalog references | Generated-surface style inventories: the agent tool surface ([tool-catalog](catalog/tool-catalog.md)), registered settings keys ([config-catalog](catalog/config-catalog.md)), runtime data layout ([data-layout](catalog/data-layout.md)) |
+| `catalog/` | Catalog references | Generated-surface style inventories: the agent tool surface ([tool-catalog](catalog/tool-catalog.md)), registered settings keys ([config-catalog](catalog/config-catalog.md)), runtime data layout ([data-layout](catalog/data-layout.md)), the module dependency graph ([module-graph](catalog/module-graph.md)) |
 | `web/` | Frontend references | The browser application: [frontend](web/frontend.md) |
 | `i18n/` | Translation process | The [pairing contract](i18n/README.md) |
 
@@ -18,7 +18,7 @@ A document's subject and tree position fix its scope: describe the owning subsys
 
 ## Bilingual pairing
 
-Every document in this tree is maintained as a three-file pair:
+Every document in this tree is maintained as a three-file pair (`AGENTS.md` files are working conventions, not documents — no pair):
 
 - `foo.md` — the English source.
 - `foo.zh.md` — the Chinese counterpart.
