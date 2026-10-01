@@ -3525,6 +3525,11 @@ a.chat-card:hover {
     var(--lg-dialog-shadow-outer), var(--lg-dialog-inset-top), var(--lg-dialog-inset-bottom),
     var(--lg-dialog-inset-glow);
   overflow: hidden;
+  /* This shell does not carry the .modal class, so mirror its enter/exit motion */
+  animation: sheetIn var(--dur-base, 200ms) var(--ease-apple) both;
+}
+.chat-run-overlay.is-leaving .chat-run {
+  animation: sheetOut var(--modal-out, 160ms) ease both;
 }
 [data-theme='dark'] .chat-run-overlay .chat-run {
   background: var(--lg-dialog-tint);
