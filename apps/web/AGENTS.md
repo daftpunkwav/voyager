@@ -80,9 +80,10 @@ not part of the gate.
 ## Tests
 
 - Unit tests live in `tests/unit/` and run under vitest; `tests/setup.ts`
-  registers `@testing-library/jest-dom` and forces the React development
-  build. Browser APIs that jsdom lacks (e.g. `matchMedia`, `scrollIntoView`)
-  are stubbed in the individual test files that need them.
+  registers `@testing-library/jest-dom` and raises the `waitFor` timeout to
+  5s; the React development build is pinned in `vite.config.ts`. Browser
+  APIs that jsdom lacks (e.g. `matchMedia`, `scrollIntoView`) are stubbed in
+  the individual test files that need them.
 - E2E tests live in `tests/e2e/` under Playwright and need the dev stack
   running.
 - TypeScript is strict; a change that weakens a type to make the compiler
