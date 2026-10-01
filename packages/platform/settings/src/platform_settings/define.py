@@ -4,6 +4,12 @@ Responsibilities:
 - SettingDef schema: key, type, default, choices/bounds, secret and
   user_only marking
 - validate: coerce and range-check a value against its definition
+
+validate() is the single gate on the write path: SettingsStore.set runs
+it before persisting, while registered defaults are code-side constants
+returned as-is without validation. The dotted key shape is enforced at
+declaration time (__post_init__), so a malformed key fails when the
+declaring module is imported, not on its first write.
 """
 
 from __future__ import annotations

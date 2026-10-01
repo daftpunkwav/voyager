@@ -6,6 +6,10 @@ This endpoint only lands files under workspace/imports/ and returns the
 server-side path; business validation (type / size limits / path
 escapes) is enforced later by domain capabilities (e.g.
 sources.add_document, notes.add_asset) inside their guard chains.
+
+Transport-level protections live here instead: the receive-boundary byte
+cap, the idle-stall timeout, and the startup sweep of stale staging files
+(the constants below).
 """
 
 from __future__ import annotations
