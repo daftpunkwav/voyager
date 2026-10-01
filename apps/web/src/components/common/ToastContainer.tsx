@@ -14,6 +14,51 @@ import type { Toast } from '@/stores/uiStore';
 import { useUIStore } from '@/stores/uiStore';
 import { describeError } from '@/utils/errorCodes';
 
+/** Decorative type glyph so the severity reads at a glance; color comes from
+ *  the semantic toast variant. */
+function ToastIcon({ type }: { type: Toast['type'] }) {
+  const common = {
+    width: 16,
+    height: 16,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2.2,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  };
+  switch (type) {
+    case 'success':
+      return (
+        <svg {...common} className="toast__icon">
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+      );
+    case 'error':
+      return (
+        <svg {...common} className="toast__icon">
+          <circle cx="12" cy="12" r="9.5" />
+          <path d="m15 9-6 6M9 9l6 6" />
+        </svg>
+      );
+    case 'warning':
+      return (
+        <svg {...common} className="toast__icon">
+          <path d="M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+          <path d="M12 9v4M12 17h.01" />
+        </svg>
+      );
+    default:
+      return (
+        <svg {...common} className="toast__icon">
+          <circle cx="12" cy="12" r="9.5" />
+          <path d="M12 16v-5M12 8h.01" />
+        </svg>
+      );
+  }
+}
+
 /** A single toast: plays the exit animation (toast-out) when its time is up or
  * when dismissed manually, and is removed only after the animation ends */
 function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) => void }) {
@@ -39,6 +84,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
         if (leaving) onRemove(toast.id);
       }}
     >
+      <ToastIcon type={toast.type} />
       <div className="toast__body">
         <div className="toast__row">
           {toast.code && (
