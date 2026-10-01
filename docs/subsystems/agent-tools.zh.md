@@ -16,7 +16,7 @@
 
 每次调用由两层裁决:
 
-1. **`policy/permissions.py` `ToolPermissions`** — agent actor 门,读设置 `agent.permissions`:`{"mode": "full"|"no_dangerous"|"read_only", "deny": [...], "allow": [...]}`。条目可以是工具名(`"bash"`)、工具动作(`"session.delete"`)或 bash argv 前缀(`"bash:git *"`)。`TOOL_CLASS` 把每个工具映射为 `R`(只读)或 `D`(危险);未知工具归为 `D`(fail-closed),另有成文的动作级覆盖(如 `session.delete`、`jobs.cancel`、`memory.forget`、`extension.install`)。旧键 `agent.shell.denied` 的条目合并为 bash 拒绝前缀。
+1. **`policy/permissions.py` `ToolPermissions`** — agent actor 门,读设置 `agent.permissions`:`{"mode": "full"|"no_dangerous"|"read_only", "deny": [...], "allow": [...]}`。条目可以是工具名(`"bash"`)、工具动作(`"session.delete"`)或 bash argv 前缀(`"bash:git push"`、`"bash:git push *"` —— 尾部 `*` 可省略且必须独占最后一个 token;不带 `*` 的模式同样是前缀,`git push` 连 `git push origin main` 一起拒绝)。拒绝方向有意过匹配;允许方向更严 —— allow 前缀只覆盖命令头部,未匹配尾部若含命令边界、命令替换或写重定向,则不允许生效(回落到危险类拒绝)。命令解析不出任何 argv token 且配置了拒绝前缀时直接拒绝,畸形输入无法绕开 deny。`TOOL_CLASS` 把每个工具映射为 `R`(只读)或 `D`(危险);未知工具归为 `D`(fail-closed),另有成文的动作级覆盖(如 `session.delete`、`jobs.cancel`、`memory.forget`、`extension.install`)。旧键 `agent.shell.denied` 的条目合并为 bash 拒绝前缀。
 2. **`policy/engine.py` `PolicyEngine`** — 维度门:`decide(Action(dimension, target, write, irreversible))` → `Decision`。各维度(`network.py`、`fs.py`、`app.py`、`shell.py`)热读自己的设置;级别为 `L0` 放行、`L1` 通知、`L2` 确认。`L2` 确认只在 `decision.confirm_scope == "write_roots"` 时生效 — 写入用户配置的 write roots 需走询问确认回调;其余情形直接执行,至多发出 `agent.policy.notify` 事件。
 
 文件系统根:`agent.fs.read_roots` / `agent.fs.write_roots` 在装配时固定牢笼;fs 工具同时拿到热读函数,设置变更无需重启即生效。
@@ -38,6 +38,8 @@
 ## MCP 工具
 
 `mcp/` 挂载外部 MCP 服务器(`agent.mcp.servers`,须批准):远端工具成为 `mcp__<server>__<tool>` 的 agent 工具(`mcp/mount.py`),`dimension="app"`,仅在批准后注册。`McpSession`(`mcp/session.py`)以 JSON-RPC 2.0 走 stdio 或 HTTP,调用超时 30 秒。只有服务端裁决的 JSON-RPC 错误(`McpRpcError`)以 `[MCP 错误]` 文本返回;超时与传输故障上抛,进入管线的重试与熔断。
+
+同意是持久化快照(`mcp/pool.py`):用户预览会重定已批准名单基线,并把快照写进配置条目(`consent` 字段),基线因此跨重启存活;`AGENT` actor 的列举绝不重定基线(远端工具不能自行扩面)。启动重连与周期刷新只挂载上次同意时见过的名字——冷启动从配置条目读快照,没有快照的条目在显式预览前不挂载任何工具——新出现的远端工具以 `new_tools` 呈现,等待下一次预览。多台服务器并发重连与刷新;重连在池级连接锁上串行,会话在同一次锁持有内读取。stdio 服务器是一棵进程树(启动器 shim 会再生出孙进程);Windows 上子进程被放入 kill-on-close 的 Job Object(`mcp/_win_job.py`),close、关停与本进程崩溃都会回收整棵树,指派失败时退化为仅直接子进程终止。
 
 ## 域工具桥
 

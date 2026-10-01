@@ -26,7 +26,7 @@
 
 ## 检查点与恢复
 
-`state.py` — `RunState`、`Step`、`ResumeSnapshot` 与 `CheckpointStore`(`data/runtime/agent/checkpoints/`),原子保存加启动清扫;`build.py` 在启动时清理临时文件并准备可恢复检查点。`Spawner.resume_from_checkpoint` 重放任务型 REACT 运行;暂停会在轮中持久化 `pending_messages`。
+`state.py` — `RunState`、`Step`、`ResumeSnapshot` 与 `CheckpointStore`(`data/runtime/agent/checkpoints/`),原子保存(临时文件、fsync、`os.replace`)加启动清扫;`build.py` 在启动时清理临时文件并准备可恢复检查点。持久化刻意做成尽力而为:`OSError`(磁盘满、权限)只记警告,恢复退化到上一份完好快照,序列化错误则保持响亮。`RunState.steps` 只保有界的常驻尾部(`MAX_STATE_STEPS = 200`,单条 detail 字符串字段截断到 4000 字符)——持久的执行轨迹在 trajectory 投影里,`next_n` 保证裁剪后步骤编号依然单调。`Spawner.resume_from_checkpoint` 重放任务型 REACT 运行;暂停会在轮中持久化 `pending_messages`。
 
 ## 追踪与可观测
 

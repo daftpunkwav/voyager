@@ -17,7 +17,7 @@
 
 ## 蒸馏
 
-`distill.py` — `Distiller.maybe_distill()` 每 `agent.memory.distill_interval` 个 turn 触发:一次 LLM 调用产出严格 JSON,落入 profile/semantic 写入。重新抽取的同主谓不同宾事实会替代旧的蒸馏事实(`SemanticMemory.add(supersede=True)`);其他写入者的事实不受影响。蒸馏只读工作记忆,不读全量日志。
+`distill.py` — `Distiller.maybe_distill()` 每 `agent.memory.distill_interval` 个 turn 触发:一次 LLM 调用产出严格 JSON,落入 profile/semantic 写入。重新抽取的同主谓不同宾事实会替代旧的蒸馏事实(`SemanticMemory.add(supersede=True)`);其他写入者的事实不受影响。蒸馏只读工作记忆,不读全量日志。LLM 调用失败或写阶段失败都只记日志——seq 游标只在全部写入成功后推进,同一窗口会在之后的 turn 重新抽取(幂等:profile 为 upsert,精确重复被跳过)。
 
 ## 读策略
 

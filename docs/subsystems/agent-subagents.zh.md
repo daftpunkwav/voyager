@@ -16,8 +16,8 @@
 
 - **成员 turn** — `engine/turn.py:run_turn(inst, text, member=人格键)` 以该人格运行 turn(经 `build_system` 注入其 system 层、工具面 `trimmed(tool_allow)`、其 `default_mode` —— explainer 在会话内跑 cot),共享同一份时间线;请求构建时把其他成员的历史发言渲染为 `【名字】` 前缀,并合并连续 assistant 条目(部分 provider 拒收相邻 assistant 轮次)。成员标签走 `inst._member_label`,step/delta 事件归属到「Elio」而非会话实例的通用名。
 - **发言权路由** — `orchestrator/master.py:_parse_mention` 把行首 `@名字`(显示名与别名)直接路由给该成员;`subagent(action=handoff, persona, message)` 经会话 inbox 排队成员 turn(当前 turn 结束后 drain,同一把会话锁——一次只有一人说话)。
-- **任务板** — `orchestrator/task_board.py:TaskBoard` 是发布/认领/确认状态机(`open → claimed → assigned → running → done/failed`,内存态,与被派实例同生命周期)。`taskboard` 能力(与同名工具)向人与 agent 同权暴露 `publish/claim/confirm/list`:Lucien 与用户敲定方案后发布,成员带商议留言认领,发布者 confirm 后由能力层转后台派单(`TaskBook.board_task_id` 关联行)。认领会唤醒发布者(`Master.notify_task_claim`)去拍板或回应商议。
-- **交付** — 板上运行的完成走 `Master.announce_delivery`:盖章板行、发结构化 `agent.delivery` 事件(完整内容/状态/耗时/`run_id`,前端渲染为交付卡),并经唤醒 turn(`handle_notice`,受 `WakeBudget` 门控——超限降级为静默收据;认领始终唤醒)让主持向用户转述摘要。
+- **任务板** — `orchestrator/task_board.py:TaskBoard` 是发布/认领/确认状态机(`open → claimed → assigned → running → done/failed/cancelled`,内存态,与被派实例同生命周期)。`taskboard` 能力(与同名工具)向人与 agent 同权暴露 `publish/claim/confirm/list`:Lucien 与用户敲定方案后发布,成员带商议留言认领,发布者 confirm 后由能力层转后台派单(`TaskBook.board_task_id` 关联行)。认领会唤醒发布者(`Master.notify_task_claim`)去拍板或回应商议。
+- **交付** — 板上运行的完成走 `Master.announce_delivery`:盖章板行、发结构化 `agent.delivery` 事件(完整内容/状态/耗时/`run_id`,前端渲染为交付卡),并经唤醒 turn(`handle_notice`,受 `WakeBudget` 门控——超限降级为静默收据;认领始终唤醒)让主持向用户转述摘要。收尾由派发与恢复路径共享(`orchestrator/dispatch.py:finish_board_run`):末轮带降级标记的运行按失败交付(harness 占位文本不是回答),错误为 `"cancelled"` 时经 `board.cancel` 盖章,板面视图保留 `cancelled` 而非 `failed`;再次暂停的运行其行保持打开,等下一次恢复。
 
 ## 派生
 

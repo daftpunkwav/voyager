@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   git hash-object docs\subsystems\agent-memory.md docs\subsystems\agent-memory.zh.md
-docs/subsystems/agent-memory.md: 637a4d82caf532f27a78b834a8dfe811e1ba48d6
-docs/subsystems/agent-memory.zh.md: 1769cc358953080992220a76fa355f0a3172cc4c
+docs/subsystems/agent-memory.md: ff0f5e69138c1ab00e34ea64c3b0e359740d33f0
+docs/subsystems/agent-memory.zh.md: 5944c154d0d61dea5b510c71ee291e76ebee38ec

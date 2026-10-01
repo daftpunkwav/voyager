@@ -8,7 +8,7 @@
 
 ## 能力
 
-注册按关注点拆分(`capabilities/`:`batch`、`catalog`、`history`、`lifecycle`、`transfer`、`view`;共享运行时在 `runtime.py`),全部合并进 `Registry("notes")` — 共 26 个能力:`create_note`、`update_note`、`edit_note_range`、`delete_note`、`restore_note`、`purge_note`、`empty_trash`、`list_notes`、`get_note`、`get_note_toc`、`resolve_links`、`import_note`、`link_note`、`get_backlinks`、`list_tags`、`rename_tag`、`notes_stats`、`list_versions`、`read_version`、`restore_version`、`export_note`、`batch_notes`、`add_asset`、`get_notes_view`、`set_notes_view`、`mark_note_span`。
+注册按关注点拆分(`batch`、`catalog`、`history`、`lifecycle`、`transfer`、`view` 模块,由 `capabilities.py` 装配入口导入合并;共享的 `Registry("notes")` 与 `Deps` 在 `runtime.py`)— 共 26 个能力:`create_note`、`update_note`、`edit_note_range`、`delete_note`、`restore_note`、`purge_note`、`empty_trash`、`list_notes`、`get_note`、`get_note_toc`、`resolve_links`、`import_note`、`link_note`、`get_backlinks`、`list_tags`、`rename_tag`、`notes_stats`、`list_versions`、`read_version`、`restore_version`、`export_note`、`batch_notes`、`add_asset`、`get_notes_view`、`set_notes_view`、`mark_note_span`。
 
 ## 存储
 
@@ -28,7 +28,7 @@
 
 ## 事件
 
-发布 `note.created`、`note.edited`、`note.deleted`、`note.restored`、`note.purged` 与 `notes.ui.changed`。
+发布 `note.created`、`note.edited`、`note.deleted`、`note.restored`、`note.purged`、`note.purged_batch` 与 `notes.ui.changed`。批量事件由 `empty_trash` 发出,载荷只有 `note_ids` 与 `purged_count`——没有 `note_id` 字段,批量清空没有单一笔记主体。
 
 ## 设置
 

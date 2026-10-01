@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   git hash-object docs/subsystems/agent-tools.md docs/subsystems/agent-tools.zh.md
-docs/subsystems/agent-tools.md: c28b229cb137ca3bf14adc69c10c313ad9a8c775
-docs/subsystems/agent-tools.zh.md: 5fe630a2f4539f457820591efa21f15b0f17b154
+docs/subsystems/agent-tools.md: 15c7794767bdd50f01219c9f4829fffceddc4944
+docs/subsystems/agent-tools.zh.md: 5079c16e10b1f9e61066e66828f07bc152070305

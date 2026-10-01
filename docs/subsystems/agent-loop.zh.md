@@ -44,7 +44,11 @@ agent 引擎是事件驱动的:它不拥有请求处理器。总线事件启动�
 
 turn 在以下情况结束:模型返回最终文本;触及 token 上限(`[预算]`);触及工具调用上限(`[中断]`);`LoopDetector` 在一轮 `LoopAdvisory` 催促后触发;触及 ReAct 轮数上限;或期限到期。上下文溢出触发一次激进压缩、`_emergency_truncate` 与重试。在输出上限处被截断且仍携带工具调用的回复按 fail-closed 处理:调用以 `[未执行]` 结果回显,配对保持完整,模型在下轮重新完整发起。
 
-`engine/turn.py:run_turn` 随后写回压缩历史摘要(`[历史压缩]` 标记),追加 assistant 回复,置终态 — 会话型实例为 `WAITING_INPUT`,任务为 `COMPLETED` — 并发出 `AGENT_COMPLETED`。错误路径置 `FAILED`/`CANCELLED`;`PauseRequested` 置 `PAUSED` 并落轮中检查点。
+每个 llm 步骤都带 `degraded` 标记:配额/供应商故障的占位文本是真实记录的轮次,但不是模型输出。该标记决定收尾——以降级 harness 文本结束的任务轮被置 `FAILED` 并发出 `RUN_FAILED`,而非 `COMPLETED`;会话轮仍交付其文本,但 reply sink 的 kind 沿用同一判读:降级文本以 `error` 交付,harness 收尾(`[中断]` / `[预算]` / `[无工具可用]`)以 `warning` 交付,其余为普通消息。
+
+`engine/turn.py:run_turn` 随后写回压缩历史摘要(`[历史压缩]` 标记;结束消息由哪些 wire 条目拼成,由模式上报的交付 provenance 按身份排除,不会重复入史),追加 assistant 回复,置终态 — 会话型实例为 `WAITING_INPUT`,任务为 `COMPLETED` — 并发出 `AGENT_COMPLETED`。
+
+非成功出口:`run_turn` 在入口复查 `CANCELLED`,排队等待并发槽位时被取消的实例保持取消态。硬取消记录终态,并且——仅会话型流式——把带取消锚的部分 assistant 条目(`"\n\n…[已中断]"`)写回历史,使下一次请求包含用户屏幕上已经看到的内容。`PauseRequested` 置 `PAUSED` 并落轮中检查点(任务实例还保留待续 transcript 供活体恢复)。reply sink 只在成功路径投递,所以每个非成功出口(开局前取消 / 取消 / 暂停 / 失败)都以尽力而为的 `notice`/`error` 聊天消息收束本轮。turn 以 `CANCELLED`/`PAUSED` 结束时 `Master._turn` 跳过持久化(没有可记录的收尾回答);被停止的会话在下一条消息时复活,任务实例保持终态。
 
 ## 流式
 

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   git hash-object docs\subsystems\notes.md docs\subsystems\notes.zh.md
-docs/subsystems/notes.md: 0ae8410ac35e8a60d026ed554ad6c198aa9de0e0
-docs/subsystems/notes.zh.md: 38a7d0a0a9d921ee8ffdab13a6a2963a11d82437
+docs/subsystems/notes.md: 1e81bec3880e44f46fcb65a5c64b487b44734d6f
+docs/subsystems/notes.zh.md: 8baeeaa6976ddea4a1595b50999c20b556955bbe

@@ -26,7 +26,7 @@ The resident machinery under `agent/src/agent/runtime/`, plus hooks and plugins.
 
 ## Checkpoints and resume
 
-`state.py` — `RunState`, `Step`, `ResumeSnapshot`, and `CheckpointStore` (`data/runtime/agent/checkpoints/`) with atomic saves and startup sweeps; `build.py` purges temp files and prepares resumable checkpoints at boot. `Spawner.resume_from_checkpoint` replays task-mode REACT runs; a pause persists `pending_messages` mid-turn.
+`state.py` — `RunState`, `Step`, `ResumeSnapshot`, and `CheckpointStore` (`data/runtime/agent/checkpoints/`) with atomic saves (temp file, fsync, `os.replace`) and startup sweeps; `build.py` purges temp files and prepares resumable checkpoints at boot. Persist is best-effort by design: an `OSError` (disk full, permissions) logs a warning and recovery degrades to the last good snapshot, while serialization errors stay loud. `RunState.steps` keeps a bounded resident tail (`MAX_STATE_STEPS = 200`, one detail string field capped at 4000 chars) — the durable execution trail is the trajectory projection, and `next_n` keeps step numbering monotone across trims. `Spawner.resume_from_checkpoint` replays task-mode REACT runs; a pause persists `pending_messages` mid-turn.
 
 ## Tracing and observability
 

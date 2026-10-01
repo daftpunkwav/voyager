@@ -17,7 +17,7 @@ Source: `agent/src/agent/memory/`, `skills/`, `personas/`.
 
 ## Distillation
 
-`distill.py` — `Distiller.maybe_distill()` fires every `agent.memory.distill_interval` turns: one LLM call producing strict JSON that lands in profile/semantic writes. A re-extracted fact with the same subject+relation but a new object supersedes the older distilled fact (`SemanticMemory.add(supersede=True)`); facts from other writers are never touched. Distillation reads working memory, never the full log.
+`distill.py` — `Distiller.maybe_distill()` fires every `agent.memory.distill_interval` turns: one LLM call producing strict JSON that lands in profile/semantic writes. A re-extracted fact with the same subject+relation but a new object supersedes the older distilled fact (`SemanticMemory.add(supersede=True)`); facts from other writers are never touched. Distillation reads working memory, never the full log. A failed LLM call or a failed write phase only logs — the seq cursor advances only after every write succeeded, so the same window is re-extracted on a later turn (idempotent: profile upserts, exact duplicates skipped).
 
 ## Read policy
 

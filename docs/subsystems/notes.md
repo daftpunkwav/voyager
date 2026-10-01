@@ -8,7 +8,7 @@ Source: `packages/notes/src/notes/` — port 8020, enabled by default, store `da
 
 ## Capabilities
 
-Registration is split by concern (`capabilities/`: `batch`, `catalog`, `history`, `lifecycle`, `transfer`, `view`; shared runtime in `runtime.py`), all merged into `Registry("notes")` — 26 capabilities: `create_note`, `update_note`, `edit_note_range`, `delete_note`, `restore_note`, `purge_note`, `empty_trash`, `list_notes`, `get_note`, `get_note_toc`, `resolve_links`, `import_note`, `link_note`, `get_backlinks`, `list_tags`, `rename_tag`, `notes_stats`, `list_versions`, `read_version`, `restore_version`, `export_note`, `batch_notes`, `add_asset`, `get_notes_view`, `set_notes_view`, `mark_note_span`.
+Registration is split by concern (`batch`, `catalog`, `history`, `lifecycle`, `transfer`, `view` modules, imported and merged by the `capabilities.py` assembly entry; the shared `Registry("notes")` and `Deps` live in `runtime.py`) — 26 capabilities: `create_note`, `update_note`, `edit_note_range`, `delete_note`, `restore_note`, `purge_note`, `empty_trash`, `list_notes`, `get_note`, `get_note_toc`, `resolve_links`, `import_note`, `link_note`, `get_backlinks`, `list_tags`, `rename_tag`, `notes_stats`, `list_versions`, `read_version`, `restore_version`, `export_note`, `batch_notes`, `add_asset`, `get_notes_view`, `set_notes_view`, `mark_note_span`.
 
 ## Storage
 
@@ -28,7 +28,7 @@ Registration is split by concern (`capabilities/`: `batch`, `catalog`, `history`
 
 ## Events
 
-Publishes `note.created`, `note.edited`, `note.deleted`, `note.restored`, `note.purged`, and `notes.ui.changed`.
+Publishes `note.created`, `note.edited`, `note.deleted`, `note.restored`, `note.purged`, `note.purged_batch`, and `notes.ui.changed`. The batch event fires from `empty_trash` and carries only `note_ids` plus `purged_count` — no `note_id` field, since a bulk purge has no single-note subject.
 
 ## Settings
 
