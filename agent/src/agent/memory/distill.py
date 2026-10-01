@@ -35,6 +35,9 @@ _WINDOW = 20
 #: Minimum entries worth spending an LLM call on
 _MIN_ENTRIES = 4
 
+#: Upper bound on atomic facts one distillation may write (also rendered into
+#: the extraction prompt as max_facts, so the model and the write loop share
+#: one cap)
 _MAX_FACTS = 5
 
 

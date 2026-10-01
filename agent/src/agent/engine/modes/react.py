@@ -488,13 +488,12 @@ async def run_react(
                 and (limits.max_rounds <= 0 or round_n < limits.max_rounds)
                 and _should_continue_react(messages, tool_calls_used, nudged=nudged)
             ):
-                # Degraded harness text must not park here either: as a
-                # pending_answer it would be delivered as a normal message
-                # while bypassing turn._turn_degraded (that check reads the
-                # LAST llm step, not the round the text came from), and as a
-                # lead-in it would join the conversational flow. Both stay
-                # unset; the post-nudge round's own text (or its degraded
-                # classification at the turn layer) speaks instead.
+                # Degraded harness text must not park in pending_answer: it
+                # would be delivered as the turn's normal message while
+                # bypassing turn._turn_degraded (that check reads the LAST llm
+                # step, not the round the text came from). It stays unset; the
+                # post-nudge round's own text (or its degraded classification
+                # at the turn layer) speaks instead.
                 # user_text, not raw text: when this round hit the output cap
                 # the truncation marker must ride along, or the nudge round's
                 # "no tools needed" confirmation would deliver the cut answer
