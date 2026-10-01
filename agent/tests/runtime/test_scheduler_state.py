@@ -3,10 +3,13 @@ checkpoint recovery.
 """
 
 import asyncio
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
+from agent.engine.turn import _surrender_reason
 from agent.runtime.scheduler import Scheduler
-from agent.runtime.state import CheckpointStore, RunState, RunStatus
+from agent.runtime.state import MAX_STATE_STEPS, CheckpointStore, RunState, RunStatus
 
 
 class TestScheduler:
@@ -114,3 +117,55 @@ class TestCheckpoint:
         # Broken files are kept as-is: no unlink, no rewrite
         assert (tmp_path / "broken.json").read_text(encoding="utf-8") == "{not json"
         assert (tmp_path / "zzz-no-status.json").read_text(encoding="utf-8") == '{"task":"x"}'
+
+
+class TestRunStateStepsCap:
+    """MAX_STATE_STEPS trims the resident steps tail: step numbering keeps
+    going through next_n (len(steps)+1 would collide after a trim), legacy
+    checkpoints backfill the counter from the retained tail, and the engine's
+    surrender scan stays correct because it scopes by step.n — not list
+    indices, which the trim shifts."""
+
+    def test_add_step_trims_head_and_next_n_stays_monotonic(self) -> None:
+        state = RunState(task="t")
+        total = MAX_STATE_STEPS + 5
+        for i in range(total):
+            state.add_step("llm", f"s{i}", "m")
+        assert state.next_n == total
+        assert len(state.steps) == MAX_STATE_STEPS
+        # the head is dropped, order is preserved, ns stay strictly increasing
+        assert [s.n for s in state.steps] == list(range(total - MAX_STATE_STEPS + 1, total + 1))
+        # numbering continues past the cap instead of colliding with the tail
+        assert state.add_step("tool", "extra", "m").n == total + 1
+        assert len(state.steps) == MAX_STATE_STEPS
+
+    def test_from_dict_backfills_legacy_next_n_from_retained_tail(self) -> None:
+        state = RunState(task="t")
+        for i in range(MAX_STATE_STEPS + 3):
+            state.add_step("llm", f"s{i}", "m")
+        legacy = state.to_dict()
+        del legacy["next_n"]  # pre-counter checkpoint shape
+        revived = RunState.from_dict(legacy)
+        assert revived.next_n == MAX_STATE_STEPS + 3  # backfilled from the tail's max n
+        assert revived.steps[0].n == 4  # the trimmed tail survived the round trip
+        # numbering resumes after the retained tail instead of colliding with it
+        assert revived.add_step("llm", "next", "m").n == MAX_STATE_STEPS + 4
+
+    def test_surrender_scan_scopes_by_step_n_after_trim(self) -> None:
+        """The engine's surrender scan must scope by step.n: once the head is
+        trimmed, both surrenders sit near the tail's end, so an index-based
+        scan would misattribute (or drop) the current turn's reason."""
+        state = RunState(task="t")
+        for i in range(249):
+            state.add_step("llm", f"filler{i}", "m")
+        state.add_step(
+            "system", "surrender", "", {"reason": "tool_cap"}
+        )  # n=250: a previous turn's stamp
+        step_base_n = state.steps[-1].n
+        state.add_step("llm", "current-round", "m")
+        state.add_step(
+            "system", "surrender", "", {"reason": "loop_abort"}
+        )  # n=252: this turn's stamp
+        assert state.steps[0].n == 53  # the head trim actually happened
+        inst: Any = SimpleNamespace(state=state)  # the scan only reads state.steps
+        assert _surrender_reason(inst, step_base_n) == "loop_abort"

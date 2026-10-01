@@ -3,6 +3,9 @@ backing the gateway's /api/chat/trajectory?run_id mode - the subagent
 execution view's data source - and the run rows it reports alongside.
 """
 
+import time
+from dataclasses import replace
+
 from agent.runtime.trajectory import TrajectoryStore
 from platform_contracts import ActorKind, ActorRef, DomainEvent, Event, RuntimeEvent
 from platform_eventbus import EventLog
@@ -216,5 +219,76 @@ class TestCatchUpSemantics:
         store.catch_up()
         assert [r["run_id"] for r in store.list_runs(session="s2")] == ["r2"]
         assert len(store.list_runs()) == 2
+        store.close()
+        log.close()
+
+
+class TestStepsRetention:
+    """Startup retention (purge_steps_older_than_days): step rows past the
+    cutoff go, TERMINAL runs rows (ended_ts set) past the cutoff go with
+    them, and a run that never ended (ended_ts = 0: alive / paused) keeps
+    its runs row so it stays listed and resumable."""
+
+    @staticmethod
+    def _terminal(ev_type: str, run_id: str, ts: float) -> Event:
+        return replace(
+            Event(
+                type=ev_type,
+                actor=_AGENT,
+                payload={"run_id": run_id, "error": "boom"},
+            ),
+            ts=ts,
+        )
+
+    def _runs_row(self, store: TrajectoryStore, run_id: str) -> tuple[float, str] | None:
+        with store._lock:
+            row = store._conn.execute(
+                "SELECT ended_ts, status FROM runs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+        return (row[0], row[1]) if row else None
+
+    def test_old_terminal_run_steps_and_runs_rows_are_purged(self, tmp_path) -> None:
+        old = time.time() - 30 * 86400
+        store, log = _store(tmp_path)
+        log.append(replace(_step("old", "a"), ts=old))
+        log.append(replace(_step("old", "b"), ts=old))
+        log.append(self._terminal(RuntimeEvent.RUN_FAILED, "old", old))
+        log.append(replace(_step("new", "a"), ts=time.time()))
+        log.append(self._terminal(RuntimeEvent.AGENT_COMPLETED, "new", time.time()))
+        store.catch_up()
+        # the return value counts STEP rows (2), not the also-deleted runs row
+        assert store.purge_steps_older_than_days(7) == 2
+        assert store.run_steps("old") == []
+        assert self._runs_row(store, "old") is None
+        assert [r["payload"]["name"] for r in store.run_steps("new")] == ["a"]
+        new_row = self._runs_row(store, "new")
+        assert new_row is not None and new_row[1] == "completed"
+        store.close()
+        log.close()
+
+    def test_unended_run_keeps_its_runs_row(self, tmp_path) -> None:
+        """A run without a terminal event (ended_ts = 0: alive / paused)
+        keeps its runs row even when every other timestamp is past the
+        cutoff — it must stay listed and resumable; its old step rows still
+        go (the step purge filters by ts only)."""
+        old = time.time() - 30 * 86400
+        store, log = _store(tmp_path)
+        log.append(replace(_step("alive", "a"), ts=old))
+        log.append(replace(_step("alive", "b"), ts=old))
+        store.catch_up()
+        assert store.purge_steps_older_than_days(7) == 2
+        assert store.run_steps("alive") == []
+        row = self._runs_row(store, "alive")
+        assert row is not None and row[0] == 0.0
+        store.close()
+        log.close()
+
+    def test_nonpositive_days_is_a_no_op(self, tmp_path) -> None:
+        store, log = _store(tmp_path)
+        log.append(replace(_step("r", "a"), ts=time.time() - 30 * 86400))
+        store.catch_up()
+        assert store.purge_steps_older_than_days(0) == 0
+        assert store.purge_steps_older_than_days(-1) == 0
+        assert [r["payload"]["name"] for r in store.run_steps("r")] == ["a"]
         store.close()
         log.close()

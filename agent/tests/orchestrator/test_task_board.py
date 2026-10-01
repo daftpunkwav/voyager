@@ -432,6 +432,61 @@ class TestDeliveryAnnouncement:
             app.close()
 
 
+class TestFinishBoardRunOkJudgment:
+    """finish_board_run's ok/degraded judgment, unit-level: the degraded check
+    reads the step trail through getattr, so orchestrator-side fakes WITHOUT a
+    steps trail read as not degraded (unlike the engine copy, which requires a
+    real SubagentInstance) — only the final llm step's flag decides."""
+
+    @staticmethod
+    async def _capture(announced: list, inst) -> None:
+        from agent.orchestrator.dispatch import finish_board_run
+
+        async def announce(inst, *, ok: bool, result: str, error: str) -> None:
+            announced.append((ok, result, error))
+
+        await finish_board_run(announce, inst, result="完成")
+
+    def test_instance_without_steps_trail_delivers_ok(self) -> None:
+        """A fake whose state has no steps attribute (the duck-typed branch)
+        reads as not degraded: a completed run still delivers ok."""
+        from types import SimpleNamespace
+
+        inst = SimpleNamespace(status=RunStatus.COMPLETED, state=SimpleNamespace())
+        announced: list = []
+        asyncio.run(self._capture(announced, inst))
+        assert announced == [(True, "完成", "")]
+
+    def test_degraded_final_llm_step_delivers_failure(self) -> None:
+        from types import SimpleNamespace
+
+        from agent.runtime.state import RunState
+
+        state = RunState("t")
+        state.add_step("llm", "round-1", "", {"degraded": True})
+        inst = SimpleNamespace(status=RunStatus.COMPLETED, state=state)
+        announced: list = []
+        asyncio.run(self._capture(announced, inst))
+        # harness placeholder text is not a real answer: it delivers as a failure
+        assert announced == [(False, "", "完成")]
+
+    def test_only_final_llm_step_flag_decides(self) -> None:
+        """An earlier degraded round does not poison the delivery: the scan
+        stops at the LAST llm step, and a non-degraded final round is ok."""
+        from types import SimpleNamespace
+
+        from agent.runtime.state import RunState
+
+        state = RunState("t")
+        state.add_step("llm", "round-1", "", {"degraded": True})
+        state.add_step("tool", "grep", "")
+        state.add_step("llm", "round-2", "", {"degraded": False})
+        inst = SimpleNamespace(status=RunStatus.COMPLETED, state=state)
+        announced: list = []
+        asyncio.run(self._capture(announced, inst))
+        assert announced == [(True, "完成", "")]
+
+
 class _ExhaustedBudget:
     """Wake-budget probe: never allows a wakeup and counts record() calls so
     a test can prove the degraded branch consumes no budget it did not grant."""
@@ -789,5 +844,84 @@ class TestBoardResumeDelivery:
                 e.payload for _, e in app2.log.read_after(types=[DomainEvent.AGENT_DELIVERY])
             ]
             assert deliveries == []
+        finally:
+            app2.close()
+
+    def test_resumed_board_run_pausing_again_keeps_row_open(self, tmp_path) -> None:
+        """A resumed run that pauses AGAIN has no outcome yet: the board row
+        stays open (running) for the next resume instead of closing as failed
+        with the '[paused]' receipt as its error text."""
+        app1 = self._app(tmp_path)
+        try:
+            run_id = self._park_paused_board_run(app1, "s-resume")
+        finally:
+            app1.close()
+        app2 = self._app(tmp_path, llm=FakeLLM())
+        try:
+            board = app2.master._task_board
+            assert board is not None
+            task_id = self._raise_board_row(app2, "s-resume", run_id)
+
+            async def _pause_again(inst, *a, **kw):
+                inst.state.status = RunStatus.PAUSED
+                return ""
+
+            app2.spawner.start = _pause_again  # type: ignore[method-assign]
+
+            async def _scenario() -> dict:
+                out = await execute(
+                    app2.registry,
+                    "agent_instance",
+                    USER_CTX,
+                    {"action": "resume", "run_id": run_id, "continue_run": True},
+                )
+                assert out["continuing"] is True
+                await self._drain_resume_tasks()
+                return board.get(task_id)
+
+            row = asyncio.run(_scenario())
+            assert row["status"] == "running"  # still open, never terminal
+            deliveries = [
+                e.payload for _, e in app2.log.read_after(types=[DomainEvent.AGENT_DELIVERY])
+            ]
+            assert deliveries == []  # no failure card for a pause
+        finally:
+            app2.close()
+
+    def test_cancelled_while_queued_closes_row_cancelled(self, tmp_path) -> None:
+        """Cancelled while queued for a scheduler slot (start() returned
+        normally with nothing run): the row closes as CANCELLED, not failed."""
+        app1 = self._app(tmp_path)
+        try:
+            run_id = self._park_paused_board_run(app1, "s-resume")
+        finally:
+            app1.close()
+        app2 = self._app(tmp_path, llm=FakeLLM())
+        try:
+            board = app2.master._task_board
+            assert board is not None
+            task_id = self._raise_board_row(app2, "s-resume", run_id)
+
+            async def _cancelled_in_queue(inst, *a, **kw):
+                inst.state.status = RunStatus.CANCELLED
+                return ""
+
+            app2.spawner.start = _cancelled_in_queue  # type: ignore[method-assign]
+
+            async def _scenario() -> dict:
+                out = await execute(
+                    app2.registry,
+                    "agent_instance",
+                    USER_CTX,
+                    {"action": "resume", "run_id": run_id, "continue_run": True},
+                )
+                assert out["continuing"] is True
+                await self._drain_resume_tasks()
+                return board.get(task_id)
+
+            row = asyncio.run(_scenario())
+            assert row["status"] == "cancelled" and row["result"] == "cancelled"
+            card = asyncio.run(self._wait_delivery(app2, "failed"))
+            assert card is not None  # the frontend vocabulary has only done/failed
         finally:
             app2.close()

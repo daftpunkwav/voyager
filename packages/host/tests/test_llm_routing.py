@@ -144,6 +144,41 @@ class TestRoutingCompleteEdges:
         reply = await llm.complete([{"role": "user", "content": "hi"}])
         assert reply.degraded and reply.text == NO_PROVIDER_TEXT
 
+    async def test_model_only_hops_resolve_default_once_per_walk(self) -> None:
+        """Two model-only hops (both riding the default provider) share ONE
+        default resolution per walk: the fallback path only ever runs after a
+        hop already failed on the wire, and re-running list_providers plus the
+        setting reads per empty-provider hop is identical read-only work."""
+        resolves = 0
+
+        async def call(domain: str, name: str, args: dict):
+            nonlocal resolves
+            if name == "list_providers":
+                resolves += 1
+                return [
+                    {"id": "p-main", "enabled": True, "has_api_key": True, "models": ["m-main"]}
+                ]
+            if name == "get_setting":
+                raise ServiceError("settings", ErrorSuffix.NOT_FOUND, "unknown setting")
+            if args["model"] == "m1":  # the first hop fails, the second succeeds
+                raise ServiceError("llm", ErrorSuffix.UNAVAILABLE, "provider p-main down")
+            return {
+                "text": f"from {args['provider_id']}/{args['model']}",
+                "tool_calls": [],
+                "usage": {},
+            }
+
+        llm = RoutingServiceLLM(
+            call,
+            purpose=Purpose.CHAT,
+            settings=_Settings(
+                {ROUTING_KEY: {"chat": {"model": "m1", "fallbacks": [{"model": "m2"}]}}}
+            ),
+        )
+        reply = await llm.complete([{"role": "user", "content": "hi"}])
+        assert reply.text == "from p-main/m2"  # the second hop served the turn
+        assert resolves == 1  # one resolution, not one per empty-provider hop
+
 
 class TestRoutingStream:
     """complete_stream shares the fallback chain for the initial call: each
