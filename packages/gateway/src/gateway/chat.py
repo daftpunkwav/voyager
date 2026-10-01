@@ -55,8 +55,8 @@ from platform_contracts import (
 )
 from platform_eventbus import EventBus, EventLog
 
-from .common import actor_of, json_body, session_or_400
 from .ratelimit import RateLimiter
+from .request_boundary import actor_of, json_body, session_or_400
 
 _DOMAIN = "gateway"
 #: Event types relevant to the human timeline (chat + progress + popups +

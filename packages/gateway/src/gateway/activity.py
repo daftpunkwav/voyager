@@ -26,8 +26,8 @@ from platform_contracts import (
 )
 from platform_eventbus import EventBus
 
-from .common import actor_of, json_body, session_or_400
 from .ratelimit import RateLimiter
+from .request_boundary import actor_of, json_body, session_or_400
 
 _DOMAIN = "gateway"
 _ACTIVITY_KINDS = ("page_view", "pointer", "selection", "manual")  # initial kinds

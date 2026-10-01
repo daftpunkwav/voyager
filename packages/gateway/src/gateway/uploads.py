@@ -23,8 +23,8 @@ from platform_contracts import retention_cutoff
 from starlette.datastructures import UploadFile
 from starlette.types import Message
 
-from .common import actor_of
 from .ratelimit import RateLimiter
+from .request_boundary import actor_of
 
 log = logging.getLogger("gateway.uploads")
 
