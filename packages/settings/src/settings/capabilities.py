@@ -5,16 +5,15 @@ Responsibilities:
 - Theme / font / code-font appearance controls (list/get/set_theme)
 - Generic get_setting / set_setting over the shared SettingsStore, plus
   schema aggregation filtered by module (settings-page groups)
-- Leave validation, secret write protection, and change events to the
-  platform SettingsStore; get_setting returns only has_value for secrets
 
-- Users and agents share the same capabilities (LocalAuth: empty scopes are
-  allowed through);
-- Write protection for secret items is enforced by the platform
-  SettingsStore (non-user -> FORBIDDEN), and get_setting returns only
-  has_value for secret items, never the value;
-- After set_theme / set_setting persist, SettingsStore automatically emits
-  settings.changed events that the web client watches for live updates.
+Contract notes:
+- Users and agents share the same capabilities (LocalAuth: empty scopes
+  are allowed through).
+- Validation, secret/user_only write protection, and change events are
+  the platform SettingsStore's job; get_setting returns only has_value
+  for secret items, never the value.
+- After set_theme / set_setting persist, the store emits settings.changed
+  events that the web client watches for live updates.
 """
 
 from __future__ import annotations

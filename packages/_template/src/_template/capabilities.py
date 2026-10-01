@@ -3,13 +3,9 @@
 Responsibilities:
 - Declare this service's capabilities on the module-level registry
 - Hold the Deps dataclass and init_deps() for runtime dependency injection
-- Keep handlers to business logic only (auth / rate limiting / auditing are
-  framework entry-point concerns)
-
-Pattern: a module-level registry plus init_deps() to inject runtime
-dependencies (store / bus / queue). Handlers contain business logic
-only; auth / rate limiting / auditing are enforced by the framework
-entry points.
+  (store / bus / queue)
+- Keep handlers to business logic only: auth / rate limiting / auditing
+  are enforced by the framework entry points, never inside handlers
 """
 
 from __future__ import annotations
