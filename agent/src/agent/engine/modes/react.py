@@ -557,7 +557,9 @@ async def run_react(
                 break
             executable.append(call)
         if tripped is not None and not executable:
-            return _loop_abort_text(tripped.name, loops)
+            text = _loop_abort_text(tripped.name, loops)
+            await _surrender_step(on_step, "loop_abort", text)
+            return text
         # Neutral back-fill: one assistant entry carrying this round's tool_calls
         # (with ids), then one result entry per call carrying the same
         # tool_call_id; wire formats per provider (OpenAI tool_call_id /

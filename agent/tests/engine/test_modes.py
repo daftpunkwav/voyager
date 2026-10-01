@@ -1240,6 +1240,36 @@ class TestSurrenderSteps:
         surrenders = [d for k, n, d in steps if k == "system" and n == "surrender"]
         assert surrenders and surrenders[-1]["reason"] == "tool_cap"
 
+    async def test_first_trip_loop_abort_marks_a_surrender_step(self) -> None:
+        """The first-trip abort with no executable prefix (the tripping call is
+        the batch head) carries the same surrender stamp as the other two
+        loop-abort paths: without it _surrender_reason finds nothing and
+        wait/dispatch callers read the truncated run as a normal completion."""
+        llm = FakeLLM(
+            dynamic=lambda _m, _t: LLMReply(tool_calls=(ToolCall("1", "echo_tool", {"x": "same"}),))
+        )  # every round re-issues the identical call; round 3 trips pre-execution
+        steps: list[tuple[str, str, dict]] = []
+
+        async def on_step(kind: str, name: str, summary: str, detail: dict | None = None) -> None:
+            steps.append((kind, name, dict(detail or {})))
+
+        messages = _msgs()
+        result = await run_mode(
+            Mode.REACT,
+            llm=llm,
+            toolbelt=_belt(),
+            messages=messages,
+            limits=ModeLimits(),
+            on_step=on_step,
+        )
+        assert "疑似死循环" in result
+        # This is the first-trip-no-executable path: the abort returned before
+        # any advisory nudge, and only the two pre-trip rounds executed
+        assert not any("[advisory]" in m.get("content", "") for m in messages)
+        assert len(llm.calls) == 3
+        surrenders = [d for k, n, d in steps if k == "system" and n == "surrender"]
+        assert surrenders and surrenders[-1]["reason"] == "loop_abort"
+
 
 class TestTokenBudgetAccountingOrder:
     """A budget-surrendering round is fully accounted for (LLM_COMPLETED +
