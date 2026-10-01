@@ -11,6 +11,10 @@
  * - Render one row per key: number / bool / choice / text / JSON / secret
  * - Save through set_setting; reload the shared schema afterwards
  *
+ * Rows reuse the .settings-rows card grammar from the hand-written sections
+ * (label left, control right) instead of a bespoke layout, so dynamic keys
+ * read the same as the rest of the settings page.
+ *
  * Labels resolve through settings:auto.<key> and fall back to the key's last
  * segment, so a new backend key is still usable before a label lands.
  */
@@ -21,6 +25,7 @@ import { callCapability } from '@/bridge/client';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useUIStore } from '@/stores/uiStore';
 import { GlassSelect } from '@/components/common/GlassSelect';
+import { Switch } from '@/components/common/Switch';
 import { extractErrorMessage } from '@/utils/errors';
 import type { SettingSchemaItem } from '@/api/types';
 
@@ -74,16 +79,18 @@ export function DynamicSettingsGroup({ modules, prefixes, exclude, titleKey }: G
   return (
     <div className="agent-settings-block">
       {titleKey && <h3 className="agent-settings-subtitle">{t(titleKey)}</h3>}
-      {error && (
-        <p className="muted" style={{ fontSize: 12 }}>
-          {t('common.loadFailed')}
-        </p>
-      )}
+      {error && <p className="dynamic-settings__error">{t('common.loadFailed')}</p>}
       {!error &&
         // Only the first load renders nothing; a post-save reload keeps the
         // rows mounted on the stale schema so in-progress edits elsewhere
         // survive, and each row re-syncs when its persisted value changes.
-        (settings ? items.map((item) => <SettingRow key={item.key} item={item} />) : null)}
+        (settings ? (
+          <div className="settings-rows dynamic-settings__rows">
+            {items.map((item) => (
+              <SettingRow key={item.key} item={item} />
+            ))}
+          </div>
+        ) : null)}
     </div>
   );
 }
@@ -127,11 +134,9 @@ function useSettingSave() {
 function SecretRow({ item, label }: { item: SettingSchemaItem; label: string }) {
   const { t } = useTranslation('settings');
   return (
-    <div className="memory-form-row">
-      <span className="muted" style={{ fontSize: 12 }}>
-        {label}
-      </span>
-      <span className="muted" style={{ fontSize: 12 }}>
+    <div className="settings-row">
+      <span className="setting-row__label">{label}</span>
+      <span className={`badge${item.has_value ? ' badge-success' : ''}`}>
         {item.has_value ? t('auto.secretSet') : t('auto.secretUnset')}
       </span>
     </div>
@@ -143,20 +148,18 @@ function BoolRow({ item, label }: { item: SettingSchemaItem; label: string }) {
   const [busy, setBusy] = useState(false);
   const value = Boolean(item.value);
   return (
-    <div className="memory-form-row">
-      <span className="muted" style={{ fontSize: 12 }}>
-        {label}
-      </span>
-      <input
-        type="checkbox"
-        aria-label={label}
-        disabled={busy}
+    <div className="settings-row">
+      <span className="setting-row__label">{label}</span>
+      <Switch
         checked={value}
-        onChange={(e) => {
+        ariaLabel={label}
+        disabled={busy}
+        small
+        onChange={(checked) => {
           setBusy(true);
           // useSettingSave already toasts the failure; only the busy gate
           // lives here, so the rethrown error is swallowed
-          save(item.key, e.target.checked, label)
+          save(item.key, checked, label)
             .finally(() => setBusy(false))
             .catch(() => undefined);
         }}
@@ -170,10 +173,8 @@ function ChoiceRow({ item, label }: { item: SettingSchemaItem; label: string }) 
   const [busy, setBusy] = useState(false);
   const value = String(item.value ?? '');
   return (
-    <div className="memory-form-row">
-      <span className="muted" style={{ fontSize: 12 }}>
-        {label}
-      </span>
+    <div className="settings-row">
+      <span className="setting-row__label">{label}</span>
       <GlassSelect
         size="sm"
         aria-label={label}
@@ -199,6 +200,7 @@ function ValueRow({ item, label }: { item: SettingSchemaItem; label: string }) {
   const addToast = useUIStore((s) => s.addToast);
   const save = useSettingSave();
   const numeric = item.type === 'int' || item.type === 'float';
+  const wide = item.type === 'json';
   const [draft, setDraft] = useState(() => toDraft(item));
   // The draft handed to the last save attempt: the Save button and the
   // input's blur fire in sequence on a click, so without this guard every
@@ -245,31 +247,37 @@ function ValueRow({ item, label }: { item: SettingSchemaItem; label: string }) {
     save(item.key, draft, label).catch(() => setDraft(toDraft(item)));
   };
 
-  const wide = item.type === 'json';
-  return (
-    <div className="memory-form-row">
-      <span className="muted" style={{ fontSize: 12 }}>
-        {label}
-      </span>
-      {wide ? (
+  if (wide) {
+    return (
+      <div className="settings-row settings-row--stack">
+        <span className="setting-row__label">{label}</span>
         <textarea
-          className="field input"
+          className="field input setting-row__code"
           aria-label={label}
           rows={3}
-          style={{ maxWidth: 420, fontFamily: 'monospace' }}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
         />
-      ) : (
+        <div className="setting-row__actions">
+          <button type="button" className="btn btn-sm btn-ghost" onClick={commit}>
+            {t('common.save')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="settings-row">
+      <span className="setting-row__label">{label}</span>
+      <div className="setting-row__control">
         <input
-          className="field input"
+          className={`field input setting-row__input${numeric ? ' setting-row__input--num' : ''}`}
           type={numeric ? 'number' : 'text'}
           step={item.type === 'float' ? 'any' : undefined}
           min={item.min ?? undefined}
           max={item.max ?? undefined}
           aria-label={label}
-          style={{ maxWidth: numeric ? 120 : 280 }}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
@@ -277,10 +285,10 @@ function ValueRow({ item, label }: { item: SettingSchemaItem; label: string }) {
             if (e.key === 'Enter') e.currentTarget.blur();
           }}
         />
-      )}
-      <button type="button" className="btn btn-sm btn-ghost" onClick={commit}>
-        {t('common.save')}
-      </button>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={commit}>
+          {t('common.save')}
+        </button>
+      </div>
     </div>
   );
 }

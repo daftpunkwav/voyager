@@ -268,6 +268,54 @@
   background: rgba(255, 255, 255, 0.04);
   border-bottom-color: rgba(255, 255, 255, 0.08);
 }
+/* Schema-driven dynamic rows: the same card grammar, tuned for dense
+   label-left / control-right editing (DynamicSettingsGroup). */
+.dynamic-settings__rows {
+  margin-bottom: 0;
+}
+.setting-row__label {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-700);
+  overflow-wrap: anywhere;
+}
+.setting-row__control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.setting-row__input {
+  width: 220px;
+}
+.setting-row__input--num {
+  width: 110px;
+  font-variant-numeric: tabular-nums;
+}
+/* JSON values edit full-width below the label instead of squeezing into the row */
+.settings-row--stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.setting-row__code {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.setting-row__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.dynamic-settings__error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-500);
+}
 /* Bound-account row content (inside .settings-row) */
 .gh-avatar {
   width: 36px;
