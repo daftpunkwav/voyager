@@ -470,7 +470,7 @@ class Master:
         if member:
             # The boss named a teammate directly: the named member takes the
             # floor (queued behind a running turn like any other speech)
-            self._start_member_turn(inst, member, mention_text, trace_id)
+            self._start_mention_turn(inst, member, mention_text, trace_id)
             return
         if inst.status is RunStatus.RUNNING:
             mode = ArbiterMode(self._settings.get("agent.arbiter.mode"))
@@ -520,12 +520,16 @@ class Master:
             return
         self._start_turn(inst, text, trace_id, guard=guard)
 
-    def _start_member_turn(
+    def _start_mention_turn(
         self, inst: SubagentInstance, member: str, text: str, trace_id: str
     ) -> None:
         """Give the floor to a named teammate (@-mention): the turn runs under
         that persona over the shared transcript and its reply is attributed to
-        them. A running turn queues the mention behind it, like any speech."""
+        them. A running turn queues the mention behind it, like any speech.
+
+        Distinct from queue_member_turn (subagent action=handoff), which hands
+        a task to a member on the capability path; this one only serves the
+        @-mention entry from group speech."""
         if inst.status is RunStatus.RUNNING:
             self._session_inbox(inst.session).append(_Queued(text, None, member))
             return

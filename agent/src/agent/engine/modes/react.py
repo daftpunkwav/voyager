@@ -645,6 +645,8 @@ async def run_step(
     slice when tools are granted (the slice's rounds/tool calls/token usage
     fold into the invocation budget via the counting wrappers), a plain
     completion otherwise. `rounds` overrides the default per-step cap.
+    The "step" here is one composite-mode invocation step, unrelated to the
+    on_step trail callback: one call emits many on_step records.
     Returns the step result text; abort reports flow through unchanged so
     the caller can tell a failed step from real work."""
     if governor is not None:

@@ -278,14 +278,14 @@ class TestServiceErrorFor:
         )
 
     def test_detail_suffix_via_raise_path(self, monkeypatch) -> None:
-        """_raise_typed carries the x-request-id response header into the
-        raised error's request_id (the _post error path)."""
+        """_raise_for_response carries the x-request-id response header into
+        the raised error's request_id (the _post error path)."""
         import httpx as _httpx
         from llm import client as client_mod
 
         resp = _httpx.Response(429, text="rate limited", headers={"x-request-id": "rid-9"})
         monkeypatch.setattr(client_mod, "_retry_after_seconds", lambda r: 0.0, raising=False)
         with pytest.raises(RateLimitError) as exc_info:
-            client_mod._raise_typed(resp)
+            client_mod._raise_for_response(resp)
         assert exc_info.value.request_id == "rid-9"
         assert "request id rid-9" in exc_info.value.detail_suffix()

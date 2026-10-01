@@ -351,7 +351,7 @@ class McpClientPool:
                 continue
             eligible.append(cfg)
         if eligible:
-            await asyncio.gather(*(self._refresh_config(cfg) for cfg in eligible))
+            await asyncio.gather(*(self._refresh_one_guarded(cfg) for cfg in eligible))
         if self._auto_refresh and self._refresher is None:
             self._refresher = asyncio.create_task(self._refresh_loop())
 
@@ -393,10 +393,10 @@ class McpClientPool:
         awaits), and reconnects still serialize on the pool-level connect
         lock; the fan-out is bounded by the user-maintained config list."""
         await asyncio.gather(
-            *(self._refresh_config(cfg) for cfg in self.configs() if _refreshable(cfg))
+            *(self._refresh_one_guarded(cfg) for cfg in self.configs() if _refreshable(cfg))
         )
 
-    async def _refresh_config(self, cfg: dict) -> None:
+    async def _refresh_one_guarded(self, cfg: dict) -> None:
         """One server's refresh with the entry-error recording both call sites
         guarantee: a failure is recorded and the other servers proceed."""
         sid = str(cfg.get("id") or "").strip()

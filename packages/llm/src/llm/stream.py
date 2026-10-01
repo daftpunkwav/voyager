@@ -9,7 +9,7 @@ several `{"type": "text", "text": <delta>}` chunks and a final
 `{"type": "final", "text", "tool_calls", "usage", "model"}` chunk (same shape
 as the complete capability return, so adapters map them uniformly).
 
-Error classification matches complete (_raise_typed_text): errors before the
+Error classification matches complete (_raise_for_body): errors before the
 first packet (status code/connection) keep retryable semantics; mid-stream
 errors are never retried automatically (deltas already consumed) and network
 errors are folded into a non-retriable TransientError. No silent degradation:
@@ -36,7 +36,7 @@ from .client import (
     TransientError,
     _dump_rejected_request,
     _parse_tool_calls,
-    _raise_typed_text,
+    _raise_for_body,
     _request_id_from,
     _stream_timeout,
     _wire_base,
@@ -137,7 +137,7 @@ async def complete_stream(
                     # already-read error body.
                     text = (await resp.aread()).decode("utf-8", errors="replace")
                     _dump_rejected_request(url, body, resp.status_code, text)
-                    _raise_typed_text(resp.status_code, text)
+                    _raise_for_body(resp.status_code, text)
                 in_body = True
                 async for chunk in parser(resp):
                     if chunk.get("type") == "final":

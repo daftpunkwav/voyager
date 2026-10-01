@@ -20,7 +20,7 @@ to user text (see _resolve_tool_messages).
 
 Internal contract: llm/stream.py (SSE streaming) builds on this module's
 private helpers — _dump_rejected_request, _parse_tool_calls,
-_raise_typed_text, _request_id_from, _stream_timeout, _wire_base and
+_raise_for_body, _request_id_from, _stream_timeout, _wire_base and
 _wire_request. These names are this package's internal (not public) API:
 they may be reshaped together with stream.py, never renamed or dropped
 unilaterally.
@@ -579,12 +579,12 @@ def _looks_overflow(body: str) -> bool:
     return any(mark in low for mark in _OVERFLOW_MARKS)
 
 
-def _raise_typed(resp: httpx.Response, *, dump_path: str = "") -> None:
+def _raise_for_response(resp: httpx.Response, *, dump_path: str = "") -> None:
     """On non-2xx, classify by status code/body and raise the matching
     ProviderError subclass, carrying the provider's request id and the debug
     dump path so the user-facing degraded reply can reference them."""
     if resp.status_code >= 400:
-        _raise_typed_text(
+        _raise_for_body(
             resp.status_code,
             resp.text,
             retry_after=_retry_after_seconds(resp),
@@ -593,7 +593,7 @@ def _raise_typed(resp: httpx.Response, *, dump_path: str = "") -> None:
         )
 
 
-def _raise_typed_text(
+def _raise_for_body(
     status: int, body: str, *, retry_after: float = 0.0, request_id: str = "", dump_path: str = ""
 ) -> None:
     """Classify by status code and body text (streaming path reuses this
@@ -686,8 +686,8 @@ async def _post(
         raise TransientError(f"{type(exc).__name__}: {exc}") from exc
     if resp.status_code >= 400:
         dump_path = _dump_rejected_request(url, body, resp.status_code, resp.text)
-        _raise_typed(resp, dump_path=dump_path)
-    _raise_typed(resp)
+        _raise_for_response(resp, dump_path=dump_path)
+    _raise_for_response(resp)
     return resp
 
 
