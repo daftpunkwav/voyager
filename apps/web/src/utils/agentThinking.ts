@@ -17,8 +17,8 @@
  * Status/scaffold lines that must not be presented as real thinking.
  *
  * NOTE: these patterns are legacy status-line formats that arrived with the
- * originally migrated frontend (they never existed in this codebase's backend). The current agent backend never emits them
- * (verified 2026-09-13, no emitter in agent/ or packages/); they remain as
+ * originally migrated frontend (they never existed in this codebase's
+ * backend): no emitter exists under agent/ or packages/. They remain as
  * display heuristics against model-authored lines that happen to look like
  * scaffolding. There is no live front<->backend text contract here.
  */

@@ -44,7 +44,7 @@ export function StepDetail({ step }: { step: TurnStep }) {
   const { t, i18n } = useTranslation('chat');
   const isTool = step.kind === 'tool';
   const status = step.ok === false ? t('chat:traj.statusFail') : t('chat:traj.statusOk');
-  // Model badge matches the row label (思考 for rounds); plan/branch-style
+  // Model badge matches the row label (chat:proc.think for rounds); plan/branch-style
   // steps keep their own names since they are not thinking rounds.
   const modelBadge = step.round !== undefined ? t('chat:proc.think') : toolLabel(step.name, t);
   const listSep = i18n.language === 'zh-CN' ? '、' : ', ';

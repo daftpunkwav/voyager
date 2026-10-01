@@ -146,7 +146,7 @@ export function SettingsPage() {
   const { data: accounts = [], refetch: refetchAccounts } = useGithubAccounts();
   const addToast = useUIStore((s) => s.addToast);
   // Deep-linkable section: ?section=llm opens the model config directly (the
-  // composer's 管理模型 entry jumps here); unknown values degrade to the
+  // composer's manage-models entry jumps here); unknown values degrade to the
   // appearance default. Section changes rewrite the query (replace) so a
   // refresh keeps the active section.
   const [searchParams, setSearchParams] = useSearchParams();
