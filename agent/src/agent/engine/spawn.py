@@ -1,4 +1,5 @@
-"""Dispatch: capability-surface trimming + mode grant + limits assembly.
+"""Instance spawn and lifecycle: capability-surface trimming, scheduler
+launch, checkpoint resume, cancel, and registry bounding.
 
 Responsibilities:
 - spawn/start: build the TaskBook-bound instance (trimmed toolbelt, persona

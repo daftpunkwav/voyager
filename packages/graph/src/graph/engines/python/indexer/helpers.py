@@ -1,5 +1,6 @@
 """Shared helpers: node ids, qualified names, complexity heuristics,
-git branch, and language detection.
+git branch, language detection, test-path classification, and AST
+name/decorator extraction.
 """
 
 from __future__ import annotations

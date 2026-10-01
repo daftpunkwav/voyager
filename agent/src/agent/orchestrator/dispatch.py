@@ -36,8 +36,12 @@ def _turn_degraded(inst) -> bool:
     provider failure placeholder) rather than model output — such a delivery
     is a failure, not a fake completion. Read back from the step trail.
 
-    Same check as engine.turn._turn_degraded (this copy is duck-typed so a
-    fake instance without a steps trail reads as not degraded)."""
+    Same check as engine.turn._turn_degraded, kept as a separate copy on
+    purpose: this one reaches the steps trail through getattr so
+    orchestrator-side fakes without one read as not degraded, while the
+    engine copy reads inst.state.steps directly and requires a real
+    SubagentInstance. The copies encode different strictness contracts —
+    do not merge them without choosing one."""
     for step in reversed(getattr(inst.state, "steps", ())):
         if step.kind == "llm":
             return bool((step.detail or {}).get("degraded"))

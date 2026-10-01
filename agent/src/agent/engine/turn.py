@@ -258,7 +258,12 @@ class PauseRequested(Exception):
 def _turn_degraded(inst: SubagentInstance) -> bool:
     """Whether this turn's latest LLM round was harness degradation text
     (quota / provider failure) rather than model output. Read back from the
-    round step trail instead of sniffing reply-text prefixes."""
+    round step trail instead of sniffing reply-text prefixes.
+
+    orchestrator.dispatch keeps its own duck-typed copy (getattr on the
+    steps trail) for callers that may hand over fake instances; this
+    engine-side copy takes a real SubagentInstance and reads
+    inst.state.steps directly on purpose."""
     for step in reversed(inst.state.steps):
         if step.kind == "llm":
             return bool((step.detail or {}).get("degraded"))

@@ -143,10 +143,8 @@ class Distiller:
             # (profile upserts, has_fact skips exact duplicates).
             log.warning("distillation write phase failed; window left unclaimed", exc_info=True)
             return
-        # The cursor advances only after every write succeeded: a write-phase
-        # failure (disk full, lock timeout) leaves the window unclaimed, so the
-        # same entries are re-extracted next time. Re-extraction is safe —
-        # profile writes upsert and has_fact skips exact duplicates.
+        # The cursor advances only after every write succeeded (the failure
+        # branch above keeps the window claimable for a later turn).
         self._cursor = max(int(e.get("seq") or 0) for e in entries)
 
 

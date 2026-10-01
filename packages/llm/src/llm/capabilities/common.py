@@ -1,6 +1,7 @@
 """Shared mechanisms for the llm capability files: the domain Registry,
-the injected Deps container, provider/key lookups, base_url validation and
-the ProviderError -> ServiceError mapping.
+the injected Deps container, provider/key lookups, models_meta validation,
+settings hot-reads (transport knobs, the max_tokens default), base_url
+validation and the ProviderError -> ServiceError mapping.
 
 Secret boundary: keys live in platform/secrets under key_name(provider_id);
 provider dicts carry a has_api_key flag and never the key itself.

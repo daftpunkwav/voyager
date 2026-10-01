@@ -165,6 +165,8 @@ RAW_LOG_RETENTION_DAYS = 7
 #: Host/domain-owned runtime data outside agent/:
 #:   - audit.db (data root): startup purge, 90d (platform_capability.audit_db)
 #:   - llm.db usage rows: startup purge, 90d (llm.store / llm.wiring)
+#:   - llm debug dumps (LLM_DEBUG_DUMP_DIR, opt-in env): newest-200 cap,
+#:     pruned after each dump write (llm.client._prune_dump_dir)
 #:   - graph index.db terminal rows: 500-row startup prune (graph.index_queue)
 #: Deliberately not age-bounded (durable meaning): sessions.db, checkpoints
 #: (pending/running durable-queue rows and cron definitions see the queue
