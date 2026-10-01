@@ -75,9 +75,10 @@ class GraphStore:
         # One lock for reads and writes: synchronous capability handlers run
         # on worker threads via to_thread, concurrent with the index pipeline
         # (event-loop thread); a bare read on the single connection would mean
-        # cross-thread concurrent use. RLock rather than Lock because
-        # upsert_node -> get_node and merge_nodes -> _node_by_id nest locks
-        # on the same thread.
+        # cross-thread concurrent use. RLock (not Lock): the store methods
+        # call each other (upsert_node re-reads via get_node, merge_nodes /
+        # find_path read rows back via _node_by_id), so a same-thread
+        # re-entry into the lock must never self-deadlock the caller.
         self._lock = threading.RLock()
 
     def upsert_node(
