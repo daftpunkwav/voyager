@@ -25,8 +25,8 @@ conventions.
   files do zero-logic aggregation only. The shape is locked by
   `tests/granularity/test_file_granularity.py`.
 - Python files open with a pure module docstring (no `@file` tags); the style
-  is enforced by `tests/test_file_header_style.py`. Comments and docstrings
-  are English.
+  is enforced by `tests/granularity/test_file_header_style.py`. Comments and
+  docstrings are English.
 
 ## Parity and frozen surfaces
 
@@ -35,18 +35,21 @@ conventions.
   file, never a reordered name); a same-named pair
   binds through `tools/core/self_capability.py`. Exceptions are registered in
   `src/agent/parity.py` with a rationale, or the parity test goes red.
-- `tests/test_capabilities.py` freezes the capability name roster. Adding a
-  capability or tool means: create the file, aggregate it in the group
-  `__init__.py`, register it in `build.py` (tools) or the capability
+- `tests/capabilities/test_registry_surface.py` freezes the capability name
+  roster; `tests/tools/test_registry.py` freezes the builtin tool roster.
+  Adding a capability or tool means: create the file, aggregate it in the
+  group `__init__.py`, register it in `build.py` (tools) or the capability
   registry, then update the frozen test expectation in the same change.
 
 ## Tests
 
 - Flat test files at `tests/` top level plus per-area subdirectories
-  (`context/`, `engine/`, `memory/`, `orchestrator/`, `policy/`, `runtime/`,
-  `sessions/`, `skills/`, `tools/`, `eval/`, `granularity/`, `docs/`). Run with the root
-  gate (`npm run test:py`); the eval suite (`tests/eval/`) runs offline via
-  `npm run eval`, and its real-model cases are env-gated.
+  (`capabilities/`, `context/`, `docs/`, `engine/`, `eval/`, `granularity/`,
+  `hooks/`, `llm/`, `mcp/`, `memory/`, `orchestrator/`, `personas/`,
+  `plugins/`, `policy/`, `prompts/`, `runtime/`, `sessions/`, `skills/`,
+  `tools/`). Run with the root gate (`npm run test:py`); the eval suite
+  (`tests/eval/`) runs offline via `npm run eval`, and its real-model cases
+  are env-gated.
 - Settings-driven behavior is expressed through `agent.*` keys declared in
   `src/agent/settings.py`; tests set keys through the settings framework, not
   by patching private attributes.
