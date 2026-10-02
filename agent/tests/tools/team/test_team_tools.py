@@ -10,6 +10,7 @@ where a full run is not the subject).
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import Any
 
@@ -305,6 +306,11 @@ class TestSubagentCapabilityEdges:
                 self.AGENT_CTX,
                 {"action": "send", "id_or_name": "parked", "message": "  go on  "},
             )
+            # send is fire-and-forget (asyncio.create_task): yield once so the
+            # continuation's first step runs before asserting on it. Older
+            # runtimes reached this state via an incidental yield inside the
+            # execute chain; 3.14's lock fast paths removed that accident.
+            await asyncio.sleep(0)
             assert out["sent"] == inst.id and out["name"] == "parked"
             assert started and started[0][0] is inst and started[0][1] == "go on"
         finally:
