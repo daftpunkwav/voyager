@@ -15,6 +15,9 @@ def ensure_workdir(root: str | Path) -> Path:
     """Ensure the agent's default working directory and its category subdirectories exist."""
     root = Path(root)
     for category in DEFAULT_CATEGORIES:
+        # codeql[py/path-injection] root is the operator-configured workspace
+        # dir (settings), and category is a fixed literal from
+        # DEFAULT_CATEGORIES - the layout this module exists to create.
         (root / category).mkdir(parents=True, exist_ok=True)
     return root
 

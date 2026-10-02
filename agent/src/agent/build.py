@@ -493,6 +493,8 @@ def build_agent(
     plan_gates = PlanGates()  # session review-phase state (human-toggled, in-memory)
     # Skill roots: built-in + user skills dir; unapproved plugin skills never enter the index
     skills_dir = workspace / "skills"  # the agent's home, created at assembly time
+    # codeql[py/path-injection] workspace comes from ensure_workdir() over the
+    # operator-configured workspace dir; "skills" is a fixed literal.
     skills_dir.mkdir(parents=True, exist_ok=True)
     skills = SkillLoader([Path(__file__).parent / "skills" / "builtin", skills_dir])
     # Hooks: declarative hooks from the user hooks directory take effect directly;

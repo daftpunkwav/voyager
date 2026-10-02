@@ -117,6 +117,9 @@ def _resolve_windows_stub(argv0: str) -> str:
 def bash_tool(cwd: str | Path) -> AgentTool:
     """Build the bash tool; the subprocess cwd is pinned to the agent
     working directory supplied at assembly time."""
+    # codeql[py/path-injection] cwd is the operator-configured agent working
+    # directory from settings, resolved once at assembly to pin the subprocess
+    # down; commands themselves are gated by the policy engine.
     work = Path(cwd).expanduser().resolve()
 
     async def bash(command: str, timeout: float = 30.0) -> str:

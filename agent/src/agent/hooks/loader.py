@@ -60,6 +60,9 @@ class HookLoader:
         if not approved:
             return 0
         count = 0
+        # codeql[py/path-injection] hooks_dir is the workspace hooks directory
+        # created at assembly time from operator settings; only *.json files
+        # directly inside it are loaded.
         for path in sorted(Path(hooks_dir).glob("*.json")):
             count += self.load_file(path, source=source, approved=True)
         return count
