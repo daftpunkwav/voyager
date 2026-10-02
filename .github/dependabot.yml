@@ -7,6 +7,11 @@
 # would freeze the toolchain and break the msrv/stable gates.
 #
 # Updates are grouped so the required-approval flow stays reviewable.
+#
+# Groups deliberately exclude semver-major bumps: a mixed group PR that
+# sneaks in e.g. vite 8 + typescript 7 + vitest 5 is unreviewable and has
+# broken the web gate before. Major updates fall out as individual PRs so
+# each migration is judged on its own.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -33,6 +38,9 @@ updates:
     groups:
       uv:
         patterns: ["*"]
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
 
   - package-ecosystem: "npm"
     directory: "/"
@@ -46,3 +54,6 @@ updates:
     groups:
       npm:
         patterns: ["*"]
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
