@@ -27,6 +27,17 @@ _CYPHER_ROW_CAP = 100_000
 _ENGINE_FLAVOR = "python"
 
 
+def _validated_project(project: str) -> str:
+    """Reject project names that could escape graphs_dir once joined into a
+    .db filename: path separators, Windows drive colons, and bare dot
+    segments. Names are otherwise free-form (CJK repo names are legitimate).
+    """
+    name = (project or "").strip()
+    if not name or name in (".", "..") or any(c in name for c in "/\\:"):
+        raise ValueError(f"invalid project name: {project!r}")
+    return name
+
+
 class GraphEngine(SearchMixin, QueryMixin, ArchitectureMixin):
     """In-process engine; can also be wrapped by an HTTP sidecar (no global singleton, see server.main)."""
 
@@ -46,9 +57,12 @@ class GraphEngine(SearchMixin, QueryMixin, ArchitectureMixin):
         return True
 
     def _store(self, project: str) -> GraphStore:
+        project = _validated_project(project)
         with self._lock:
             if project not in self._projects:
                 store = GraphStore(project)
+                # codeql[py/path-injection] project passed _validated_project:
+                # a single slug that cannot traverse out of graphs_dir.
                 db = self.graphs_dir / f"{project}.db"
                 if db.exists():
                     try:
@@ -67,7 +81,7 @@ class GraphEngine(SearchMixin, QueryMixin, ArchitectureMixin):
 
     def drop_project(self, project: str) -> dict[str, Any]:
         """Delete the in-memory graph and its persisted files (.db / .db.zst)."""
-        name = (project or "").strip()
+        name = _validated_project(project)
         removed_files: list[str] = []
         with self._lock:
             self._projects.pop(name, None)
@@ -121,6 +135,8 @@ class GraphEngine(SearchMixin, QueryMixin, ArchitectureMixin):
                 result["abandoned"] = True
                 return result
             if persistence:
+                # codeql[py/path-injection] project passed _validated_project
+                # via _store above: a single slug under graphs_dir.
                 db_path = self.graphs_dir / f"{project}.db"
                 store.persist(db_path)
                 # Optional zst: keep only .db when zstandard is unavailable.
@@ -129,6 +145,8 @@ class GraphEngine(SearchMixin, QueryMixin, ArchitectureMixin):
                     import zstandard as zstd  # type: ignore
 
                     cctx = zstd.ZstdCompressor(level=3)
+                    # codeql[py/path-injection] db_path derives from the
+                    # validated project slug; see the persist call above.
                     with open(db_path, "rb") as src, open(zst, "wb") as dst:
                         dst.write(cctx.compress(src.read()))
                     result["persistence_path"] = str(zst)

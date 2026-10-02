@@ -18,6 +18,9 @@ from .constants import ALL_EXT, SAFETY_CORE_DIRS, SKIP_DIRS
 def iter_source_files(root: Path, max_files: int) -> Iterable[Path]:
     ignore_rules = _load_engineignore(root)
     count = 0
+    # codeql[py/path-injection] root is the resolved repo root handed to the
+    # indexer (operator-configured, and bounded by ENGINE_ALLOWED_ROOT in the
+    # sidecar); the walk only reads below it.
     for dirpath, dirnames, filenames in os.walk(root):
         rel_root = Path(dirpath)
         dirnames[:] = [
@@ -58,10 +61,14 @@ def _load_engineignore(root: Path) -> list[tuple[str, bool]]:
     `#` comments, `!` negation, and trailing whitespace are handled.
     """
     rules: list[tuple[str, bool]] = []
+    # codeql[py/path-injection] root is the indexer's resolved repo root;
+    # only the .engineignore file directly under it is read.
     ignore_file = root / ".engineignore"
     if not ignore_file.is_file():
         return rules
     try:
+        # codeql[py/path-injection] see note above: fixed file under the
+        # resolved repo root.
         lines = ignore_file.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return rules
@@ -78,6 +85,8 @@ def _load_engineignore(root: Path) -> list[tuple[str, bool]]:
 
 def _rel_posix(repo_root: Path, path: Path) -> str:
     """Convert a path to a posix path relative to the repo root (the matching basis for .engineignore patterns)."""
+    # codeql[py/path-injection] path comes from walking repo_root itself and
+    # is only made relative to it; no file access happens here.
     try:
         return path.resolve().relative_to(repo_root.resolve()).as_posix()
     except ValueError:
