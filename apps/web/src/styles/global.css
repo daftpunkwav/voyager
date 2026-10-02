@@ -27,8 +27,7 @@ a {
   /* Named properties only: hover lifts change transform + shadow, theme flips recolor surfaces */
   /* Longhand form: the transition shorthand cannot carry var() fallbacks that
      contain commas (cubic-bezier) under the vite 8 lightningcss minifier */
-  transition-property:
-    transform, box-shadow, border-color, background-color !important;
+  transition-property: transform, box-shadow, border-color, background-color !important;
   transition-duration: var(--dur-base, 250ms) !important;
   transition-timing-function: var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) !important;
 }
