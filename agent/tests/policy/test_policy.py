@@ -55,7 +55,10 @@ class TestNetwork:
         the reverse https://evil.com@github.com/ connects to github.com (host parsing looks only after the @)."""
         engine = PolicyEngine(network=NetworkPolicy(mode="whitelist", domains=("github.com",)))
         d = engine.decide(Action(dimension="network", target="https://github.com@evil.com/x"))
-        assert not d.allow and "evil.com" in d.reason
+        # Anchored tail match: proves the reason names exactly evil.com (not a
+        # suffix lookalike like notevil.com) as the refused host.
+        assert not d.allow
+        assert d.reason.endswith("evil.com (add it in the settings page)")
         assert engine.decide(
             Action(dimension="network", target="https://evil.com@github.com/x")
         ).allow
