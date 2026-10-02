@@ -2,7 +2,7 @@
 name = "host"
 version = "2.0.0"
 description = "Composition root: scans domain cards, wires shared facilities, mounts the gateway and the agent"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
     "agent",
     "gateway",

@@ -2,7 +2,7 @@
 name = "platform-contracts"
 version = "0.1.0"
 description = "cross-module contracts: event envelope, DTOs, unified error codes, protocol version (pure types, zero dependencies)"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = []
 
 [project.optional-dependencies]

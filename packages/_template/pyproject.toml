@@ -2,7 +2,7 @@
 name = "template"
 version = "0.1.0"
 description = "Domain scaffold: copy the directory, rename the package and fill in service.json"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
     "platform-actor",
     "platform-capability",

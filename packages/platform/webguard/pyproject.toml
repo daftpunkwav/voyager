@@ -2,7 +2,7 @@
 name = "platform-webguard"
 version = "0.1.0"
 description = "shared URL safety guard: SSRF policy, DNS resolve-and-pin, per-hop redirect checks"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = ["httpx>=0.25.0"]
 
 [project.optional-dependencies]
