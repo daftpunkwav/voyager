@@ -117,7 +117,7 @@ extend-select = ["I"]  # also enforce import sorting
 "packages/graph/src/graph/engines/c/core/scripts/**" = ["BLE001", "S110", "S112", "SIM102", "SIM103", "SIM115", "UP031", "PERF102", "PERF402", "PIE810", "PLW1510", "RUF013", "RUF059", "ISC004", "RUF007", "E402"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 explicit_package_bases = true
 namespace_packages = true
 plugins = ["pydantic.mypy"]

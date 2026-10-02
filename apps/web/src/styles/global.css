@@ -25,11 +25,11 @@ a {
 .glass-card--panel-clear,
 .glass-card--control {
   /* Named properties only: hover lifts change transform + shadow, theme flips recolor surfaces */
-  transition:
-    transform var(--dur-base, 250ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) !important,
-    box-shadow var(--dur-base, 250ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) !important,
-    border-color var(--dur-base, 250ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) !important,
-    background-color var(--dur-base, 250ms) var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) !important;
+  /* Longhand form: the transition shorthand cannot carry var() fallbacks that
+     contain commas (cubic-bezier) under the vite 8 lightningcss minifier */
+  transition-property: transform, box-shadow, border-color, background-color !important;
+  transition-duration: var(--dur-base, 250ms) !important;
+  transition-timing-function: var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1)) !important;
 }
 /* Touch devices fire :hover on tap and leave it stuck: transform hovers are
    gated to real pointers (see liquid-glass.css for the same pattern) */
