@@ -174,14 +174,14 @@ def build_workspace_router(workspace: Path, *, home: str | None = None) -> APIRo
         target = PureWindowsPath(path)
         resolved = Path(target.anchor + "/".join(target.parts[1:])) if target.drive else Path(path)
         try:
-            # codeql[py/path-injection] the whole-machine directory chooser is
+            # the whole-machine directory chooser is
             # the feature: this endpoint exists so the workspace picker can
             # list any directory the user points it at on their own machine.
             resolved = resolved.resolve()
-            # codeql[py/path-injection] see note above: intentional chooser.
+            # see note above: intentional chooser.
             if not resolved.exists():
                 return _not_found("path not found")
-            # codeql[py/path-injection] see note above: intentional chooser.
+            # see note above: intentional chooser.
             if not resolved.is_dir():
                 return _bad_input("not a directory")
         except (PermissionError, OSError):

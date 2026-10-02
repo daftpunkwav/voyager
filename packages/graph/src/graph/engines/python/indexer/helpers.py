@@ -52,7 +52,7 @@ def _complexity_attrs(source: str) -> dict:
 
 
 def _read_git_branch(root: Path) -> str:
-    # codeql[py/path-injection] root is the indexer's resolved repo root; the
+    # root is the indexer's resolved repo root; the
     # fixed .git/HEAD file under it is the only thing read here.
     head = root / ".git" / "HEAD"
     try:

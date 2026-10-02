@@ -61,7 +61,7 @@ class GraphEngine(SearchMixin, QueryMixin, ArchitectureMixin):
         with self._lock:
             if project not in self._projects:
                 store = GraphStore(project)
-                # codeql[py/path-injection] project passed _validated_project:
+                # project passed _validated_project:
                 # a single slug that cannot traverse out of graphs_dir.
                 db = self.graphs_dir / f"{project}.db"
                 if db.exists():
@@ -135,7 +135,7 @@ class GraphEngine(SearchMixin, QueryMixin, ArchitectureMixin):
                 result["abandoned"] = True
                 return result
             if persistence:
-                # codeql[py/path-injection] project passed _validated_project
+                # project passed _validated_project
                 # via _store above: a single slug under graphs_dir.
                 db_path = self.graphs_dir / f"{project}.db"
                 store.persist(db_path)
@@ -145,7 +145,7 @@ class GraphEngine(SearchMixin, QueryMixin, ArchitectureMixin):
                     import zstandard as zstd  # type: ignore
 
                     cctx = zstd.ZstdCompressor(level=3)
-                    # codeql[py/path-injection] db_path derives from the
+                    # db_path derives from the
                     # validated project slug; see the persist call above.
                     with open(db_path, "rb") as src, open(zst, "wb") as dst:
                         dst.write(cctx.compress(src.read()))

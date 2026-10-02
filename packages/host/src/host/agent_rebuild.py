@@ -89,7 +89,7 @@ def resolve_candidate_dir(raw: str, root: Path) -> Path:
         )
     path = Path(text)
     joined = path if path.is_absolute() else root / path
-    # codeql[py/path-injection] this containment check IS the guard: anything
+    # this containment check IS the guard: anything
     # resolving outside the repo root is rejected below, before any use.
     if not joined.resolve().is_relative_to(root.resolve()):
         raise ServiceError(
@@ -325,7 +325,7 @@ async def switch_workspace(
         previous = rebuilder.current_workspace
         if previous is None:
             raw_previous = str(rebuilder.settings_store.get(WORKSPACE_KEY) or "")
-            # codeql[py/path-injection] raw_previous comes from operator
+            # raw_previous comes from operator
             # settings; resolve_candidate_dir rejects anything resolving
             # outside the repo root before returning it.
             previous = (
