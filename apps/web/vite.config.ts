@@ -100,6 +100,17 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './tests/setup.ts',
     include: ['tests/unit/**/*.test.{ts,tsx}'],
+    // Ratchet floors, not aspirations: pinned at the measured baseline
+    // (2026-10-03) so any regression fails while deliberate coverage work
+    // raises them. Mirrors the Python side's --cov-fail-under philosophy.
+    coverage: {
+      thresholds: {
+        statements: 67,
+        branches: 59,
+        functions: 63,
+        lines: 68,
+      },
+    },
     // Pin NODE_ENV before any module loads: react's CJS entry picks its build
     // from this variable at import time, and a shell exporting production
     // would resolve react.production (which has no act()) — setup.ts cannot

@@ -20,6 +20,7 @@
     "build:web": "npm run build -w web",
     "preview:web": "npm run preview -w web",
     "test:web": "npm run test -w web",
+    "test:web:cov": "npm run test:coverage -w web",
     "lint:web": "npm run lint -w web",
     "typecheck:web": "npm run typecheck -w web",
     "lint:py": "uv run ruff format --check packages agent scripts && uv run ruff check packages agent scripts",
