@@ -45,25 +45,41 @@ jobs:
             exit 1
           fi
 
-  # Docs-only PRs (the bilingual doc set changes often) skip both gates.
-  # Classification is deliberately fail-open: anything unrecognized flips
-  # the flag back on, and .github/* always triggers everything so the
-  # pipeline can never edit its own way out of being checked.
+  # PR policy: docs-only PRs (the bilingual doc set changes often) skip
+  # both gates. Classification is deliberately fail-open: anything
+  # unrecognized flips the flag back on, and .github/* always triggers
+  # everything so the pipeline can never edit its own way out of being
+  # checked.
+  #
+  # Push and dispatch policy: verify main itself, always in full. This job
+  # must therefore run on every event — the gates depend on it, and a
+  # skipped dependency skips its dependents, which silently no-opped the
+  # whole workflow on push once already (2026-10-03). Off a pull_request
+  # there is no base to diff against, so classify as all-changed and skip
+  # the full-history checkout.
   changes:
     name: detect changed paths
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
-      py: ${{ steps.filter.outputs.py }}
-      web: ${{ steps.filter.outputs.web }}
-    if: github.event_name == 'pull_request'
+      py: ${{ steps.shortcut.outputs.py || steps.filter.outputs.py }}
+      web: ${{ steps.shortcut.outputs.web || steps.filter.outputs.web }}
     steps:
+      - name: Classify as all-changed (push, workflow_dispatch)
+        id: shortcut
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "py=true" >> "$GITHUB_OUTPUT"
+          echo "web=true" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request'
         with:
           fetch-depth: 0
 
       - name: Compute changed paths against the base branch
         id: filter
+        if: github.event_name == 'pull_request'
         env:
           BASE: origin/${{ github.base_ref }}
         run: |
@@ -86,7 +102,7 @@ jobs:
   gate-py:
     name: gate:py (ruff + import-linter + mypy + pytest + graph:check)
     needs: changes
-    if: github.event_name != 'pull_request' || needs.changes.outputs.py == 'true'
+    if: needs.changes.outputs.py == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -121,7 +137,7 @@ jobs:
   gate-web:
     name: gate:web (tsc + eslint + vitest + i18n keys + prettier + build)
     needs: changes
-    if: github.event_name != 'pull_request' || needs.changes.outputs.web == 'true'
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
