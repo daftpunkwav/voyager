@@ -1,0 +1,11 @@
+# Gitleaks configuration. The default rule set stays active (extend), this
+# file only carves out paths whose content we do not author.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Vendored third-party C sources trip generic-api-key on comments, macros and internal string literals"
+paths = [
+    '''packages/graph/src/graph/engines/c/core/vendored/''',
+    '''packages/graph/src/graph/engines/c/core/internal/engine/vendored/''',
+]
