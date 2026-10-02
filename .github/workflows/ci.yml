@@ -6,6 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# The CI only needs to read the repo and nothing else; scoping the token
+# here also covers every job, so no per-job block is required.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
