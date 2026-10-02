@@ -1,0 +1,82 @@
+name: Security
+
+# Supply-chain and credential checks, split from CI so a leak or a CVE
+# fails its own workflow instead of being buried in the gate noise.
+# The weekly schedule re-scans main so drift is caught even when nothing
+# was pushed all week.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Tuesdays 04:17 UTC — deliberately off the dependabot days (Tue-Thu)
+    # so findings land before/around the upgrade PRs, not on top of them.
+    - cron: "17 4 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Full history: a secret added and removed within a PR must still be
+      # caught, which a shallow checkout cannot see.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # The repo's allowed-actions policy admits only GitHub-owned and
+      # Marketplace-verified actions, and gitleaks-action is neither —
+      # using it failed the whole workflow with a startup_failure. The
+      # binary comes from the official release instead, checksum-verified.
+      # No automation covers this URL; bump the version deliberately.
+      - name: Install gitleaks
+        run: |
+          V=8.30.1
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${V}/gitleaks_${V}_linux_x64.tar.gz" -o /tmp/gitleaks.tgz
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${V}/gitleaks_${V}_checksums.txt" -o /tmp/checksums.txt
+          grep "gitleaks_${V}_linux_x64.tar.gz" /tmp/checksums.txt | sed "s|gitleaks_${V}_linux_x64.tar.gz|/tmp/gitleaks.tgz|" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          /tmp/gitleaks version
+
+      - name: Scan full history
+        run: /tmp/gitleaks detect --source . --redact --verbose --exit-code 1
+
+  audit-web:
+    name: dependency audit (npm ≥ high)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      # npm audit consults package-lock.json only; no install needed.
+      - name: npm audit
+        run: npm run audit:web
+
+  audit-py:
+    name: dependency audit (pip-audit on uv lock)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+
+      # uv export reads the lockfile and uvx fetches pip-audit ephemerally;
+      # no workspace sync required.
+      - name: pip-audit
+        run: npm run audit:py
