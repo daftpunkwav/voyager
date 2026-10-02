@@ -60,7 +60,11 @@ def index_repository(
     mode: str = "moderate",
 ) -> dict:
     limits = MODE_LIMITS.get(mode) or MODE_LIMITS["moderate"]
+    # codeql[py/path-injection] repo_path is the operator-configured repo to
+    # index; the sidecar bounds it with ENGINE_ALLOWED_ROOT (server.py) and
+    # the walk below only reads below this resolved root.
     root = Path(repo_path).resolve()
+    # codeql[py/path-injection] existence probe on the same validated root.
     if not root.exists():
         raise FileNotFoundError(f"repo path does not exist: {root}")
 

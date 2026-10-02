@@ -27,8 +27,12 @@ class QueryMixin:
         rows: list[dict[str, Any]] = []
 
         # MATCH (n:Label) RETURN n LIMIT
+        # Possessive quantifiers: q is whitespace-normalized above, so the
+        # greedy whitespace runs can never need backtracking; without the
+        # possessive form a padded query makes the lazy bodies split on every
+        # space (polynomial blowup).
         m = re.search(
-            r"MATCH\s*\(\s*(\w+)(?::(\w+))?\s*\)(?:\s*WHERE\s+(.+?))?\s*RETURN\s+(.+?)(?:\s*LIMIT\s+(\d+))?$",
+            r"MATCH\s*+\(\s*+(\w++)(?::(\w++))?\s*+\)(?:\s*+WHERE\s++(.+?))?\s*+RETURN\s++(.+?)(?:\s*+LIMIT\s++(\d++))?$",
             q,
             re.IGNORECASE,
         )
@@ -48,8 +52,8 @@ class QueryMixin:
 
         # MATCH (a)-[r:TYPE]->(b) RETURN ...
         m2 = re.search(
-            r"MATCH\s*\(\s*(\w+)\s*\)\s*-\s*\[\s*(\w+)(?::(\w+))?\s*\]\s*->\s*\(\s*(\w+)\s*\)"
-            r"(?:\s*WHERE\s+(.+?))?\s*RETURN\s+(.+?)(?:\s*LIMIT\s+(\d+))?$",
+            r"MATCH\s*+\(\s*+(\w++)\s*+\)\s*+-\s*+\[\s*+(\w++)(?::(\w++))?\s*+\]\s*+->\s*+\(\s*+(\w++)\s*+\)"
+            r"(?:\s*+WHERE\s++(.+?))?\s*+RETURN\s++(.+?)(?:\s*+LIMIT\s++(\d++))?$",
             q,
             re.IGNORECASE,
         )

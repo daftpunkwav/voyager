@@ -11,6 +11,9 @@ from typing import Any
 
 _DEFAULT_SEARCH_LIMIT = 200
 
+#: Longest line content fed to a search regex (hang guard for minified lines)
+_MAX_SEARCH_LINE_CHARS = 4000
+
 _CODE_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".go", ".rs", ".java"}
 
 _TRACE_EDGE_TYPES = {
@@ -47,6 +50,19 @@ class SearchMixin:
         store = self._store(project)
         q = (query or semantic_query or "").lower().strip()
         pat = name_pattern.strip()
+        # Compile the name pattern once for the whole node scan; an invalid
+        # regex falls back to plain substring matching below (same scoring as
+        # before, minus a re-compile per node).
+        pat_rx: re.Pattern[str] | None = None
+        if pat:
+            # codeql[py/regex-injection] name_pattern is an operator-supplied
+            # regex-search feature; it is compiled exactly once here and only
+            # ever matched against in-process node names, so the residual risk
+            # is CPU on the operator's own data, not injection.
+            try:
+                pat_rx = re.compile(pat)
+            except re.error:
+                pat_rx = None
         scored: list[tuple[float, dict]] = []
         for n in store.nodes.values():
             if label and n.label != label:
@@ -62,15 +78,14 @@ class SearchMixin:
                 # Coarse BM25 approximation: term frequency + in-degree
                 score += min(3.0, n.in_calls * 0.1)
             if pat:
-                try:
-                    if not re.search(pat, n.name) and not re.search(pat, n.qualified_name or ""):
-                        if not q:
-                            continue
-                    else:
+                if pat_rx is not None:
+                    if pat_rx.search(n.name) or pat_rx.search(n.qualified_name or ""):
                         score += 8.0
-                except re.error:
-                    if pat.lower() not in hay:
+                    elif not q:
                         continue
+                elif pat.lower() not in hay:
+                    continue
+                else:
                     score += 4.0
             if not q and not pat:
                 score = 1.0 + n.in_calls * 0.05
@@ -122,6 +137,10 @@ class SearchMixin:
         hits: list[dict[str, Any]] = []
         if not root.exists() or not pattern:
             return {"results": [], "has_more": False}
+        # codeql[py/regex-injection] pattern is an operator-supplied grep-style
+        # regex over the indexed repo's own files; invalid patterns fall back
+        # to a literal search, and per-line subjects are capped below so a
+        # pathological pattern can only cost bounded CPU.
         try:
             rx = re.compile(pattern)
         except re.error:
@@ -138,7 +157,10 @@ class SearchMixin:
                 continue
             rel = str(path.relative_to(root)).replace("\\", "/")
             for i, line in enumerate(text.splitlines(), 1):
-                if rx.search(line):
+                # Cap the subject per line: minified bundles ship megabyte
+                # lines and a backtracking regex over them is a hang risk.
+                # Matches past the cap within one line are not reported.
+                if rx.search(line[:_MAX_SEARCH_LINE_CHARS]):
                     file_hits.setdefault(rel, []).append({"line": i, "text": line.strip()[:240]})
                     budget -= 1
                     if budget <= 0:
