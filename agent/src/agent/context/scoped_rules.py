@@ -21,6 +21,9 @@ _MAX_CHARS = 4000
 
 class ScopedRules:
     def __init__(self, root: str | Path, *, max_chars: int = _MAX_CHARS) -> None:
+        # codeql[py/path-injection] root is the session's task root from
+        # settings; render() re-checks that AGENTS.md resolves inside it, so
+        # a symlinked rules file cannot escape the root.
         self._root = Path(root).resolve()
         self._max_chars = max_chars
         self._cache: tuple[tuple[int, int], str] | None = None  # ((mtime_ns, size), text)
