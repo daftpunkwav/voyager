@@ -29,7 +29,7 @@ class Jail:
     ) -> None:
         if not roots:
             raise ValueError("jail needs at least one root")
-        # codeql[py/path-injection] the roots ARE the trust boundary this
+        # the roots ARE the trust boundary this
         # module defines: they come from operator settings, and resolve() /
         # contains() enforce containment against them for every tool path.
         self._roots = [Path(r).resolve() for r in roots]

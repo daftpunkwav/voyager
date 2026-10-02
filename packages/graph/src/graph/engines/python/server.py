@@ -123,7 +123,7 @@ def _assert_within_allowed_root(repo_path: str) -> None:
     if not root:
         return  # No boundary when allowed_root is unset (matches the C engine's behavior)
     root_resolved = Path(root).resolve()
-    # codeql[py/path-injection] this resolve IS the boundary check: the target
+    # this resolve IS the boundary check: the target
     # is only compared against the allowed root, never opened.
     target = Path(repo_path).resolve()
     if target != root_resolved and root_resolved not in target.parents:

@@ -181,12 +181,12 @@ class GraphStore:
         Callers build this path from a project slug that passed
         engine._validated_project, so it cannot traverse out of graphs_dir.
         """
-        # codeql[py/path-injection] see docstring: validated project slug.
+        # see docstring: validated project slug.
         path.parent.mkdir(parents=True, exist_ok=True)
-        # codeql[py/path-injection] see docstring: validated project slug.
+        # see docstring: validated project slug.
         if path.exists():
             path.unlink()
-        # codeql[py/path-injection] see docstring: validated project slug.
+        # see docstring: validated project slug.
         conn = sqlite3.connect(str(path))
         try:
             conn.execute("CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT)")

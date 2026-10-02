@@ -55,7 +55,7 @@ class SearchMixin:
         # before, minus a re-compile per node).
         pat_rx: re.Pattern[str] | None = None
         if pat:
-            # codeql[py/regex-injection] name_pattern is an operator-supplied
+            # name_pattern is an operator-supplied
             # regex-search feature; it is compiled exactly once here and only
             # ever matched against in-process node names, so the residual risk
             # is CPU on the operator's own data, not injection.
@@ -137,7 +137,7 @@ class SearchMixin:
         hits: list[dict[str, Any]] = []
         if not root.exists() or not pattern:
             return {"results": [], "has_more": False}
-        # codeql[py/regex-injection] pattern is an operator-supplied grep-style
+        # pattern is an operator-supplied grep-style
         # regex over the indexed repo's own files; invalid patterns fall back
         # to a literal search, and per-line subjects are capped below so a
         # pathological pattern can only cost bounded CPU.
