@@ -157,8 +157,8 @@ jobs:
       - name: eslint
         run: npm run lint:web
 
-      - name: vitest
-        run: npm run test:web
+      - name: vitest (coverage gated)
+        run: npm run test:web:cov
 
       - name: i18n key parity
         run: npm run i18n:web
