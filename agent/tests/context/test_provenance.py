@@ -15,7 +15,7 @@ from agent.context.provenance import CLOSE, OPEN, wrap_untrusted
 class TestProvenance:
     def test_wrap_names_source_and_fences_both_ends(self) -> None:
         wrapped = wrap_untrusted("hello", "https://example.com")
-        assert "example.com" in wrapped and wrapped.startswith("───[")
+        assert wrapped.startswith("───[不可信内容·来源:https://example.com]")
         assert wrapped.rstrip().endswith(CLOSE)
 
     async def test_web_fetch_result_is_fenced(self, tmp_path, monkeypatch) -> None:
