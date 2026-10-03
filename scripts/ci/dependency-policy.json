@@ -1,0 +1,5 @@
+{
+  "$comment": "Banned dependencies, per ecosystem. Keys are canonical names (npm: package name as package-lock.json records it, aliases detected via npm: specifiers; pip: PEP 503 normalized distribution name as uv.lock records it). The checkers scan the full lockfile graphs (transitive included), so a ban here blocks any path of arrival. Extend with a reason - a ban without one will be questioned at review.",
+  "npm": {},
+  "pip": {}
+}
