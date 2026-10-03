@@ -172,6 +172,27 @@ jobs:
       - name: production build (vite)
         run: npm run build:web
 
+  docs:
+    name: docs (i18n registry + internal links)
+    # Deliberately unconditional (no path filter): the checks are pure
+    # local file verification, cost seconds, and gate the bilingual
+    # registry that nothing else polices — a doc edited without
+    # re-recording its consistency hashes must not land.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+
+      - name: consistency records
+        run: npm run docs:i18n
+
+      - name: internal links and pair reciprocity
+        run: npm run docs:links
+
   e2e-web:
     name: e2e (playwright chromium smoke, manual)
     # The specs still assume a developer-local data state: on a clean data

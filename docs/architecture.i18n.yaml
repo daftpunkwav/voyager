@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   git hash-object docs/architecture.md docs/architecture.zh.md
-docs/architecture.md: 55ffd474f0d9e303ab00d900d41f25186f772b87
-docs/architecture.zh.md: f74117ef1b92d4dad0769242343d651d05e0a644
+docs/architecture.md: a212dd1bcb5697921ee8e24e7f31385f5d358e34
+docs/architecture.zh.md: c3a217d8722973f7c3f0d4fb8261c6cb4c310202

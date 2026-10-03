@@ -33,6 +33,8 @@
     "eval:update": "uv run python scripts/update_eval_baseline.py",
     "graph": "uv run python scripts/gen_dep_graph.py",
     "graph:check": "uv run python scripts/gen_dep_graph.py --check",
+    "docs:i18n": "uv run python scripts/check_docs_i18n.py",
+    "docs:links": "uv run python scripts/check_doc_links.py",
     "gate:py": "npm run lint:py && npm run lint:imports && npm run typecheck:py && npm run test:py && npm run graph:check",
     "gate:web": "npm run typecheck:web && npm run lint:web && npm run test:web && npm run i18n:web && npm run format:web",
     "i18n:web": "npm run i18n:check -w web",
