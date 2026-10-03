@@ -141,7 +141,7 @@ jobs:
     needs: [changes, full-approval]
     if: >-
       needs.full-approval.result == 'success' &&
-      (needs.changes.outputs.py == 'true' || github.event.action == 'labeled')
+      (needs.changes.outputs.py == 'true' || (github.event.action == 'labeled' && github.event.label.name == 'ci-approved'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -178,7 +178,7 @@ jobs:
     needs: [changes, full-approval]
     if: >-
       needs.full-approval.result == 'success' &&
-      (needs.changes.outputs.web == 'true' || github.event.action == 'labeled')
+      (needs.changes.outputs.web == 'true' || (github.event.action == 'labeled' && github.event.label.name == 'ci-approved'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -243,7 +243,7 @@ jobs:
     needs: [changes, full-approval]
     if: >-
       needs.full-approval.result == 'success' &&
-      (needs.changes.outputs.web == 'true' || github.event.action == 'labeled')
+      (needs.changes.outputs.web == 'true' || (github.event.action == 'labeled' && github.event.label.name == 'ci-approved'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
