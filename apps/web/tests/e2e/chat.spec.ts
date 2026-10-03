@@ -32,9 +32,28 @@ test.describe('chat page', () => {
     const body = (await created.json()) as { result?: { id?: string }; detail?: string };
     const id = body.result?.id;
     if (!id) throw new Error(`add_provider failed: ${JSON.stringify(body)}`);
-    await request.post(`${API_BASE}/api/llm/capabilities/set_api_key`, {
+    const keyed = await request.post(`${API_BASE}/api/llm/capabilities/set_api_key`, {
       data: { provider_id: id, api_key: 'sk-e2e-not-a-real-key' },
     });
+    if (!keyed.ok()) {
+      throw new Error(`set_api_key HTTP ${keyed.status()}: ${await keyed.text()}`);
+    }
+    // verify the seed actually stuck: the composer gate reads exactly this
+    const listed = await request.post(`${API_BASE}/api/llm/capabilities/list_providers`, {
+      data: {},
+    });
+    const providers =
+      (
+        (await listed.json()) as {
+          result?: Array<{ id: string; enabled: boolean; has_api_key: boolean }>;
+        }
+      ).result ?? [];
+    const seededProvider = providers.find((p) => p.id === id);
+    if (!seededProvider?.enabled || !seededProvider.has_api_key) {
+      throw new Error(
+        `provider seed did not stick: id=${id} state=${JSON.stringify(seededProvider)}`
+      );
+    }
   });
 
   test('empty draft keeps send disabled', async ({ page }) => {
