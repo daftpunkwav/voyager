@@ -35,6 +35,7 @@ data/*.bak*
 data/repo-cache/
 data/graph-db/
 data/graph-engine-cache/
+data/e2e-scratch/
 # Directory anchor; .gitkeep stays committed (keep this line if later relaxed to data/*)
 !data/.gitkeep
 
