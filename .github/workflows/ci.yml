@@ -94,7 +94,7 @@ jobs:
               .github/*|apps/web/*|package.json|package-lock.json|.nvmrc)
                 web=true ;;
             esac
-          done < <(git diff --name-only "$BASE...HEAD")
+          done < <(git diff --no-renames --name-only "$BASE...HEAD")
           echo "py=$py" >> "$GITHUB_OUTPUT"
           echo "web=$web" >> "$GITHUB_OUTPUT"
           echo "python paths: $py, web paths: $web"
