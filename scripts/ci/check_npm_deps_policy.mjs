@@ -30,6 +30,9 @@ const aliases = []; // { installed, target: "npm:<realname>@..." }
 for (const [key, entry] of Object.entries(lock.packages ?? {})) {
   const installed = key.split("node_modules/").pop();
   if (installed) found.add(installed);
+  // Aliased transitives may carry the real package name in entry.name while
+  // only the node_modules key shows the alias - check both identities.
+  if (typeof entry?.name === "string") found.add(entry.name);
   if (typeof entry?.version === "string" && entry.version.startsWith("npm:")) {
     aliases.push({ installed, target: entry.version });
   }
