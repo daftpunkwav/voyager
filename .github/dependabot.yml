@@ -52,6 +52,12 @@ updates:
     schedule:
       interval: "weekly"
       day: "thursday"
+    # "Highest usable" cap: typescript-eslint@8 (latest) declares peer
+    # typescript <6.1.0, so typescript 7 is uninstallable until that lifts.
+    # Remove the cap on the day the peer range widens.
+    ignore:
+      - dependency-name: "typescript"
+        versions: [">=7"]
     commit-message:
       prefix: "chore(deps-js)"
     labels:
