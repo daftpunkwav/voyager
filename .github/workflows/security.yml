@@ -61,9 +61,12 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      # npm audit consults package-lock.json only; no install needed.
+      # npm audit consults package-lock.json only; no install needed. The
+      # checker gates on high/critical with an explicit allowlist and
+      # propagates verdicts through via-chains (an advisory plus its
+      # transitive reporters count as one decision, not N).
       - name: npm audit
-        run: npm run audit:web
+        run: npm audit --json | node scripts/ci/npm_audit_check.mjs
 
   audit-py:
     name: dependency audit (pip-audit on uv lock)

@@ -30,7 +30,9 @@ def main() -> int:
 
     text = LOCK.read_text(encoding="utf-8")
     installed: dict[str, str] = {}
-    for match in re.finditer(r'^\[\[package\]\]\nname = "([^"]+)"\nversion = "([^"]+)"', text, re.M):
+    for match in re.finditer(
+        r'^\[\[package\]\]\nname = "([^"]+)"\nversion = "([^"]+)"', text, re.MULTILINE
+    ):
         installed[canonical(match.group(1))] = match.group(2)
     if not installed:
         print("no packages parsed from uv.lock - parse failure?", file=sys.stderr)
