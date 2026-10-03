@@ -28,12 +28,15 @@ def main() -> int:
         print("pip dependency policy ok (empty denylist)")
         return 0
 
-    text = LOCK.read_text(encoding="utf-8")
+    # Normalize line endings and parse [[package]] blocks field-order-free:
+    # uv's lockfile layout is not a contract, only the field names are.
+    text = LOCK.read_text(encoding="utf-8").replace("\r\n", "\n")
     installed: dict[str, str] = {}
-    for match in re.finditer(
-        r'^\[\[package\]\]\nname = "([^"]+)"\nversion = "([^"]+)"', text, re.MULTILINE
-    ):
-        installed[canonical(match.group(1))] = match.group(2)
+    for block in text.split("[[package]]")[1:]:
+        name = re.search(r'^\s*name\s*=\s*"([^"]+)"', block, re.MULTILINE)
+        version = re.search(r'^\s*version\s*=\s*"([^"]+)"', block, re.MULTILINE)
+        if name:
+            installed[canonical(name.group(1))] = version.group(1) if version else ""
     if not installed:
         print("no packages parsed from uv.lock - parse failure?", file=sys.stderr)
         return 1
