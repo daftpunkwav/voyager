@@ -44,8 +44,8 @@ updates:
       uv:
         patterns: ["*"]
         update-types:
-          - "version-update:semver-minor"
-          - "version-update:semver-patch"
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "npm"
     directory: "/"
@@ -67,5 +67,5 @@ updates:
       npm:
         patterns: ["*"]
         update-types:
-          - "version-update:semver-minor"
-          - "version-update:semver-patch"
+          - "minor"
+          - "patch"
