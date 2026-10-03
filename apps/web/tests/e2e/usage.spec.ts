@@ -16,8 +16,10 @@ test.describe('usage page', () => {
     await expect(page.getByText(/已用 0·上限 不限|已用/)).toBeVisible();
     await expect(page.getByRole('img', { name: '按日调用热力图' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '模型用量' })).toBeVisible();
-    // breakdown rows render with model names
-    await expect(page.getByText('MiniMax-M3').first()).toBeVisible();
+    // breakdown dimension toggles render; the rows themselves need real
+    // usage data, which a fresh environment legitimately has none of
+    await expect(page.getByRole('button', { name: '模型', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '供应商', exact: true })).toBeVisible();
   });
 
   test('switching the time range refetches usage history', async ({ page }) => {

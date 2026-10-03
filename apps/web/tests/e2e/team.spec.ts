@@ -4,20 +4,21 @@
  * "register a subagent" form (with cleanup of the created definition).
  */
 
-import { expect, test } from '@playwright/test';
-import { rm } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { expect, test, type APIRequestContext } from '@playwright/test';
 
 const AGENT_NAME = `e2e_probe_${Date.now()}`;
+// Backend origin for setup/cleanup calls (must match the vite proxy target in
+// vite.config.ts); the browser-facing pages themselves go through the proxy.
+const API_BASE = 'http://127.0.0.1:8000';
 
 test.describe('team page', () => {
-  test('renders the six management sections', async ({ page }) => {
+  test('renders the management sections', async ({ page }) => {
     await page.goto('/team');
-    await expect(page.getByRole('heading', { name: '人格', exact: true, level: 2 })).toBeVisible();
-    await expect(
-      page.getByRole('heading', { name: '自建 subagent', exact: true, level: 2 })
-    ).toBeVisible();
-    await expect(page.getByRole('heading', { name: '工具面名册', level: 2 })).toBeVisible();
+    // the tool roster section renders a toolbar without a section heading,
+    // so the page exposes five level-2 headings
+    for (const section of ['人格', '自建子代理', '注册子代理', '可恢复任务', '子代理实例']) {
+      await expect(page.getByRole('heading', { name: section, level: 2 })).toBeVisible();
+    }
     // persona cards: at least the five built-in personas
     for (const persona of ['Lucien', 'Iris', 'Elio', 'Miyai', 'Atlas']) {
       await expect(page.getByRole('heading', { name: persona, level: 3 })).toBeVisible();
@@ -39,9 +40,12 @@ test.describe('team page', () => {
     });
   });
 
-  test.afterAll(async () => {
-    // definitions live at <repo>/data/subagents/<name>.json; remove our probe
-    // (playwright runs with cwd = apps/web, so the repo root is two up)
-    await rm(resolve(process.cwd(), '../../data/subagents', `${AGENT_NAME}.json`), { force: true });
+  test.afterAll(async ({ request }: { request: APIRequestContext }) => {
+    // purge the probe definition through the API: the on-disk location of
+    // subagent definitions follows the backend's data root, which differs
+    // between a developer machine and a fresh CI environment
+    await request.post(`${API_BASE}/api/agent/capabilities/subagent`, {
+      data: { action: 'unregister', name: AGENT_NAME },
+    });
   });
 });

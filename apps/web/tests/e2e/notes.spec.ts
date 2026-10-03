@@ -60,7 +60,11 @@ test.describe('notes page', () => {
 
   test('create a note, save it, find it via search', async ({ page }) => {
     await openCurrentTab(page);
-    await page.getByRole('button', { name: '新建', exact: true }).click();
+    // scope to the workspace and take the last match: the sidebar's "+"
+    // creates a chat session, the workspace has a toolbar button and (on an
+    // empty list) an empty-state CTA — all create-note buttons open the same
+    // editor
+    await page.locator('main').getByRole('button', { name: '新建', exact: true }).last().click();
 
     // the editor mode is a persisted preference; when it restores as
     // preview/split the edit pane must be switched on explicitly
@@ -92,20 +96,25 @@ test.describe('notes page', () => {
   });
 
   test('search filter hides non-matching notes', async ({ page }) => {
+    test.skip(!created, 'probe note was not created');
     await openCurrentTab(page);
     const search = page.getByRole('searchbox', { name: '筛选笔记' });
-    await search.fill('Voyager 架构设计');
-    await expect(page.getByText('Voyager 架构设计(最终形态)').first()).toBeVisible();
-    await expect(page.getByText('王者荣耀介绍')).toHaveCount(0);
+    // assert against the probe note, not fixed titles: a fresh environment
+    // legitimately has no pre-existing notes to lean on
+    await search.fill('e2e notes probe');
+    await expect(page.getByText(TITLE).first()).toBeVisible();
+    await search.fill('e2e-no-such-note-needle');
+    await expect(page.getByText(TITLE)).toHaveCount(0);
   });
 
   test('switching between list and card views keeps the list usable', async ({ page }) => {
+    test.skip(!created, 'probe note was not created');
     await openCurrentTab(page);
     const card = page.getByRole('button', { name: '卡片', exact: true });
     const list = page.getByRole('button', { name: '列表', exact: true });
     await card.click();
     await expect(card).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByText('Voyager 架构设计(最终形态)').first()).toBeVisible();
+    await expect(page.getByText(TITLE).first()).toBeVisible();
     await list.click();
     await expect(list).toHaveAttribute('aria-pressed', 'true');
   });

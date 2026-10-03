@@ -5,11 +5,57 @@
  * — the LLM provider may legitimately fail in this environment).
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type APIRequestContext } from '@playwright/test';
 
 const PING = `e2e ping ${Date.now()}`;
+// Backend origin for setup calls (must match the vite proxy target in
+// vite.config.ts); the browser-facing pages themselves go through the proxy.
+const API_BASE = 'http://127.0.0.1:8000';
 
 test.describe('chat page', () => {
+  /** The composer is gated on a configured provider (enabled + has_api_key):
+   *  on a fresh data dir the page renders the disabled "configure LLM first"
+   *  state instead of the editable composer. Seed a throwaway provider whose
+   *  endpoint is the reserved discard port — the agent turn then fails fast,
+   *  which the streaming assertions already tolerate. */
+  test.beforeAll(async ({ request }: { request: APIRequestContext }) => {
+    const created = await request.post(`${API_BASE}/api/llm/capabilities/add_provider`, {
+      data: {
+        display_name: 'e2e fake provider',
+        base_url: 'http://127.0.0.1:9',
+        api_format: 'chat',
+        models: ['e2e-fake-model'],
+      },
+    });
+    // raw REST wraps payloads in a {result} envelope (the frontend bridge
+    // unwraps it; the request fixture does not)
+    const body = (await created.json()) as { result?: { id?: string }; detail?: string };
+    const id = body.result?.id;
+    if (!id) throw new Error(`add_provider failed: ${JSON.stringify(body)}`);
+    const keyed = await request.post(`${API_BASE}/api/llm/capabilities/set_api_key`, {
+      data: { provider_id: id, api_key: 'sk-e2e-not-a-real-key' },
+    });
+    if (!keyed.ok()) {
+      throw new Error(`set_api_key HTTP ${keyed.status()}: ${await keyed.text()}`);
+    }
+    // verify the seed actually stuck: the composer gate reads exactly this
+    const listed = await request.post(`${API_BASE}/api/llm/capabilities/list_providers`, {
+      data: {},
+    });
+    const providers =
+      (
+        (await listed.json()) as {
+          result?: Array<{ id: string; enabled: boolean; has_api_key: boolean }>;
+        }
+      ).result ?? [];
+    const seededProvider = providers.find((p) => p.id === id);
+    if (!seededProvider?.enabled || !seededProvider.has_api_key) {
+      throw new Error(
+        `provider seed did not stick: id=${id} state=${JSON.stringify(seededProvider)}`
+      );
+    }
+  });
+
   test('empty draft keeps send disabled', async ({ page }) => {
     await page.goto('/chat');
     const send = page.getByRole('button', { name: '发送' });
@@ -65,6 +111,15 @@ test.describe('chat page', () => {
     page,
   }) => {
     await page.goto('/chat');
+    // self-seeding: with a fresh data dir (or a parallel worker racing ahead
+    // of the send tests) this may run before any bubble exists — produce one
+    // first, otherwise there is no history to anchor
+    if ((await page.locator('.chat-bubble').count()) === 0) {
+      const box = page.getByRole('textbox', { name: /说点什么/ });
+      await box.click();
+      await box.pressSequentially(`e2e anchor ${Date.now()}`);
+      await box.press('Enter');
+    }
     await expect(page.locator('.chat-bubble').first()).toBeVisible({ timeout: 10_000 });
     // the stream must be pinned to its bottom edge: the pre-paint anchor
     // positions the viewport before the first frame instead of scrolling

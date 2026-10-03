@@ -194,12 +194,13 @@ jobs:
         run: npm run docs:links
 
   e2e-web:
-    name: e2e (playwright chromium smoke, manual)
-    # The specs still assume a developer-local data state: on a clean data
-    # dir roughly half of them fail on empty-state rendering (verified
-    # 2026-10-03, 6/16 fail). Run them from the Actions tab until the specs
-    # are adapted, then change the guard to the path filter like the gates.
-    if: github.event_name == 'workflow_dispatch'
+    name: e2e (playwright chromium smoke)
+    # Path-gated like the unit gates: only web-surface changes need a
+    # browser pass (skipped counts as success for py-/docs-only PRs). The
+    # push/dispatch classification is all-changed, so main itself always
+    # gets the full browser run.
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -228,6 +229,12 @@ jobs:
         run: uv sync
 
       - name: Start backend on :8000
+        env:
+          # Throwaway key material for the per-run scratch data dir only —
+          # not a secret. The runner has no .env, and without key material
+          # SecretStore is unavailable, which takes set_api_key (and thus
+          # the chat composer seed) down with it.
+          SECRETS_ENCRYPTION_KEY: e2e-scratch-only-never-a-real-key
         run: |
           uv run uvicorn host.assemble:build --factory --host 127.0.0.1 --port 8000 > backend.log 2>&1 &
           for i in $(seq 1 60); do
