@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Fast staged-only checks that mirror the CI fast gates: the ruff half of
+# gate:py (npm run lint:py) and the prettier half of gate:web (npm run
+# format:web). The slow matrix - import-linter, mypy, pytest, graph:check,
+# tsc, eslint, vitest, i18n keys, the production build - stays in CI; this
+# hook just keeps formatting and lint from leaving the machine. Zero
+# dependencies: uses the uv-managed project venv and whatever node/npm is
+# on PATH.
+#
+# Checks run against the STAGED contents (git index), never the working tree:
+# an unstaged "fix" in the worktree must not make an unformatted commit pass.
+# Content is piped via stdin with --stdin-filename/--stdin-filepath so both
+# tools resolve their per-file configuration against the real path without
+# materializing temp copies.
+#
+# Enable once per clone (overrides any global core.hooksPath):
+#   git config core.hooksPath .githooks
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+VENV_PY="$ROOT/.venv/Scripts/python.exe"
+[ -x "$VENV_PY" ] || VENV_PY="$ROOT/.venv/bin/python"
+[ -x "$VENV_PY" ] || {
+  echo "pre-commit: project venv not found; run 'uv sync' first" >&2
+  exit 1
+}
+cd "$ROOT"
+
+py=()
+while IFS= read -r f; do [ -n "$f" ] && py+=("$f"); done < <(
+  git diff --cached --name-only --diff-filter=ACMR -- 'packages/*.py' 'agent/*.py' 'scripts/*.py'
+)
+web=()
+while IFS= read -r f; do [ -n "$f" ] && web+=("${f#apps/web/}"); done < <(
+  git diff --cached --name-only --diff-filter=ACMR -- \
+    'apps/web/*.ts' 'apps/web/*.tsx' 'apps/web/*.js' 'apps/web/*.jsx' \
+    'apps/web/*.mjs' 'apps/web/*.cjs' 'apps/web/*.json' 'apps/web/*.css' \
+    'apps/web/*.scss' 'apps/web/*.html' 'apps/web/*.md' 'apps/web/*.yml' \
+    'apps/web/*.yaml'
+)
+
+if [ "${#py[@]}" -gt 0 ]; then
+  for f in "${py[@]}"; do
+    git show ":$f" | "$VENV_PY" -m ruff check -q --stdin-filename "$f" - || {
+      echo "pre-commit: ruff check failed on $f" >&2
+      exit 1
+    }
+    git show ":$f" | "$VENV_PY" -m ruff format --diff --stdin-filename "$f" - || {
+      echo "pre-commit: ruff format failed on $f" >&2
+      exit 1
+    }
+  done
+fi
+
+if [ "${#web[@]}" -gt 0 ]; then
+  (cd apps/web && for f in "${web[@]}"; do
+    git show ":apps/web/$f" | npx prettier --stdin-filepath "$f" --check || {
+      echo "pre-commit: prettier check failed on apps/web/$f" >&2
+      exit 1
+    }
+  done)
+fi
+
+exit 0
