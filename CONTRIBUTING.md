@@ -45,6 +45,10 @@ npm run gate        # gate:py && gate:web
 npm run eval        # agent eval suite (agent/tests/eval); env-gated for real models
 ```
 
+A fast staged-only pre-commit hook (ruff + prettier) can catch the
+formatting and lint half of that locally; enable it once per clone with
+`git config core.hooksPath .githooks`.
+
 `gate:py` = ruff format/check, import-linter layering contracts, mypy,
 pytest, dependency-graph check. `gate:web` = tsc, eslint (`--max-warnings 0`),
 vitest, i18n key check, prettier. What each script runs:

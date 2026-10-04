@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Fast staged-only checks that mirror the CI fast gates: the ruff half of
+# gate:py (npm run lint:py) and the prettier half of gate:web (npm run
+# format:web). The slow matrix - import-linter, mypy, pytest, graph:check,
+# tsc, eslint, vitest, i18n keys, the production build - stays in CI; this
+# hook just keeps formatting and lint from leaving the machine. No install
+# steps beyond the repo itself: the uv-managed venv is only required when
+# Python files are staged, and the web half uses whatever node/npm is on
+# PATH.
+#
+# Checks run against the STAGED contents (git index), never the working tree:
+# an unstaged "fix" in the worktree must not make an unformatted commit pass.
+# Content is piped via stdin with --stdin-filename/--stdin-filepath so both
+# tools resolve their per-file configuration against the real path without
+# materializing temp copies.
+#
+# Enable once per clone (overrides any global core.hooksPath):
+#   git config core.hooksPath .githooks
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# -z with a NUL-delimited read so exotic filenames (quotes, glob chars) are
+# taken verbatim instead of being mangled by Git's C-style quoting. Pathspec
+# globs match across directory separators by default, so these cover the
+# whole tree (shell-like non-recursive matching would need :(glob) magic).
+# A staged path is never empty, so git failing inside the process
+# substitution is surfaced as an empty sentinel record (the `|| printf`)
+# and fails the hook instead of silently checking nothing.
+py=()
+while IFS= read -r -d '' f; do
+  [ -n "$f" ] || {
+    echo "pre-commit: git diff failed while listing staged Python files" >&2
+    exit 1
+  }
+  py+=("$f")
+done < <(
+  git diff --cached -z --name-only --diff-filter=ACMR -- 'packages/*.py' 'agent/*.py' 'scripts/*.py' || printf '\0'
+)
+web=()
+while IFS= read -r -d '' f; do
+  [ -n "$f" ] || {
+    echo "pre-commit: git diff failed while listing staged web files" >&2
+    exit 1
+  }
+  web+=("${f#apps/web/}")
+done < <(
+  git diff --cached -z --name-only --diff-filter=ACMR -- \
+    'apps/web/*.ts' 'apps/web/*.tsx' 'apps/web/*.js' 'apps/web/*.jsx' \
+    'apps/web/*.mjs' 'apps/web/*.cjs' 'apps/web/*.json' 'apps/web/*.css' \
+    'apps/web/*.scss' 'apps/web/*.html' 'apps/web/*.md' 'apps/web/*.yml' \
+    'apps/web/*.yaml' || printf '\0'
+)
+
+if [ "${#py[@]}" -gt 0 ]; then
+  # The venv is only needed for the ruff half; web-only commits must work
+  # without it.
+  VENV_PY="$ROOT/.venv/Scripts/python.exe"
+  [ -x "$VENV_PY" ] || VENV_PY="$ROOT/.venv/bin/python"
+  [ -x "$VENV_PY" ] || {
+    echo "pre-commit: project venv not found; run 'uv sync' first" >&2
+    exit 1
+  }
+  for f in "${py[@]}"; do
+    git show ":$f" | "$VENV_PY" -m ruff check -q --stdin-filename "$f" - || {
+      echo "pre-commit: ruff check failed on $f" >&2
+      exit 1
+    }
+    git show ":$f" | "$VENV_PY" -m ruff format --diff --stdin-filename "$f" - || {
+      echo "pre-commit: ruff format failed on $f" >&2
+      exit 1
+    }
+  done
+fi
+
+if [ "${#web[@]}" -gt 0 ]; then
+  # Resolve the prettier binary once per run instead of spawning npx per
+  # file: prefer the workspace-local bin dir (pnpm layout), then the root
+  # one where npm workspaces hoist dependencies, falling back to a single
+  # npx resolution when neither is installed.
+  if [ -x "$ROOT/apps/web/node_modules/.bin/prettier" ]; then
+    prettier=("$ROOT/apps/web/node_modules/.bin/prettier")
+  elif [ -x "$ROOT/node_modules/.bin/prettier" ]; then
+    prettier=("$ROOT/node_modules/.bin/prettier")
+  else
+    prettier=(npx prettier)
+  fi
+
+  (cd apps/web && for f in "${web[@]}"; do
+    git show ":apps/web/$f" | "${prettier[@]}" --stdin-filepath "$f" --check || {
+      echo "pre-commit: prettier check failed on apps/web/$f" >&2
+      exit 1
+    }
+  done)
+fi
+
+exit 0

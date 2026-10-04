@@ -26,6 +26,8 @@ npm run gate        # gate:py && gate:web
 npm run eval        # agent 评测套件(agent/tests/eval);真模型需环境变量门控
 ```
 
+一个只检查暂存内容的快速 pre-commit 钩子(ruff + prettier)可以在本地拦下其中格式与 lint 的一半;每个克隆启用一次即可:`git config core.hooksPath .githooks`。
+
 `gate:py` = ruff format/check、import-linter 分层契约、mypy、pytest、依赖图检查。`gate:web` = tsc、eslint(`--max-warnings 0`)、vitest、i18n 键检查、prettier。各脚本内容:[docs/development.zh.md](docs/development.zh.md)。门禁红意味着修改本次变更 —— 不要为了让检查通过而削弱检查。
 
 ## 测试
