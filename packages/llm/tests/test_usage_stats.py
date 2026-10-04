@@ -140,6 +140,28 @@ class TestMigration:
         assert stats["totals"]["prompt_cached_tokens"] == 0
         assert stats["totals"]["prompt_uncached_tokens"] == 10
 
+    def test_older_db_gains_reasoning_and_cache_write_columns(self, tmp_path) -> None:
+        """The middle-era schema (cached_tokens present, reasoning/cache-write
+        absent) upgrades in place on reopen without touching existing rows."""
+        db = tmp_path / "llm.db"
+        conn = sqlite3.connect(db)
+        conn.executescript(
+            "CREATE TABLE usage (id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL,"
+            " provider_id TEXT NOT NULL, model TEXT NOT NULL, caller TEXT NOT NULL DEFAULT '',"
+            " input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0,"
+            " ok INTEGER NOT NULL DEFAULT 1, cached_tokens INTEGER NOT NULL DEFAULT 0);"
+            "INSERT INTO usage (ts, provider_id, model, input_tokens, output_tokens,"
+            " cached_tokens) VALUES (strftime('%s','now'), 'p1', 'm1', 10, 5, 4);"
+        )
+        conn.commit()
+        conn.close()
+        store = ProviderStore(db)
+        ucols = {row[1] for row in store._conn.execute("PRAGMA table_info(usage)")}
+        assert {"reasoning_tokens", "cache_write_tokens"} <= ucols
+        stats = store.usage_stats(days=1)
+        assert stats["totals"]["prompt_cached_tokens"] == 4
+        assert stats["totals"]["prompt_uncached_tokens"] == 6
+
 
 class TestUsageRetention:
     def test_purge_usage_older_than_days(self, tmp_path) -> None:
