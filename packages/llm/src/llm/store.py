@@ -78,6 +78,9 @@ def is_private_host(host: str) -> bool:
         return False
 
 
+#: Projection for _row's dict(zip(_COLS, row)); every SELECT names these
+#: columns explicitly in this order so old databases with appended ALTER
+#: columns still project correctly.
 _COLS = (
     "id",
     "display_name",
@@ -134,11 +137,18 @@ class ProviderStore:
                 "ALTER TABLE usage ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0"
             )
             self._conn.commit()
-        for extra in ("reasoning_tokens", "cache_write_tokens"):
-            if extra not in cols:
-                self._conn.execute(
-                    f"ALTER TABLE usage ADD COLUMN {extra} INTEGER NOT NULL DEFAULT 0"
-                )
+        for col, stmt in (
+            (
+                "reasoning_tokens",
+                "ALTER TABLE usage ADD COLUMN reasoning_tokens INTEGER NOT NULL DEFAULT 0",
+            ),
+            (
+                "cache_write_tokens",
+                "ALTER TABLE usage ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0",
+            ),
+        ):
+            if col not in cols:
+                self._conn.execute(stmt)
         self._conn.commit()
         pcols = {row[1] for row in self._conn.execute("PRAGMA table_info(providers)")}
         if "models_meta" not in pcols:
@@ -197,16 +207,27 @@ class ProviderStore:
     def get(self, pid: str) -> dict[str, Any] | None:
         with self._lock:
             row = self._conn.execute(
-                f"SELECT {','.join(_COLS)} FROM providers WHERE id = ?", (pid,)
+                "SELECT id, display_name, preset_id, base_url, api_format, models,"
+                " models_meta, enabled, custom, private_endpoint, created_ts, updated_ts"
+                " FROM providers WHERE id = ?",
+                (pid,),
             ).fetchone()
         return _row(row) if row else None
 
     def list(self, *, include_disabled: bool = False) -> list[dict[str, Any]]:
-        sql = f"SELECT {','.join(_COLS)} FROM providers"
-        if not include_disabled:
-            sql += " WHERE enabled = 1"
         with self._lock:
-            rows = self._conn.execute(sql + " ORDER BY created_ts").fetchall()
+            if include_disabled:
+                rows = self._conn.execute(
+                    "SELECT id, display_name, preset_id, base_url, api_format, models,"
+                    " models_meta, enabled, custom, private_endpoint, created_ts, updated_ts"
+                    " FROM providers ORDER BY created_ts"
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT id, display_name, preset_id, base_url, api_format, models,"
+                    " models_meta, enabled, custom, private_endpoint, created_ts, updated_ts"
+                    " FROM providers WHERE enabled = 1 ORDER BY created_ts"
+                ).fetchall()
         return [_row(r) for r in rows]
 
     def delete(self, pid: str) -> None:

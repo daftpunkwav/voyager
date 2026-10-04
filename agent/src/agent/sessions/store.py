@@ -31,8 +31,6 @@ from typing import Any
 #: keeps anything path-like or control-ish out by construction
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
-#: Legacy single-row table (pre-multi-session); read-only after migration
-_LEGACY_TABLE = "session"
 _DEFAULT_SESSION_ID = "chat"
 
 
@@ -169,11 +167,9 @@ class SessionStore:
                 r[0]
                 for r in self._conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
             }
-            if _LEGACY_TABLE not in tables or self.get(_DEFAULT_SESSION_ID) is not None:
+            if "session" not in tables or self.get(_DEFAULT_SESSION_ID) is not None:
                 return
-            row = self._conn.execute(
-                f"SELECT value FROM {_LEGACY_TABLE} WHERE key = 'chat'"
-            ).fetchone()
+            row = self._conn.execute("SELECT value FROM session WHERE key = 'chat'").fetchone()
             if row is None:
                 return
             try:

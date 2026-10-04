@@ -43,9 +43,15 @@ CREATE INDEX IF NOT EXISTS idx_jobs_status ON index_jobs(status, priority, creat
 """
 
 #: Incremental columns for pre-existing databases (level/kinds); not in the
-#: CREATE TABLE statement, always added by _migrate.
-_MIGRATE_COLS = {"level": "TEXT NOT NULL DEFAULT 'l1'", "kinds": "TEXT NOT NULL DEFAULT '[]'"}
+#: CREATE TABLE statement, always added by _migrate as full literal statements.
+_MIGRATE_STMTS = {
+    "level": "ALTER TABLE index_jobs ADD COLUMN level TEXT NOT NULL DEFAULT 'l1'",
+    "kinds": "ALTER TABLE index_jobs ADD COLUMN kinds TEXT NOT NULL DEFAULT '[]'",
+}
 
+#: Projection for _row's dict(zip(_COLS, row)); every SELECT names these
+#: columns explicitly in this order so old databases with appended ALTER
+#: columns still project correctly.
 _COLS = (
     "id",
     "project",
@@ -95,17 +101,16 @@ class IndexQueue:
                 ).fetchall()
             ]
             if ids:
-                marks = ",".join("?" for _ in ids)
-                self._conn.execute(f"DELETE FROM index_jobs WHERE id IN ({marks})", ids)
+                self._conn.executemany("DELETE FROM index_jobs WHERE id = ?", [(i,) for i in ids])
                 self._conn.commit()
         return len(ids)
 
     def _migrate(self) -> None:
         """Idempotently add missing columns to older databases via ALTER TABLE."""
         have = {r[1] for r in self._conn.execute("PRAGMA table_info(index_jobs)")}
-        for col, ddl in _MIGRATE_COLS.items():
+        for col, stmt in _MIGRATE_STMTS.items():
             if col not in have:
-                self._conn.execute(f"ALTER TABLE index_jobs ADD COLUMN {col} {ddl}")
+                self._conn.execute(stmt)
         self._conn.commit()
 
     def enqueue(
@@ -182,8 +187,9 @@ class IndexQueue:
         """Dequeue the highest-priority queued job and mark it running (single scheduler)."""
         with self._lock:
             row = self._conn.execute(
-                f"SELECT {','.join(_COLS)} FROM index_jobs WHERE status='queued'"
-                " ORDER BY priority ASC, created_ts ASC LIMIT 1"
+                "SELECT id, project, repo_path, priority, status, attempts, error,"
+                " created_ts, updated_ts, level, kinds FROM index_jobs"
+                " WHERE status='queued' ORDER BY priority ASC, created_ts ASC LIMIT 1"
             ).fetchone()
             if row is None:
                 return None
@@ -212,20 +218,27 @@ class IndexQueue:
         # scheduler thread's status transitions).
         with self._lock:
             row = self._conn.execute(
-                f"SELECT {','.join(_COLS)} FROM index_jobs WHERE id=?", (jid,)
+                "SELECT id, project, repo_path, priority, status, attempts, error,"
+                " created_ts, updated_ts, level, kinds FROM index_jobs WHERE id=?",
+                (jid,),
             ).fetchone()
         return _row(row) if row else None
 
     def list(self, status: str = "") -> list[dict[str, Any]]:
-        sql = f"SELECT {','.join(_COLS)} FROM index_jobs"
-        params: tuple = ()
-        if status:
-            sql += " WHERE status=?"
-            params = (status,)
         with self._lock:
-            rows = self._conn.execute(
-                f"{sql} ORDER BY priority ASC, created_ts ASC", params
-            ).fetchall()
+            if status:
+                rows = self._conn.execute(
+                    "SELECT id, project, repo_path, priority, status, attempts, error,"
+                    " created_ts, updated_ts, level, kinds FROM index_jobs WHERE status=?"
+                    " ORDER BY priority ASC, created_ts ASC",
+                    (status,),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT id, project, repo_path, priority, status, attempts, error,"
+                    " created_ts, updated_ts, level, kinds FROM index_jobs"
+                    " ORDER BY priority ASC, created_ts ASC"
+                ).fetchall()
         return [_row(r) for r in rows]
 
     def close(self) -> None:
