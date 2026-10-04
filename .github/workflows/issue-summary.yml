@@ -3,16 +3,15 @@
 # untrusted data).
 #
 # Inference runs on actions/ai-inference v3, whose only provider is the
-# GitHub Copilot CLI. The CLI comes from the committed lockfile under
-# .github/copilot-cli/ (npm ci), so the whole dependency tree - including
-# transitive packages running beside COPILOT_PAT - is pinned and reviewed
-# instead of resolved from registry ranges on every run. Authenticate with
-# a user-owned fine-grained PAT carrying the "Copilot Requests" account
-# permission and nothing else (classic PATs are not supported by the
-# Copilot CLI; repository secret COPILOT_PAT). The v1 backend this starter
-# shipped with - the GitHub Models inference endpoint - was retired on
-# 2026-07-30, which is why the run soft-skips while the secret is absent
-# instead of failing on every issue.
+# GitHub Copilot CLI. The runner installs the official linux-x64 binary
+# from its npm tarball after a sha512 check, and the action shells out to
+# `copilot` on PATH. Authenticate with a user-owned fine-grained PAT
+# carrying the "Copilot Requests" account permission and nothing else
+# (classic PATs are not supported by the Copilot CLI; repository secret
+# COPILOT_PAT). The v1 backend this starter shipped with - the GitHub
+# Models inference endpoint - was retired on 2026-07-30, which is why the
+# run soft-skips while the secret is absent instead of failing on every
+# issue.
 name: Summarize new issues
 
 on:
@@ -53,11 +52,20 @@ jobs:
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
 
-      - name: Install the locked Copilot CLI
+      # The CLI packages declare "SEE LICENSE IN LICENSE.md", which is not
+      # an SPDX id. A committed npm lockfile therefore reports every
+      # platform build as an unknown license. Pin the linux-x64 binary
+      # this runner executes: exact version, official tarball, checksum
+      # before install. No automation covers this URL; bump deliberately.
+      # The digest is the sha512 of @github/copilot-linux-x64@1.0.91.
+      - name: Install the pinned Copilot CLI
         if: steps.gate.outputs.available == 'true'
         run: |
-          npm ci --prefix .github/copilot-cli
-          echo "$(pwd)/.github/copilot-cli/node_modules/.bin" >> "$GITHUB_PATH"
+          V=1.0.91
+          curl -sSfL "https://registry.npmjs.org/@github/copilot-linux-x64/-/copilot-linux-x64-${V}.tgz" -o /tmp/copilot.tgz
+          echo "b6b42b7c7aac284fc388cb5bbb5ce1955e22c17d19fd2a7fd2ba9967bdb88bc7d42d3dea76ecc03a31eed087f2542392c00f946e8a6e9ecc5e9471d38be136a8  /tmp/copilot.tgz" | sha512sum -c -
+          tar -xzf /tmp/copilot.tgz -C /tmp
+          install -m 0755 /tmp/package/copilot /usr/local/bin/copilot
 
       - name: Build the prompt
         if: steps.gate.outputs.available == 'true'
