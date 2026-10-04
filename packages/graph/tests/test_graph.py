@@ -180,6 +180,33 @@ class TestQueue:
         finally:
             reopened.close()
 
+    def test_legacy_db_gains_level_and_kinds_columns(self, tmp_path) -> None:
+        """A pre-level/kinds database is upgraded in place on reopen: the
+        ALTER migrations add both columns with their defaults and the
+        existing row stays readable through the widened _COLS projection."""
+        path = tmp_path / "legacy.db"
+        conn = sqlite3.connect(path)
+        conn.executescript(
+            "CREATE TABLE index_jobs (id TEXT PRIMARY KEY, project TEXT NOT NULL,"
+            " repo_path TEXT NOT NULL, priority INTEGER NOT NULL, status TEXT NOT NULL,"
+            " attempts INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '',"
+            " created_ts REAL NOT NULL, updated_ts REAL NOT NULL);"
+            "INSERT INTO index_jobs (id, project, repo_path, priority, status, created_ts,"
+            " updated_ts) VALUES ('j1', 'p', '/x', 100, 'queued', 1.0, 1.0);"
+        )
+        conn.commit()
+        conn.close()
+
+        queue = IndexQueue(path)
+        try:
+            cols = {row[1] for row in queue._conn.execute("PRAGMA table_info(index_jobs)")}
+            assert {"level", "kinds"} <= cols
+            job = queue.next()
+            assert job is not None and job["id"] == "j1"
+            assert job["level"] == "l1" and job["kinds"] == []
+        finally:
+            queue.close()
+
 
 class TestScheduler:
     async def test_retry_then_done(self, deps) -> None:
