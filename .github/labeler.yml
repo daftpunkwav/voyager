@@ -22,4 +22,4 @@ python:
 web:
   - changed-files:
       - any-glob-to-any-file:
-          - "web/**"
+          - "apps/web/**"
