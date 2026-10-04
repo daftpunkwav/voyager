@@ -6364,9 +6364,9 @@ static void arch_register_file_dirs(const char *fp, char **dir_paths, int *dir_c
         char dir[ENGINE_SZ_512] = "";
         for (int k = 0; k <= depth; k++) {
             if (k > 0) {
-                strcat(dir, "/");
+                strncat(dir, "/", sizeof(dir) - strlen(dir) - 1);
             }
-            strcat(dir, parts[k]);
+            strncat(dir, parts[k], sizeof(dir) - strlen(dir) - 1);
         }
         const char *child = (depth + SKIP_ONE < nparts) ? parts[depth + SKIP_ONE] : NULL;
         if (!child) {

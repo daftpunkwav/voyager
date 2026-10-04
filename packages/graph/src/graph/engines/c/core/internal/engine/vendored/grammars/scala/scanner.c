@@ -246,13 +246,21 @@ bool tree_sitter_scala_external_scanner_scan(void *payload, TSLexer *lexer,
       LOG("entering tree_sitter_scala_external_scanner_scan. ERROR_SENTINEL is valid\n");
     } else {
       char debug_str[1024] = "entering tree_sitter_scala_external_scanner_scan valid symbols: ";
+      /* strlen on the array trips CWE-126 linters; the same literal measured
+       * with sizeof is a compile-time constant and cannot over-read. */
+      size_t used =
+          sizeof("entering tree_sitter_scala_external_scanner_scan valid symbols: ") - 1;
       for (unsigned i = 0; i < ERROR_SENTINEL; i++) {
         if (valid_symbols[i]) {
-          strcat(debug_str, token_name[i]);
-          strcat(debug_str, ", ");
+          int written =
+              snprintf(debug_str + used, sizeof(debug_str) - used, "%s, ", token_name[i]);
+          if (written < 0 || (size_t)written >= sizeof(debug_str) - used) {
+            break; /* buffer full: drop remaining token names */
+          }
+          used += (size_t)written;
         }
       }
-      strcat(debug_str, "\n");
+      snprintf(debug_str + used, sizeof(debug_str) - used, "\n");
       LOG("%s", debug_str);
     }
   }

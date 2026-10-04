@@ -2033,11 +2033,11 @@ static void kt_register_class_members(KotlinLSPContext *ctx, const char *class_q
                         const char **dq =
                             (const char **)engine_arena_alloc(ctx->arena, 2 * sizeof(const char *));
                         if (dq) {
-                            char *tag = (char *)engine_arena_alloc(
-                                ctx->arena, strlen("lambda_receiver:") + strlen(resolved) + 1);
+                            const size_t tag_size =
+                                strlen("lambda_receiver:") + strlen(resolved) + 1;
+                            char *tag = (char *)engine_arena_alloc(ctx->arena, tag_size);
                             if (tag) {
-                                strcpy(tag, "lambda_receiver:");
-                                strcat(tag, resolved);
+                                snprintf(tag, tag_size, "lambda_receiver:%s", resolved);
                                 dq[0] = tag;
                                 dq[1] = NULL;
                                 rf.decorator_qns = dq;
