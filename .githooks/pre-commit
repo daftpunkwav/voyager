@@ -25,17 +25,32 @@ cd "$ROOT"
 # taken verbatim instead of being mangled by Git's C-style quoting. Pathspec
 # globs match across directory separators by default, so these cover the
 # whole tree (shell-like non-recursive matching would need :(glob) magic).
+# A staged path is never empty, so git failing inside the process
+# substitution is surfaced as an empty sentinel record (the `|| printf`)
+# and fails the hook instead of silently checking nothing.
 py=()
-while IFS= read -r -d '' f; do py+=("$f"); done < <(
-  git diff --cached -z --name-only --diff-filter=ACMR -- 'packages/*.py' 'agent/*.py' 'scripts/*.py'
+while IFS= read -r -d '' f; do
+  [ -n "$f" ] || {
+    echo "pre-commit: git diff failed while listing staged Python files" >&2
+    exit 1
+  }
+  py+=("$f")
+done < <(
+  git diff --cached -z --name-only --diff-filter=ACMR -- 'packages/*.py' 'agent/*.py' 'scripts/*.py' || printf '\0'
 )
 web=()
-while IFS= read -r -d '' f; do web+=("${f#apps/web/}"); done < <(
+while IFS= read -r -d '' f; do
+  [ -n "$f" ] || {
+    echo "pre-commit: git diff failed while listing staged web files" >&2
+    exit 1
+  }
+  web+=("${f#apps/web/}")
+done < <(
   git diff --cached -z --name-only --diff-filter=ACMR -- \
     'apps/web/*.ts' 'apps/web/*.tsx' 'apps/web/*.js' 'apps/web/*.jsx' \
     'apps/web/*.mjs' 'apps/web/*.cjs' 'apps/web/*.json' 'apps/web/*.css' \
     'apps/web/*.scss' 'apps/web/*.html' 'apps/web/*.md' 'apps/web/*.yml' \
-    'apps/web/*.yaml'
+    'apps/web/*.yaml' || printf '\0'
 )
 
 if [ "${#py[@]}" -gt 0 ]; then
