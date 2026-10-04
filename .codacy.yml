@@ -1,0 +1,7 @@
+---
+# The zero-new-issues Codacy gate counts every engine, and test suites
+# legitimately use asserts (B101) and other patterns production linters
+# dislike. Exclude the test trees from analysis; production code stays
+# fully covered.
+exclude_paths:
+  - "**/tests/**"
