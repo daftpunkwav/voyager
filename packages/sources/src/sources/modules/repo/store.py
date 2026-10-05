@@ -68,6 +68,31 @@ _COLS = (
 #: demand via get_readme
 _SUMMARY_COLS = tuple(c for c in _COLS if c != "readme")
 
+# Plain-literal SELECT heads; the column lists are kept in lockstep with
+# _COLS / _SUMMARY_COLS (which feed _row via zip), never widened to *.
+_SQL_SUMMARY_HEAD = (
+    "SELECT id, owner, name, url, description, stars, language, category,"
+    " tags, progress, note, local_path, status, error, source, added_ts,"
+    " updated_ts FROM repos"
+)
+_SQL_FULL_HEAD = (
+    "SELECT id, owner, name, url, description, stars, language, category,"
+    " tags, progress, note, local_path, readme, status, error, source,"
+    " added_ts, updated_ts FROM repos"
+)
+_SQL_GET_BY_ID_FULL = _SQL_FULL_HEAD + " WHERE id = ?"
+_SQL_GET_BY_ID_SUMMARY = _SQL_SUMMARY_HEAD + " WHERE id = ?"
+_SQL_GET_BY_URL = _SQL_SUMMARY_HEAD + " WHERE url = ?"
+
+# One literal UPDATE per editable field: every value stays a bound parameter
+# and no SET clause is ever assembled at runtime. The keys ARE the whitelist.
+_META_UPDATE_SQL = {
+    "category": "UPDATE repos SET category = ?, updated_ts = ? WHERE id = ?",
+    "tags": "UPDATE repos SET tags = ?, updated_ts = ? WHERE id = ?",
+    "progress": "UPDATE repos SET progress = ?, updated_ts = ? WHERE id = ?",
+    "note": "UPDATE repos SET note = ?, updated_ts = ? WHERE id = ?",
+}
+
 _SORTABLE = {"name": "name", "stars": "stars", "added": "added_ts", "updated": "updated_ts"}
 
 
@@ -125,34 +150,32 @@ class RepoStore:
             self._conn.commit()
         return str(row[0])
 
-    def _fetch(
-        self, where: str = "", params: tuple = (), cols=_SUMMARY_COLS, order: str = "added_ts DESC"
-    ) -> list[dict[str, Any]]:
-        sql = f"SELECT {','.join(cols)} FROM repos"
-        if where:
-            sql += f" WHERE {where}"
-        rows = self._conn.execute(f"{sql} ORDER BY {order}", params).fetchall()
-        return [_row(cols, r) for r in rows]
-
     def get(self, rid: str, *, with_readme: bool = True) -> dict[str, Any] | None:
         # Readers and writers share the same lock
-        cols = _COLS if with_readme else _SUMMARY_COLS
+        sql = _SQL_GET_BY_ID_FULL if with_readme else _SQL_GET_BY_ID_SUMMARY
         with self._lock:
-            rows = self._fetch("id = ?", (rid,), cols=cols)
-        return rows[0] if rows else None
+            row = self._conn.execute(sql, (rid,)).fetchone()
+        return _row(_COLS if with_readme else _SUMMARY_COLS, row) if row else None
 
     def get_by_url(self, url: str) -> dict[str, Any] | None:
         with self._lock:
-            rows = self._fetch("url = ?", (url,))
-        return rows[0] if rows else None
+            row = self._conn.execute(_SQL_GET_BY_URL, (url,)).fetchone()
+        return _row(_SUMMARY_COLS, row) if row else None
 
     def list(
         self, *, sort: str = "added", desc: bool = True, category: str = ""
     ) -> builtins.list[dict[str, Any]]:
         col = _SORTABLE.get(sort, "added_ts")
-        where, params = ("category = ?", (category,)) if category else ("", ())
+        order = col + (" DESC" if desc else " ASC")
+        sql = _SQL_SUMMARY_HEAD
+        params: list[Any] = []
+        if category:
+            sql += " WHERE category = ?"
+            params.append(category)
+        sql += " ORDER BY " + order
         with self._lock:
-            return self._fetch(where, params, order=f"{col} {'DESC' if desc else 'ASC'}")
+            rows = self._conn.execute(sql, params).fetchall()
+        return [_row(_SUMMARY_COLS, r) for r in rows]
 
     def categories(self) -> builtins.list[str]:
         with self._lock:
@@ -180,7 +203,7 @@ class RepoStore:
             wheres.append("(name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')")
             like = f"%{escape_like(query)}%"
             params += [like, like]
-        sql = f"SELECT {','.join(_SUMMARY_COLS)} FROM repos"
+        sql = _SQL_SUMMARY_HEAD
         if wheres:
             sql += " WHERE " + " AND ".join(wheres)
         sql += " ORDER BY added_ts DESC LIMIT ?"
@@ -219,20 +242,14 @@ class RepoStore:
         }
 
     def set_meta(self, rid: str, **fields: Any) -> None:
-        allowed = {"category", "tags", "progress", "note"}
-        updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
+        updates = {k: v for k, v in fields.items() if k in _META_UPDATE_SQL and v is not None}
         if not updates:
             return
-        sets, params = [], []
-        for k, v in updates.items():
-            sets.append(f"{k} = ?")
-            params.append(json.dumps(v, ensure_ascii=False) if k == "tags" else v)
-        params += [time.time(), rid]
+        now = time.time()
         with self._lock:
-            self._conn.execute(
-                f"UPDATE repos SET {', '.join(sets)}, updated_ts = ? WHERE id = ?",
-                params,
-            )
+            for k, v in updates.items():
+                value = json.dumps(v, ensure_ascii=False) if k == "tags" else v
+                self._conn.execute(_META_UPDATE_SQL[k], (value, now, rid))
             self._conn.commit()
 
     def set_status(self, rid: str, status: str, *, local_path: str = "", error: str = "") -> None:

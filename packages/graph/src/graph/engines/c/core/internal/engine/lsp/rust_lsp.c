@@ -29,6 +29,7 @@
 #include "rust_cargo.h"
 #include "../helpers.h"
 #include <ctype.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1550,9 +1551,14 @@ const EngineType *rust_eval_expr_type(RustLSPContext *ctx, TSNode node) {
                 }
                 if (base && base->kind == ENGINE_TYPE_TUPLE) {
                     char *idx_text = rust_node_text(ctx, field);
-                    int idx = atoi(idx_text);
-                    if (idx >= 0 && idx < base->data.tuple.count) {
-                        return base->data.tuple.elems[idx];
+                    if (idx_text) {
+                        char *end = NULL;
+                        errno = 0;
+                        long idx = strtol(idx_text, &end, 10);
+                        if (errno == 0 && end != idx_text && *end == '\0' && idx >= 0 &&
+                            idx < base->data.tuple.count) {
+                            return base->data.tuple.elems[idx];
+                        }
                     }
                 }
             }

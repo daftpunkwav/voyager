@@ -15,6 +15,7 @@
 #include "../helpers.h"
 #include "tree_sitter/api.h"
 #include <ctype.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -2026,8 +2027,10 @@ static const EngineType *py_eval_expr_type_uncached(PyLSPContext *ctx, TSNode no
             if (!ts_node_is_null(sub) && strcmp(ts_node_type(sub), "integer") == 0) {
                 char *idx_text = py_node_text(ctx, sub);
                 if (idx_text) {
-                    int idx = atoi(idx_text);
-                    if (idx >= 0 && idx < n)
+                    char *end = NULL;
+                    errno = 0;
+                    long idx = strtol(idx_text, &end, 10);
+                    if (errno == 0 && end != idx_text && *end == '\0' && idx >= 0 && idx < n)
                         return args[idx];
                 }
             }

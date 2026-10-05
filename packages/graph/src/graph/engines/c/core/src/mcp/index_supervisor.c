@@ -12,6 +12,8 @@
 #include "foundation/profile.h"  /* engine_profile_active (keep worker log under ENGINE_PROFILE) */
 #include "ui/http_server.h"      /* engine_http_server_resolve_binary_path */
 
+#include <errno.h>  /* strtol overflow check */
+#include <limits.h> /* INT_MAX (seconds→ms bound) */
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -298,8 +300,11 @@ static int worker_quiet_timeout_ms(void) {
     if (engine_safe_getenv("ENGINE_INDEX_WORKER_TIMEOUT_S", timeout_seconds, sizeof(timeout_seconds),
                         NULL) &&
         timeout_seconds[0]) {
-        long s = atol(timeout_seconds);
-        if (s > 0) {
+        char *end = NULL;
+        errno = 0;
+        long s = strtol(timeout_seconds, &end, ENGINE_DECIMAL_BASE);
+        if (errno == 0 && end != timeout_seconds && *end == '\0' && s > 0 &&
+            s <= INT_MAX / 1000) {
             return (int)(s * 1000);
         }
     }

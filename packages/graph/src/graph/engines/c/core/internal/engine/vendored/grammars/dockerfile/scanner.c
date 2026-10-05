@@ -240,6 +240,12 @@ static bool scan_content(scanner_state *state, TSLexer *lexer,
         if (state->heredocs[0][delim_idx] == '\0') {
             lexer->result_symbol = HEREDOC_END;
 
+            // Read the next marker's strip flag BEFORE the shift: after the
+            // shift heredocs[0] is the old heredocs[1], and the marker being
+            // freed here must never be dereferenced again.
+            const bool next_strips =
+                state->heredoc_count > 1 && state->heredocs[1][0] == '-';
+
             // Shift the first heredoc off the list.
             free(state->heredocs[0]);
 
@@ -250,7 +256,7 @@ static bool scan_content(scanner_state *state, TSLexer *lexer,
             state->heredoc_count--;
 
             if (state->heredoc_count > 0) {
-                state->stripping_heredoc = state->heredocs[0][0] == '-';
+                state->stripping_heredoc = next_strips;
             } else {
                 state->in_heredoc = false;
             }

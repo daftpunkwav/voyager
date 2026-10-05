@@ -9,11 +9,13 @@
 #include "simhash/minhash.h"
 #include "semantic/ast_profile.h"
 #include "tree_sitter/api.h" // TSNode, ts_node_*
-#include <stdint.h>          // uint32_t
-#include <stdio.h>           // snprintf (ObjectScript storage/trigger sidecars)
-#include <stdlib.h>          // getenv, atoi
-#include <string.h>
 #include <ctype.h>
+#include <errno.h>   // strtol overflow check
+#include <limits.h>  // INT_MAX
+#include <stdint.h>  // uint32_t
+#include <stdio.h>   // snprintf (ObjectScript storage/trigger sidecars)
+#include <stdlib.h>  // getenv, strtol
+#include <string.h>
 
 // Buffer sizes for local arrays (base classes, params, return types).
 #define MAX_COMMENT_LEN 500
@@ -5881,9 +5883,11 @@ typedef struct {
 static int wd_stack_max(void) {
     const char *e = getenv("ENGINE_WALK_DEFS_MAX");
     if (e) {
-        int v = atoi(e);
-        if (v > 0) {
-            return v;
+        char *end = NULL;
+        errno = 0;
+        long v = strtol(e, &end, ENGINE_DECIMAL_BASE);
+        if (errno == 0 && end != e && *end == '\0' && v > 0 && v <= INT_MAX) {
+            return (int)v;
         }
     }
     return 8 * 1024 * 1024; // 8M frames (~320 MB) default

@@ -430,15 +430,16 @@ char *engine_project_name_from_path(const char *abs_path) {
         name_path = real;
     }
 
-    /* Work on mutable copy */
-    char *path = strdup(name_path);
-    if (!path) {
+    /* Work on mutable copy. `src` owns the raw copy and is freed as soon as
+     * the mapped buffer replaces it; nothing reads it afterwards. */
+    char *src = strdup(name_path);
+    if (!src) {
         return NULL;
     }
-    size_t len = strlen(path);
+    size_t len = strlen(src);
 
     /* Normalize path separators */
-    engine_normalize_path_sep(path);
+    engine_normalize_path_sep(src);
 
     /* Map every character that is unsafe for portable project DB names. We
      * keep derived names in [A-Za-z0-9._-], so anything else — path
@@ -456,12 +457,12 @@ char *engine_project_name_from_path(const char *abs_path) {
     static const char hex_digits[] = "0123456789abcdef";
     char *mapped = malloc(len * 2 + 1); /* worst case: every byte → 2 hex chars */
     if (!mapped) {
-        free(path);
+        free(src);
         return strdup("root");
     }
     size_t mlen = 0;
     for (size_t i = 0; i < len; i++) {
-        unsigned char c = (unsigned char)path[i];
+        unsigned char c = (unsigned char)src[i];
         bool safe = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
                     c == '.' || c == '_' || c == '-';
         if (safe) {
@@ -474,8 +475,8 @@ char *engine_project_name_from_path(const char *abs_path) {
         }
     }
     mapped[mlen] = '\0';
-    free(path);
-    path = mapped;
+    free(src);
+    char *path = mapped;
     len = mlen;
 
     /* Collapse consecutive dashes, and consecutive dots (the validator also

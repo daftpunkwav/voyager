@@ -77,6 +77,24 @@ _SQL_SUMMARY_HEAD = (
     " note, status, error, source, added_ts, updated_ts FROM documents"
 )
 
+# Single-row fetch: full literal, column list identical to the summary head
+# (kept in lockstep with _COLS, which feeds _row via zip).
+_SQL_GET_DOC = (
+    "SELECT id, title, filename, ext, local_path, category, tags, progress,"
+    " note, status, error, source, added_ts, updated_ts FROM documents"
+    " WHERE id = ?"
+)
+
+# One literal UPDATE per editable field: every value stays a bound parameter
+# and no SET clause is ever assembled at runtime. The keys ARE the whitelist.
+_META_UPDATE_SQL = {
+    "title": "UPDATE documents SET title = ?, updated_ts = ? WHERE id = ?",
+    "category": "UPDATE documents SET category = ?, updated_ts = ? WHERE id = ?",
+    "tags": "UPDATE documents SET tags = ?, updated_ts = ? WHERE id = ?",
+    "progress": "UPDATE documents SET progress = ?, updated_ts = ? WHERE id = ?",
+    "note": "UPDATE documents SET note = ?, updated_ts = ? WHERE id = ?",
+}
+
 _SORTABLE = {"added": "added_ts", "updated": "updated_ts", "title": "title"}
 
 
@@ -119,19 +137,10 @@ class DocStore:
             self._conn.commit()
         return did
 
-    def _fetch(
-        self, where: str = "", params: tuple = (), order: str = "added_ts DESC"
-    ) -> list[dict[str, Any]]:
-        sql = _SQL_SUMMARY_HEAD
-        if where:
-            sql += f" WHERE {where}"
-        rows = self._conn.execute(f"{sql} ORDER BY {order}", params).fetchall()
-        return [_row(r) for r in rows]
-
     def get(self, did: str) -> dict[str, Any] | None:
         with self._lock:
-            rows = self._fetch("id = ?", (did,))
-        return rows[0] if rows else None
+            row = self._conn.execute(_SQL_GET_DOC, (did,)).fetchone()
+        return _row(row) if row else None
 
     def list(
         self,
@@ -158,31 +167,25 @@ class DocStore:
             like = f"%{escape_like(query)}%"
             params += [like, like]
         col = _SORTABLE.get(sort, "added_ts")
-        order = f"{col} {'DESC' if desc else 'ASC'}"
+        order = col + (" DESC" if desc else " ASC")
         sql = _SQL_SUMMARY_HEAD
         if wheres:
             sql += " WHERE " + " AND ".join(wheres)
-        sql += f" ORDER BY {order} LIMIT ?"
+        sql += " ORDER BY " + order + " LIMIT ?"
         params.append(limit)
         with self._lock:
             rows = self._conn.execute(sql, params).fetchall()
         return [_row(r) for r in rows]
 
     def set_meta(self, did: str, **fields: Any) -> None:
-        allowed = {"category", "tags", "progress", "note", "title"}
-        updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
+        updates = {k: v for k, v in fields.items() if k in _META_UPDATE_SQL and v is not None}
         if not updates:
             return
-        sets, params = [], []
-        for k, v in updates.items():
-            sets.append(f"{k} = ?")
-            params.append(json.dumps(v, ensure_ascii=False) if k == "tags" else v)
-        params += [time.time(), did]
+        now = time.time()
         with self._lock:
-            self._conn.execute(
-                f"UPDATE documents SET {', '.join(sets)}, updated_ts = ? WHERE id = ?",
-                params,
-            )
+            for k, v in updates.items():
+                value = json.dumps(v, ensure_ascii=False) if k == "tags" else v
+                self._conn.execute(_META_UPDATE_SQL[k], (value, now, did))
             self._conn.commit()
 
     def set_status(self, did: str, status: str, *, error: str = "") -> None:

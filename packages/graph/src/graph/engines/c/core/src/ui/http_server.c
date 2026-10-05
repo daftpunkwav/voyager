@@ -291,9 +291,12 @@ static void handle_logs(engine_http_conn_t *c, const engine_http_req_t *req) {
     char lines_str[16] = {0};
     int max_lines = 100;
     if (engine_http_query_param(req->query, "lines", lines_str, (int)sizeof(lines_str))) {
-        int v = atoi(lines_str);
-        if (v > 0 && v <= LOG_RING_SIZE)
-            max_lines = v;
+        char *end = NULL;
+        errno = 0;
+        long v = strtol(lines_str, &end, 10);
+        if (errno == 0 && end != lines_str && *end == '\0' && v > 0 && v <= LOG_RING_SIZE) {
+            max_lines = (int)v;
+        }
     }
 
     engine_mutex_lock(&g_log_mutex);

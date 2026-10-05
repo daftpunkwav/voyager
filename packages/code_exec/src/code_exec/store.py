@@ -118,8 +118,9 @@ class ExecutionStore:
             ).fetchall()
             ids = [r[0] for r in old] + [r[0] for r in extra]
             if ids:
-                marks = ",".join("?" for _ in ids)
-                self._conn.execute(f"DELETE FROM executions WHERE id IN ({marks})", ids)
+                self._conn.executemany(
+                    "DELETE FROM executions WHERE id = ?", [(exec_id,) for exec_id in ids]
+                )
                 self._conn.commit()
         for exec_id in ids:
             self._remove_artifacts(exec_id)
