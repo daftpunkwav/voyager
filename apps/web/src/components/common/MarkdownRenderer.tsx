@@ -13,7 +13,15 @@
  * - Resolve wiki links and internal paths in-app; open external links in new tabs
  */
 
-import { Children, createContext, memo, useContext, useState, type CSSProperties } from 'react';
+import {
+  Children,
+  createContext,
+  isValidElement,
+  memo,
+  useContext,
+  useState,
+  type CSSProperties,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown, { type Options as MarkdownOptions } from 'react-markdown';
@@ -129,41 +137,34 @@ function ArchStack({
 interface MarkdownImageProps {
   src?: string;
   alt?: string;
+  title?: string;
   openLightbox: (state: { src: string; alt: string } | null) => void;
 }
 
-/** Markdown image control: opens the lightbox; inside a markdown link it stays a plain image because the anchor is its single tab stop and activation target. */
-function MarkdownImage({ src, alt, openLightbox, ...props }: MarkdownImageProps) {
+/**
+ * Markdown image control. Standalone images are wrapped in a native button
+ * that opens the lightbox; images inside a real markdown link stay a plain
+ * image because the anchor is their single tab stop and activation target.
+ */
+function MarkdownImage({ src, alt, title, openLightbox }: MarkdownImageProps) {
   const inLink = useContext(InMarkdownLink);
-  const resolved = safeImgSrc(
-    typeof src === 'string' && src.startsWith('attachment://') ? src : src
-  );
+  const resolved = safeImgSrc(src);
   if (!resolved) return null;
   const altText = alt ?? '';
-  if (inLink) {
-    return <img {...props} src={resolved} alt={altText} loading="lazy" className="md-img" />;
-  }
+  const img = <img src={resolved} alt={altText} title={title} loading="lazy" className="md-img" />;
+  if (inLink) return img;
   // No alt text: fall back to the file name so the control and the lightbox
   // dialog keep a non-empty accessible name.
   const lightboxName = altText.trim() || resolved.split('/').pop() || 'image';
   return (
-    <img
-      {...props}
-      src={resolved}
-      alt={altText}
-      loading="lazy"
-      className="md-img"
-      role="button"
-      tabIndex={0}
+    <button
+      type="button"
+      className="md-img-button"
       aria-label={lightboxName}
       onClick={() => openLightbox({ src: resolved, alt: lightboxName })}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          openLightbox({ src: resolved, alt: lightboxName });
-        }
-      }}
-    />
+    >
+      {img}
+    </button>
   );
 }
 
@@ -300,8 +301,15 @@ function MarkdownRendererInner({
                 </a>
               );
             };
-            // Descendants (a markdown image) must know they sit inside a link.
-            return <InMarkdownLink.Provider value={true}>{renderLink()}</InMarkdownLink.Provider>;
+            // Descendants (a markdown image) must know they sit inside a real
+            // link. The rejected-URL and empty-wiki fallbacks render a bare
+            // span; images under those keep their own lightbox control.
+            const rendered = renderLink();
+            return (
+              <InMarkdownLink.Provider value={isValidElement(rendered) && rendered.type === 'a'}>
+                {rendered}
+              </InMarkdownLink.Provider>
+            );
           },
           img: (imageProps) => <MarkdownImage {...imageProps} openLightbox={setLightbox} />,
           table: ({ children, ...props }) => (

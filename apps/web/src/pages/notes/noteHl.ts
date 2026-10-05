@@ -27,30 +27,31 @@ export const NOTE_HL_LABEL: Record<(typeof NOTE_HL_TONES)[number], string> = {
  * Marker names: built-in tones or rgb plus 6 hex digits (case-insensitive
  * when scanning; canonical form is lowercase).
  *
- * The tone grammar has a single source: the factory functions below spell the
- * vocabulary out in regex literals and every other highlight module builds
- * its patterns from them. Global (/g) regexes carry lastIndex state, so the
- * factories return a fresh object per call instead of sharing one constant;
- * behavior-level tests assert each palette tone is recognized by every path.
+ * NOTE_HL_KIND is the single source of the tone alternation: every pattern
+ * in this module is built from it, and the grammar test asserts each palette
+ * tone is recognized. Global (/g) regexes carry lastIndex state, so the /g
+ * patterns are factory functions returning a fresh object per call instead
+ * of shared constants.
  */
+export const NOTE_HL_KIND = 'warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}';
 export const NOTES_HL_RGB_KEY = 'notes-hl-rgb';
 export const NOTES_HL_RGB_DEFAULT = '7c3aed';
 
 const RGB_TONE = /^rgb[0-9a-f]{6}$/;
 const HEX6 = /^[0-9a-f]{6}$/;
 
-/** `==tone:` prefix anywhere in the string; fresh /gi object per call. */
+/** `==tone:` prefix at any position; fresh /gi object per call. */
 export function hlTonePrefixRegex(): RegExp {
-  return /==(warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}):/gi;
+  return new RegExp(`==(${NOTE_HL_KIND}):`, 'gi');
 }
 
-/** Full `==tone:text==` markup; fresh /gi object per call. */
+/** Full closed `==tone:text==` markup; fresh /gi object per call. */
 export function hlToneClosedRegex(): RegExp {
-  return /==(warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}):((?:(?!==).)+)==/gi;
+  return new RegExp(`==(${NOTE_HL_KIND}):((?:(?!==).)+)==`, 'gi');
 }
 
 /** Tone prefix anchored at the string start; flagless and stateless. */
-export const HL_TONE_AT = /^(warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}):/i;
+export const HL_TONE_AT = new RegExp(`^(${NOTE_HL_KIND}):`, 'i');
 
 export function isRgbTone(tone: string): boolean {
   return RGB_TONE.test(tone);
