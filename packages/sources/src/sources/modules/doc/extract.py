@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from xml.etree import ElementTree
 
-from defusedxml import DefusedXmlException
+from defusedxml.common import DefusedXmlException
 from defusedxml.ElementTree import fromstring as _xml_fromstring
 
 #: Soft per-chapter cap (chars); unstructured docs chunk at this size,
