@@ -9,6 +9,8 @@
  *   TOC display and slug generation
  */
 
+import { hlTonePrefixRegex } from './noteHl';
+
 export interface NoteTocItem {
   level: number;
   text: string;
@@ -41,9 +43,6 @@ export function extractNoteToc(content: string): NoteTocItem[] {
 
 /** TOC display and slug generation use the visible heading with highlight markers stripped, matching the preview node text. */
 export function tocHeadingLabel(text: string): string {
-  const stripped = text
-    .replace(/==(warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}):/gi, '')
-    .replace(/==/g, '')
-    .trim();
+  const stripped = text.replace(hlTonePrefixRegex(), '').replace(/==/g, '').trim();
   return stripped || text;
 }

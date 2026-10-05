@@ -13,7 +13,7 @@
  * - Resolve wiki links and internal paths in-app; open external links in new tabs
  */
 
-import { Children, memo, useState, type CSSProperties } from 'react';
+import { Children, createContext, memo, useContext, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown, { type Options as MarkdownOptions } from 'react-markdown';
@@ -30,6 +30,9 @@ import { MdCodeBlock } from '@/components/common/MdCodeBlock';
 import { Lightbox } from '@/components/common/Lightbox';
 import { safeHttpUrl, safeImgSrc, safeInternalPath } from '@/utils/safeUrl';
 import { routes } from '@/utils/routes';
+
+/* True while rendering descendants of a markdown link: a linked image must stay a plain image because the anchor is its single tab stop and activation target. */
+const InMarkdownLink = createContext(false);
 
 interface MarkdownRendererProps {
   content: string;
@@ -123,6 +126,47 @@ function ArchStack({
   );
 }
 
+interface MarkdownImageProps {
+  src?: string;
+  alt?: string;
+  openLightbox: (state: { src: string; alt: string } | null) => void;
+}
+
+/** Markdown image control: opens the lightbox; inside a markdown link it stays a plain image because the anchor is its single tab stop and activation target. */
+function MarkdownImage({ src, alt, openLightbox, ...props }: MarkdownImageProps) {
+  const inLink = useContext(InMarkdownLink);
+  const resolved = safeImgSrc(
+    typeof src === 'string' && src.startsWith('attachment://') ? src : src
+  );
+  if (!resolved) return null;
+  const altText = alt ?? '';
+  if (inLink) {
+    return <img {...props} src={resolved} alt={altText} loading="lazy" className="md-img" />;
+  }
+  // No alt text: fall back to the file name so the control and the lightbox
+  // dialog keep a non-empty accessible name.
+  const lightboxName = altText.trim() || resolved.split('/').pop() || 'image';
+  return (
+    <img
+      {...props}
+      src={resolved}
+      alt={altText}
+      loading="lazy"
+      className="md-img"
+      role="button"
+      tabIndex={0}
+      aria-label={lightboxName}
+      onClick={() => openLightbox({ src: resolved, alt: lightboxName })}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openLightbox({ src: resolved, alt: lightboxName });
+        }
+      }}
+    />
+  );
+}
+
 function MarkdownRendererInner({
   content,
   className,
@@ -204,81 +248,62 @@ function MarkdownRendererInner({
             );
           },
           a: ({ children, href, ...props }) => {
-            if (typeof href === 'string' && href.startsWith('#wiki:')) {
-              let target = href.slice('#wiki:'.length);
-              try {
-                target = decodeURIComponent(target);
-              } catch {
-                /* Invalid percent-encoding: fall back to the raw string as the title */
+            const renderLink = () => {
+              if (typeof href === 'string' && href.startsWith('#wiki:')) {
+                let target = href.slice('#wiki:'.length);
+                try {
+                  target = decodeURIComponent(target);
+                } catch {
+                  /* Invalid percent-encoding: fall back to the raw string as the title */
+                }
+                target = target.trim();
+                if (!target) return <span>{children}</span>;
+                const to = routes.note(target);
+                return (
+                  <a
+                    {...props}
+                    href={to}
+                    className="md-wiki-link"
+                    title={t('common:markdown.wikiLinkTitle', { target })}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (onWikiLink) onWikiLink(target);
+                      else navigate(to);
+                    }}
+                  >
+                    {children}
+                  </a>
+                );
               }
-              target = target.trim();
-              if (!target) return <span>{children}</span>;
-              const to = routes.note(target);
+              const internal = typeof href === 'string' ? safeInternalPath(href) : null;
+              if (internal) {
+                return (
+                  <a
+                    {...props}
+                    href={internal}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      navigate(internal);
+                    }}
+                  >
+                    {children}
+                  </a>
+                );
+              }
+              const safe = typeof href === 'string' ? safeHttpUrl(href) : undefined;
+              if (!safe) {
+                return <span>{children}</span>;
+              }
               return (
-                <a
-                  {...props}
-                  href={to}
-                  className="md-wiki-link"
-                  title={t('common:markdown.wikiLinkTitle', { target })}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (onWikiLink) onWikiLink(target);
-                    else navigate(to);
-                  }}
-                >
+                <a {...props} href={safe} target="_blank" rel="noreferrer noopener">
                   {children}
                 </a>
               );
-            }
-            const internal = typeof href === 'string' ? safeInternalPath(href) : null;
-            if (internal) {
-              return (
-                <a
-                  {...props}
-                  href={internal}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    navigate(internal);
-                  }}
-                >
-                  {children}
-                </a>
-              );
-            }
-            const safe = typeof href === 'string' ? safeHttpUrl(href) : undefined;
-            if (!safe) {
-              return <span>{children}</span>;
-            }
-            return (
-              <a {...props} href={safe} target="_blank" rel="noreferrer noopener">
-                {children}
-              </a>
-            );
+            };
+            // Descendants (a markdown image) must know they sit inside a link.
+            return <InMarkdownLink.Provider value={true}>{renderLink()}</InMarkdownLink.Provider>;
           },
-          img: ({ src, alt, ...props }) => {
-            const resolved = safeImgSrc(
-              typeof src === 'string' && src.startsWith('attachment://') ? src : src
-            );
-            if (!resolved) return null;
-            return (
-              <img
-                {...props}
-                src={resolved}
-                alt={alt ?? ''}
-                loading="lazy"
-                className="md-img"
-                role="button"
-                tabIndex={0}
-                onClick={() => setLightbox({ src: resolved, alt: alt ?? '' })}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setLightbox({ src: resolved, alt: alt ?? '' });
-                  }
-                }}
-              />
-            );
-          },
+          img: (imageProps) => <MarkdownImage {...imageProps} openLightbox={setLightbox} />,
           table: ({ children, ...props }) => (
             <div className="markdown-table-wrap">
               <table {...props}>{children}</table>

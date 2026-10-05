@@ -25,15 +25,32 @@ export const NOTE_HL_LABEL: Record<(typeof NOTE_HL_TONES)[number], string> = {
 
 /**
  * Marker names: built-in tones or rgb plus 6 hex digits (case-insensitive
- * when scanning; canonical form is lowercase). The tone grammar is spelled
- * out in the regex literals below so the patterns stay precompiled literals.
+ * when scanning; canonical form is lowercase).
+ *
+ * The tone grammar has a single source: the factory functions below spell the
+ * vocabulary out in regex literals and every other highlight module builds
+ * its patterns from them. Global (/g) regexes carry lastIndex state, so the
+ * factories return a fresh object per call instead of sharing one constant;
+ * behavior-level tests assert each palette tone is recognized by every path.
  */
 export const NOTES_HL_RGB_KEY = 'notes-hl-rgb';
 export const NOTES_HL_RGB_DEFAULT = '7c3aed';
 
 const RGB_TONE = /^rgb[0-9a-f]{6}$/;
 const HEX6 = /^[0-9a-f]{6}$/;
-const TONE_AT = /^(warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}):/i;
+
+/** `==tone:` prefix anywhere in the string; fresh /gi object per call. */
+export function hlTonePrefixRegex(): RegExp {
+  return /==(warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}):/gi;
+}
+
+/** Full `==tone:text==` markup; fresh /gi object per call. */
+export function hlToneClosedRegex(): RegExp {
+  return /==(warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}):((?:(?!==).)+)==/gi;
+}
+
+/** Tone prefix anchored at the string start; flagless and stateless. */
+export const HL_TONE_AT = /^(warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}):/i;
 
 export function isRgbTone(tone: string): boolean {
   return RGB_TONE.test(tone);
@@ -58,7 +75,7 @@ export function readToneAt(
   text: string,
   innerFrom: number
 ): { tone: NoteHlTone; innerStart: number } | null {
-  const m = TONE_AT.exec(text.slice(innerFrom));
+  const m = HL_TONE_AT.exec(text.slice(innerFrom));
   if (!m || m.index !== 0) return null;
   return { tone: m[1].toLowerCase() as NoteHlTone, innerStart: innerFrom + m[0].length };
 }
@@ -68,7 +85,7 @@ export function parseNoteHighlight(text: string): { tone: NoteHlTone; inner: str
   if (!(text.startsWith('==') && text.endsWith('==') && text.length >= 4)) return null;
   const body = text.slice(2, -2);
   if (body.includes('==')) return null;
-  const m = TONE_AT.exec(body);
+  const m = HL_TONE_AT.exec(body);
   if (m && m.index === 0) {
     return { tone: m[1].toLowerCase() as NoteHlTone, inner: body.slice(m[0].length) };
   }
@@ -94,8 +111,8 @@ export function notesHlMarkProps(raw: unknown): { className: string; color?: str
 
 /** Recovers ==tone:...== markup accidentally written inside code fences: only for ASCII-diagram rendering, never mutates the source. */
 export function recoverTonedMarkup(text: string): string {
-  const closed = /==(warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}):((?:(?!==).)+)==/gi;
-  const open = /==(warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}):/gi;
+  const closed = hlToneClosedRegex();
+  const open = hlTonePrefixRegex();
   let s = text;
   for (let n = 0; n < 16; n += 1) {
     const next = s.replace(closed, '$2');

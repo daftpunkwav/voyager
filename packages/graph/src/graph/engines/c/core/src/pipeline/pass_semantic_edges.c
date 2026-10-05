@@ -761,6 +761,15 @@ static void sig_build_worker(int worker_id, void *ctx_ptr) {
     }
 }
 
+/* Read-only view of sem_bucket_t for the scoring pass: aliases sem_bucket_t
+ * arrays through a cast, so the element size must stay identical (locked by
+ * the _Static_assert after sem_bucket_t). */
+typedef struct {
+    int *items;
+    int count;
+    int cap; /* stride mirror of sem_bucket_t; never read here */
+} sem_bucket_view_t;
+
 /* ── Parallel Phase 6: Score candidates + collect edges ──────────── */
 
 typedef struct {
@@ -770,13 +779,12 @@ typedef struct {
     engine_sem_config_t cfg;
     int func_count;
 
-    /* LSH buckets (read-only during scoring); layout mirrors sem_bucket_t
-     * (band_buckets is a cast of sem_bucket_t**) but only the members that
-     * are actually read here. */
-    struct {
-        int *items;
-        int count;
-    } **band_buckets;
+    /* LSH buckets (read-only during scoring); the view aliases sem_bucket_t
+     * arrays (band_buckets is a cast of sem_bucket_t**), so the element type
+     * sem_bucket_view_t must keep the full sem_bucket_t layout: the unused
+     * `cap` member is required for the array stride to match (locked by the
+     * _Static_assert next to sem_bucket_t). */
+    sem_bucket_view_t **band_buckets;
 
     /* Per-worker edge buffer */
     deferred_edge_buf_t *worker_bufs;
@@ -925,6 +933,12 @@ typedef struct {
     int count;
     int cap;
 } sem_bucket_t;
+
+/* score_ctx_t.band_buckets aliases sem_bucket_t arrays through
+ * sem_bucket_view_t; a layout drift would make every bucket past index 0
+ * read the wrong slots. */
+_Static_assert(sizeof(sem_bucket_t) == sizeof(sem_bucket_view_t),
+               "sem_bucket_t changed; update sem_bucket_view_t in score_ctx_t");
 
 /* Canonical node order: by qualified name (unique per node), id tie-break
  * for defensiveness. Gives the semantic pass a stable, content-derived input
