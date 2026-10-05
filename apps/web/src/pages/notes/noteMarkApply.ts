@@ -10,7 +10,6 @@
  */
 
 import {
-  NOTE_HL_KIND,
   parseNoteHighlight,
   wrapNoteHighlight,
   type NoteHlAction,
@@ -42,7 +41,7 @@ function flattenTonedMarkup(text: string): string {
       s = s.slice(0, m.start) + s.slice(m.innerStart, m.innerEnd) + s.slice(m.end);
     }
   }
-  s = s.replace(new RegExp(`==(${NOTE_HL_KIND}):`, 'gi'), '');
+  s = s.replace(/==(warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}):/gi, '');
   return s.replace(/(^|[^=])==(?!=)/g, '$1');
 }
 
@@ -198,7 +197,7 @@ function stripAllMarks(text: string): string {
       s = s.slice(0, m.start) + s.slice(m.innerStart, m.innerEnd) + s.slice(m.end);
     }
   }
-  return s.replace(new RegExp(`==(${NOTE_HL_KIND}):`, 'gi'), '');
+  return s.replace(/==(warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}):/gi, '');
 }
 
 function intervalTransform(doc: string, from: number, to: number, action: NoteHlAction): string {

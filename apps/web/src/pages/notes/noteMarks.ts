@@ -4,7 +4,6 @@
  */
 
 export {
-  NOTE_HL_KIND,
   NOTE_HL_LABEL,
   NOTE_HL_TONES,
   NOTES_HL_RGB_DEFAULT,

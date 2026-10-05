@@ -23,14 +23,17 @@ export const NOTE_HL_LABEL: Record<(typeof NOTE_HL_TONES)[number], string> = {
   sand: 'hl.sand',
 };
 
-/** Marker names: built-in tones or rgb plus 6 hex digits (case-insensitive when scanning; canonical form is lowercase). */
-export const NOTE_HL_KIND = 'warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}';
+/**
+ * Marker names: built-in tones or rgb plus 6 hex digits (case-insensitive
+ * when scanning; canonical form is lowercase). The tone grammar is spelled
+ * out in the regex literals below so the patterns stay precompiled literals.
+ */
 export const NOTES_HL_RGB_KEY = 'notes-hl-rgb';
 export const NOTES_HL_RGB_DEFAULT = '7c3aed';
 
 const RGB_TONE = /^rgb[0-9a-f]{6}$/;
 const HEX6 = /^[0-9a-f]{6}$/;
-const TONE_AT = new RegExp(`^(${NOTE_HL_KIND}):`, 'i');
+const TONE_AT = /^(warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}):/i;
 
 export function isRgbTone(tone: string): boolean {
   return RGB_TONE.test(tone);
@@ -79,7 +82,7 @@ export function wrapNoteHighlight(inner: string, tone: NoteHlTone): string {
 /** The preview sanitizer only allows known notes-hl-* classes; custom colors carry an inline --notes-hl custom property. */
 export function notesHlMarkProps(raw: unknown): { className: string; color?: string } {
   const text = Array.isArray(raw) ? raw.join(' ') : String(raw ?? '');
-  const named = new RegExp(`\\bnotes-hl-(${NOTE_HL_TONES.join('|')})\\b`).exec(text);
+  const named = /\bnotes-hl-(warm|cool|rose|lime|violet|sand)\b/.exec(text);
   if (named) return { className: `notes-hl-${named[1]}` };
   const rgb = /\bnotes-hl-(rgb[0-9a-f]{6})\b/i.exec(text);
   if (rgb) {
@@ -91,8 +94,8 @@ export function notesHlMarkProps(raw: unknown): { className: string; color?: str
 
 /** Recovers ==tone:...== markup accidentally written inside code fences: only for ASCII-diagram rendering, never mutates the source. */
 export function recoverTonedMarkup(text: string): string {
-  const closed = new RegExp(`==(${NOTE_HL_KIND}):((?:(?!==).)+)==`, 'gi');
-  const open = new RegExp(`==(${NOTE_HL_KIND}):`, 'gi');
+  const closed = /==(warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}):((?:(?!==).)+)==/gi;
+  const open = /==(warm|cool|rose|lime|violet|sand|rgb[0-9a-fA-F]{6}):/gi;
   let s = text;
   for (let n = 0; n < 16; n += 1) {
     const next = s.replace(closed, '$2');
