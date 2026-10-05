@@ -7,6 +7,7 @@
  * - Host the note-generation prompt bar for the organizer persona
  */
 import type { Project, ProjectProgress } from '@/api/types';
+import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { GLASS_OUTER } from '@/constants/glassTokens';
 
@@ -37,12 +38,14 @@ export function ProjectProgressCard({
   onGenerateNote,
 }: ProjectProgressCardProps) {
   const { t } = useTranslation('sources');
+  const listRef = useRef<HTMLDivElement>(null);
   return (
     <div className={`pd-progress ${GLASS_OUTER}`}>
       <div className="pd-progress-head">
         <span className="label">{t('sources:progress.label')}</span>
       </div>
       <div
+        ref={listRef}
         className="pd-progress-list"
         role="radiogroup"
         aria-label={t('sources:progress.label')}
@@ -51,9 +54,10 @@ export function ProjectProgressCard({
           e.preventDefault();
           const step = e.key === 'ArrowRight' ? 1 : -1;
           const at = PD_PROGRESS.findIndex((p) => p.id === project.progress);
-          const next =
-            PD_PROGRESS[(Math.max(at, 0) + step + PD_PROGRESS.length) % PD_PROGRESS.length];
-          onProgressChange(next.id);
+          const nextAt = (Math.max(at, 0) + step + PD_PROGRESS.length) % PD_PROGRESS.length;
+          onProgressChange(PD_PROGRESS[nextAt].id);
+          // Roving focus: the next arrow press acts on the focused radio.
+          listRef.current?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[nextAt]?.focus();
         }}
       >
         {PD_PROGRESS.map((p) => (

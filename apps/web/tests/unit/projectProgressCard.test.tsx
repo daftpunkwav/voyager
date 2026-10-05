@@ -65,12 +65,13 @@ describe('ProjectProgressCard progress radios', () => {
     expect(onProgressChange).toHaveBeenCalledWith('mastered');
   });
 
-  it('selects the neighbor progress on arrow keys', () => {
+  it('selects the neighbor progress on arrow keys and moves focus', () => {
     const onProgressChange = vi.fn();
     const { rerender } = renderCard('learning', onProgressChange);
 
     fireEvent.keyDown(screen.getByRole('radiogroup'), { key: 'ArrowRight' });
     expect(onProgressChange).toHaveBeenLastCalledWith('learned');
+    expect(screen.getByRole('radio', { name: '已学习' })).toHaveFocus();
 
     rerender(
       <ProjectProgressCard
@@ -83,5 +84,6 @@ describe('ProjectProgressCard progress radios', () => {
     );
     fireEvent.keyDown(screen.getByRole('radiogroup'), { key: 'ArrowLeft' });
     expect(onProgressChange).toHaveBeenLastCalledWith('learning');
+    expect(screen.getByRole('radio', { name: '学习中' })).toHaveFocus();
   });
 });
