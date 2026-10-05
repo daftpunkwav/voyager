@@ -124,8 +124,8 @@ jobs:
           set -euo pipefail
           results="secrets=$SECRETS audit_web=$AUDIT_WEB audit_py=$AUDIT_PY policy=$POLICY"
           echo "$results"
-          if grep -qE '=(failure|cancelled)' <<< "$results"; then
-            echo "::error::one or more security gates failed or were cancelled"
+          if grep -qE '=(failure|cancelled|abandoned)' <<< "$results"; then
+            echo "::error::one or more security gates failed, were cancelled, or were abandoned"
             exit 1
           fi
           echo "all security gates passed"
