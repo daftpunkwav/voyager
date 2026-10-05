@@ -384,7 +384,7 @@ export function LlmModelEditDialog({
         </div>
 
         <div className="form-row">
-          <label>{t('llm.modelEdit.inputTypes')}</label>
+          <span>{t('llm.modelEdit.inputTypes')}</span>
           <div
             className="llm-model-dialog__toggles"
             role="group"
@@ -405,7 +405,7 @@ export function LlmModelEditDialog({
         </div>
 
         <div className="form-row">
-          <label>{t('llm.modelEdit.reasoning')}</label>
+          <span>{t('llm.modelEdit.reasoning')}</span>
           <div className="llm-model-dialog__toggles">
             <button
               type="button"

@@ -214,6 +214,7 @@ export function NotesWorkspace({
           >
             <button
               type="button"
+              role="separator"
               className="notes-toc-handle"
               data-testid="notes-toc-handle"
               aria-label={t('notes:workspace.tocHandleAria')}

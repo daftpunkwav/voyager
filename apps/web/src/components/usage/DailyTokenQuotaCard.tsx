@@ -43,7 +43,7 @@ export function DailyTokenQuotaCard() {
     <div className={`${GLASS_CHIP} usage-panel usage-quota`}>
       <div className="usage-quota-head">
         <h3 className="usage-panel-title">{t('usage:quota.title')}</h3>
-        <span className="usage-quota-value" aria-label={t('usage:quota.usedAria')}>
+        <span className="usage-quota-value">
           {/* Placeholder while data is loading: the default limit of 0 would misleadingly show "unlimited" */}
           {isLoading ? (
             '—'

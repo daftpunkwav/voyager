@@ -75,9 +75,9 @@ export function FilterDropdown({
         </span>
       </button>
       {open && (
-        <ul className="filter-dropdown-menu" id={listId} role="listbox">
+        <div className="filter-dropdown-menu" id={listId} role="listbox">
           {options.map((opt) => (
-            <li key={opt.value || '__all__'} role="presentation">
+            <div key={opt.value || '__all__'} role="presentation">
               <button
                 type="button"
                 role="option"
@@ -90,9 +90,9 @@ export function FilterDropdown({
               >
                 {opt.label}
               </button>
-            </li>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

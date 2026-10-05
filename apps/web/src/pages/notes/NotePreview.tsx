@@ -164,7 +164,11 @@ export const NotePreview = memo(function NotePreview({
       {!hasBody ? (
         <p className="muted">{t('notes:preview.noBody')}</p>
       ) : showSource ? (
-        <pre className="preview-block-source" aria-label={t('notes:preview.sourceAria')}>
+        <pre
+          className="preview-block-source"
+          role="region"
+          aria-label={t('notes:preview.sourceAria')}
+        >
           {content}
         </pre>
       ) : (

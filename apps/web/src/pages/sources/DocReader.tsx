@@ -186,6 +186,7 @@ export function DocReader() {
               strokeWidth="2"
               width={16}
               height={16}
+              aria-hidden="true"
             >
               <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
             </svg>

@@ -47,8 +47,9 @@ export function ProjectProgressCard({
           <button
             key={p.id}
             type="button"
+            role="radio"
             className={`pd-progress-pill ${p.className}`}
-            aria-selected={project.progress === p.id ? 'true' : 'false'}
+            aria-checked={project.progress === p.id ? 'true' : 'false'}
             onClick={() => onProgressChange(p.id)}
           >
             <span className="dot" />
@@ -65,6 +66,7 @@ export function ProjectProgressCard({
             strokeWidth="2"
             width={16}
             height={16}
+            aria-hidden="true"
           >
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
             <polyline points="14 2 14 8 20 8" />

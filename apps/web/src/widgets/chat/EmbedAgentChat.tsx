@@ -175,6 +175,7 @@ export function EmbedAgentChat({
             strokeWidth="2.2"
             width={16}
             height={16}
+            aria-hidden="true"
           >
             <path d="M5 12h14M13 5l7 7-7 7" />
           </svg>

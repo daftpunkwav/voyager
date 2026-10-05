@@ -168,7 +168,7 @@ export function SourcesPage() {
 function KindTabs({ tab, onChange }: { tab: KindTab; onChange: (t: KindTab) => void }) {
   const { t } = useTranslation('sources');
   return (
-    <nav className="kind-tabs" role="tablist" aria-label={t('sources:list.kindAria')}>
+    <div className="kind-tabs" role="tablist" aria-label={t('sources:list.kindAria')}>
       {TABS.map((tabItem) => (
         <button
           key={tabItem.key}
@@ -181,6 +181,6 @@ function KindTabs({ tab, onChange }: { tab: KindTab; onChange: (t: KindTab) => v
           {t(tabItem.labelKey)}
         </button>
       ))}
-    </nav>
+    </div>
   );
 }

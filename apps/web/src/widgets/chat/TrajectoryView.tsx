@@ -219,7 +219,15 @@ export function TrajectoryView() {
                 top: `${laneFor(r.kind) * 16}px`,
               }}
               title={r.text.slice(0, 120)}
+              role="button"
+              tabIndex={0}
               onClick={() => scrollToRow(r.key)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  scrollToRow(r.key);
+                }
+              }}
             />
           ))}
         </div>

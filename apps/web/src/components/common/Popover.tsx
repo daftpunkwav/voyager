@@ -80,7 +80,7 @@ export function Popover({
   return (
     <div
       role={role}
-      aria-label={ariaLabel}
+      aria-label={role ? ariaLabel : undefined}
       className={[
         'popover-pop',
         `popover-pop--${direction}`,

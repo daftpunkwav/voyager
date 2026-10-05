@@ -51,7 +51,7 @@ export function DeliveryCard({
   };
 
   return (
-    <div className={`delivery-card${failed ? ' delivery-card--failed' : ''}`} role="article">
+    <article className={`delivery-card${failed ? ' delivery-card--failed' : ''}`}>
       <div className="delivery-card__head">
         <span className="delivery-card__avatar" aria-hidden>
           <AgentCharacterHead
@@ -93,6 +93,6 @@ export function DeliveryCard({
           </button>
         ) : null}
       </div>
-    </div>
+    </article>
   );
 }

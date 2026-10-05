@@ -119,9 +119,10 @@ export function EditProjectModal({
         </header>
 
         <div className="edit-project-modal__body">
-          <label className="edit-project-field">
+          <label className="edit-project-field" htmlFor="edit-project-category">
             <span className="label">{t('sources:edit.field.category')}</span>
             <GlassSelect
+              id="edit-project-category"
               aria-label={t('sources:edit.field.categoryAria')}
               value={categoryId}
               options={categoryOptions}

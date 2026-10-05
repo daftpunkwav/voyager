@@ -211,11 +211,7 @@ export function GraphNodeDetail({
               })}
             </div>
             {similarPageCount > 1 && (
-              <div
-                className="similar-pager"
-                role="navigation"
-                aria-label={t('graph:detail.similarPagerAria')}
-              >
+              <nav className="similar-pager" aria-label={t('graph:detail.similarPagerAria')}>
                 <button
                   type="button"
                   className="similar-pager__btn"
@@ -237,7 +233,7 @@ export function GraphNodeDetail({
                 >
                   ›
                 </button>
-              </div>
+              </nav>
             )}
           </div>
         )}

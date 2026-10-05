@@ -34,7 +34,7 @@ export function ProjectHero({
   return (
     <div className={`pd-hero ${GLASS_OUTER}`}>
       <div className="pd-avatar">
-        <svg viewBox="-11.5 -10.232 23 20.464" fill="none">
+        <svg viewBox="-11.5 -10.232 23 20.464" fill="none" aria-hidden="true">
           <circle r="2.05" fill="#fff" />
           <g stroke="#fff" strokeWidth="1" fill="none">
             <ellipse rx="11" ry="4.2" />
@@ -48,7 +48,7 @@ export function ProjectHero({
         <p className="pd-desc">{project.description}</p>
         <div className="pd-meta">
           <span className="pd-meta-item">
-            <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}>
+            <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14} aria-hidden="true">
               <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
             </svg>
             <strong>{abbrevCount(project.stars)}</strong>&nbsp;stars
@@ -78,6 +78,7 @@ export function ProjectHero({
             strokeWidth="2"
             width={14}
             height={14}
+            aria-hidden="true"
           >
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3" />

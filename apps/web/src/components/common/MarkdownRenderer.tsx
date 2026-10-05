@@ -267,7 +267,15 @@ function MarkdownRendererInner({
                 alt={alt ?? ''}
                 loading="lazy"
                 className="md-img"
+                role="button"
+                tabIndex={0}
                 onClick={() => setLightbox({ src: resolved, alt: alt ?? '' })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setLightbox({ src: resolved, alt: alt ?? '' });
+                  }
+                }}
               />
             );
           },

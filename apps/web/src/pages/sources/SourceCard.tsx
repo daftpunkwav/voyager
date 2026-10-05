@@ -23,6 +23,7 @@ const KIND_META: Record<string, { icon: React.ReactNode }> = {
         strokeWidth="2"
         width={18}
         height={18}
+        aria-hidden="true"
       >
         <path d="M3 7l9-4 9 4v10l-9 4-9-4V7z" />
         <path d="M3 7l9 4 9-4" />
@@ -38,6 +39,7 @@ const KIND_META: Record<string, { icon: React.ReactNode }> = {
         strokeWidth="2"
         width={18}
         height={18}
+        aria-hidden="true"
       >
         <path d="M14 2H6a1 1 0 0 0-1 1v18a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7z" />
         <path d="M14 2v5h5M9 13h6M9 17h6" />
@@ -53,6 +55,7 @@ const KIND_META: Record<string, { icon: React.ReactNode }> = {
         strokeWidth="2"
         width={18}
         height={18}
+        aria-hidden="true"
       >
         <circle cx="12" cy="12" r="9" />
         <path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z" />
