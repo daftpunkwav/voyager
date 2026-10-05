@@ -223,24 +223,31 @@ class NoteStore:
         new_content = updates.get("content")
         now = time.time()
         with self._lock:
-            old_content = None
-            if new_content is not None and self.history_keep > 0:
-                row = self._conn.execute(
-                    "SELECT content FROM notes WHERE id = ?", (nid,)
-                ).fetchone()
-                old_content = row[0] if row else None
-            hit = False
-            for k, v in updates.items():
-                value = json.dumps(v, ensure_ascii=False) if k == "tags" else v
-                cur = self._conn.execute(_UPDATE_FIELD_SQL[k], (value, now, nid))
-                hit = hit or cur.rowcount > 0
-            if old_content is not None and old_content != new_content:
-                self._snapshot_locked(nid, old_content)
-            # Commit after the snapshot: the version INSERT/DELETE open their own
-            # implicit transaction, so committing before the snapshot left it
-            # uncommitted — it survived only if a later write happened to commit
-            # again, and was rolled back by close() (or a crash) otherwise.
-            self._conn.commit()
+            try:
+                old_content = None
+                if new_content is not None and self.history_keep > 0:
+                    row = self._conn.execute(
+                        "SELECT content FROM notes WHERE id = ?", (nid,)
+                    ).fetchone()
+                    old_content = row[0] if row else None
+                hit = False
+                for k, v in updates.items():
+                    value = json.dumps(v, ensure_ascii=False) if k == "tags" else v
+                    cur = self._conn.execute(_UPDATE_FIELD_SQL[k], (value, now, nid))
+                    hit = hit or cur.rowcount > 0
+                if old_content is not None and old_content != new_content:
+                    self._snapshot_locked(nid, old_content)
+                # Commit after the snapshot: the version INSERT/DELETE open their own
+                # implicit transaction, so committing before the snapshot left it
+                # uncommitted — it survived only if a later write happened to commit
+                # again, and was rolled back by close() (or a crash) otherwise.
+                self._conn.commit()
+            except BaseException:
+                # A later field failing must not leave earlier fields to be
+                # persisted by the next commit; the snapshot must not be
+                # skipped for saved content either.
+                self._conn.rollback()
+                raise
         return hit
 
     def delete(self, nid: str) -> None:

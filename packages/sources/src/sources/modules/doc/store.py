@@ -183,10 +183,16 @@ class DocStore:
             return
         now = time.time()
         with self._lock:
-            for k, v in updates.items():
-                value = json.dumps(v, ensure_ascii=False) if k == "tags" else v
-                self._conn.execute(_META_UPDATE_SQL[k], (value, now, did))
-            self._conn.commit()
+            try:
+                for k, v in updates.items():
+                    value = json.dumps(v, ensure_ascii=False) if k == "tags" else v
+                    self._conn.execute(_META_UPDATE_SQL[k], (value, now, did))
+                self._conn.commit()
+            except BaseException:
+                # A later field failing must not leave earlier fields to be
+                # persisted by the next commit.
+                self._conn.rollback()
+                raise
 
     def set_status(self, did: str, status: str, *, error: str = "") -> None:
         with self._lock:

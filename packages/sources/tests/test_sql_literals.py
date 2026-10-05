@@ -70,10 +70,15 @@ def test_web_sql_heads_columns_match_cols() -> None:
     assert _head_of(_WEB_SQL_GET) == _WEB_COLS
 
 
-def test_get_executes_the_locked_head(tmp_path: Path) -> None:
+def test_get_executes_the_locked_literal(tmp_path: Path) -> None:
     store = DocStore(tmp_path / "t.db")
+    first = store.add({"title": "first"})
+    store.add({"title": "second"})
     recording = _RecordingConn(store._conn)
     store._conn = recording  # type: ignore[assignment]
     assert store.get("missing") is None
-    assert len(recording.executed) == 1
-    assert recording.executed[0].startswith(_DOC_SQL_HEAD)
+    hit = store.get(first)
+    assert hit is not None and hit["title"] == "first"
+    # Exact-literal pin: a statement that drops the WHERE id = ? predicate
+    # would otherwise pass a startswith(head) check and return the first row.
+    assert recording.executed == [_DOC_SQL_GET, _DOC_SQL_GET]

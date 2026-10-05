@@ -2027,11 +2027,30 @@ static const EngineType *py_eval_expr_type_uncached(PyLSPContext *ctx, TSNode no
             if (!ts_node_is_null(sub) && strcmp(ts_node_type(sub), "integer") == 0) {
                 char *idx_text = py_node_text(ctx, sub);
                 if (idx_text) {
-                    char *end = NULL;
-                    errno = 0;
-                    long idx = strtol(idx_text, &end, 10);
-                    if (errno == 0 && end != idx_text && *end == '\0' && idx >= 0 && idx < n)
-                        return args[idx];
+                    /* Python integer literals may carry digit separators
+                     * ('1_0'); strtol stops at the underscore, so strip
+                     * them into a bounded local copy first. A literal too
+                     * long for the copy cannot index any real tuple. */
+                    char digits[32];
+                    size_t ndigits = 0;
+                    bool copy_ok = idx_text[0] != '\0';
+                    for (const char *p = idx_text; *p; p++) {
+                        if (*p == '_')
+                            continue;
+                        if (ndigits >= sizeof(digits) - 1) {
+                            copy_ok = false;
+                            break;
+                        }
+                        digits[ndigits++] = *p;
+                    }
+                    digits[ndigits] = '\0';
+                    if (copy_ok) {
+                        char *end = NULL;
+                        errno = 0;
+                        long idx = strtol(digits, &end, 10);
+                        if (errno == 0 && end != digits && *end == '\0' && idx >= 0 && idx < n)
+                            return args[idx];
+                    }
                 }
             }
             if (n == 1)

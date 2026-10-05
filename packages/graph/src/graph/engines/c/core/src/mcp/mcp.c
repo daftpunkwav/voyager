@@ -7636,9 +7636,11 @@ static char *index_run_supervised(engine_mcp_server_t *srv, const char *args) {
     int cap = 100;
     const char *cap_env = getenv("ENGINE_INDEX_MAX_RESTARTS");
     if (cap_env && cap_env[0]) {
-        int v = atoi(cap_env);
-        if (v > 0) {
-            cap = v;
+        char *end = NULL;
+        errno = 0;
+        long v = strtol(cap_env, &end, 10);
+        if (errno == 0 && end != cap_env && *end == '\0' && v > 0 && v <= INT_MAX) {
+            cap = (int)v;
         }
     }
 

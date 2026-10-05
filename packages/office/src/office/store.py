@@ -89,9 +89,15 @@ class DocumentStore:
             return existing
         now = time.time()
         with self._lock:
-            for k, v in fields.items():
-                self._conn.execute(_UPDATE_FIELD_SQL[k], (v, now, did))
-            self._conn.commit()
+            try:
+                for k, v in fields.items():
+                    self._conn.execute(_UPDATE_FIELD_SQL[k], (v, now, did))
+                self._conn.commit()
+            except BaseException:
+                # A later field failing must not leave earlier fields to be
+                # persisted by the next commit.
+                self._conn.rollback()
+                raise
         updated = self.get(did)
         if updated is None:
             # backstop: the capability layer (_require_doc) is the not-found path;

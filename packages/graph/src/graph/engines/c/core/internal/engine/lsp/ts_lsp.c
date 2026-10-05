@@ -27,6 +27,7 @@
  */
 
 #include "ts_lsp.h"
+#include <errno.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,8 +63,12 @@ static _Thread_local bool g_ts_type_budget_warned;
 static void ts_type_budget_reset(size_t source_len) {
     const char *e = getenv("ENGINE_TS_TYPE_BUDGET");
     if (e && e[0]) {
-        long v = atol(e);
-        g_ts_type_budget = (v > 0) ? v : -1;
+        char *end = NULL;
+        errno = 0;
+        long v = strtol(e, &end, 10);
+        /* Unparseable or out-of-range overrides degrade to -1 (unlimited),
+         * same as the old atol mapping but without partial parses. */
+        g_ts_type_budget = (errno == 0 && end != e && *end == '\0' && v > 0) ? v : -1;
     } else {
         g_ts_type_budget = 1000000 + (long)source_len * 64;
     }
