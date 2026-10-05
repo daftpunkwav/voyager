@@ -221,6 +221,7 @@ export function TrajectoryView() {
                 top: `${laneFor(r.kind) * 16}px`,
               }}
               title={r.text.slice(0, 120)}
+              aria-label={`${r.kind} ${r.key}`}
               role="button"
               tabIndex={0}
               onClick={() => scrollToRow(r.key)}
