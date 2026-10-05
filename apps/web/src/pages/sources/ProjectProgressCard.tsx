@@ -73,6 +73,7 @@ export function ProjectProgressCard({
             role="radio"
             className={`pd-progress-pill ${p.className}`}
             aria-checked={project.progress === p.id ? 'true' : 'false'}
+            tabIndex={project.progress === p.id ? 0 : -1}
             onClick={() => onProgressChange(p.id)}
           >
             <span className="dot" />
