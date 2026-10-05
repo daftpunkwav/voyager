@@ -234,6 +234,7 @@ jobs:
           # not a secret. The runner has no .env, and without key material
           # SecretStore is unavailable, which takes set_api_key (and thus
           # the chat composer seed) down with it.
+          # checkov:skip=CKV_SECRET_6:scratch placeholder, not real key material
           SECRETS_ENCRYPTION_KEY: e2e-scratch-only-never-a-real-key
         run: |
           uv run uvicorn host.assemble:build --factory --host 127.0.0.1 --port 8000 > backend.log 2>&1 &
