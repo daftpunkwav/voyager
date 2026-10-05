@@ -40,6 +40,7 @@ export async function callCapability<T = unknown>(
   let resp: Response;
   try {
     resp = await fetch(`/api/${domain}/capabilities/${name}`, {
+      // nosemgrep: same-origin backend call; the ssrf rule targets server-side fetch
       method: 'POST',
       credentials: 'include',
       headers: {
