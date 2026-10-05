@@ -28,9 +28,10 @@ engines:
   biome:
     exclude_paths:
       - "apps/web/**"
-    # Replacement gate: the repo's own ESLint flat config (CI gate:web,
-    # eslint --max-warnings 0) plus tsc cover every rule class this engine
-    # raises for this React app.
+    # Not a coverage replacement but a scope statement: this engine's
+    # default ruleset is Qwik-specific and does not apply to this React
+    # app. React-specific lint is enforced by the repo's own ESLint flat
+    # config plus tsc (CI gate:web, eslint --max-warnings 0).
   # The engine runs type-aware @typescript-eslint rules without type
   # information (no-confusing-void-expression, no-unnecessary-condition,
   # no-redundant-type-constituents, prefer-nullish-coalescing) and the base
@@ -41,9 +42,15 @@ engines:
     exclude_paths:
       - "apps/web/**"
       - "scripts/**"
-    # Replacement gate: the repo's own ESLint flat config is the
-    # authoritative JS/TS linter (CI gate:web, eslint --max-warnings 0,
-    # type-aware rules run with real type information via tsc).
+    # Replacement gate, stated precisely: the repo's own ESLint flat config
+    # is the authoritative JS/TS linter (CI gate:web, eslint --max-warnings
+    # 0) and tsc provides type checking -- but the local ESLint rule set is
+    # the non-type-checked recommended config, so the type-aware rule
+    # classes this engine raises here (no-floating-promises,
+    # no-misused-promises, require-await, ...) have no local automated
+    # equivalent. Their disposition is the per-site manual audit recorded
+    # in PR #31 (43 findings reviewed, zero real defects), not an
+    # automated gate.
   # Reports every call to memcpy/strlen/open/getenv/... as an audit advisory
   # regardless of surrounding guards. The C sidecar is dormant (the Python
   # fallback engine serves requests) and its call sites received a targeted
