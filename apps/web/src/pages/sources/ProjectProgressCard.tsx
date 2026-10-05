@@ -52,12 +52,18 @@ export function ProjectProgressCard({
         onKeyDown={(e) => {
           if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
           e.preventDefault();
+          const radios = Array.from(
+            listRef.current?.querySelectorAll<HTMLButtonElement>('[role="radio"]') ?? []
+          );
+          // Arrow navigation is anchored on the focused radio (roving
+          // focus), falling back to the selected value when none is focused.
+          const focusedAt = radios.findIndex((b) => b === document.activeElement);
+          const at =
+            focusedAt >= 0 ? focusedAt : PD_PROGRESS.findIndex((p) => p.id === project.progress);
           const step = e.key === 'ArrowRight' ? 1 : -1;
-          const at = PD_PROGRESS.findIndex((p) => p.id === project.progress);
           const nextAt = (Math.max(at, 0) + step + PD_PROGRESS.length) % PD_PROGRESS.length;
           onProgressChange(PD_PROGRESS[nextAt].id);
-          // Roving focus: the next arrow press acts on the focused radio.
-          listRef.current?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[nextAt]?.focus();
+          radios[nextAt]?.focus();
         }}
       >
         {PD_PROGRESS.map((p) => (

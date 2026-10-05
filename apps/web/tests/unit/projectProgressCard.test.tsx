@@ -86,4 +86,19 @@ describe('ProjectProgressCard progress radios', () => {
     expect(onProgressChange).toHaveBeenLastCalledWith('learning');
     expect(screen.getByRole('radio', { name: '学习中' })).toHaveFocus();
   });
+
+  it('anchors arrow navigation on the focused radio, not the selection', () => {
+    const onProgressChange = vi.fn();
+    renderCard('learning', onProgressChange);
+
+    // Focus sits on 'mastered' while the selection is 'learning': the next
+    // arrow press must move from the focused radio and wrap around.
+    fireEvent.click(screen.getByRole('radio', { name: '已掌握' }));
+    screen.getByRole('radio', { name: '已掌握' }).focus();
+    onProgressChange.mockClear();
+    fireEvent.keyDown(screen.getByRole('radio', { name: '已掌握' }), { key: 'ArrowRight' });
+
+    expect(onProgressChange).toHaveBeenLastCalledWith('none');
+    expect(screen.getByRole('radio', { name: '待开始' })).toHaveFocus();
+  });
 });
