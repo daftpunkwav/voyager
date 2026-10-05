@@ -770,11 +770,12 @@ typedef struct {
     engine_sem_config_t cfg;
     int func_count;
 
-    /* LSH buckets (read-only during scoring) */
+    /* LSH buckets (read-only during scoring); layout mirrors sem_bucket_t
+     * (band_buckets is a cast of sem_bucket_t**) but only the members that
+     * are actually read here. */
     struct {
         int *items;
         int count;
-        int cap;
     } **band_buckets;
 
     /* Per-worker edge buffer */

@@ -179,6 +179,7 @@ elif true; then
 else
     echo "WARNING: running a PARTIAL sanitizer lane — excluded: $MSAN_EXCLUDE" >&2
     echo "WARNING: a green result here does NOT mean the tree is MSan-clean." >&2
+    # shellcheck disable=SC2086  # intentional: word-split the multi-line exclusion list item by item
     excl_pattern="$(printf '%s\n' $MSAN_EXCLUDE | tr '\n' '|' | sed 's/|$//')"
     suites="$(./build/msan/test-runner --list-suites | grep -Evx "$excl_pattern")"
     # Fail loudly if an entry matched no suite: a typo (or a TEST name given
