@@ -20,7 +20,7 @@ contributor workflow the contract prescribes.
 from __future__ import annotations
 
 import re
-import subprocess
+import subprocess  # nosec B404  # git invocation is the purpose of this check
 import sys
 from pathlib import Path
 
@@ -37,7 +37,7 @@ STRAYS_ALLOWED = {
 
 
 def git_blob_hash(path: Path) -> str:
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B603 B607  # constant argv, dev script
         ["git", "hash-object", "--", str(path)],
         cwd=REPO_ROOT,
         check=True,

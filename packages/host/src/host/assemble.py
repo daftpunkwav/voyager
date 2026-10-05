@@ -184,7 +184,10 @@ def _wire_card(
     """
     module_name = f"{card.module}.wiring"
     try:
-        module = importlib.import_module(module_name)
+        # module name from the internal ServiceCard registry
+        module = importlib.import_module(
+            module_name
+        )  # nosemgrep:python.lang.security.audit.non-literal-import.non-literal-import
     except Exception as exc:
         raise RuntimeError(f"domain {card.domain} failed to load {module_name}: {exc}") from exc
     wire_fn = getattr(module, "wire", None)

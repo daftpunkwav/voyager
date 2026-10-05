@@ -135,6 +135,7 @@ def to_schema_spec(target: Any, name: str | None = None) -> SchemaSpec:
             resolved_name = name or str(getattr(target, "__name__", "DataclassModel"))
             return SchemaSpec(name=resolved_name, schema=schema)
         except Exception:  # noqa: BLE001, S110  # fallback when TypeAdapter is unavailable
+            # nosec B110
             pass
 
     raise TypeError(f"unsupported schema target: {type(target)!r}")

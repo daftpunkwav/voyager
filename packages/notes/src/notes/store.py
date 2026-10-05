@@ -98,6 +98,13 @@ _ALL_COLS = (
     "created_ts",
     "updated_ts",
 )
+
+# Plain-literal SELECT head; the column list is kept in lockstep with
+# _ALL_COLS (which feeds _full_row via zip), never widened to *.
+_SQL_GET_NOTE = (
+    "SELECT id, title, content, tags, source_id, node_id, archived,"
+    " pinned, trashed_ts, created_ts, updated_ts FROM notes WHERE id = ?"
+)
 _STATE_CONDS: dict[str, tuple[str, list[Any]]] = {
     "active": ("archived = 0 AND trashed_ts IS NULL", []),
     "archived": ("archived = 1 AND trashed_ts IS NULL", []),
@@ -169,9 +176,7 @@ class NoteStore:
 
     def get(self, nid: str) -> dict[str, Any] | None:
         with self._lock:
-            row = self._conn.execute(
-                f"SELECT {','.join(_ALL_COLS)} FROM notes WHERE id = ?", (nid,)
-            ).fetchone()
+            row = self._conn.execute(_SQL_GET_NOTE, (nid,)).fetchone()
         return _full_row(row) if row else None
 
     def exists_by_title(self, title: str) -> str | None:
@@ -217,8 +222,9 @@ class NoteStore:
                     "SELECT content FROM notes WHERE id = ?", (nid,)
                 ).fetchone()
                 old_content = row[0] if row else None
+            # SET column names come from the allowlist above; values are bound.
             cur = self._conn.execute(
-                f"UPDATE notes SET {', '.join(sets)}, updated_ts = ? WHERE id = ?",
+                f"UPDATE notes SET {', '.join(sets)}, updated_ts = ? WHERE id = ?",  # nosec B608  # nosemgrep
                 (*params, time.time(), nid),
             )
             if old_content is not None and old_content != new_content:
@@ -244,10 +250,17 @@ class NoteStore:
         if not nids:
             return
         placeholders = ",".join("?" * len(nids))
-        self._conn.execute(f"DELETE FROM notes WHERE id IN ({placeholders})", nids)
-        self._conn.execute(f"DELETE FROM note_versions WHERE note_id IN ({placeholders})", nids)
+        # Bound parameters only; the IN-list length drives the placeholder count.
         self._conn.execute(
-            f"DELETE FROM note_links WHERE src IN ({placeholders}) OR dst IN ({placeholders})",
+            f"DELETE FROM notes WHERE id IN ({placeholders})",  # nosec B608  # nosemgrep
+            nids,
+        )
+        self._conn.execute(
+            f"DELETE FROM note_versions WHERE note_id IN ({placeholders})",  # nosec B608  # nosemgrep
+            nids,
+        )
+        self._conn.execute(
+            f"DELETE FROM note_links WHERE src IN ({placeholders}) OR dst IN ({placeholders})",  # nosec B608  # nosemgrep
             [*nids, *nids],
         )
         self._conn.commit()
@@ -342,8 +355,8 @@ class NoteStore:
         sql = (
             "SELECT id, title, tags, source_id, node_id, archived, pinned,"
             " trashed_ts, created_ts, updated_ts,"
-            f" {excerpt_sql} AS excerpt"
-            f" FROM notes WHERE {' AND '.join(conds)}"
+            f" {excerpt_sql} AS excerpt"  # nosec B608  # nosemgrep  # module-constant columns; conds are literal fragments
+            f" FROM notes WHERE {' AND '.join(conds)}"  # nosec B608  # nosemgrep
         )
         sql += f" ORDER BY pinned DESC, {col} {direction} LIMIT ?"
         params = [*query_params, *params, limit]

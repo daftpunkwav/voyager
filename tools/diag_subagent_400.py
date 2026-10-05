@@ -48,7 +48,8 @@ def call(base, key, model, input_schema, label):
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=60):
+        # one-shot dev diagnostic against the locally configured provider base
+        with urllib.request.urlopen(req, timeout=60):  # nosec B310  # nosemgrep:python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected  # nosemgrep:python_urlopen_rule-urllib-urlopen
             print(f"[{label}] HTTP 200")
             return True
     except urllib.error.HTTPError as exc:

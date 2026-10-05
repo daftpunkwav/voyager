@@ -47,6 +47,18 @@ _COLS = (
     "updated_ts",
 )
 
+# Plain-literal SELECT heads; the column lists are kept in lockstep with
+# _COLS (which feeds _row via zip), never widened to *.
+_SQL_GET_EXEC = (
+    "SELECT id, runtime, kind, status, exit_code, stdout, stderr, artifact_dir,"
+    " created_ts, updated_ts FROM executions WHERE id=?"
+)
+_SQL_LIST_RECENT = (
+    "SELECT id, runtime, kind, status, exit_code, stdout, stderr, artifact_dir,"
+    " created_ts, updated_ts FROM executions"
+    " ORDER BY created_ts DESC, rowid DESC LIMIT ?"
+)
+
 #: Keep finished executions for 30 days, at most 200 rows (each row may hold
 #: up to ~1MB stdout + ~1MB stderr, so the cap bounds burst loops at a few
 #: hundred MB worst case).
@@ -107,7 +119,11 @@ class ExecutionStore:
             ids = [r[0] for r in old] + [r[0] for r in extra]
             if ids:
                 marks = ",".join("?" for _ in ids)
-                self._conn.execute(f"DELETE FROM executions WHERE id IN ({marks})", ids)
+                # Bound parameters only; the IN-list length drives the mark count.
+                self._conn.execute(
+                    f"DELETE FROM executions WHERE id IN ({marks})",  # nosec B608  # nosemgrep
+                    ids,
+                )
                 self._conn.commit()
         for exec_id in ids:
             self._remove_artifacts(exec_id)
@@ -165,9 +181,7 @@ class ExecutionStore:
 
     def get(self, exec_id: str) -> dict[str, Any] | None:
         with self._lock:
-            row = self._conn.execute(
-                f"SELECT {','.join(_COLS)} FROM executions WHERE id=?", (exec_id,)
-            ).fetchone()
+            row = self._conn.execute(_SQL_GET_EXEC, (exec_id,)).fetchone()
         return _row(_COLS, row) if row else None
 
     def list_recent(self, limit: int = 100) -> list[dict[str, Any]]:
@@ -175,11 +189,7 @@ class ExecutionStore:
             # rowid DESC breaks created_ts ties (a burst of creates inside one
             # clock tick): "newest" must match prune's row selection, which
             # already tiebreaks by rowid, or the history order is arbitrary.
-            rows = self._conn.execute(
-                f"SELECT {','.join(_COLS)} FROM executions"
-                " ORDER BY created_ts DESC, rowid DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
+            rows = self._conn.execute(_SQL_LIST_RECENT, (limit,)).fetchall()
         return [_row(_COLS, r) for r in rows]
 
     def close(self) -> None:

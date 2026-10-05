@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404  # subprocess is the purpose of the dev launcher
 import sys
 from typing import IO
 
@@ -68,7 +68,7 @@ def _stop_tree(proc: subprocess.Popen) -> None:
     node with tooling children (esbuild etc.); terminate() alone would leave
     orphans, so taskkill /T takes down the children too."""
     if sys.platform == "win32":
-        subprocess.run(
+        subprocess.run(  # nosec B603 B607  # constant argv, pid of our own child
             ["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, check=False
         )
     else:
@@ -79,7 +79,10 @@ def main() -> None:
     import uvicorn
 
     _acquire_instance_lock()
-    web = subprocess.Popen(_npm_command(), cwd=ROOT / "apps" / "web", shell=False)
+    # argv comes from shutil.which plus constants; shell=False.
+    web = subprocess.Popen(  # nosec B603  # nosemgrep:python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
+        _npm_command(), cwd=ROOT / "apps" / "web", shell=False
+    )
     try:
         uvicorn.run("host.assemble:build", factory=True, host="127.0.0.1", port=8000, reload=False)
     finally:

@@ -118,7 +118,8 @@ class SemanticMemory:
             200
         )  # candidate-pool cap: multi-term scoring needs candidates fetched before ranking
         with self._lock:
-            rows = self._conn.execute(sql, params).fetchall()
+            # conds are literal LIKE fragments per term; the values are bound.
+            rows = self._conn.execute(sql, params).fetchall()  # nosemgrep
         if terms and len(rows) > limit:
             scored = [(score(terms, [r[2], r[4]]), int(r[0]), r) for r in rows]
             scored.sort(key=lambda item: (-item[0], -item[1]))

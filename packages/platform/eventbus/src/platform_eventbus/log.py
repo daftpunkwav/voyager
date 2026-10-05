@@ -149,8 +149,9 @@ class EventLog:
             return 0
         placeholders = ",".join("?" for _ in type_list)
         with self._lock:
+            # Bound parameters only; the IN-list length drives the placeholder count.
             cur = self._conn.execute(
-                f"DELETE FROM events WHERE type IN ({placeholders}) AND ts < ?",
+                f"DELETE FROM events WHERE type IN ({placeholders}) AND ts < ?",  # nosec B608  # nosemgrep
                 (*type_list, before_ts),
             )
             self._conn.commit()

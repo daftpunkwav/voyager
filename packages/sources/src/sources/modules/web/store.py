@@ -91,15 +91,20 @@ class WebStore:
     def _rows(
         self, cols: tuple[str, ...], where: str = "", params: tuple = (), limit: int | None = None
     ) -> list[dict[str, Any]]:
-        sql = f"SELECT {','.join(cols)} FROM webpages"
+        # cols is always a module-constant tuple (_COLS / _LIST_COLS); `where`
+        # is a literal fragment built by the callers with bound parameters.
+        sql = f"SELECT {','.join(cols)} FROM webpages"  # nosec B608  # nosemgrep
         if where:
-            sql += f" WHERE {where}"
+            sql += f" WHERE {where}"  # nosec B608  # nosemgrep
         sql += " ORDER BY added_ts DESC"
         args: list[Any] = list(params)
         if limit is not None:
             sql += " LIMIT ?"
             args.append(limit)
-        return [_row(cols, r) for r in self._conn.execute(sql, args).fetchall()]
+        return [
+            _row(cols, r)
+            for r in self._conn.execute(sql, args).fetchall()  # nosemgrep
+        ]
 
     def get(self, pid: str) -> dict[str, Any] | None:
         # Readers and writers share the same lock
@@ -134,8 +139,9 @@ class WebStore:
             params.append(json.dumps(v, ensure_ascii=False) if k == "tags" else v)
         params += [time.time(), pid]
         with self._lock:
+            # SET names come from the allowlist above; values are bound.
             self._conn.execute(
-                f"UPDATE webpages SET {', '.join(sets)}, updated_ts = ? WHERE id = ?",
+                f"UPDATE webpages SET {', '.join(sets)}, updated_ts = ? WHERE id = ?",  # nosec B608  # nosemgrep
                 params,
             )
             self._conn.commit()
@@ -166,14 +172,14 @@ class WebStore:
             wheres.append("(title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\')")
             params += [like, like]
         cols = _LIST_COLS + ("updated_ts",)
-        sql = f"SELECT {','.join(cols)} FROM webpages"
+        sql = f"SELECT {','.join(cols)} FROM webpages"  # nosec B608  # nosemgrep
         if wheres:
             sql += " WHERE " + " AND ".join(wheres)
         sql += " ORDER BY added_ts DESC LIMIT ?"
         params.append(limit)
         out = []
         with self._lock:
-            rows = self._conn.execute(sql, params).fetchall()
+            rows = self._conn.execute(sql, params).fetchall()  # nosemgrep
         for r in rows:
             d = dict(zip(cols, r))
             out.append(

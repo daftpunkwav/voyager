@@ -250,7 +250,7 @@ def record_span(span: Span) -> None:
         try:
             listener(span)
         except Exception:  # noqa: BLE001, S110  # listener failures must not fail the span caller
-            pass
+            pass  # nosec B110
 
 
 class SpanHandle:

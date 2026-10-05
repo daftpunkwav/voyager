@@ -31,6 +31,11 @@ CREATE INDEX IF NOT EXISTS idx_docs_kind ON documents(kind);
 
 _COLS = ("id", "title", "kind", "blocks", "created_ts", "updated_ts")
 
+# Plain-literal SELECT heads; the column lists are kept in lockstep with
+# _COLS (which feeds _row via zip), never widened to *.
+_SQL_GET_DOC = "SELECT id, title, kind, blocks, created_ts, updated_ts FROM documents WHERE id=?"
+_SQL_LIST_HEAD = "SELECT id, title, kind, blocks, created_ts, updated_ts FROM documents"
+
 
 class DocumentStore:
     """Single table for docs and decks; kind='doc'/'slides' distinguishes sub-domains."""
@@ -59,9 +64,7 @@ class DocumentStore:
     def get(self, did: str) -> dict[str, Any] | None:
         # Reads take the same lock as writes: async handlers may write from other threads.
         with self._lock:
-            row = self._conn.execute(
-                f"SELECT {','.join(_COLS)} FROM documents WHERE id=?", (did,)
-            ).fetchone()
+            row = self._conn.execute(_SQL_GET_DOC, (did,)).fetchone()
         return _row(_COLS, row) if row else None
 
     def update(
@@ -80,7 +83,11 @@ class DocumentStore:
         sets = ", ".join(f"{k}=?" for k in fields)
         params = list(fields.values()) + [time.time(), did]
         with self._lock:
-            self._conn.execute(f"UPDATE documents SET {sets}, updated_ts=? WHERE id=?", params)
+            # SET names come from the keyword-only signature above (title/blocks).
+            self._conn.execute(
+                f"UPDATE documents SET {sets}, updated_ts=? WHERE id=?",  # nosec B608  # nosemgrep
+                params,
+            )
             self._conn.commit()
         updated = self.get(did)
         if updated is None:
@@ -90,7 +97,7 @@ class DocumentStore:
         return updated
 
     def list(self, kind: str = "", limit: int = 100) -> list[dict[str, Any]]:
-        sql = f"SELECT {','.join(_COLS)} FROM documents"
+        sql = _SQL_LIST_HEAD
         params: list[Any] = []
         if kind:
             sql += " WHERE kind=?"
@@ -98,7 +105,7 @@ class DocumentStore:
         sql += " ORDER BY updated_ts DESC LIMIT ?"
         params.append(limit)
         with self._lock:
-            rows = self._conn.execute(sql, params).fetchall()
+            rows = self._conn.execute(sql, params).fetchall()  # nosemgrep
         return [_row(_COLS, r) for r in rows]
 
     def delete(self, did: str) -> bool:

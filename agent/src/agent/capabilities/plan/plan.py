@@ -29,7 +29,8 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
         ),
     )
     def plan(action: str = "status", session_id: str = "", plan: str = "") -> dict:
-        assert deps.plan_gates is not None, "plan gates not wired at assembly"
+        if deps.plan_gates is None:  # unreachable: gates are wired at assembly
+            raise RuntimeError("plan gates not wired at assembly")
         gates = deps.plan_gates
         if action == "status":
             return plan_status(gates, session_id)

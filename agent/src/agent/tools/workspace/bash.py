@@ -141,7 +141,8 @@ def bash_tool(cwd: str | Path) -> AgentTool:
             )
         argv[0] = _resolve_windows_stub(argv[0])
         try:
-            proc = await asyncio.create_subprocess_exec(
+            # policy-gated user command execution; exec form, never a shell
+            proc = await asyncio.create_subprocess_exec(  # nosemgrep:python.lang.security.audit.dangerous-asyncio-create-exec-audit.dangerous-asyncio-create-exec-audit
                 argv[0],
                 *argv[1:],
                 stdout=asyncio.subprocess.PIPE,

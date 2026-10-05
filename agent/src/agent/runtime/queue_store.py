@@ -358,8 +358,9 @@ class QueueStore:
     ) -> list[Job]:
         marks = ",".join("?" for _ in statuses)
         with self._lock:
+            # Bound parameters only; the IN-list length drives the mark count.
             rows = self._conn.execute(
-                f"SELECT id, kind, payload, cron, run_at, priority FROM jobs"
+                f"SELECT id, kind, payload, cron, run_at, priority FROM jobs"  # nosec B608  # nosemgrep
                 f" WHERE status IN ({marks}) ORDER BY run_at ASC LIMIT ?",
                 (*statuses, max(1, limit)),
             ).fetchall()

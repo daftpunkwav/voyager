@@ -154,7 +154,8 @@ async def _timeout_kill(kill_args: list[str]) -> None:
     a wedged daemon cannot hang the timeout path.
     """
     try:
-        killer = await asyncio.create_subprocess_exec(
+        # docker CLI kill of the sandbox container this module created
+        killer = await asyncio.create_subprocess_exec(  # nosemgrep:python.lang.security.audit.dangerous-asyncio-create-exec-audit.dangerous-asyncio-create-exec-audit
             *kill_args,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
@@ -187,7 +188,8 @@ async def _execute(
     "<container>"]) run after a timeout kill of the child itself, for children
     (the docker CLI) whose work outlives their process.
     """
-    proc = await asyncio.create_subprocess_exec(
+    # running user code in the sandbox is the feature; exec form, never a shell
+    proc = await asyncio.create_subprocess_exec(  # nosemgrep:python.lang.security.audit.dangerous-asyncio-create-exec-audit.dangerous-asyncio-create-exec-audit
         *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,

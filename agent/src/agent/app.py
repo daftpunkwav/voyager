@@ -78,7 +78,7 @@ class AgentApp:
             try:
                 await self.dispatcher.flush()
             except Exception:  # noqa: BLE001, S110  # best effort: dispatcher flush failure ignored on drain
-                pass
+                pass  # nosec B110
         bg = getattr(self.master, "_bg", None)
         pending = [t for t in tuple(bg) if not t.done()] if bg else []
         if not pending:

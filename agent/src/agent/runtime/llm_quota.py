@@ -128,7 +128,7 @@ def metered_llm(
                 # before entering this tier (protocol tiering, see
                 # StreamingLLClient): mypy cannot follow that getattr probe,
                 # so narrow explicitly here.
-                stream_llm = cast("StreamingLLClient", llm)
+                stream_llm = cast(StreamingLLClient, llm)
                 try:
                     stream = stream_llm.complete_stream(messages, tools, max_tokens=max_tokens)
                 except TypeError:
