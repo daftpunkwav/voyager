@@ -200,7 +200,9 @@ export function TrajectoryView() {
         />
       </div>
 
-      <div className="chat-traj2__timeline" role="img" aria-label={t('chat:traj.timelineAria')}>
+      {/* group (not img): the timeline hosts focusable span controls, and an
+          img role would hide its descendants from assistive technology. */}
+      <div className="chat-traj2__timeline" role="group" aria-label={t('chat:traj.timelineAria')}>
         <div className="chat-traj2__lanes">
           {LANES.map((l) => (
             <span key={l.labelKey} className="chat-traj2__lane-label">

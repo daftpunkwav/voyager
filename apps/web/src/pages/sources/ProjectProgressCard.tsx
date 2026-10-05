@@ -42,7 +42,20 @@ export function ProjectProgressCard({
       <div className="pd-progress-head">
         <span className="label">{t('sources:progress.label')}</span>
       </div>
-      <div className="pd-progress-list" role="radiogroup" aria-label={t('sources:progress.label')}>
+      <div
+        className="pd-progress-list"
+        role="radiogroup"
+        aria-label={t('sources:progress.label')}
+        onKeyDown={(e) => {
+          if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+          e.preventDefault();
+          const step = e.key === 'ArrowRight' ? 1 : -1;
+          const at = PD_PROGRESS.findIndex((p) => p.id === project.progress);
+          const next =
+            PD_PROGRESS[(Math.max(at, 0) + step + PD_PROGRESS.length) % PD_PROGRESS.length];
+          onProgressChange(next.id);
+        }}
+      >
         {PD_PROGRESS.map((p) => (
           <button
             key={p.id}

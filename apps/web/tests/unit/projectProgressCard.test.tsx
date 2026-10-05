@@ -64,4 +64,24 @@ describe('ProjectProgressCard progress radios', () => {
 
     expect(onProgressChange).toHaveBeenCalledWith('mastered');
   });
+
+  it('selects the neighbor progress on arrow keys', () => {
+    const onProgressChange = vi.fn();
+    const { rerender } = renderCard('learning', onProgressChange);
+
+    fireEvent.keyDown(screen.getByRole('radiogroup'), { key: 'ArrowRight' });
+    expect(onProgressChange).toHaveBeenLastCalledWith('learned');
+
+    rerender(
+      <ProjectProgressCard
+        project={makeProject('learned')}
+        scribeName="voyager"
+        noteGenerating={false}
+        onProgressChange={onProgressChange}
+        onGenerateNote={() => {}}
+      />
+    );
+    fireEvent.keyDown(screen.getByRole('radiogroup'), { key: 'ArrowLeft' });
+    expect(onProgressChange).toHaveBeenLastCalledWith('learning');
+  });
 });
