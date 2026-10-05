@@ -794,9 +794,7 @@
 }
 .pd-shell
   > .pd-main
-  > .glass-card:not(.pd-hero):not(.pd-progress):not(.pd-notes-panel):not(.pd-readme):not(
-    .pd-ai-panel
-  ) {
+  > .glass-card:not(.pd-hero, .pd-progress, .pd-notes-panel, .pd-readme, .pd-ai-panel) {
   padding: 16px 20px;
 }
 
