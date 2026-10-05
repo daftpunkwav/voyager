@@ -33,6 +33,7 @@ import {
 import type { Project, ProjectProgress } from '@/api/types';
 import { useProjectStore } from '@/stores/projectStore';
 import { invalidateOverviewQueries } from '@/utils/invalidateOverview';
+import { createKeyedWriteQueue } from '@/utils/writeQueue';
 
 /** Derive query params from the store; useShallow is required so a new object
  * identity does not trigger infinite re-renders. */
@@ -125,28 +126,17 @@ export function useImportProjects() {
   });
 }
 
-/** Progress writes to one project are serialized: rapid progress changes fire
- *  overlapping mutations, and an unordered commit would let an older
- *  selection land last and revert the stored value. The map keeps each
- *  project's tail promise (one settled entry per project id; the id set is
- *  small) so unrelated projects never wait on each other. */
-const progressWrites = new Map<string, Promise<void>>();
+/** Progress writes to one project are serialized through the keyed write
+ *  queue: rapid progress changes fire overlapping mutations, and an unordered
+ *  commit would let an older selection land last and revert the stored
+ *  value. */
+const enqueueProgressWrite = createKeyedWriteQueue(updateProgress);
 
 export function useUpdateProgress() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, progress }: { id: string; progress: ProjectProgress }) => {
-      const prev = progressWrites.get(id) ?? Promise.resolve();
-      const next: Promise<void> = prev
-        .catch((): void => {})
-        .then(async () => {
-          await updateProgress(id, progress);
-        });
-      progressWrites.set(
-        id,
-        next.catch((): void => {})
-      );
-      await next;
+      await enqueueProgressWrite(id, progress);
     },
     onSuccess: (_d, vars) => {
       void qc.invalidateQueries({ queryKey: ['projects'] });
