@@ -285,11 +285,10 @@ class TrajectoryStore:
         sql = "SELECT seq, run_id, session, subagent, ts, trace_id, actor, kind, name, summary, detail FROM steps"
         if where:
             sql += " WHERE " + " AND ".join(where)
-        # `order` is the literal "ASC"/"DESC" chosen above; values are bound.
-        sql += f" ORDER BY seq {order} LIMIT ?"  # nosec B608  # nosemgrep
+        sql += f" ORDER BY seq {order} LIMIT ?"
         params.append(cap + 1)
         with self._lock:
-            rows = self._conn.execute(sql, params).fetchall()  # nosemgrep
+            rows = self._conn.execute(sql, params).fetchall()
         has_more = len(rows) > cap
         rows = rows[:cap]
         if trim_head:

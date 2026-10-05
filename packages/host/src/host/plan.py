@@ -132,10 +132,7 @@ def register_gateway_settings(cards: list[ServiceCard], store: SettingsStore) ->
             log.debug("gateway %s has no settings module, skip", card.domain)
             continue
         try:
-            # module name from the internal ServiceCard registry, guarded by find_spec
-            module = importlib.import_module(
-                settings_mod
-            )  # nosemgrep:python.lang.security.audit.non-literal-import.non-literal-import
+            module = importlib.import_module(settings_mod)
         except Exception:
             log.exception("failed to import %s, skip settings", settings_mod)
             continue

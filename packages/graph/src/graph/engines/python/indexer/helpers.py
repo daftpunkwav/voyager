@@ -14,9 +14,7 @@ from .constants import DOC_EXT
 
 
 def _nid(project: str, qn: str) -> str:
-    h = hashlib.sha1(f"{project}:{qn}".encode(), usedforsecurity=False).hexdigest()[
-        :16
-    ]  # nosemgrep  # non-crypto identifier
+    h = hashlib.sha1(f"{project}:{qn}".encode()).hexdigest()[:16]
     return f"n_{h}"
 
 

@@ -128,16 +128,10 @@ class RepoStore:
     def _fetch(
         self, where: str = "", params: tuple = (), cols=_SUMMARY_COLS, order: str = "added_ts DESC"
     ) -> list[dict[str, Any]]:
-        # cols is always a module-constant tuple (_COLS / _SUMMARY_COLS);
-        # `where` is a literal fragment with bound parameters; `order` comes
-        # from the _SORTABLE whitelist (or the default literal).
-        sql = f"SELECT {','.join(cols)} FROM repos"  # nosec B608  # nosemgrep
+        sql = f"SELECT {','.join(cols)} FROM repos"
         if where:
-            sql += f" WHERE {where}"  # nosec B608  # nosemgrep
-        rows = self._conn.execute(
-            f"{sql} ORDER BY {order}",
-            params,  # nosec B608  # nosemgrep
-        ).fetchall()
+            sql += f" WHERE {where}"
+        rows = self._conn.execute(f"{sql} ORDER BY {order}", params).fetchall()
         return [_row(cols, r) for r in rows]
 
     def get(self, rid: str, *, with_readme: bool = True) -> dict[str, Any] | None:
@@ -186,14 +180,14 @@ class RepoStore:
             wheres.append("(name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')")
             like = f"%{escape_like(query)}%"
             params += [like, like]
-        sql = f"SELECT {','.join(_SUMMARY_COLS)} FROM repos"  # nosec B608  # nosemgrep
+        sql = f"SELECT {','.join(_SUMMARY_COLS)} FROM repos"
         if wheres:
             sql += " WHERE " + " AND ".join(wheres)
         sql += " ORDER BY added_ts DESC LIMIT ?"
         params.append(limit)
         out = []
         with self._lock:
-            rows = self._conn.execute(sql, params).fetchall()  # nosemgrep
+            rows = self._conn.execute(sql, params).fetchall()
         for r in rows:
             d = dict(zip(_SUMMARY_COLS, r))
             out.append(
@@ -235,9 +229,8 @@ class RepoStore:
             params.append(json.dumps(v, ensure_ascii=False) if k == "tags" else v)
         params += [time.time(), rid]
         with self._lock:
-            # SET names come from the allowlist above; values are bound.
             self._conn.execute(
-                f"UPDATE repos SET {', '.join(sets)}, updated_ts = ? WHERE id = ?",  # nosec B608  # nosemgrep
+                f"UPDATE repos SET {', '.join(sets)}, updated_ts = ? WHERE id = ?",
                 params,
             )
             self._conn.commit()

@@ -83,11 +83,7 @@ class DocumentStore:
         sets = ", ".join(f"{k}=?" for k in fields)
         params = list(fields.values()) + [time.time(), did]
         with self._lock:
-            # SET names come from the keyword-only signature above (title/blocks).
-            self._conn.execute(
-                f"UPDATE documents SET {sets}, updated_ts=? WHERE id=?",  # nosec B608  # nosemgrep
-                params,
-            )
+            self._conn.execute(f"UPDATE documents SET {sets}, updated_ts=? WHERE id=?", params)
             self._conn.commit()
         updated = self.get(did)
         if updated is None:
@@ -105,7 +101,7 @@ class DocumentStore:
         sql += " ORDER BY updated_ts DESC LIMIT ?"
         params.append(limit)
         with self._lock:
-            rows = self._conn.execute(sql, params).fetchall()  # nosemgrep
+            rows = self._conn.execute(sql, params).fetchall()
         return [_row(_COLS, r) for r in rows]
 
     def delete(self, did: str) -> bool:

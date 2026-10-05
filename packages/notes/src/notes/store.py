@@ -222,9 +222,8 @@ class NoteStore:
                     "SELECT content FROM notes WHERE id = ?", (nid,)
                 ).fetchone()
                 old_content = row[0] if row else None
-            # SET column names come from the allowlist above; values are bound.
             cur = self._conn.execute(
-                f"UPDATE notes SET {', '.join(sets)}, updated_ts = ? WHERE id = ?",  # nosec B608  # nosemgrep
+                f"UPDATE notes SET {', '.join(sets)}, updated_ts = ? WHERE id = ?",
                 (*params, time.time(), nid),
             )
             if old_content is not None and old_content != new_content:
@@ -250,17 +249,10 @@ class NoteStore:
         if not nids:
             return
         placeholders = ",".join("?" * len(nids))
-        # Bound parameters only; the IN-list length drives the placeholder count.
+        self._conn.execute(f"DELETE FROM notes WHERE id IN ({placeholders})", nids)
+        self._conn.execute(f"DELETE FROM note_versions WHERE note_id IN ({placeholders})", nids)
         self._conn.execute(
-            f"DELETE FROM notes WHERE id IN ({placeholders})",  # nosec B608  # nosemgrep
-            nids,
-        )
-        self._conn.execute(
-            f"DELETE FROM note_versions WHERE note_id IN ({placeholders})",  # nosec B608  # nosemgrep
-            nids,
-        )
-        self._conn.execute(
-            f"DELETE FROM note_links WHERE src IN ({placeholders}) OR dst IN ({placeholders})",  # nosec B608  # nosemgrep
+            f"DELETE FROM note_links WHERE src IN ({placeholders}) OR dst IN ({placeholders})",
             [*nids, *nids],
         )
         self._conn.commit()
@@ -355,8 +347,8 @@ class NoteStore:
         sql = (
             "SELECT id, title, tags, source_id, node_id, archived, pinned,"
             " trashed_ts, created_ts, updated_ts,"
-            f" {excerpt_sql} AS excerpt"  # nosec B608  # nosemgrep  # module-constant columns; conds are literal fragments
-            f" FROM notes WHERE {' AND '.join(conds)}"  # nosec B608  # nosemgrep
+            f" {excerpt_sql} AS excerpt"
+            f" FROM notes WHERE {' AND '.join(conds)}"
         )
         sql += f" ORDER BY pinned DESC, {col} {direction} LIMIT ?"
         params = [*query_params, *params, limit]

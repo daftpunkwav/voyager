@@ -43,9 +43,7 @@ def secure_data_dir(name: str) -> Path:
     try:
         st = path.lstat()
     except FileNotFoundError:
-        path.mkdir(
-            mode=0o700
-        )  # nosemgrep:python.lang.security.audit.insecure-file-permissions.insecure-file-permissions  # 0o700 dir is the intended hardening
+        path.mkdir(mode=0o700)
         os.chmod(path, 0o700)  # mkdir() applies the process umask; force 0o700
         return path
     if not stat.S_ISDIR(st.st_mode):
@@ -55,7 +53,5 @@ def secure_data_dir(name: str) -> Path:
     if hasattr(os, "getuid") and st.st_uid != os.getuid():
         raise RuntimeError(f"data dir {path} is owned by another user; refusing to start")
     if os.name != "nt" and st.st_mode & 0o077:
-        os.chmod(
-            path, 0o700
-        )  # nosemgrep:python.lang.security.audit.insecure-file-permissions.insecure-file-permissions  # 0o700 dir is the intended hardening
+        os.chmod(path, 0o700)
     return path

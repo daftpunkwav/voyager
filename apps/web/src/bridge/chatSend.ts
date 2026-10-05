@@ -34,7 +34,7 @@ export interface ChatHistoryPage {
 }
 
 async function fetchHistoryPage(url: string): Promise<ChatHistoryPage> {
-  const resp = await fetch(url, { credentials: 'include' }); // nosemgrep  // same-origin history page URL
+  const resp = await fetch(url, { credentials: 'include' });
   if (!resp.ok) {
     // History fetch failures must throw explicitly: silently returning [] would
     // make users believe they have no history
@@ -90,9 +90,7 @@ export function fetchChatHistoryBefore(
  *  Newest-window only by design (matches the gateway contract): sessions
  *  beyond the window regroup from the live stream. */
 export function fetchTrajectory(limit = 500, session?: string): Promise<ChatEvent[]> {
-  // same-origin backend call; the SSRF rule targets server-side fetch
   return fetch(`/api/chat/trajectory?limit=${limit}${sessionQuery(session)}`, {
-    // nosemgrep: same-origin backend call; the ssrf rule targets server-side fetch
     credentials: 'include',
   })
     .then((resp) => {
@@ -150,7 +148,6 @@ export async function fetchRawLlmRounds(
 ): Promise<{ rounds: RawLlmRound[]; total: number }> {
   const lim = limit !== undefined ? `&limit=${limit}` : '';
   const resp = await fetch(`/api/chat/rawllm?session=${encodeURIComponent(session ?? '')}${lim}`, {
-    // nosemgrep: same-origin backend call; the ssrf rule targets server-side fetch
     credentials: 'include',
   });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);

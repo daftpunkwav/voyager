@@ -126,9 +126,7 @@ def render_zh(packages: list[str], edges: set[tuple[str, str]]) -> str:
 def blob_hash(text: str) -> str:
     """The hash `git hash-object` records for this content (blob <len>\\0<body>)."""
     data = text.encode("utf-8")
-    return hashlib.sha1(
-        b"blob %d\0" % len(data) + data, usedforsecurity=False
-    ).hexdigest()  # nosemgrep  # git-style cache key, non-crypto
+    return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
 
 
 def render_i18n(en: str, zh: str) -> str:

@@ -119,11 +119,7 @@ class ExecutionStore:
             ids = [r[0] for r in old] + [r[0] for r in extra]
             if ids:
                 marks = ",".join("?" for _ in ids)
-                # Bound parameters only; the IN-list length drives the mark count.
-                self._conn.execute(
-                    f"DELETE FROM executions WHERE id IN ({marks})",  # nosec B608  # nosemgrep
-                    ids,
-                )
+                self._conn.execute(f"DELETE FROM executions WHERE id IN ({marks})", ids)
                 self._conn.commit()
         for exec_id in ids:
             self._remove_artifacts(exec_id)

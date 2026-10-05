@@ -124,11 +124,8 @@ class DocStore:
     ) -> list[dict[str, Any]]:
         sql = _SQL_SUMMARY_HEAD
         if where:
-            sql += f" WHERE {where}"  # nosec B608  # nosemgrep
-        rows = self._conn.execute(
-            f"{sql} ORDER BY {order}",
-            params,  # nosec B608  # nosemgrep
-        ).fetchall()
+            sql += f" WHERE {where}"
+        rows = self._conn.execute(f"{sql} ORDER BY {order}", params).fetchall()
         return [_row(r) for r in rows]
 
     def get(self, did: str) -> dict[str, Any] | None:
@@ -165,10 +162,10 @@ class DocStore:
         sql = _SQL_SUMMARY_HEAD
         if wheres:
             sql += " WHERE " + " AND ".join(wheres)
-        sql += f" ORDER BY {order} LIMIT ?"  # nosec B608  # nosemgrep
+        sql += f" ORDER BY {order} LIMIT ?"
         params.append(limit)
         with self._lock:
-            rows = self._conn.execute(sql, params).fetchall()  # nosemgrep
+            rows = self._conn.execute(sql, params).fetchall()
         return [_row(r) for r in rows]
 
     def set_meta(self, did: str, **fields: Any) -> None:
@@ -182,9 +179,8 @@ class DocStore:
             params.append(json.dumps(v, ensure_ascii=False) if k == "tags" else v)
         params += [time.time(), did]
         with self._lock:
-            # SET names come from the allowlist above; values are bound.
             self._conn.execute(
-                f"UPDATE documents SET {', '.join(sets)}, updated_ts = ? WHERE id = ?",  # nosec B608  # nosemgrep
+                f"UPDATE documents SET {', '.join(sets)}, updated_ts = ? WHERE id = ?",
                 params,
             )
             self._conn.commit()

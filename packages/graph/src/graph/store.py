@@ -70,17 +70,11 @@ CREATE INDEX IF NOT EXISTS idx_edges_project ON edges(project, type);
 
 
 def _node_id(project: str, label: str, qualified_name: str) -> str:
-    # Stable graph identifier, not a security primitive (collision resistance
-    # is irrelevant at this scale; the digest is never used to authenticate).
-    return hashlib.sha1(
-        f"{project}{label}{qualified_name}".encode(), usedforsecurity=False
-    ).hexdigest()[:16]  # nosemgrep  # non-crypto identifier
+    return hashlib.sha1(f"{project}{label}{qualified_name}".encode()).hexdigest()[:16]
 
 
 def _edge_id(project: str, src: str, dst: str, type_: str) -> str:
-    return hashlib.sha1(f"{project}{src}{dst}{type_}".encode(), usedforsecurity=False).hexdigest()[
-        :16
-    ]  # nosemgrep  # non-crypto identifier
+    return hashlib.sha1(f"{project}{src}{dst}{type_}".encode()).hexdigest()[:16]
 
 
 class GraphStore:
@@ -205,9 +199,7 @@ class GraphStore:
             nodes = [
                 _row(_NODE_COLS, r)
                 for r in self._conn.execute(
-                    # conds are literal fragments ("project = ?", "label = ?",
-                    # "(name LIKE ? ...)"); values are bound parameters.
-                    f"SELECT {','.join(_NODE_COLS)} FROM nodes WHERE {' AND '.join(conds)} LIMIT ?",  # nosec B608  # nosemgrep
+                    f"SELECT {','.join(_NODE_COLS)} FROM nodes WHERE {' AND '.join(conds)} LIMIT ?",
                     (*params, limit),
                 )
             ]
@@ -256,9 +248,8 @@ class GraphStore:
                 if not frontier:
                     break
                 qmarks = ",".join("?" for _ in frontier)
-                # Bound parameters only; the IN-list length drives the mark count.
                 for r in self._conn.execute(
-                    f"SELECT {','.join(_NODE_COLS)} FROM nodes"  # nosec B608  # nosemgrep
+                    f"SELECT {','.join(_NODE_COLS)} FROM nodes"
                     f" WHERE project = ? AND id IN ({qmarks})",
                     (project, *frontier),
                 ):
@@ -364,10 +355,9 @@ class GraphStore:
                 "DELETE FROM edges WHERE project = ? AND source = 'meta'", (project,)
             ).rowcount
             if keep:
-                # Bound parameters only; the IN-list length drives the mark count.
                 rows = self._conn.execute(
                     "SELECT id FROM nodes WHERE project = ? AND label = 'Resource'"
-                    f" AND qualified_name NOT IN ({','.join('?' * len(keep))})",  # nosec B608  # nosemgrep
+                    f" AND qualified_name NOT IN ({','.join('?' * len(keep))})",
                     (project, *keep),
                 ).fetchall()
             else:

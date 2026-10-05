@@ -79,10 +79,7 @@ def main() -> None:
     import uvicorn
 
     _acquire_instance_lock()
-    # argv comes from shutil.which plus constants; shell=False.
-    web = subprocess.Popen(  # nosec B603  # nosemgrep:python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
-        _npm_command(), cwd=ROOT / "apps" / "web", shell=False
-    )
+    web = subprocess.Popen(_npm_command(), cwd=ROOT / "apps" / "web", shell=False)
     try:
         uvicorn.run("host.assemble:build", factory=True, host="127.0.0.1", port=8000, reload=False)
     finally:

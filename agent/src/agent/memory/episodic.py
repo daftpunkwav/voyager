@@ -85,9 +85,8 @@ class EpisodicMemory:
         cols = ("summary", "detail")
         conds = " OR ".join(f"({c} LIKE ? ESCAPE '\\')" for t in terms for c in cols)
         params = [like_pattern(t) for t in terms for _ in cols]
-        # conds are literal LIKE fragments per term; the values are bound.
         sql = (
-            "SELECT id, ts, run_id, kind, summary, detail FROM episodes"  # nosec B608  # nosemgrep
+            "SELECT id, ts, run_id, kind, summary, detail FROM episodes"
             f" WHERE {conds} ORDER BY id DESC LIMIT 200"
         )
         with self._lock:

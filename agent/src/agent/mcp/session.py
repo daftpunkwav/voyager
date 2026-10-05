@@ -198,8 +198,7 @@ class StdioMcpSession(_McpProtocol):
         )  # serialize request-response: concurrent reads would steal each other's response lines
 
     async def connect(self) -> None:
-        # runs the user-configured MCP server by design; exec form, never a shell
-        self._proc = await asyncio.create_subprocess_exec(  # nosemgrep:python.lang.security.audit.dangerous-asyncio-create-exec-audit.dangerous-asyncio-create-exec-audit
+        self._proc = await asyncio.create_subprocess_exec(
             self._command,
             *self._args,
             stdin=asyncio.subprocess.PIPE,
