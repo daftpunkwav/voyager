@@ -104,6 +104,7 @@ export function FilterBar({ categories, tags, languages }: FilterBarProps) {
           strokeWidth="2"
           width={14}
           height={14}
+          aria-hidden="true"
         >
           <circle cx="11" cy="11" r="7" />
           <path d="M21 21l-4.3-4.3" />

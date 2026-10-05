@@ -256,9 +256,8 @@ export function ProjectsPage({ embedded = false }: { embedded?: boolean }) {
       <FilterBar categories={categories} tags={tags} languages={languages} />
 
       {selectedIds.length > 0 && (
-        <div
+        <section
           className="bulk-bar"
-          role="region"
           aria-label={t('sources:projects.bulkAria')}
           data-testid="bulk-bar"
         >
@@ -270,6 +269,7 @@ export function ProjectsPage({ embedded = false }: { embedded?: boolean }) {
               strokeWidth="2"
               width={14}
               height={14}
+              aria-hidden="true"
             >
               <path d="M20 6L9 17l-5-5" />
             </svg>
@@ -306,7 +306,7 @@ export function ProjectsPage({ embedded = false }: { embedded?: boolean }) {
               {t('sources:projects.btnClearSelection')}
             </button>
           </div>
-        </div>
+        </section>
       )}
 
       <ProjectTable

@@ -200,7 +200,9 @@ export function TrajectoryView() {
         />
       </div>
 
-      <div className="chat-traj2__timeline" role="img" aria-label={t('chat:traj.timelineAria')}>
+      {/* group (not img): the timeline hosts focusable span controls, and an
+          img role would hide its descendants from assistive technology. */}
+      <div className="chat-traj2__timeline" role="group" aria-label={t('chat:traj.timelineAria')}>
         <div className="chat-traj2__lanes">
           {LANES.map((l) => (
             <span key={l.labelKey} className="chat-traj2__lane-label">
@@ -210,8 +212,9 @@ export function TrajectoryView() {
         </div>
         <div className="chat-traj2__spans">
           {filtered.map((r, i) => (
-            <span
+            <button
               key={r.key}
+              type="button"
               className={`chat-traj2__span is-${r.kind}${selected === r.key ? ' is-selected' : ''}`}
               style={{
                 left: `${(i / Math.max(filtered.length, 1)) * 100}%`,
@@ -219,6 +222,7 @@ export function TrajectoryView() {
                 top: `${laneFor(r.kind) * 16}px`,
               }}
               title={r.text.slice(0, 120)}
+              aria-label={`${t(KIND_LABEL_KEYS[r.kind])}: ${r.label}${r.text ? `, ${r.text.slice(0, 120)}` : ''}`}
               onClick={() => scrollToRow(r.key)}
             />
           ))}

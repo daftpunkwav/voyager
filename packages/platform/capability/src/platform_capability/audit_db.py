@@ -53,6 +53,14 @@ _COLS = (
     "trace_id",
 )
 
+# Plain-literal SELECT head; the column list is kept in lockstep with _COLS
+# (which feeds dict(zip()) below), never widened to *. Filter conditions are
+# appended dynamically as literal fragments with bound parameters.
+_SQL_RECENT_HEAD = (
+    "SELECT id, ts, actor_id, actor_kind, capability, args_summary, ok,"
+    " error_code, trace_id FROM audit"
+)
+
 
 class SqliteAuditSink:
     """Audit ingestion: the guard chain records on every outcome; single
@@ -94,7 +102,7 @@ class SqliteAuditSink:
         (the activity page reads the event stream for now); this interface is
         reserved for debugging and the activity page's operation-history view.
         """
-        sql = f"SELECT {','.join(_COLS)} FROM audit"
+        sql = _SQL_RECENT_HEAD
         conds: list[str] = []
         params: list[Any] = []
         if capability:

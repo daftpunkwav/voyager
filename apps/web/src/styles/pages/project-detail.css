@@ -184,7 +184,7 @@
   opacity: 0.92;
   filter: saturate(1);
 }
-.pd-progress-pill[aria-selected='true'] {
+.pd-progress-pill[aria-checked='true'] {
   opacity: 1;
   filter: saturate(1.08);
   box-shadow:
@@ -794,9 +794,7 @@
 }
 .pd-shell
   > .pd-main
-  > .glass-card:not(.pd-hero):not(.pd-progress):not(.pd-notes-panel):not(.pd-readme):not(
-    .pd-ai-panel
-  ) {
+  > .glass-card:not(.pd-hero, .pd-progress, .pd-notes-panel, .pd-readme, .pd-ai-panel) {
   padding: 16px 20px;
 }
 

@@ -761,6 +761,15 @@ static void sig_build_worker(int worker_id, void *ctx_ptr) {
     }
 }
 
+/* LSH bucket: one band slot's item list plus its allocation capacity.
+ * Defined before score_ctx_t so the scoring pass holds the buckets through
+ * their actual type instead of a layout-mirrored alias. */
+typedef struct {
+    int *items;
+    int count;
+    int cap;
+} sem_bucket_t;
+
 /* ── Parallel Phase 6: Score candidates + collect edges ──────────── */
 
 typedef struct {
@@ -770,12 +779,8 @@ typedef struct {
     engine_sem_config_t cfg;
     int func_count;
 
-    /* LSH buckets (read-only during scoring) */
-    struct {
-        int *items;
-        int count;
-        int cap;
-    } **band_buckets;
+    /* LSH buckets (read-only during scoring); allocated in phase5_lsh_build. */
+    sem_bucket_t **band_buckets;
 
     /* Per-worker edge buffer */
     deferred_edge_buf_t *worker_bufs;
@@ -918,12 +923,6 @@ static void collect_worker(int worker_id, void *ctx_ptr) {
 }
 
 /* ── Phase helpers (keep engine_pipeline_pass_semantic_edges complexity low) ── */
-
-typedef struct {
-    int *items;
-    int count;
-    int cap;
-} sem_bucket_t;
 
 /* Canonical node order: by qualified name (unique per node), id tie-break
  * for defensiveness. Gives the semantic pass a stable, content-derived input
@@ -1247,7 +1246,7 @@ static void phase6a_score_candidates(engine_sem_func_t *funcs, uint64_t *signatu
         .edge_counts = edge_counts,
         .cfg = cfg,
         .func_count = func_count,
-        .band_buckets = (void *)band_buckets,
+        .band_buckets = band_buckets,
         .worker_bufs = worker_bufs,
         .max_workers = worker_count,
     };

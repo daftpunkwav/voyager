@@ -35,7 +35,7 @@ from .worker import CloneJob, RemoveJob
 _DOMAIN = "sources"
 registry = Registry(_DOMAIN)
 
-_TOKEN_KEY = "sources.github.token"
+_TOKEN_KEY = "sources.github.token"  # nosec B105  # settings-store key name, not a credential
 _REPO_ACTOR = ActorRef(kind=ActorKind.SYSTEM, id="sources.repo")
 
 
@@ -239,4 +239,4 @@ def set_github_token(token: str, _actor: ActorRef | None = None) -> dict:
             "GitHub tokens are private data; only the user themself may set one",
         )
     require_deps().secrets.set(_TOKEN_KEY, token)
-    return {"has_token": True}
+    return {"has_token": True}  # nosec B105  # boolean flag, not a secret

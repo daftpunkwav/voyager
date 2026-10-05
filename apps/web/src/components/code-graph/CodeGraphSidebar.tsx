@@ -391,6 +391,7 @@ export function CodeGraphSidebar({
                 {colorByStatus && (
                   <div
                     className="code-graph-status-legend"
+                    role="group"
                     aria-label={t('codeGraph:legend.statusAria')}
                   >
                     {STATUS_LEGEND.map((s) => (

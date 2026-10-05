@@ -143,8 +143,8 @@ def base_qns(class_node: ast.ClassDef, module_qn: str) -> list[str]:
             # mod.SubClass
             try:
                 text = ast.unparse(base)  # type: ignore[attr-defined]
-            except Exception:
-                continue
+            except Exception:  # skip unparsable AST base nodes
+                continue  # nosec B112
             out.append(text)
     return out
 
@@ -405,7 +405,7 @@ def main() -> int:
     parser.add_argument(
         "stdlib_root",
         nargs="?",
-        default="/tmp/python-lsp-references/typeshed/stdlib",
+        default="/tmp/python-lsp-references/typeshed/stdlib",  # nosec B108  # fixed dev cache dir, no secrets
     )
     parser.add_argument(
         "output",

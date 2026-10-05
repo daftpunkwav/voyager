@@ -67,9 +67,14 @@ EngineLogFormat engine_log_get_format(void);
  */
 void engine_log(EngineLogLevel level, const char *msg, ...);
 
+/* Terminator for variadic key-value lists: the arguments are read back with
+ * va_arg(args, const char *), so the sentinel must be passed as a character
+ * pointer, not a bare NULL that some platforms define as integer 0. */
+#define ENGINE_LOG_ARGS_END ((const char *)NULL)
+
 /* Convenience macros. */
-#define engine_log_debug(msg, ...) engine_log(ENGINE_LOG_DEBUG, msg, ##__VA_ARGS__, NULL)
-#define engine_log_info(msg, ...) engine_log(ENGINE_LOG_INFO, msg, ##__VA_ARGS__, NULL)
+#define engine_log_debug(msg, ...) engine_log(ENGINE_LOG_DEBUG, msg, ##__VA_ARGS__, ENGINE_LOG_ARGS_END)
+#define engine_log_info(msg, ...) engine_log(ENGINE_LOG_INFO, msg, ##__VA_ARGS__, ENGINE_LOG_ARGS_END)
 
 /* Always-delivered internal control/discovery record. It bypasses the level
  * threshold and always uses the JSON encoding, so exact values (paths with
@@ -78,9 +83,9 @@ void engine_log(EngineLogLevel level, const char *msg, ...);
  * discovery/control events that ordinary log filtering must never suppress
  * (e.g. diagnostics.start path announcement). */
 void engine_log_control_record(const char *msg, ...);
-#define engine_log_control(msg, ...) engine_log_control_record(msg, ##__VA_ARGS__, NULL)
-#define engine_log_warn(msg, ...) engine_log(ENGINE_LOG_WARN, msg, ##__VA_ARGS__, NULL)
-#define engine_log_error(msg, ...) engine_log(ENGINE_LOG_ERROR, msg, ##__VA_ARGS__, NULL)
+#define engine_log_control(msg, ...) engine_log_control_record(msg, ##__VA_ARGS__, ENGINE_LOG_ARGS_END)
+#define engine_log_warn(msg, ...) engine_log(ENGINE_LOG_WARN, msg, ##__VA_ARGS__, ENGINE_LOG_ARGS_END)
+#define engine_log_error(msg, ...) engine_log(ENGINE_LOG_ERROR, msg, ##__VA_ARGS__, ENGINE_LOG_ARGS_END)
 
 /* Log with integer value (avoids sprintf for common case). */
 void engine_log_int(EngineLogLevel level, const char *msg, const char *key, int64_t value);

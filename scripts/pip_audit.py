@@ -12,7 +12,7 @@ Run: npm run audit:py
 
 from __future__ import annotations
 
-import subprocess
+import subprocess  # nosec B404  # pip-audit invocation is the purpose of this script
 import sys
 import tempfile
 from pathlib import Path
@@ -22,7 +22,7 @@ def main() -> int:
     with tempfile.NamedTemporaryFile(prefix="voyager-audit-", suffix=".txt", delete=False) as f:
         reqs = Path(f.name)
     try:
-        export = subprocess.run(
+        export = subprocess.run(  # nosec B603 B607  # constant argv, dev script
             [
                 "uv",
                 "export",
@@ -38,7 +38,9 @@ def main() -> int:
         )
         if export.returncode != 0:
             return export.returncode
-        audit = subprocess.run(["uvx", "pip-audit", "-r", str(reqs)], check=False)
+        audit = subprocess.run(  # nosec B603 B607  # constant argv, dev script
+            ["uvx", "pip-audit", "-r", str(reqs)], check=False
+        )
         return audit.returncode
     finally:
         reqs.unlink(missing_ok=True)

@@ -23,6 +23,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from xml.etree import ElementTree
 
+from defusedxml.common import DefusedXmlException
+from defusedxml.ElementTree import fromstring as _xml_fromstring
+
 #: Soft per-chapter cap (chars); unstructured docs chunk at this size,
 #: oversized chunks split further on blank lines
 _CHAPTER_TARGET = 8000
@@ -159,8 +162,10 @@ def _from_epub(path: Path) -> list[Section]:
         sections: list[Section] = []
         for i, name in enumerate(spine_files):
             try:
-                root = ElementTree.fromstring(_read_entry(zf, name, budget))
-            except ElementTree.ParseError:
+                root = _xml_fromstring(_read_entry(zf, name, budget))
+            except (ElementTree.ParseError, DefusedXmlException):
+                # Malformed or entity-carrying XML: skip the section rather
+                # than fail the whole document.
                 continue
             title = _first_heading(root)
             text = _strip_xhtml(root)
@@ -182,8 +187,8 @@ def _epub_spine(zf: zipfile.ZipFile, budget: list[int]) -> list[str]:
         return [n for n in names if n.endswith((".xhtml", ".html", ".htm"))]
     base = opf_name.rsplit("/", 1)[0] + "/" if "/" in opf_name else ""
     try:
-        root = ElementTree.fromstring(_read_entry(zf, opf_name, budget))
-    except ElementTree.ParseError:
+        root = _xml_fromstring(_read_entry(zf, opf_name, budget))
+    except (ElementTree.ParseError, DefusedXmlException):
         return [n for n in names if n.endswith((".xhtml", ".html", ".htm"))]
     manifest: dict[str, str] = {}
     for item in root.iter():

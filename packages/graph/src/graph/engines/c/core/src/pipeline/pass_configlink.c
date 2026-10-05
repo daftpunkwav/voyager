@@ -348,11 +348,6 @@ static int strategy_dep_imports(engine_gbuf_t *gb) {
 
 /* ── Strategy 3: Config File Path → Code String Reference ───────── */
 
-typedef struct {
-    const char *key;
-    int64_t node_id;
-} path_map_t;
-
 /* Match a ref_path against config module maps. Returns target node_id (0 = no match). */
 
 int engine_pipeline_pass_configlink(engine_pipeline_ctx_t *ctx) {

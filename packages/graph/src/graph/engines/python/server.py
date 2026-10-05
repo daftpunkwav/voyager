@@ -26,7 +26,8 @@ class Handler(BaseHTTPRequestHandler):
     eng = None
     allowed_root: str | None = None
 
-    def log_message(self, fmt: str, *args) -> None:
+    # arity matches BaseHTTPRequestHandler.log_message; pylint miscounts varargs
+    def log_message(self, fmt: str, *args) -> None:  # pylint: disable=arguments-differ
         return
 
     def _reject(self, code: int, message: str) -> None:

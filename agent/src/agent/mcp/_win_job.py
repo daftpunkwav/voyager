@@ -107,7 +107,8 @@ class ProcessTreeJob:
     """
 
     def __init__(self, handle: int) -> None:
-        assert _k32 is not None
+        if _k32 is None:  # unreachable: assign_tree guards on kernel32 load
+            raise RuntimeError("kernel32 job-object support not loaded")
         self._k32 = _k32
         self._handle = handle
 

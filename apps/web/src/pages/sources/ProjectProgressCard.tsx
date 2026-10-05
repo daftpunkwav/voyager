@@ -7,6 +7,7 @@
  * - Host the note-generation prompt bar for the organizer persona
  */
 import type { Project, ProjectProgress } from '@/api/types';
+import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { GLASS_OUTER } from '@/constants/glassTokens';
 
@@ -37,18 +38,42 @@ export function ProjectProgressCard({
   onGenerateNote,
 }: ProjectProgressCardProps) {
   const { t } = useTranslation('sources');
+  const listRef = useRef<HTMLDivElement>(null);
   return (
     <div className={`pd-progress ${GLASS_OUTER}`}>
       <div className="pd-progress-head">
         <span className="label">{t('sources:progress.label')}</span>
       </div>
-      <div className="pd-progress-list" role="radiogroup" aria-label={t('sources:progress.label')}>
+      <div
+        ref={listRef}
+        className="pd-progress-list"
+        role="radiogroup"
+        aria-label={t('sources:progress.label')}
+        onKeyDown={(e) => {
+          if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+          e.preventDefault();
+          const radios = Array.from(
+            listRef.current?.querySelectorAll<HTMLButtonElement>('[role="radio"]') ?? []
+          );
+          // Arrow navigation is anchored on the focused radio (roving
+          // focus), falling back to the selected value when none is focused.
+          const focusedAt = radios.findIndex((b) => b === document.activeElement);
+          const at =
+            focusedAt >= 0 ? focusedAt : PD_PROGRESS.findIndex((p) => p.id === project.progress);
+          const step = e.key === 'ArrowRight' ? 1 : -1;
+          const nextAt = (Math.max(at, 0) + step + PD_PROGRESS.length) % PD_PROGRESS.length;
+          onProgressChange(PD_PROGRESS[nextAt].id);
+          radios[nextAt]?.focus();
+        }}
+      >
         {PD_PROGRESS.map((p) => (
           <button
             key={p.id}
             type="button"
+            role="radio"
             className={`pd-progress-pill ${p.className}`}
-            aria-selected={project.progress === p.id ? 'true' : 'false'}
+            aria-checked={project.progress === p.id ? 'true' : 'false'}
+            tabIndex={project.progress === p.id ? 0 : -1}
             onClick={() => onProgressChange(p.id)}
           >
             <span className="dot" />
@@ -65,6 +90,7 @@ export function ProjectProgressCard({
             strokeWidth="2"
             width={16}
             height={16}
+            aria-hidden="true"
           >
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
             <polyline points="14 2 14 8 20 8" />

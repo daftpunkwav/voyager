@@ -53,7 +53,7 @@ export function ImportCenter({ open, initialTab = 'files', onClose }: ImportCent
       >
         <header className="import-center__head">
           <h2>{t('sources:import.title')}</h2>
-          <nav className="import-center__tabs" role="tablist">
+          <div className="import-center__tabs" role="tablist">
             {TABS.map((tabItem) => (
               <button
                 key={tabItem.key}
@@ -66,7 +66,7 @@ export function ImportCenter({ open, initialTab = 'files', onClose }: ImportCent
                 {t(tabItem.labelKey)}
               </button>
             ))}
-          </nav>
+          </div>
           <button
             type="button"
             className="icon-btn"
@@ -169,6 +169,7 @@ function FilesPane({ onDone }: { onDone: () => void }) {
           strokeWidth="1.6"
           width={40}
           height={40}
+          aria-hidden="true"
         >
           <path d="M12 16V4M6 10l6-6 6 6" />
           <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />

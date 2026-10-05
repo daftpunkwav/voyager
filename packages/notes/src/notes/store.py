@@ -98,6 +98,13 @@ _ALL_COLS = (
     "created_ts",
     "updated_ts",
 )
+
+# Plain-literal SELECT head; the column list is kept in lockstep with
+# _ALL_COLS (which feeds _full_row via zip), never widened to *.
+_SQL_GET_NOTE = (
+    "SELECT id, title, content, tags, source_id, node_id, archived,"
+    " pinned, trashed_ts, created_ts, updated_ts FROM notes WHERE id = ?"
+)
 _STATE_CONDS: dict[str, tuple[str, list[Any]]] = {
     "active": ("archived = 0 AND trashed_ts IS NULL", []),
     "archived": ("archived = 1 AND trashed_ts IS NULL", []),
@@ -169,9 +176,7 @@ class NoteStore:
 
     def get(self, nid: str) -> dict[str, Any] | None:
         with self._lock:
-            row = self._conn.execute(
-                f"SELECT {','.join(_ALL_COLS)} FROM notes WHERE id = ?", (nid,)
-            ).fetchone()
+            row = self._conn.execute(_SQL_GET_NOTE, (nid,)).fetchone()
         return _full_row(row) if row else None
 
     def exists_by_title(self, title: str) -> str | None:

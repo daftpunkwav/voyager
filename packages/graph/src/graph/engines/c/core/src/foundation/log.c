@@ -309,7 +309,7 @@ void engine_log_control_record(const char *msg, ...) {
 void engine_log_int(EngineLogLevel level, const char *msg, const char *key, int64_t value) {
     char value_buf[ENGINE_SZ_32];
     snprintf(value_buf, sizeof(value_buf), "%" PRId64, value);
-    engine_log(level, msg, key ? key : "?", value_buf, NULL);
+    engine_log(level, msg, key ? key : "?", value_buf, ENGINE_LOG_ARGS_END);
 }
 
 static void copy_path_without_query(const char *path, char *out, size_t outsz) {
@@ -335,11 +335,11 @@ void engine_log_mcp_request(const char *method, const char *tool_name, bool is_e
     if (tool_name && tool_name[0] != '\0') {
         engine_log(is_error ? ENGINE_LOG_WARN : ENGINE_LOG_INFO, "mcp.request", "protocol", "jsonrpc",
                 "method", method ? method : "", "tool", tool_name, "status",
-                is_error ? "error" : "ok", "duration_ms", duration_ms, NULL);
+                is_error ? "error" : "ok", "duration_ms", duration_ms, ENGINE_LOG_ARGS_END);
     } else {
         engine_log(is_error ? ENGINE_LOG_WARN : ENGINE_LOG_INFO, "mcp.request", "protocol", "jsonrpc",
                 "method", method ? method : "", "status", is_error ? "error" : "ok", "duration_ms",
-                duration_ms, NULL);
+                duration_ms, ENGINE_LOG_ARGS_END);
     }
 }
 
@@ -365,5 +365,6 @@ void engine_log_http_request(const char *component, const char *method, const ch
 
     engine_log(level, "http.request", "component", component ? component : "", "method",
             method ? method : "", "path", safe_path, "status", status_buf, "duration_ms",
-            duration_buf, "request_bytes", request_buf, "response_bytes", response_buf, NULL);
+            duration_buf, "request_bytes", request_buf, "response_bytes", response_buf,
+            ENGINE_LOG_ARGS_END);
 }

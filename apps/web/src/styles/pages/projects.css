@@ -812,7 +812,7 @@
     box-shadow 0.18s var(--ease),
     transform 0.18s var(--ease);
 }
-.page-btn:hover:not(:disabled):not(.active) {
+.page-btn:hover:not(:disabled, .active) {
   background: rgba(255, 255, 255, 0.7);
 }
 .page-btn.active {
@@ -1376,7 +1376,7 @@
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.18);
 }
-[data-theme='dark'] .page-btn:hover:not(:disabled):not(.active) {
+[data-theme='dark'] .page-btn:hover:not(:disabled, .active) {
   background: rgba(255, 255, 255, 0.14);
 }
 

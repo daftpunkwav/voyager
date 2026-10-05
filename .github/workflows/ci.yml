@@ -234,6 +234,7 @@ jobs:
           # not a secret. The runner has no .env, and without key material
           # SecretStore is unavailable, which takes set_api_key (and thus
           # the chat composer seed) down with it.
+          # checkov:skip=CKV_SECRET_6:scratch placeholder, not real key material
           SECRETS_ENCRYPTION_KEY: e2e-scratch-only-never-a-real-key
         run: |
           uv run uvicorn host.assemble:build --factory --host 127.0.0.1 --port 8000 > backend.log 2>&1 &
@@ -256,8 +257,9 @@ jobs:
   gate:
     # Merge-time summary: branch protection requires this check. Always runs;
     # passes when every job that ran succeeded (skipped areas are the path
-    # triage doing its job) and fails on any failure or cancellation, so a
-    # cancelled run can never masquerade as green. Future jobs join the needs
+    # triage doing its job) and fails on any failure, cancellation, or
+    # abandonment (the platform marks outage-killed jobs as abandoned), so a
+    # dead run can never masquerade as green. Future jobs join the needs
     # list; the required-checks entry never changes.
     name: gate
     needs: [pr-title, changes, gate-py, gate-web, docs, e2e-web]
@@ -277,8 +279,8 @@ jobs:
           set -euo pipefail
           results="pr_title=$PR_TITLE changes=$CHANGES gate_py=$GATE_PY gate_web=$GATE_WEB docs=$DOCS e2e_web=$E2E_WEB"
           echo "$results"
-          if grep -qE '=(failure|cancelled)' <<< "$results"; then
-            echo "::error::one or more gates failed or were cancelled"
+          if grep -qE '=(failure|cancelled|abandoned)' <<< "$results"; then
+            echo "::error::one or more gates failed, were cancelled, or were abandoned"
             exit 1
           fi
           echo "all triggered gates passed"

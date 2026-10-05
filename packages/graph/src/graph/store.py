@@ -27,7 +27,17 @@ from pathlib import Path
 from typing import Any
 
 from . import operations
-from .columns import _EDGE_COLS, _NODE_COLS, _row
+from .columns import (
+    _EDGE_COLS,
+    _NODE_COLS,
+    _SQL_CROSS_EDGES,
+    _SQL_EDGES_BY_PROJECT,
+    _SQL_GET_EDGE_BY_ID,
+    _SQL_GET_EDGE_BY_PROJECT_ID,
+    _SQL_GET_NODE_BY_ID,
+    _SQL_GET_NODE_BY_KEY,
+    _row,
+)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS nodes (
@@ -122,8 +132,7 @@ class GraphStore:
     def get_node(self, project: str, label: str, qualified_name: str) -> dict | None:
         with self._lock:
             row = self._conn.execute(
-                f"SELECT {','.join(_NODE_COLS)} FROM nodes"
-                " WHERE project=? AND label=? AND qualified_name=?",
+                _SQL_GET_NODE_BY_KEY,
                 (project, label, qualified_name),
             ).fetchone()
         return _row(_NODE_COLS, row) if row else None
@@ -173,9 +182,7 @@ class GraphStore:
                 ),
             )
             self._conn.commit()
-            row = self._conn.execute(
-                f"SELECT {','.join(_EDGE_COLS)} FROM edges WHERE id=?", (eid,)
-            ).fetchone()
+            row = self._conn.execute(_SQL_GET_EDGE_BY_ID, (eid,)).fetchone()
         return _row(_EDGE_COLS, row)
 
     def query(
@@ -205,9 +212,7 @@ class GraphStore:
             # edge table. Result set and table order are unchanged; an empty
             # node set can never match an edge, so the scan is skipped.
             if node_ids:
-                for r in self._conn.execute(
-                    f"SELECT {','.join(_EDGE_COLS)} FROM edges WHERE project = ?", (project,)
-                ):
+                for r in self._conn.execute(_SQL_EDGES_BY_PROJECT, (project,)):
                     if r[2] in node_ids and r[3] in node_ids:
                         edges.append(_row(_EDGE_COLS, r))
         return {"project": project, "nodes": nodes, "edges": edges}
@@ -234,9 +239,7 @@ class GraphStore:
             # incident to its frontier instead of rescanning the whole edge
             # table (O(depth x E) -> O(E + visited edges)).
             incident: dict[str, list[dict]] = {}
-            for r in self._conn.execute(
-                f"SELECT {','.join(_EDGE_COLS)} FROM edges WHERE project = ?", (project,)
-            ):
+            for r in self._conn.execute(_SQL_EDGES_BY_PROJECT, (project,)):
                 e = _row(_EDGE_COLS, r)
                 incident.setdefault(e["src"], []).append(e)
                 if e["dst"] != e["src"]:  # self-loops listed once; seen_edges dedupes anyway
@@ -322,18 +325,12 @@ class GraphStore:
 
     def _node_by_id(self, project: str, node_id: str) -> dict | None:
         with self._lock:
-            row = self._conn.execute(
-                f"SELECT {','.join(_NODE_COLS)} FROM nodes WHERE project=? AND id=?",
-                (project, node_id),
-            ).fetchone()
+            row = self._conn.execute(_SQL_GET_NODE_BY_ID, (project, node_id)).fetchone()
         return _row(_NODE_COLS, row) if row else None
 
     def _edge_by_id(self, project: str, edge_id: str) -> dict | None:
         with self._lock:
-            row = self._conn.execute(
-                f"SELECT {','.join(_EDGE_COLS)} FROM edges WHERE project=? AND id=?",
-                (project, edge_id),
-            ).fetchone()
+            row = self._conn.execute(_SQL_GET_EDGE_BY_PROJECT_ID, (project, edge_id)).fetchone()
         return _row(_EDGE_COLS, row) if row else None
 
     def drop_project(self, project: str) -> dict[str, int]:
@@ -376,11 +373,7 @@ class GraphStore:
     def cross_edges(self, edge_type: str = "CROSS_REPO") -> list[dict[str, Any]]:
         """Cross-project relation edges (cross-repo space), merged into the L0 view."""
         with self._lock:
-            rows = self._conn.execute(
-                f"SELECT {','.join(_EDGE_COLS)} FROM edges"
-                " WHERE project = 'cross-repo' AND type = ?",
-                (edge_type,),
-            ).fetchall()
+            rows = self._conn.execute(_SQL_CROSS_EDGES, (edge_type,)).fetchall()
         return [_row(_EDGE_COLS, r) for r in rows]
 
     def close(self) -> None:

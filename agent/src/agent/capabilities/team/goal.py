@@ -182,7 +182,8 @@ def register(reg: Registry, deps: CapabilityDeps) -> None:
         index: int | None = None,
         _actor: ActorRef | None = None,
     ) -> dict:
-        assert deps.goal_manager is not None, "goal manager not wired at assembly"
+        if deps.goal_manager is None:  # unreachable: wired at assembly
+            raise RuntimeError("goal manager not wired at assembly")
         session = session_id or current_session()
         return goal_action(
             deps.goal_manager,

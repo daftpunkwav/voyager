@@ -18,7 +18,7 @@ import time
 from collections import deque
 from typing import Any
 
-from .columns import _EDGE_COLS, _edge_row
+from .columns import _SQL_EDGES_BY_PROJECT, _edge_row
 
 
 def find_path(
@@ -29,9 +29,7 @@ def find_path(
     with store._lock:
         edges = [
             _edge_row(r)
-            for r in store._conn.execute(
-                f"SELECT {','.join(_EDGE_COLS)} FROM edges WHERE project = ?", (project,)
-            )
+            for r in store._conn.execute(_SQL_EDGES_BY_PROJECT, (project,))
             if not edge_filter or r[4] == edge_filter
         ]
     adj: dict[str, list[tuple[str, str, str]]] = {}

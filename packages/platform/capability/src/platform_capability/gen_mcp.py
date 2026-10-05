@@ -29,7 +29,8 @@ _UNION_ORIGINS = {typing.Union, types.UnionType}  # Optional[X] and X | None
 def _unwrap_optional(expected: Any) -> Any:
     """Optional[X] / X | None -> X; anything else is returned as-is."""
     if typing.get_origin(expected) in _UNION_ORIGINS:
-        args = [a for a in typing.get_args(expected) if a is not type(None)]
+        # type(None) comparison is exact here: isinstance(x, type(None)) would be wrong
+        args = [a for a in typing.get_args(expected) if a is not type(None)]  # pylint: disable=unidiomatic-typecheck
         if len(args) == 1:
             return args[0]
     return expected

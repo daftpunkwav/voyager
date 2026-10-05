@@ -214,6 +214,7 @@ export function NotesWorkspace({
           >
             <button
               type="button"
+              role="separator"
               className="notes-toc-handle"
               data-testid="notes-toc-handle"
               aria-label={t('notes:workspace.tocHandleAria')}
@@ -223,10 +224,14 @@ export function NotesWorkspace({
               aria-valuenow={tocWidth}
               onPointerDown={onTocPointerDown}
               onKeyDown={(e) => {
-                if (e.key === 'ArrowLeft') {
+                // Horizontal keys move the handle; vertical keys follow the
+                // APG convention for a vertical separator. Both axes resize.
+                const widen = e.key === 'ArrowLeft' || e.key === 'ArrowUp';
+                const narrow = e.key === 'ArrowRight' || e.key === 'ArrowDown';
+                if (widen) {
                   e.preventDefault();
                   onTocWidth(tocWidth + 16);
-                } else if (e.key === 'ArrowRight') {
+                } else if (narrow) {
                   e.preventDefault();
                   onTocWidth(tocWidth - 16);
                 }

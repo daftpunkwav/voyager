@@ -291,22 +291,31 @@ export function McpBlock() {
                       </p>
                     ) : (
                       <>
-                        {s.preview.map((tool) => (
-                          <label key={tool.name} className="mcp-row__tool">
-                            {s.approval === 'item' && (
+                        {s.preview.map((tool) => {
+                          const toolText = (
+                            <span>
+                              <strong className="mono">{tool.name}</strong>
+                              {tool.description ? ` — ${tool.description}` : ''}
+                            </span>
+                          );
+                          // A <label> must wrap a native control: use one only
+                          // when the per-item checkbox exists, plain text otherwise.
+                          return s.approval === 'item' ? (
+                            <label key={tool.name} className="mcp-row__tool">
                               <input
                                 type="checkbox"
                                 checked={(checked[s.id] ?? []).includes(tool.name)}
                                 onChange={() => toggleTool(s.id, tool.name)}
                                 aria-label={`${s.id} · ${tool.name}`}
                               />
-                            )}
-                            <span>
-                              <strong className="mono">{tool.name}</strong>
-                              {tool.description ? ` — ${tool.description}` : ''}
+                              {toolText}
+                            </label>
+                          ) : (
+                            <span key={tool.name} className="mcp-row__tool">
+                              {toolText}
                             </span>
-                          </label>
-                        ))}
+                          );
+                        })}
                         <div className="mcp-row__tool-actions">
                           {s.approval === 'package' ? (
                             <button

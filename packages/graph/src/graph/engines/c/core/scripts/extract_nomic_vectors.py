@@ -42,6 +42,9 @@ from transformers import AutoModel, AutoTokenizer  # after the os.environ setup 
 # ── Configuration ──────────────────────────────────────────────────────
 
 MODEL_NAME = "nomic-ai/nomic-embed-code"
+# The model repo requires trust_remote_code=True, so the download is pinned
+# to a commit sha: a moved tag cannot swap the executed code underneath us.
+MODEL_REVISION = "11114029805cee545ef111d5144b623787462a52"
 OUTPUT_DIM = 768  # Target dimension (Matryoshka truncation if model outputs more)
 SIM_ATTENTION_K = 32  # Top-K neighbors for simulated attention
 SIM_ATTENTION_ITERS = 3  # Number of simulated attention iterations
@@ -389,9 +392,12 @@ def main():
     # ── Step 1: Load model + tokenizer ──
     print("step 1: loading model + tokenizer...")
     t0 = time.time()
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(
+        MODEL_NAME, revision=MODEL_REVISION, trust_remote_code=True
+    )
     model = AutoModel.from_pretrained(
         MODEL_NAME,
+        revision=MODEL_REVISION,
         trust_remote_code=True,
         dtype=torch.float16,  # 7B×2B = ~14GB (vs 28GB float32)
         low_cpu_mem_usage=True,  # Stream weights, no 2x peak during load

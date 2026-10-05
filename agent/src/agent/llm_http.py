@@ -545,7 +545,8 @@ class HttpLLM:
                 text=f"{_DEGRADED_PREFIX} connection failed: {type(net_error).__name__}",
                 degraded=True,
             )
-        assert resp is not None  # the loop exits only with a response or a net error
+        if resp is None:  # unreachable: the loop exits with a response or a net error
+            raise RuntimeError("retry loop exited without a response or net error")
         if resp.status_code != 200:
             return LLMReply(
                 text=_error_text(resp.status_code),
@@ -728,7 +729,8 @@ class HttpLLM:
                     )
                 )
                 return
-            assert retry_delay is not None  # a retry branch always sets the delay
+            if retry_delay is None:  # unreachable: every retry branch sets a delay
+                raise RuntimeError("retry branch did not set a delay")
             await asyncio.sleep(retry_delay)
         calls = tuple(
             ToolCall(

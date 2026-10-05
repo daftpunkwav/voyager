@@ -1,0 +1,6 @@
+# CVE-2026-31236 — arbitrary code execution via the `llm` CLI's --functions
+# argument (PyPI project `llm`). The `llm==0.1.0` entry in uv.lock is the
+# first-party workspace package packages/llm (source = editable path), which
+# only shares the name and version with the PyPI CLI; the vulnerable code is
+# not part of this dependency tree.
+CVE-2026-31236

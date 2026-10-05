@@ -143,8 +143,8 @@ async def agent_instance_action(
                         state.status = RunStatus.FAILED
                         state.error = err
                         checkpoints.save(state)
-                    except Exception:  # noqa: BLE001, S110
-                        pass
+                    except Exception:  # noqa: BLE001, S110  # best-effort checkpoint status update
+                        pass  # nosec B110
                     # Same completion wrapper as dispatch: the board row closes
                     # and the delivery card goes out even on a failed resume
                     if board_id:

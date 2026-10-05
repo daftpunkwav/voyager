@@ -268,8 +268,7 @@ export function NoteIndex({
               </svg>
               <input
                 id="notes-search-input"
-                type="text"
-                role="searchbox"
+                type="search"
                 placeholder={t('notes:index.searchPlaceholder')}
                 value={query}
                 onChange={(e) => onQuery(e.target.value)}
@@ -486,9 +485,8 @@ export function NoteIndex({
 
         <div className="page-scaffold__body">
           {bulkMounted ? (
-            <div
+            <section
               className={`notes-bulk${bulkExiting ? ' is-exit' : ''}`}
-              role="region"
               aria-label={t('notes:bulk.regionAria')}
               data-testid="notes-bulk-bar"
             >
@@ -535,7 +533,7 @@ export function NoteIndex({
                   {t('notes:bulk.clear')}
                 </button>
               </div>
-            </div>
+            </section>
           ) : null}
           {empty ? (
             <div className="page-scaffold__state">

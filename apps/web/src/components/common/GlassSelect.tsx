@@ -56,7 +56,7 @@ export function GlassSelect({
   // entrance must grow from the edge facing the trigger (transform-origin)
   const [flipped, setFlipped] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLUListElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const listId = useId();
 
   const selected = options.find((o) => o.value === value) ?? options[0];
@@ -108,7 +108,7 @@ export function GlassSelect({
 
   const menu =
     open && pos ? (
-      <ul
+      <div
         ref={menuRef}
         className={`glass-select-menu glass-select-menu--portal${flipped ? ' is-flipped' : ''}`}
         id={listId}
@@ -116,7 +116,7 @@ export function GlassSelect({
         style={{ top: pos.top, left: pos.left, width: pos.width }}
       >
         {options.map((opt) => (
-          <li key={opt.value || '__empty__'} role="presentation">
+          <div key={opt.value || '__empty__'} role="presentation">
             <button
               type="button"
               role="option"
@@ -129,9 +129,9 @@ export function GlassSelect({
             >
               {opt.label}
             </button>
-          </li>
+          </div>
         ))}
-      </ul>
+      </div>
     ) : null;
 
   return (

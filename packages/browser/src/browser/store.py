@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 _COLS = ("id", "url", "created_ts", "updated_ts")
 
+# Plain-literal SELECT heads: the column list is kept in lockstep with _COLS
+# (which feeds _row via zip), never widened to *.
+_SQL_GET_SESSION = "SELECT id, url, created_ts, updated_ts FROM sessions WHERE id=?"
+
 
 class BrowserStore:
     """Session metadata only; kept for debugging and auditing, not business data."""
@@ -49,9 +53,7 @@ class BrowserStore:
 
     def get(self, sid: str) -> dict[str, Any] | None:
         with self._lock:
-            row = self._conn.execute(
-                f"SELECT {','.join(_COLS)} FROM sessions WHERE id=?", (sid,)
-            ).fetchone()
+            row = self._conn.execute(_SQL_GET_SESSION, (sid,)).fetchone()
         return _row(_COLS, row) if row else None
 
     def close(self) -> None:

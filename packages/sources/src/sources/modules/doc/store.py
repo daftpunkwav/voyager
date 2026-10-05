@@ -68,6 +68,15 @@ _COLS = (
 #: fetched on demand only via get_doc_section
 _SUMMARY_COLS = _COLS
 
+# Plain-literal SELECT head; the column list is kept in lockstep with
+# _COLS (which feeds _row via zip), never widened to *. Filter and order
+# fragments are appended dynamically from literal strings and the
+# _SORTABLE whitelist with bound parameters.
+_SQL_SUMMARY_HEAD = (
+    "SELECT id, title, filename, ext, local_path, category, tags, progress,"
+    " note, status, error, source, added_ts, updated_ts FROM documents"
+)
+
 _SORTABLE = {"added": "added_ts", "updated": "updated_ts", "title": "title"}
 
 
@@ -113,7 +122,7 @@ class DocStore:
     def _fetch(
         self, where: str = "", params: tuple = (), order: str = "added_ts DESC"
     ) -> list[dict[str, Any]]:
-        sql = f"SELECT {','.join(_SUMMARY_COLS)} FROM documents"
+        sql = _SQL_SUMMARY_HEAD
         if where:
             sql += f" WHERE {where}"
         rows = self._conn.execute(f"{sql} ORDER BY {order}", params).fetchall()
@@ -150,7 +159,7 @@ class DocStore:
             params += [like, like]
         col = _SORTABLE.get(sort, "added_ts")
         order = f"{col} {'DESC' if desc else 'ASC'}"
-        sql = f"SELECT {','.join(_SUMMARY_COLS)} FROM documents"
+        sql = _SQL_SUMMARY_HEAD
         if wheres:
             sql += " WHERE " + " AND ".join(wheres)
         sql += f" ORDER BY {order} LIMIT ?"

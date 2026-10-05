@@ -33,6 +33,7 @@ import {
 import type { Project, ProjectProgress } from '@/api/types';
 import { useProjectStore } from '@/stores/projectStore';
 import { invalidateOverviewQueries } from '@/utils/invalidateOverview';
+import { createKeyedWriteQueue } from '@/utils/writeQueue';
 
 /** Derive query params from the store; useShallow is required so a new object
  * identity does not trigger infinite re-renders. */
@@ -125,11 +126,17 @@ export function useImportProjects() {
   });
 }
 
+/** Progress writes to one project are serialized through the keyed write
+ *  queue: rapid progress changes fire overlapping mutations, and an unordered
+ *  commit would let an older selection land last and revert the stored
+ *  value. */
+const enqueueProgressWrite = createKeyedWriteQueue(updateProgress);
+
 export function useUpdateProgress() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, progress }: { id: string; progress: ProjectProgress }) => {
-      await updateProgress(id, progress);
+      await enqueueProgressWrite(id, progress);
     },
     onSuccess: (_d, vars) => {
       void qc.invalidateQueries({ queryKey: ['projects'] });

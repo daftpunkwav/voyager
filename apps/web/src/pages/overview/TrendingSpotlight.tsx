@@ -8,7 +8,6 @@
  * - Apply the width measured by the page so the bubble stays aligned
  */
 
-import { useTranslation } from 'react-i18next';
 import { AgentAvatar, type LookTarget } from '@/components/agent/AgentAvatar';
 import { GLASS_CHIP } from '@/constants/glassTokens';
 import type { TrendingRepo } from '@/api/types';
@@ -32,10 +31,8 @@ export function TrendingSpotlight({
   lookTarget,
   bubbleWidthPx,
 }: TrendingSpotlightProps) {
-  const { t } = useTranslation('overview');
   if (phase === 'hidden' || !repo) return null;
 
-  const name = `${repo.owner}/${repo.repo}`;
   const bubbleStyle = bubbleWidthPx
     ? ({ '--scout-bubble-width': `${bubbleWidthPx}px` } as CSSProperties)
     : undefined;
@@ -45,7 +42,6 @@ export function TrendingSpotlight({
       className={`trending-scout-spot trending-scout-spot--${phase}`}
       style={bubbleStyle}
       aria-live="polite"
-      aria-label={t('overview:trending.spotlightAria', { name })}
     >
       <div className={`trending-scout-bubble overview-control-surface ${GLASS_CHIP}`}>
         <span className="trending-scout-bubble-label">Iris</span>

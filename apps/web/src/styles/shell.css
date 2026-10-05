@@ -693,6 +693,10 @@
   height: 50px;
 }
 .chat-traj2__span {
+  /* Native button reset: the timeline record is a positioned color chip. */
+  appearance: none;
+  border: 0;
+  padding: 0;
   position: absolute;
   height: 12px;
   border-radius: 3px;

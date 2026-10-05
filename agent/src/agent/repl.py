@@ -100,7 +100,8 @@ class ReplSession:
     async def _consume(self) -> None:
         """Drain the subscription forever; a timeout tick keeps the task
         responsive to cancellation."""
-        assert self._sub is not None
+        if self._sub is None:  # unreachable: _consume starts after subscribe
+            raise RuntimeError("repl consumer not subscribed")
         while True:
             try:
                 event = await self._sub.get(timeout=0.5)
@@ -155,7 +156,8 @@ class ReplSession:
         return True
 
     def _answer_pending(self, line: str) -> None:
-        assert self._pending is not None
+        if self._pending is None:  # unreachable: only called with a pending ask
+            raise RuntimeError("answer without a pending ask")
         pending, self._pending = self._pending, None
         value = _coerce_answer(pending.kind, pending.options, line)
         if not self._app.asker.answer(pending.question_id, value):
