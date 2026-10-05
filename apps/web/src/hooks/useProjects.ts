@@ -125,11 +125,28 @@ export function useImportProjects() {
   });
 }
 
+/** Progress writes to one project are serialized: rapid progress changes fire
+ *  overlapping mutations, and an unordered commit would let an older
+ *  selection land last and revert the stored value. The map keeps each
+ *  project's tail promise (one settled entry per project id; the id set is
+ *  small) so unrelated projects never wait on each other. */
+const progressWrites = new Map<string, Promise<void>>();
+
 export function useUpdateProgress() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, progress }: { id: string; progress: ProjectProgress }) => {
-      await updateProgress(id, progress);
+      const prev = progressWrites.get(id) ?? Promise.resolve();
+      const next: Promise<void> = prev
+        .catch((): void => {})
+        .then(async () => {
+          await updateProgress(id, progress);
+        });
+      progressWrites.set(
+        id,
+        next.catch((): void => {})
+      );
+      await next;
     },
     onSuccess: (_d, vars) => {
       void qc.invalidateQueries({ queryKey: ['projects'] });

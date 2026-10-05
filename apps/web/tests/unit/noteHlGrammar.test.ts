@@ -2,14 +2,16 @@
  * @file noteHlGrammar
  * @description Behavior-level lock on the highlight tone grammar: every
  * palette tone must be recognized by each code path that consumes the
- * `==tone:` markup (parsing, fence recovery, outline stripping), so adding a
- * tone without updating the shared grammar factories fails loudly here.
+ * `==tone:` markup (parsing, fence recovery, outline stripping, preview mark
+ * props), so adding a tone without updating the shared grammar or its class
+ * matcher fails loudly here.
  */
 
 import { describe, expect, it } from 'vitest';
 import {
   HL_TONE_AT,
   NOTE_HL_TONES,
+  notesHlMarkProps,
   parseHlTone,
   parseNoteHighlight,
   recoverTonedMarkup,
@@ -20,9 +22,16 @@ describe('note highlight grammar', () => {
   it('recognizes every built-in tone at the tone position', () => {
     for (const tone of NOTE_HL_TONES) {
       expect(HL_TONE_AT.test(`${tone}:`)).toBe(true);
+      expect(parseHlTone(tone)).toBe(tone);
     }
     expect(HL_TONE_AT.test('rgb7c3aed:')).toBe(true);
     expect(HL_TONE_AT.test('nope:')).toBe(false);
+  });
+
+  it('maps every palette tone to its own preview class', () => {
+    for (const tone of NOTE_HL_TONES) {
+      expect(notesHlMarkProps(`notes-hl-${tone}`)).toEqual({ className: `notes-hl-${tone}` });
+    }
   });
 
   it.each(NOTE_HL_TONES)('parses %s markup through parseNoteHighlight', (tone) => {
