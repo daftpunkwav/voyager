@@ -28,6 +28,9 @@ engines:
   biome:
     exclude_paths:
       - "apps/web/**"
+    # Replacement gate: the repo's own ESLint flat config (CI gate:web,
+    # eslint --max-warnings 0) plus tsc cover every rule class this engine
+    # raises for this React app.
   # The engine runs type-aware @typescript-eslint rules without type
   # information (no-confusing-void-expression, no-unnecessary-condition,
   # no-redundant-type-constituents, prefer-nullish-coalescing) and the base
@@ -38,6 +41,9 @@ engines:
     exclude_paths:
       - "apps/web/**"
       - "scripts/**"
+    # Replacement gate: the repo's own ESLint flat config is the
+    # authoritative JS/TS linter (CI gate:web, eslint --max-warnings 0,
+    # type-aware rules run with real type information via tsc).
   # Reports every call to memcpy/strlen/open/getenv/... as an audit advisory
   # regardless of surrounding guards. The C sidecar is dormant (the Python
   # fallback engine serves requests) and its call sites received a targeted
@@ -45,6 +51,9 @@ engines:
   flawfinder:
     exclude_paths:
       - "packages/graph/src/graph/engines/c/**"
+    # Replacement gate: dormant sidecar (the Python fallback engine serves
+    # requests); the C tree received two per-site manual audits (PRs #29 and
+    # #31) and ships no production path.
   # The engine's configuration references a rule id that does not exist
   # ("Unknown rule scss_function-disallowed-list"), producing an error on
   # every analyzed CSS file. The :not() notation findings it did report are
@@ -52,6 +61,11 @@ engines:
   stylelint:
     exclude_paths:
       - "apps/web/**"
+    # Replacement gate: the engine's config references a rule id that does
+    # not exist (unknown rule scss_function-disallowed-list), erroring on
+    # every CSS file; the actionable findings it did report (selector-not-
+    # notation) are fixed in the stylesheets, and formatting is enforced by
+    # prettier in CI.
   # Reports every call to memcpy/strlen/memset/getenv/open/... as an audit
   # advisory regardless of surrounding guards, and its use-after-free matches
   # are re-assignment pairs it cannot track. A per-site audit of the first-party
@@ -60,6 +74,9 @@ engines:
   opengrep:
     exclude_paths:
       - "packages/graph/src/graph/engines/c/**"
+    # Replacement gate for the C tree: dormant sidecar, audited per site in
+    # PRs #29/#31 (see also flawfinder above); the Python findings follow the
+    # audited-file policy below.
       # Every Python finding below was audited at its call site (triage
       # recorded in PR #31): the SQL statements interpolate only
       # module-constant columns, bound placeholders, or whitelisted
@@ -286,12 +303,79 @@ engines:
   cppcheck:
     exclude_paths:
       - "packages/graph/src/graph/engines/c/**"
-  # Duplicates the standalone Bandit, Pylint, and pyflakes findings already
-  # reported by those tools; its remaining unique output is the mccabe
-  # complexity metric, which no repository gate enforces.
+    # Replacement gate: dormant sidecar audited per site (PRs #29/#31); the
+    # one real finding (variadic NULL sentinel) is fixed in code.
+  # Wraps the standalone Bandit, Pylint, and pyflakes engines (excluded with
+  # the same audited-file list below); its remaining unique output is the
+  # mccabe complexity metric, an advisory no repository gate enforces. Same
+  # per-file policy as opengrep/bandit: audited files only, so newly added
+  # Python source stays in Prospector's scope.
   prospector:
     exclude_paths:
-      - "**/*.py"
+      - "packages/graph/src/graph/engines/python/**"
+      - "packages/graph/src/graph/engines/c/core/scripts/**"
+      - "agent/src/agent/build.py"
+      - "agent/src/agent/capabilities/extension/add_mcp_server.py"
+      - "agent/src/agent/capabilities/extension/approve_mcp_tools.py"
+      - "agent/src/agent/capabilities/extension/extension.py"
+      - "agent/src/agent/capabilities/extension/remove_mcp_server.py"
+      - "agent/src/agent/capabilities/team/subagent.py"
+      - "agent/src/agent/capabilities/team/taskboard.py"
+      - "agent/src/agent/context/builder.py"
+      - "agent/src/agent/context/prefix_watch.py"
+      - "agent/src/agent/engine/instance.py"
+      - "agent/src/agent/engine/modes/react.py"
+      - "agent/src/agent/engine/modes/streaming.py"
+      - "agent/src/agent/engine/spawn.py"
+      - "agent/src/agent/engine/turn.py"
+      - "agent/src/agent/mcp/session.py"
+      - "agent/src/agent/memory/episodic.py"
+      - "agent/src/agent/memory/semantic.py"
+      - "agent/src/agent/orchestrator/master.py"
+      - "agent/src/agent/runtime/meter_store.py"
+      - "agent/src/agent/runtime/pricing.py"
+      - "agent/src/agent/runtime/queue_store.py"
+      - "agent/src/agent/runtime/trajectory.py"
+      - "agent/src/agent/tools/core/invoke.py"
+      - "agent/src/agent/tools/interact/ask_user.py"
+      - "agent/src/agent/tools/plan/scratchpad.py"
+      - "agent/src/agent/tools/workspace/bash.py"
+      - "agent/src/agent/tools/workspace/grep.py"
+      - "packages/browser/src/browser/store.py"
+      - "packages/code_exec/src/code_exec/executor.py"
+      - "packages/code_exec/src/code_exec/store.py"
+      - "packages/gateway/src/gateway/chat.py"
+      - "packages/gateway/src/gateway/rest.py"
+      - "packages/gateway/src/gateway/uploads.py"
+      - "packages/gateway/src/gateway/workspace.py"
+      - "packages/graph/src/graph/capabilities.py"
+      - "packages/graph/src/graph/operations.py"
+      - "packages/graph/src/graph/store.py"
+      - "packages/host/src/host/assemble.py"
+      - "packages/host/src/host/dev.py"
+      - "packages/host/src/host/plan.py"
+      - "packages/llm/src/llm/capabilities/common.py"
+      - "packages/llm/src/llm/client.py"
+      - "packages/llm/src/llm/embeddings.py"
+      - "packages/llm/src/llm/store.py"
+      - "packages/llm/src/llm/stream.py"
+      - "packages/llm/src/llm/wire_responses.py"
+      - "packages/notes/src/notes/store.py"
+      - "packages/notes/src/notes/view.py"
+      - "packages/office/src/office/store.py"
+      - "packages/platform/capability/src/platform_capability/audit_db.py"
+      - "packages/platform/capability/src/platform_capability/gen_mcp.py"
+      - "packages/platform/capability/src/platform_capability/gen_rest.py"
+      - "packages/platform/capability/src/platform_capability/runtime_dir.py"
+      - "packages/platform/eventbus/src/platform_eventbus/log.py"
+      - "packages/sources/src/sources/modules/doc/store.py"
+      - "packages/sources/src/sources/modules/repo/capabilities.py"
+      - "packages/sources/src/sources/modules/repo/store.py"
+      - "packages/sources/src/sources/modules/web/store.py"
+      - "scripts/check_docs_i18n.py"
+      - "scripts/gen_dep_graph.py"
+      - "scripts/pip_audit.py"
+      - "tools/diag_subagent_400.py"
   # Write-Host in the build/test scripts is intentional console output
   # (colored progress for the developer, not pipeline data).
   psscriptanalyzer:

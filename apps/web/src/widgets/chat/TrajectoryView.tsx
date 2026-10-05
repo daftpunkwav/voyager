@@ -212,8 +212,9 @@ export function TrajectoryView() {
         </div>
         <div className="chat-traj2__spans">
           {filtered.map((r, i) => (
-            <span
+            <button
               key={r.key}
+              type="button"
               className={`chat-traj2__span is-${r.kind}${selected === r.key ? ' is-selected' : ''}`}
               style={{
                 left: `${(i / Math.max(filtered.length, 1)) * 100}%`,
@@ -222,15 +223,7 @@ export function TrajectoryView() {
               }}
               title={r.text.slice(0, 120)}
               aria-label={`${r.kind} ${r.key}`}
-              role="button"
-              tabIndex={0}
               onClick={() => scrollToRow(r.key)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  scrollToRow(r.key);
-                }
-              }}
             />
           ))}
         </div>
