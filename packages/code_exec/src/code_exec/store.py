@@ -118,10 +118,17 @@ class ExecutionStore:
             ).fetchall()
             ids = [r[0] for r in old] + [r[0] for r in extra]
             if ids:
-                self._conn.executemany(
-                    "DELETE FROM executions WHERE id = ?", [(exec_id,) for exec_id in ids]
-                )
-                self._conn.commit()
+                try:
+                    self._conn.executemany(
+                        "DELETE FROM executions WHERE id = ?", [(exec_id,) for exec_id in ids]
+                    )
+                    self._conn.commit()
+                except BaseException:
+                    # A batch failing halfway must not leave earlier deletes
+                    # to be persisted by the next commit; artifact cleanup is
+                    # skipped with the rows intact.
+                    self._conn.rollback()
+                    raise
         for exec_id in ids:
             self._remove_artifacts(exec_id)
         self._sweep_orphan_artifacts(cutoff)

@@ -87,8 +87,9 @@ class DocumentStore:
             if existing is None:
                 raise KeyError(did)
             return existing
-        now = time.time()
         with self._lock:
+            # Captured under the lock so racing updates keep updated_ts ordered.
+            now = time.time()
             try:
                 for k, v in fields.items():
                     self._conn.execute(_UPDATE_FIELD_SQL[k], (v, now, did))

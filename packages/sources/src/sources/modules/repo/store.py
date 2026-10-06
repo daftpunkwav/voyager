@@ -259,8 +259,9 @@ class RepoStore:
         updates = {k: v for k, v in fields.items() if k in _META_UPDATE_SQL and v is not None}
         if not updates:
             return
-        now = time.time()
         with self._lock:
+            # Captured under the lock so racing updates keep updated_ts ordered.
+            now = time.time()
             try:
                 for k, v in updates.items():
                     value = json.dumps(v, ensure_ascii=False) if k == "tags" else v

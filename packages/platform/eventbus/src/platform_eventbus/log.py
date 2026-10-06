@@ -148,11 +148,17 @@ class EventLog:
         if not type_list:
             return 0
         with self._lock:
-            cur = self._conn.executemany(
-                "DELETE FROM events WHERE type = ? AND ts < ?",
-                [(t, before_ts) for t in type_list],
-            )
-            self._conn.commit()
+            try:
+                cur = self._conn.executemany(
+                    "DELETE FROM events WHERE type = ? AND ts < ?",
+                    [(t, before_ts) for t in type_list],
+                )
+                self._conn.commit()
+            except BaseException:
+                # A batch failing halfway must not leave earlier deletes to
+                # be persisted by the next commit.
+                self._conn.rollback()
+                raise
         return max(int(cur.rowcount or 0), 0)  # drivers may report -1 for unknown
 
     def _sweep(self) -> None:

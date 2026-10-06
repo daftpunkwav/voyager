@@ -1457,6 +1457,47 @@ static const EngineType *rust_eval_literal_type(RustLSPContext *ctx, const char 
 static const EngineType *rust_eval_member_access(RustLSPContext *ctx, const EngineType *recv,
                                               const char *member);
 
+/* Rust tuple indices are decimal literals that may carry digit separators
+ * between digits ('.0_0' and '.1_0' are valid; leading, doubled, and
+ * trailing separators are not). strtol stops at the underscore, so
+ * validated separators are stripped into a bounded local copy first;
+ * anything the Rust grammar would reject returns false so the caller
+ * keeps its fallback. */
+static bool rust_parse_tuple_index(const char *s, long *out) {
+    if (!s || !s[0]) {
+        return false;
+    }
+    char digits[32];
+    size_t ndigits = 0;
+    bool pending_sep = false;
+    for (const char *p = s; *p; p++) {
+        if (*p == '_') {
+            if (ndigits == 0 || pending_sep) {
+                return false;
+            }
+            pending_sep = true;
+            continue;
+        }
+        if (ndigits >= sizeof(digits) - 1) {
+            return false; /* cannot index any real tuple */
+        }
+        digits[ndigits++] = *p;
+        pending_sep = false;
+    }
+    if (pending_sep) {
+        return false; /* trailing separator */
+    }
+    digits[ndigits] = '\0';
+    char *end = NULL;
+    errno = 0;
+    long value = strtol(digits, &end, 10);
+    if (errno != 0 || end != digits || *end != '\0') {
+        return false;
+    }
+    *out = value;
+    return true;
+}
+
 const EngineType *rust_eval_expr_type(RustLSPContext *ctx, TSNode node) {
     if (ts_node_is_null(node)) {
         return engine_type_unknown();
@@ -1551,14 +1592,10 @@ const EngineType *rust_eval_expr_type(RustLSPContext *ctx, TSNode node) {
                 }
                 if (base && base->kind == ENGINE_TYPE_TUPLE) {
                     char *idx_text = rust_node_text(ctx, field);
-                    if (idx_text) {
-                        char *end = NULL;
-                        errno = 0;
-                        long idx = strtol(idx_text, &end, 10);
-                        if (errno == 0 && end != idx_text && *end == '\0' && idx >= 0 &&
-                            idx < base->data.tuple.count) {
-                            return base->data.tuple.elems[idx];
-                        }
+                    long idx = 0;
+                    if (idx_text && rust_parse_tuple_index(idx_text, &idx) && idx >= 0 &&
+                        idx < base->data.tuple.count) {
+                        return base->data.tuple.elems[idx];
                     }
                 }
             }

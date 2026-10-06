@@ -23,6 +23,7 @@ from sources.modules.repo.store import _SQL_GET_BY_ID_SUMMARY as _REPO_SQL_GET_S
 from sources.modules.repo.store import _SQL_GET_BY_URL as _REPO_SQL_GET_URL
 from sources.modules.repo.store import _SQL_SUMMARY_HEAD as _REPO_SQL_HEAD
 from sources.modules.repo.store import _SUMMARY_COLS as _REPO_SUMMARY_COLS
+from sources.modules.repo.store import RepoStore
 from sources.modules.web.store import _COLS as _WEB_COLS
 from sources.modules.web.store import _LIST_COLS as _WEB_LIST_COLS
 from sources.modules.web.store import _SQL_GET_PAGE as _WEB_SQL_GET
@@ -54,6 +55,64 @@ def test_doc_sql_heads_columns_match_cols() -> None:
     assert _head_of(_DOC_SQL_HEAD) == _DOC_COLS
     assert _head_of(_DOC_SQL_GET) == _DOC_COLS
     assert _DOC_SQL_GET.startswith(_DOC_SQL_HEAD)
+
+
+# The lookup literals spelled out independently of the store constants, so a
+# predicate that drifts from exact equality (e.g. LIKE) fails these pins.
+_EXPECTED_DOC_GET = (
+    "SELECT id, title, filename, ext, local_path, category, tags, progress,"
+    " note, status, error, source, added_ts, updated_ts FROM documents"
+    " WHERE id = ?"
+)
+_EXPECTED_REPO_GET_FULL = (
+    "SELECT id, owner, name, url, description, stars, language, category,"
+    " tags, progress, note, local_path, readme, status, error, source,"
+    " added_ts, updated_ts FROM repos WHERE id = ?"
+)
+_EXPECTED_REPO_GET_SUMMARY = (
+    "SELECT id, owner, name, url, description, stars, language, category,"
+    " tags, progress, note, local_path, status, error, source, added_ts,"
+    " updated_ts FROM repos WHERE id = ?"
+)
+_EXPECTED_REPO_GET_URL = (
+    "SELECT id, owner, name, url, description, stars, language, category,"
+    " tags, progress, note, local_path, status, error, source, added_ts,"
+    " updated_ts FROM repos WHERE url = ?"
+)
+_EXPECTED_WEB_GET = (
+    "SELECT id, title, url, domain, summary, content, tags, category, meta,"
+    " added_ts, updated_ts FROM webpages WHERE id = ?"
+)
+
+
+def test_lookup_sql_is_exact_equality() -> None:
+    assert _DOC_SQL_GET == _EXPECTED_DOC_GET
+    assert _REPO_SQL_GET_FULL == _EXPECTED_REPO_GET_FULL
+    assert _REPO_SQL_GET_SUMMARY == _EXPECTED_REPO_GET_SUMMARY
+    assert _REPO_SQL_GET_URL == _EXPECTED_REPO_GET_URL
+    assert _WEB_SQL_GET == _EXPECTED_WEB_GET
+
+
+def test_lookups_match_only_the_exact_key(tmp_path: Path) -> None:
+    """Wildcard-shaped keys must not match through the id/url predicates."""
+    doc_store = DocStore(tmp_path / "doc.db")
+    doc_store.add({"id": "a%", "title": "pct"})
+    doc_store.add({"id": "a_", "title": "under"})
+    doc_pct = doc_store.get("a%")
+    doc_under = doc_store.get("a_")
+    assert doc_pct is not None and doc_pct["title"] == "pct"
+    assert doc_under is not None and doc_under["title"] == "under"
+    repo_store = RepoStore(tmp_path / "repo.db")
+    repo_store.add({"id": "a%", "name": "pct", "url": "u%"})
+    repo_store.add({"id": "a_", "name": "under", "url": "u_"})
+    repo_pct = repo_store.get("a%")
+    repo_under = repo_store.get("a_")
+    url_pct = repo_store.get_by_url("u%")
+    url_under = repo_store.get_by_url("u_")
+    assert repo_pct is not None and repo_pct["name"] == "pct"
+    assert repo_under is not None and repo_under["name"] == "under"
+    assert url_pct is not None and url_pct["name"] == "pct"
+    assert url_under is not None and url_under["name"] == "under"
 
 
 def test_repo_sql_heads_columns_match_cols() -> None:

@@ -1438,6 +1438,65 @@ static const EngineType *py_iterable_element_type(PyLSPContext *ctx, const Engin
     return engine_type_unknown();
 }
 
+/* Python integer literal syntax (PEP 515): optional radix prefix
+ * (0x/0o/0b), digit separators allowed only between digits — and
+ * immediately after a radix prefix — never doubled or trailing, and a
+ * decimal literal may not lead with a zero unless it is a bare "0"
+ * ('0_1' and '01' are syntax errors). Radix prefixes select the strtol
+ * base; anything Python's own grammar would reject returns false so the
+ * caller keeps its fallback. */
+static bool py_parse_int_literal(const char *s, long *out) {
+    if (!s || !s[0]) {
+        return false;
+    }
+    int base = 10;
+    const char *body = s;
+    if (s[0] == '0' &&
+        (s[1] == 'x' || s[1] == 'X' || s[1] == 'o' || s[1] == 'O' || s[1] == 'b' || s[1] == 'B')) {
+        base = (s[1] == 'x' || s[1] == 'X')   ? 16
+               : (s[1] == 'o' || s[1] == 'O') ? 8
+                                              : 2;
+        body = s + 2;
+        if (*body == '_') {
+            body++; /* a separator may follow the prefix directly */
+        }
+    } else if (s[0] == '0' && s[1] != '\0') {
+        return false; /* leading-zero decimal ('0_1', '01') is invalid */
+    }
+    if (!*body) {
+        return false; /* bare prefix */
+    }
+    char digits[32];
+    size_t ndigits = 0;
+    bool pending_sep = false;
+    for (const char *p = body; *p; p++) {
+        if (*p == '_') {
+            if (ndigits == 0 || pending_sep) {
+                return false;
+            }
+            pending_sep = true;
+            continue;
+        }
+        if (ndigits >= sizeof(digits) - 1) {
+            return false; /* cannot index any real tuple */
+        }
+        digits[ndigits++] = *p;
+        pending_sep = false;
+    }
+    if (pending_sep) {
+        return false; /* trailing separator */
+    }
+    digits[ndigits] = '\0';
+    char *end = NULL;
+    errno = 0;
+    long value = strtol(digits, &end, base);
+    if (errno != 0 || end != digits || *end != '\0') {
+        return false;
+    }
+    *out = value;
+    return true;
+}
+
 /* The real recursive-descent evaluator. Never call directly — go through
  * the memoizing, depth- and budget-guarded py_eval_expr_type wrapper below
  * (every recursive call inside this body already does). */
@@ -2027,41 +2086,9 @@ static const EngineType *py_eval_expr_type_uncached(PyLSPContext *ctx, TSNode no
             if (!ts_node_is_null(sub) && strcmp(ts_node_type(sub), "integer") == 0) {
                 char *idx_text = py_node_text(ctx, sub);
                 if (idx_text) {
-                    /* Python allows digit separators between digits ('1_0')
-                     * and rejects leading, doubled, and trailing ones;
-                     * strtol stops at the underscore, so validated
-                     * separators are stripped into a bounded local copy.
-                     * Literals Python's own grammar would reject keep the
-                     * union fallback instead of selecting an element. */
-                    char digits[32];
-                    size_t ndigits = 0;
-                    bool copy_ok = idx_text[0] != '\0';
-                    bool pending_sep = false;
-                    for (const char *p = idx_text; copy_ok && *p; p++) {
-                        if (*p == '_') {
-                            /* A separator must sit between two digits. */
-                            copy_ok = ndigits > 0 && !pending_sep;
-                            pending_sep = true;
-                            continue;
-                        }
-                        if (ndigits >= sizeof(digits) - 1) {
-                            copy_ok = false;
-                            break;
-                        }
-                        digits[ndigits++] = *p;
-                        pending_sep = false;
-                    }
-                    if (pending_sep) {
-                        copy_ok = false; /* trailing separator */
-                    }
-                    digits[ndigits] = '\0';
-                    if (copy_ok) {
-                        char *end = NULL;
-                        errno = 0;
-                        long idx = strtol(digits, &end, 10);
-                        if (errno == 0 && end != digits && *end == '\0' && idx >= 0 && idx < n)
-                            return args[idx];
-                    }
+                    long idx = 0;
+                    if (py_parse_int_literal(idx_text, &idx) && idx >= 0 && idx < n)
+                        return args[idx];
                 }
             }
             if (n == 1)

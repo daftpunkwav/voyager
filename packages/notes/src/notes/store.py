@@ -221,8 +221,11 @@ class NoteStore:
         if "content" in updates:
             updates["content"] = _normalize(updates["content"])
         new_content = updates.get("content")
-        now = time.time()
         with self._lock:
+            # Captured under the lock: two racing updates must stamp the
+            # later-committed one with the later timestamp, or the
+            # recent-first list shows stale ordering.
+            now = time.time()
             try:
                 old_content = None
                 if new_content is not None and self.history_keep > 0:
@@ -263,13 +266,21 @@ class NoteStore:
     def _delete_ids_locked(self, nids: list[str]) -> None:
         if not nids:
             return
-        self._conn.executemany("DELETE FROM notes WHERE id = ?", [(n,) for n in nids])
-        self._conn.executemany("DELETE FROM note_versions WHERE note_id = ?", [(n,) for n in nids])
-        # Links match on either endpoint: two literal sweeps replace the OR-ed
-        # IN pair and delete the same row set.
-        self._conn.executemany("DELETE FROM note_links WHERE src = ?", [(n,) for n in nids])
-        self._conn.executemany("DELETE FROM note_links WHERE dst = ?", [(n,) for n in nids])
-        self._conn.commit()
+        try:
+            self._conn.executemany("DELETE FROM notes WHERE id = ?", [(n,) for n in nids])
+            self._conn.executemany(
+                "DELETE FROM note_versions WHERE note_id = ?", [(n,) for n in nids]
+            )
+            # Links match on either endpoint: two literal sweeps replace the OR-ed
+            # IN pair and delete the same row set.
+            self._conn.executemany("DELETE FROM note_links WHERE src = ?", [(n,) for n in nids])
+            self._conn.executemany("DELETE FROM note_links WHERE dst = ?", [(n,) for n in nids])
+            self._conn.commit()
+        except BaseException:
+            # A batch failing halfway must not leave earlier deletes to be
+            # persisted by the next commit.
+            self._conn.rollback()
+            raise
 
     # ---------- State transitions ----------
 
