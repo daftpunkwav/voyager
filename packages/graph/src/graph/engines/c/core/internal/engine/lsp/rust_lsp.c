@@ -1457,14 +1457,17 @@ static const EngineType *rust_eval_literal_type(RustLSPContext *ctx, const char 
 static const EngineType *rust_eval_member_access(RustLSPContext *ctx, const EngineType *recv,
                                               const char *member);
 
-/* Rust tuple indices are plain decimal digits: rustc matches the index
- * token textually against the tuple's field names, so a separator form
- * like '.0_0' resolves to no field at all (rustc E0609). Reject any
- * non-digit instead of normalizing separators; invalid forms keep the
- * caller's fallback. */
+/* Rust tuple indices are plain decimal digits with no leading zeros: the
+ * reference grammar forbids them and rustc matches the index token
+ * textually against the tuple's field names, so '.01' resolves to no
+ * field at all (rustc E0609). Reject leading zeros and any non-digit
+ * instead of normalizing; invalid forms keep the caller's fallback. */
 static bool rust_parse_tuple_index(const char *text, long *out) {
     if (!text || !text[0]) {
         return false;
+    }
+    if (text[0] == '0' && text[1] != '\0') {
+        return false; /* leading zeros ('01') never match a tuple field */
     }
     for (const char *cursor = text; *cursor; cursor++) {
         if (*cursor < '0' || *cursor > '9') {
