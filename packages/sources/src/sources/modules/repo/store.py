@@ -68,8 +68,10 @@ _COLS = (
 #: demand via get_readme
 _SUMMARY_COLS = tuple(c for c in _COLS if c != "readme")
 
-# Plain-literal SELECT heads; the column lists are kept in lockstep with
-# _COLS / _SUMMARY_COLS (which feed _row via zip), never widened to *.
+# Plain-literal SELECT statements; the column lists are kept in lockstep
+# with _COLS / _SUMMARY_COLS (which feed _row via zip), never widened to *.
+# Each statement is one standalone adjacent-literal string — no runtime
+# concatenation composes them, so scanners can verify the constant text.
 _SQL_SUMMARY_HEAD = (
     "SELECT id, owner, name, url, description, stars, language, category,"
     " tags, progress, note, local_path, status, error, source, added_ts,"
@@ -80,9 +82,21 @@ _SQL_FULL_HEAD = (
     " tags, progress, note, local_path, readme, status, error, source,"
     " added_ts, updated_ts FROM repos"
 )
-_SQL_GET_BY_ID_FULL = _SQL_FULL_HEAD + " WHERE id = ?"
-_SQL_GET_BY_ID_SUMMARY = _SQL_SUMMARY_HEAD + " WHERE id = ?"
-_SQL_GET_BY_URL = _SQL_SUMMARY_HEAD + " WHERE url = ?"
+_SQL_GET_BY_ID_FULL = (
+    "SELECT id, owner, name, url, description, stars, language, category,"
+    " tags, progress, note, local_path, readme, status, error, source,"
+    " added_ts, updated_ts FROM repos WHERE id = ?"
+)
+_SQL_GET_BY_ID_SUMMARY = (
+    "SELECT id, owner, name, url, description, stars, language, category,"
+    " tags, progress, note, local_path, status, error, source, added_ts,"
+    " updated_ts FROM repos WHERE id = ?"
+)
+_SQL_GET_BY_URL = (
+    "SELECT id, owner, name, url, description, stars, language, category,"
+    " tags, progress, note, local_path, status, error, source, added_ts,"
+    " updated_ts FROM repos WHERE url = ?"
+)
 
 # One literal UPDATE per editable field: every value stays a bound parameter
 # and no SET clause is ever assembled at runtime. The keys ARE the whitelist.

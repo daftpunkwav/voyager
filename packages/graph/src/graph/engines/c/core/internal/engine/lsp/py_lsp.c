@@ -2027,21 +2027,32 @@ static const EngineType *py_eval_expr_type_uncached(PyLSPContext *ctx, TSNode no
             if (!ts_node_is_null(sub) && strcmp(ts_node_type(sub), "integer") == 0) {
                 char *idx_text = py_node_text(ctx, sub);
                 if (idx_text) {
-                    /* Python integer literals may carry digit separators
-                     * ('1_0'); strtol stops at the underscore, so strip
-                     * them into a bounded local copy first. A literal too
-                     * long for the copy cannot index any real tuple. */
+                    /* Python allows digit separators between digits ('1_0')
+                     * and rejects leading, doubled, and trailing ones;
+                     * strtol stops at the underscore, so validated
+                     * separators are stripped into a bounded local copy.
+                     * Literals Python's own grammar would reject keep the
+                     * union fallback instead of selecting an element. */
                     char digits[32];
                     size_t ndigits = 0;
                     bool copy_ok = idx_text[0] != '\0';
-                    for (const char *p = idx_text; *p; p++) {
-                        if (*p == '_')
+                    bool pending_sep = false;
+                    for (const char *p = idx_text; copy_ok && *p; p++) {
+                        if (*p == '_') {
+                            /* A separator must sit between two digits. */
+                            copy_ok = ndigits > 0 && !pending_sep;
+                            pending_sep = true;
                             continue;
+                        }
                         if (ndigits >= sizeof(digits) - 1) {
                             copy_ok = false;
                             break;
                         }
                         digits[ndigits++] = *p;
+                        pending_sep = false;
+                    }
+                    if (pending_sep) {
+                        copy_ok = false; /* trailing separator */
                     }
                     digits[ndigits] = '\0';
                     if (copy_ok) {
