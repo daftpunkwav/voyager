@@ -933,7 +933,8 @@ void engine_mem_census_log(const char *tag) {
         char one[ENGINE_SZ_64];
         (void)snprintf(one, sizeof(one), "%s%p:%zuM", r == 0 ? "" : ",", census.large_base[r],
                        census.large_size[r] / ((size_t)ENGINE_SZ_1K * ENGINE_SZ_1K));
-        (void)strncat(large_map, one, sizeof(large_map) - strlen(large_map) - 1);
+        (void)snprintf(large_map + strlen(large_map), sizeof(large_map) - strlen(large_map), "%s",
+                       one);
     }
     (void)snprintf(heaps, sizeof(heaps), "%u", census.heap_walk_ok ? census.crt_heap_count : 0);
     /* Attribution alongside the pool totals: the census says which pool holds

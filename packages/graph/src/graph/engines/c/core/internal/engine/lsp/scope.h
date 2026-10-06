@@ -3,8 +3,10 @@
 
 #include "type_rep.h"
 #include "../arena.h"
+#include <errno.h>     /* strtol overflow check (engine_lsp_max_walk_depth) */
+#include <limits.h>    /* INT_MAX (engine_lsp_max_walk_depth) */
 #include <stdatomic.h> /* relaxed cache for engine_lsp_max_walk_depth */
-#include <stdlib.h>     /* getenv, atoi (engine_lsp_max_walk_depth) */
+#include <stdlib.h>    /* getenv, strtol (engine_lsp_max_walk_depth) */
 
 typedef struct {
     const char* name;
@@ -57,7 +59,15 @@ static inline int engine_lsp_max_walk_depth(void) {
     int value = atomic_load_explicit(&cached, memory_order_relaxed);
     if (value < 0) {
         const char* e = getenv("ENGINE_LSP_MAX_WALK_DEPTH");
-        int v = (e && *e) ? atoi(e) : 0;
+        int v = 0;
+        if (e && *e) {
+            char* end = NULL;
+            errno = 0;
+            long parsed = strtol(e, &end, 10);
+            if (errno == 0 && end != e && *end == '\0' && parsed > 0 && parsed <= INT_MAX) {
+                v = (int)parsed;
+            }
+        }
         value = (v > 0) ? v : ENGINE_LSP_MAX_WALK_DEPTH;
         atomic_store_explicit(&cached, value, memory_order_relaxed);
     }

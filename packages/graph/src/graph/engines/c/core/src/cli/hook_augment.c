@@ -25,6 +25,7 @@
 #include "yyjson/yyjson.h"
 
 #include <ctype.h>
+#include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -74,14 +75,16 @@ static int ha_deadline_ms(void) {
     if (!env || !env[0]) {
         return HA_DEADLINE_DEFAULT_MS;
     }
-    int v = atoi(env);
-    if (v < HA_DEADLINE_MIN_MS) {
+    char *end = NULL;
+    errno = 0;
+    long v = strtol(env, &end, ENGINE_DECIMAL_BASE);
+    if (errno != 0 || end == env || *end != '\0' || v < HA_DEADLINE_MIN_MS) {
         return HA_DEADLINE_MIN_MS;
     }
     if (v > HA_DEADLINE_MAX_MS) {
         return HA_DEADLINE_MAX_MS;
     }
-    return v;
+    return (int)v;
 }
 
 static int g_ha_crumb_fd = -1;

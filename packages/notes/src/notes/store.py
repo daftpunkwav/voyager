@@ -105,6 +105,18 @@ _SQL_GET_NOTE = (
     "SELECT id, title, content, tags, source_id, node_id, archived,"
     " pinned, trashed_ts, created_ts, updated_ts FROM notes WHERE id = ?"
 )
+
+# One literal UPDATE per editable field: every value stays a bound parameter
+# and no SET clause is ever assembled at runtime. The keys ARE the whitelist.
+_UPDATE_FIELD_SQL = {
+    "title": "UPDATE notes SET title = ?, updated_ts = ? WHERE id = ?",
+    "content": "UPDATE notes SET content = ?, updated_ts = ? WHERE id = ?",
+    "tags": "UPDATE notes SET tags = ?, updated_ts = ? WHERE id = ?",
+    "source_id": "UPDATE notes SET source_id = ?, updated_ts = ? WHERE id = ?",
+    "node_id": "UPDATE notes SET node_id = ?, updated_ts = ? WHERE id = ?",
+    "pinned": "UPDATE notes SET pinned = ?, updated_ts = ? WHERE id = ?",
+    "archived": "UPDATE notes SET archived = ?, updated_ts = ? WHERE id = ?",
+}
 _STATE_CONDS: dict[str, tuple[str, list[Any]]] = {
     "active": ("archived = 0 AND trashed_ts IS NULL", []),
     "archived": ("archived = 1 AND trashed_ts IS NULL", []),
@@ -202,38 +214,44 @@ class NoteStore:
 
         Keeps the most recent history_keep snapshots (0 disables history).
         """
-        allowed = {"title", "content", "tags", "source_id", "node_id", "pinned", "archived"}
+        allowed = set(_UPDATE_FIELD_SQL)
         updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
         if not updates:
             return False
         if "content" in updates:
             updates["content"] = _normalize(updates["content"])
-        sets, params = [], []
-        new_content = None
-        for k, v in updates.items():
-            sets.append(f"{k} = ?")
-            params.append(json.dumps(v, ensure_ascii=False) if k == "tags" else v)
-            if k == "content":
-                new_content = v
+        new_content = updates.get("content")
         with self._lock:
-            old_content = None
-            if new_content is not None and self.history_keep > 0:
-                row = self._conn.execute(
-                    "SELECT content FROM notes WHERE id = ?", (nid,)
-                ).fetchone()
-                old_content = row[0] if row else None
-            cur = self._conn.execute(
-                f"UPDATE notes SET {', '.join(sets)}, updated_ts = ? WHERE id = ?",
-                (*params, time.time(), nid),
-            )
-            if old_content is not None and old_content != new_content:
-                self._snapshot_locked(nid, old_content)
-            # Commit after the snapshot: the version INSERT/DELETE open their own
-            # implicit transaction, so committing before the snapshot left it
-            # uncommitted — it survived only if a later write happened to commit
-            # again, and was rolled back by close() (or a crash) otherwise.
-            self._conn.commit()
-        return cur.rowcount > 0
+            # Captured under the lock: two racing updates must stamp the
+            # later-committed one with the later timestamp, or the
+            # recent-first list shows stale ordering.
+            now = time.time()
+            try:
+                old_content = None
+                if new_content is not None and self.history_keep > 0:
+                    row = self._conn.execute(
+                        "SELECT content FROM notes WHERE id = ?", (nid,)
+                    ).fetchone()
+                    old_content = row[0] if row else None
+                hit = False
+                for k, v in updates.items():
+                    value = json.dumps(v, ensure_ascii=False) if k == "tags" else v
+                    cur = self._conn.execute(_UPDATE_FIELD_SQL[k], (value, now, nid))
+                    hit = hit or cur.rowcount > 0
+                if old_content is not None and old_content != new_content:
+                    self._snapshot_locked(nid, old_content)
+                # Commit after the snapshot: the version INSERT/DELETE open their own
+                # implicit transaction, so committing before the snapshot left it
+                # uncommitted — it survived only if a later write happened to commit
+                # again, and was rolled back by close() (or a crash) otherwise.
+                self._conn.commit()
+            except BaseException:
+                # A later field failing must not leave earlier fields to be
+                # persisted by the next commit; the snapshot must not be
+                # skipped for saved content either.
+                self._conn.rollback()
+                raise
+        return hit
 
     def delete(self, nid: str) -> None:
         """Hard delete (versions and links included). Soft delete goes through trash()."""
@@ -248,14 +266,21 @@ class NoteStore:
     def _delete_ids_locked(self, nids: list[str]) -> None:
         if not nids:
             return
-        placeholders = ",".join("?" * len(nids))
-        self._conn.execute(f"DELETE FROM notes WHERE id IN ({placeholders})", nids)
-        self._conn.execute(f"DELETE FROM note_versions WHERE note_id IN ({placeholders})", nids)
-        self._conn.execute(
-            f"DELETE FROM note_links WHERE src IN ({placeholders}) OR dst IN ({placeholders})",
-            [*nids, *nids],
-        )
-        self._conn.commit()
+        try:
+            self._conn.executemany("DELETE FROM notes WHERE id = ?", [(n,) for n in nids])
+            self._conn.executemany(
+                "DELETE FROM note_versions WHERE note_id = ?", [(n,) for n in nids]
+            )
+            # Links match on either endpoint: two literal sweeps replace the OR-ed
+            # IN pair and delete the same row set.
+            self._conn.executemany("DELETE FROM note_links WHERE src = ?", [(n,) for n in nids])
+            self._conn.executemany("DELETE FROM note_links WHERE dst = ?", [(n,) for n in nids])
+            self._conn.commit()
+        except BaseException:
+            # A batch failing halfway must not leave earlier deletes to be
+            # persisted by the next commit.
+            self._conn.rollback()
+            raise
 
     # ---------- State transitions ----------
 

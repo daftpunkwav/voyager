@@ -15,6 +15,7 @@
 #include "../helpers.h"
 #include "tree_sitter/api.h"
 #include <ctype.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1437,6 +1438,80 @@ static const EngineType *py_iterable_element_type(PyLSPContext *ctx, const Engin
     return engine_type_unknown();
 }
 
+/* Copy the digit body into digits, validating separators per PEP 515:
+ * between digits only, never doubled or trailing, and allowed directly
+ * after a radix prefix. Anything longer than the bounded buffer cannot
+ * index a real tuple and is rejected. */
+static bool py_copy_literal_digits(const char *body, char *digits, size_t cap) {
+    size_t ndigits = 0;
+    bool pending_sep = false;
+    for (const char *cursor = body; *cursor; cursor++) {
+        if (*cursor == '_') {
+            if (ndigits == 0 || pending_sep) {
+                return false;
+            }
+            pending_sep = true;
+            continue;
+        }
+        if (ndigits >= cap - 1) {
+            return false;
+        }
+        digits[ndigits++] = *cursor;
+        pending_sep = false;
+    }
+    if (pending_sep) {
+        return false; /* trailing separator */
+    }
+    digits[ndigits] = '\0';
+    return true;
+}
+
+/* Python integer literal syntax (PEP 515 + the reference grammar's
+ * decinteger rule): optional radix prefix (0x/0o/0b) selecting the strtol
+ * base, digit separators between digits, and a decimal literal may lead
+ * with zero only when every digit is zero ('00' and '0_0' are the valid
+ * zero literals; '01' and '0_1' are syntax errors). Anything Python's own
+ * grammar would reject returns false so the caller keeps its fallback. */
+static bool py_parse_int_literal(const char *text, long *out) {
+    if (!text || !text[0]) {
+        return false;
+    }
+    int base = 10;
+    const char *body = text;
+    if (text[0] == '0' &&
+        (text[1] == 'x' || text[1] == 'X' || text[1] == 'o' || text[1] == 'O' ||
+         text[1] == 'b' || text[1] == 'B')) {
+        base = (text[1] == 'x' || text[1] == 'X')   ? 16
+               : (text[1] == 'o' || text[1] == 'O') ? 8
+                                                    : 2;
+        body = text + 2;
+        if (*body == '_') {
+            body++; /* a separator may follow the prefix directly */
+        }
+    }
+    if (!*body) {
+        return false; /* bare prefix */
+    }
+    char digits[32];
+    if (!py_copy_literal_digits(body, digits, sizeof(digits))) {
+        return false;
+    }
+    if (digits[0] == '+' || digits[0] == '-') {
+        return false; /* a signed value is an operator node, not a literal */
+    }
+    if (base == 10 && digits[0] == '0' && strspn(digits, "0") != strlen(digits)) {
+        return false; /* leading-zero decimal with a nonzero digit ('01') */
+    }
+    char *end = NULL;
+    errno = 0;
+    long value = strtol(digits, &end, base);
+    if (errno != 0 || end == digits || *end != '\0') {
+        return false;
+    }
+    *out = value;
+    return true;
+}
+
 /* The real recursive-descent evaluator. Never call directly — go through
  * the memoizing, depth- and budget-guarded py_eval_expr_type wrapper below
  * (every recursive call inside this body already does). */
@@ -2026,8 +2101,8 @@ static const EngineType *py_eval_expr_type_uncached(PyLSPContext *ctx, TSNode no
             if (!ts_node_is_null(sub) && strcmp(ts_node_type(sub), "integer") == 0) {
                 char *idx_text = py_node_text(ctx, sub);
                 if (idx_text) {
-                    int idx = atoi(idx_text);
-                    if (idx >= 0 && idx < n)
+                    long idx = 0;
+                    if (py_parse_int_literal(idx_text, &idx) && idx >= 0 && idx < n)
                         return args[idx];
                 }
             }

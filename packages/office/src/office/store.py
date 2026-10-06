@@ -36,6 +36,13 @@ _COLS = ("id", "title", "kind", "blocks", "created_ts", "updated_ts")
 _SQL_GET_DOC = "SELECT id, title, kind, blocks, created_ts, updated_ts FROM documents WHERE id=?"
 _SQL_LIST_HEAD = "SELECT id, title, kind, blocks, created_ts, updated_ts FROM documents"
 
+# One literal UPDATE per editable field: values stay bound parameters and no
+# SET clause is ever assembled at runtime. The keys ARE the whitelist.
+_UPDATE_FIELD_SQL = {
+    "title": "UPDATE documents SET title = ?, updated_ts = ? WHERE id = ?",
+    "blocks": "UPDATE documents SET blocks = ?, updated_ts = ? WHERE id = ?",
+}
+
 
 class DocumentStore:
     """Single table for docs and decks; kind='doc'/'slides' distinguishes sub-domains."""
@@ -80,11 +87,18 @@ class DocumentStore:
             if existing is None:
                 raise KeyError(did)
             return existing
-        sets = ", ".join(f"{k}=?" for k in fields)
-        params = list(fields.values()) + [time.time(), did]
         with self._lock:
-            self._conn.execute(f"UPDATE documents SET {sets}, updated_ts=? WHERE id=?", params)
-            self._conn.commit()
+            # Captured under the lock so racing updates keep updated_ts ordered.
+            now = time.time()
+            try:
+                for k, v in fields.items():
+                    self._conn.execute(_UPDATE_FIELD_SQL[k], (v, now, did))
+                self._conn.commit()
+            except BaseException:
+                # A later field failing must not leave earlier fields to be
+                # persisted by the next commit.
+                self._conn.rollback()
+                raise
         updated = self.get(did)
         if updated is None:
             # backstop: the capability layer (_require_doc) is the not-found path;

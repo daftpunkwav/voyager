@@ -29,6 +29,7 @@
 #include "rust_cargo.h"
 #include "../helpers.h"
 #include <ctype.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1456,6 +1457,33 @@ static const EngineType *rust_eval_literal_type(RustLSPContext *ctx, const char 
 static const EngineType *rust_eval_member_access(RustLSPContext *ctx, const EngineType *recv,
                                               const char *member);
 
+/* Rust tuple indices are plain decimal digits with no leading zeros: the
+ * reference grammar forbids them and rustc matches the index token
+ * textually against the tuple's field names, so '.01' resolves to no
+ * field at all (rustc E0609). Reject leading zeros and any non-digit
+ * instead of normalizing; invalid forms keep the caller's fallback. */
+static bool rust_parse_tuple_index(const char *text, long *out) {
+    if (!text || !text[0]) {
+        return false;
+    }
+    if (text[0] == '0' && text[1] != '\0') {
+        return false; /* leading zeros ('01') never match a tuple field */
+    }
+    for (const char *cursor = text; *cursor; cursor++) {
+        if (*cursor < '0' || *cursor > '9') {
+            return false;
+        }
+    }
+    char *end = NULL;
+    errno = 0;
+    long value = strtol(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0') {
+        return false;
+    }
+    *out = value;
+    return true;
+}
+
 const EngineType *rust_eval_expr_type(RustLSPContext *ctx, TSNode node) {
     if (ts_node_is_null(node)) {
         return engine_type_unknown();
@@ -1550,8 +1578,9 @@ const EngineType *rust_eval_expr_type(RustLSPContext *ctx, TSNode node) {
                 }
                 if (base && base->kind == ENGINE_TYPE_TUPLE) {
                     char *idx_text = rust_node_text(ctx, field);
-                    int idx = atoi(idx_text);
-                    if (idx >= 0 && idx < base->data.tuple.count) {
+                    long idx = 0;
+                    if (idx_text && rust_parse_tuple_index(idx_text, &idx) && idx >= 0 &&
+                        idx < base->data.tuple.count) {
                         return base->data.tuple.elems[idx];
                     }
                 }

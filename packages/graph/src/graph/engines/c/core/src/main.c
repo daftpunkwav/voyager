@@ -2149,11 +2149,16 @@ static int main_run_daemon_ctl(int argc, char **argv, const engine_daemon_ipc_en
         } else if (strcmp(argv[index], "--open") == 0) {
             open_browser = true;
         } else if (strncmp(argv[index], "--port=", 7) == 0) {
-            requested_port = atoi(argv[index] + 7);
-            if (requested_port <= 0 || requested_port >= MAIN_MAX_PORT) {
+            const char *value = argv[index] + 7;
+            char *end = NULL;
+            errno = 0;
+            long port = strtol(value, &end, ENGINE_DECIMAL_BASE);
+            if (errno != 0 || end == value || *end != '\0' || port <= 0 ||
+                port >= MAIN_MAX_PORT) {
                 (void)fprintf(stderr, "error: --port requires a value between 1 and 65535\n");
                 return EXIT_FAILURE;
             }
+            requested_port = (int)port;
         } else {
             (void)fprintf(stderr, "error: unknown daemon option: %s\n", argv[index]);
             arguments_valid = false;

@@ -55,6 +55,25 @@ _COLS = (
 )
 _LIST_COLS = ("id", "title", "url", "domain", "summary", "tags", "category", "added_ts")
 
+# Plain-literal SELECT heads; the column lists are kept in lockstep with
+# _COLS / _LIST_COLS (which feed _row via zip), never widened to *.
+_SQL_GET_PAGE = (
+    "SELECT id, title, url, domain, summary, content, tags, category, meta,"
+    " added_ts, updated_ts FROM webpages WHERE id = ?"
+)
+_SQL_LIST_HEAD = "SELECT id, title, url, domain, summary, tags, category, added_ts FROM webpages"
+_SQL_SUMMARY_HEAD = (
+    "SELECT id, title, url, domain, summary, tags, category, added_ts, updated_ts FROM webpages"
+)
+
+# One literal UPDATE per editable field: every value stays a bound parameter
+# and no SET clause is ever assembled at runtime. The keys ARE the whitelist.
+_META_UPDATE_SQL = {
+    "title": "UPDATE webpages SET title = ?, updated_ts = ? WHERE id = ?",
+    "tags": "UPDATE webpages SET tags = ?, updated_ts = ? WHERE id = ?",
+    "category": "UPDATE webpages SET category = ?, updated_ts = ? WHERE id = ?",
+}
+
 
 class WebStore:
     def __init__(self, db_path: str | Path) -> None:
@@ -88,29 +107,17 @@ class WebStore:
             self._conn.commit()
         return pid
 
-    def _rows(
-        self, cols: tuple[str, ...], where: str = "", params: tuple = (), limit: int | None = None
-    ) -> list[dict[str, Any]]:
-        sql = f"SELECT {','.join(cols)} FROM webpages"
-        if where:
-            sql += f" WHERE {where}"
-        sql += " ORDER BY added_ts DESC"
-        args: list[Any] = list(params)
-        if limit is not None:
-            sql += " LIMIT ?"
-            args.append(limit)
-        return [_row(cols, r) for r in self._conn.execute(sql, args).fetchall()]
-
     def get(self, pid: str) -> dict[str, Any] | None:
         # Readers and writers share the same lock
         with self._lock:
-            rows = self._rows(_COLS, "id = ?", (pid,))
-        return rows[0] if rows else None
+            row = self._conn.execute(_SQL_GET_PAGE, (pid,)).fetchone()
+        return _row(_COLS, row) if row else None
 
     def list(
         self, *, query: str = "", tag: str = "", limit: int = 50
     ) -> builtins.list[dict[str, Any]]:
-        wheres, params = [], []
+        wheres: list[str] = []
+        params: list[Any] = []
         if query:
             like = f"%{escape_like(query)}%"
             wheres.append("(title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\')")
@@ -120,25 +127,32 @@ class WebStore:
             # hit "ai-tools" inside the stored JSON array
             wheres.append(r"tags LIKE ? ESCAPE '\'")
             params.append(f"%{escape_like(json.dumps(tag, ensure_ascii=False))}%")
+        sql = _SQL_LIST_HEAD
+        if wheres:
+            sql += " WHERE " + " AND ".join(wheres)
+        sql += " ORDER BY added_ts DESC LIMIT ?"
+        params.append(min(limit, 500))
         with self._lock:
-            return self._rows(_LIST_COLS, " AND ".join(wheres), tuple(params), min(limit, 500))
+            rows = self._conn.execute(sql, params).fetchall()
+        return [_row(_LIST_COLS, r) for r in rows]
 
     def set_meta(self, pid: str, **fields: Any) -> None:
-        allowed = {"title", "tags", "category"}
-        updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
+        updates = {k: v for k, v in fields.items() if k in _META_UPDATE_SQL and v is not None}
         if not updates:
             return
-        sets, params = [], []
-        for k, v in updates.items():
-            sets.append(f"{k} = ?")
-            params.append(json.dumps(v, ensure_ascii=False) if k == "tags" else v)
-        params += [time.time(), pid]
         with self._lock:
-            self._conn.execute(
-                f"UPDATE webpages SET {', '.join(sets)}, updated_ts = ? WHERE id = ?",
-                params,
-            )
-            self._conn.commit()
+            # Captured under the lock so racing updates keep updated_ts ordered.
+            now = time.time()
+            try:
+                for k, v in updates.items():
+                    value = json.dumps(v, ensure_ascii=False) if k == "tags" else v
+                    self._conn.execute(_META_UPDATE_SQL[k], (value, now, pid))
+                self._conn.commit()
+            except BaseException:
+                # A later field failing must not leave earlier fields to be
+                # persisted by the next commit.
+                self._conn.rollback()
+                raise
 
     def remove(self, pid: str) -> None:
         with self._lock:
@@ -166,7 +180,7 @@ class WebStore:
             wheres.append("(title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\')")
             params += [like, like]
         cols = _LIST_COLS + ("updated_ts",)
-        sql = f"SELECT {','.join(cols)} FROM webpages"
+        sql = _SQL_SUMMARY_HEAD
         if wheres:
             sql += " WHERE " + " AND ".join(wheres)
         sql += " ORDER BY added_ts DESC LIMIT ?"

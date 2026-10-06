@@ -147,13 +147,18 @@ class EventLog:
         type_list = list(types)
         if not type_list:
             return 0
-        placeholders = ",".join("?" for _ in type_list)
         with self._lock:
-            cur = self._conn.execute(
-                f"DELETE FROM events WHERE type IN ({placeholders}) AND ts < ?",
-                (*type_list, before_ts),
-            )
-            self._conn.commit()
+            try:
+                cur = self._conn.executemany(
+                    "DELETE FROM events WHERE type = ? AND ts < ?",
+                    [(t, before_ts) for t in type_list],
+                )
+                self._conn.commit()
+            except BaseException:
+                # A batch failing halfway must not leave earlier deletes to
+                # be persisted by the next commit.
+                self._conn.rollback()
+                raise
         return max(int(cur.rowcount or 0), 0)  # drivers may report -1 for unknown
 
     def _sweep(self) -> None:
@@ -223,14 +228,16 @@ class EventLog:
         params: list[object] = [after_seq]
         exact: list[str] = []
         globs: list[str] = []
+        cond_params: list[object] = []
         if types:
-            cond = _type_condition(types, params)
+            cond = _type_condition(types, cond_params)
             if cond:
                 sql += " AND " + cond
+                params.extend(cond_params)
                 exact = [t for t in types if not (_GLOB_CHARS & set(t))]
                 globs = [t for t in types if _GLOB_CHARS & set(t)]
+        sql += " ORDER BY seq ASC LIMIT ?"
         if not globs:
-            sql += " ORDER BY seq ASC LIMIT ?"
             params.append(limit)
             with self._lock:
                 rows = self._conn.execute(sql, params).fetchall()
@@ -238,22 +245,17 @@ class EventLog:
         collected: list[tuple] = []
         cursor = after_seq
         while len(collected) < limit:
-            window_sql = sql + " ORDER BY seq ASC LIMIT ?"
-            window_params = [*params, max(limit, _GLOB_WINDOW)]
+            # The statement is fixed for the whole walk; only the cursor
+            # parameter and the window size change between iterations.
+            window_params = [cursor, *cond_params, max(limit, _GLOB_WINDOW)]
             with self._lock:
-                rows = self._conn.execute(window_sql, window_params).fetchall()
+                rows = self._conn.execute(sql, window_params).fetchall()
             if not rows:
                 break
             cursor = int(rows[-1][0])
             collected.extend(_refine_rows(rows, exact, globs))
             # Narrow the next window past everything just read (matches and
             # refined-out rows alike), so sparse matches cannot loop forever
-            sql = "SELECT seq, id, type, actor, payload, ts, trace_id FROM events WHERE seq > ?"
-            params = [cursor]
-            if types:
-                cond = _type_condition(types, params)
-                if cond:
-                    sql += " AND " + cond
         return [(int(r[0]), _row_to_event(r)) for r in collected[:limit]]
 
     def read_before(
@@ -277,14 +279,16 @@ class EventLog:
         params: list[object] = [before_seq]
         exact: list[str] = []
         globs: list[str] = []
+        cond_params: list[object] = []
         if types:
-            cond = _type_condition(types, params)
+            cond = _type_condition(types, cond_params)
             if cond:
                 sql += " AND " + cond
+                params.extend(cond_params)
                 exact = [t for t in types if not (_GLOB_CHARS & set(t))]
                 globs = [t for t in types if _GLOB_CHARS & set(t)]
+        sql += " ORDER BY seq DESC LIMIT ?"
         if not globs:
-            sql += " ORDER BY seq DESC LIMIT ?"
             params.append(limit)
             with self._lock:
                 rows = self._conn.execute(sql, params).fetchall()
@@ -293,22 +297,17 @@ class EventLog:
         collected: list[tuple] = []
         cursor = before_seq
         while len(collected) < limit:
-            window_sql = sql + " ORDER BY seq DESC LIMIT ?"
-            window_params = [*params, max(limit, _GLOB_WINDOW)]
+            # The statement is fixed for the whole walk; only the cursor
+            # parameter and the window size change between iterations.
+            window_params = [cursor, *cond_params, max(limit, _GLOB_WINDOW)]
             with self._lock:
-                rows = self._conn.execute(window_sql, window_params).fetchall()
+                rows = self._conn.execute(sql, window_params).fetchall()
             if not rows:
                 break
             cursor = int(rows[-1][0])
             collected[:0] = _refine_rows(rows, exact, globs)
             # Narrow the next window below everything just read (matches and
             # refined-out rows alike), so sparse matches cannot loop forever
-            sql = "SELECT seq, id, type, actor, payload, ts, trace_id FROM events WHERE seq < ?"
-            params = [cursor]
-            if types:
-                cond = _type_condition(types, params)
-                if cond:
-                    sql += " AND " + cond
         # collected is newest-first (DESC windows prepended): the page closest
         # to before_seq is its head; return it in ascending order
         kept = collected[:limit]
