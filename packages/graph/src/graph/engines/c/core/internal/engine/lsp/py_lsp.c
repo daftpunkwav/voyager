@@ -1438,59 +1438,74 @@ static const EngineType *py_iterable_element_type(PyLSPContext *ctx, const Engin
     return engine_type_unknown();
 }
 
-/* Python integer literal syntax (PEP 515): optional radix prefix
- * (0x/0o/0b), digit separators allowed only between digits — and
- * immediately after a radix prefix — never doubled or trailing, and a
- * decimal literal may not lead with a zero unless it is a bare "0"
- * ('0_1' and '01' are syntax errors). Radix prefixes select the strtol
- * base; anything Python's own grammar would reject returns false so the
- * caller keeps its fallback. */
-static bool py_parse_int_literal(const char *s, long *out) {
-    if (!s || !s[0]) {
-        return false;
-    }
-    int base = 10;
-    const char *body = s;
-    if (s[0] == '0' &&
-        (s[1] == 'x' || s[1] == 'X' || s[1] == 'o' || s[1] == 'O' || s[1] == 'b' || s[1] == 'B')) {
-        base = (s[1] == 'x' || s[1] == 'X')   ? 16
-               : (s[1] == 'o' || s[1] == 'O') ? 8
-                                              : 2;
-        body = s + 2;
-        if (*body == '_') {
-            body++; /* a separator may follow the prefix directly */
-        }
-    } else if (s[0] == '0' && s[1] != '\0') {
-        return false; /* leading-zero decimal ('0_1', '01') is invalid */
-    }
-    if (!*body) {
-        return false; /* bare prefix */
-    }
-    char digits[32];
+/* Copy the digit body into digits, validating separators per PEP 515:
+ * between digits only, never doubled or trailing, and allowed directly
+ * after a radix prefix. Anything longer than the bounded buffer cannot
+ * index a real tuple and is rejected. */
+static bool py_copy_literal_digits(const char *body, char *digits, size_t cap) {
     size_t ndigits = 0;
     bool pending_sep = false;
-    for (const char *p = body; *p; p++) {
-        if (*p == '_') {
+    for (const char *cursor = body; *cursor; cursor++) {
+        if (*cursor == '_') {
             if (ndigits == 0 || pending_sep) {
                 return false;
             }
             pending_sep = true;
             continue;
         }
-        if (ndigits >= sizeof(digits) - 1) {
-            return false; /* cannot index any real tuple */
+        if (ndigits >= cap - 1) {
+            return false;
         }
-        digits[ndigits++] = *p;
+        digits[ndigits++] = *cursor;
         pending_sep = false;
     }
     if (pending_sep) {
         return false; /* trailing separator */
     }
     digits[ndigits] = '\0';
+    return true;
+}
+
+/* Python integer literal syntax (PEP 515 + the reference grammar's
+ * decinteger rule): optional radix prefix (0x/0o/0b) selecting the strtol
+ * base, digit separators between digits, and a decimal literal may lead
+ * with zero only when every digit is zero ('00' and '0_0' are the valid
+ * zero literals; '01' and '0_1' are syntax errors). Anything Python's own
+ * grammar would reject returns false so the caller keeps its fallback. */
+static bool py_parse_int_literal(const char *text, long *out) {
+    if (!text || !text[0]) {
+        return false;
+    }
+    int base = 10;
+    const char *body = text;
+    if (text[0] == '0' &&
+        (text[1] == 'x' || text[1] == 'X' || text[1] == 'o' || text[1] == 'O' ||
+         text[1] == 'b' || text[1] == 'B')) {
+        base = (text[1] == 'x' || text[1] == 'X')   ? 16
+               : (text[1] == 'o' || text[1] == 'O') ? 8
+                                                    : 2;
+        body = text + 2;
+        if (*body == '_') {
+            body++; /* a separator may follow the prefix directly */
+        }
+    }
+    if (!*body) {
+        return false; /* bare prefix */
+    }
+    char digits[32];
+    if (!py_copy_literal_digits(body, digits, sizeof(digits))) {
+        return false;
+    }
+    if (digits[0] == '+' || digits[0] == '-') {
+        return false; /* a signed value is an operator node, not a literal */
+    }
+    if (base == 10 && digits[0] == '0' && strspn(digits, "0") != strlen(digits)) {
+        return false; /* leading-zero decimal with a nonzero digit ('01') */
+    }
     char *end = NULL;
     errno = 0;
     long value = strtol(digits, &end, base);
-    if (errno != 0 || end != digits || *end != '\0') {
+    if (errno != 0 || end == digits || *end != '\0') {
         return false;
     }
     *out = value;

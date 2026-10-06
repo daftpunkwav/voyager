@@ -1457,41 +1457,24 @@ static const EngineType *rust_eval_literal_type(RustLSPContext *ctx, const char 
 static const EngineType *rust_eval_member_access(RustLSPContext *ctx, const EngineType *recv,
                                               const char *member);
 
-/* Rust tuple indices are decimal literals that may carry digit separators
- * between digits ('.0_0' and '.1_0' are valid; leading, doubled, and
- * trailing separators are not). strtol stops at the underscore, so
- * validated separators are stripped into a bounded local copy first;
- * anything the Rust grammar would reject returns false so the caller
- * keeps its fallback. */
-static bool rust_parse_tuple_index(const char *s, long *out) {
-    if (!s || !s[0]) {
+/* Rust tuple indices are plain decimal digits: rustc matches the index
+ * token textually against the tuple's field names, so a separator form
+ * like '.0_0' resolves to no field at all (rustc E0609). Reject any
+ * non-digit instead of normalizing separators; invalid forms keep the
+ * caller's fallback. */
+static bool rust_parse_tuple_index(const char *text, long *out) {
+    if (!text || !text[0]) {
         return false;
     }
-    char digits[32];
-    size_t ndigits = 0;
-    bool pending_sep = false;
-    for (const char *p = s; *p; p++) {
-        if (*p == '_') {
-            if (ndigits == 0 || pending_sep) {
-                return false;
-            }
-            pending_sep = true;
-            continue;
+    for (const char *cursor = text; *cursor; cursor++) {
+        if (*cursor < '0' || *cursor > '9') {
+            return false;
         }
-        if (ndigits >= sizeof(digits) - 1) {
-            return false; /* cannot index any real tuple */
-        }
-        digits[ndigits++] = *p;
-        pending_sep = false;
     }
-    if (pending_sep) {
-        return false; /* trailing separator */
-    }
-    digits[ndigits] = '\0';
     char *end = NULL;
     errno = 0;
-    long value = strtol(digits, &end, 10);
-    if (errno != 0 || end != digits || *end != '\0') {
+    long value = strtol(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0') {
         return false;
     }
     *out = value;
