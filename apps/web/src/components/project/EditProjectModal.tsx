@@ -160,7 +160,7 @@ export function EditProjectModal({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    void handleAddTag();
+                    handleAddTag();
                   }
                 }}
               />

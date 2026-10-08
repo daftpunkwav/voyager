@@ -37,7 +37,7 @@ const KIND_LABEL_KEYS: Record<RowKind, string> = {
   op: 'chat:traj.badgeOp',
 };
 
-const LANES: Array<{ key: RowKind[]; labelKey: string }> = [
+const LANES: { key: RowKind[]; labelKey: string }[] = [
   { key: ['user'], labelKey: 'chat:traj.laneInput' },
   { key: ['think', 'assistant'], labelKey: 'chat:traj.laneModel' },
   { key: ['tool', 'op'], labelKey: 'chat:traj.laneTools' },
@@ -69,7 +69,7 @@ function buildRows(
           // The round's THINKING goes here (reasoning channel); the answer
           // text is the assistant row's business — previewing s.text would
           // just duplicate the closing message below.
-          text: s.reasoning || s.text || s.summary,
+          text: (s.reasoning ?? '') || (s.text ?? '') || s.summary,
           step: s,
           ts: s.ts,
         });
@@ -88,7 +88,7 @@ function buildRows(
           key: `${keyPrefix}-tool-${s.seq}`,
           kind: 'tool',
           turn,
-          label: toolLabel(s.title || s.name, t),
+          label: toolLabel((s.title ?? '') || s.name, t),
           text: s.summary,
           step: s,
           ts: s.ts,
@@ -231,7 +231,7 @@ export function TrajectoryView() {
 
       <div className="chat-traj2__table" ref={tableRef}>
         {filtered.map((r) => {
-          const open = !!expanded[r.key];
+          const open = expanded[r.key];
           return (
             <div
               key={r.key}

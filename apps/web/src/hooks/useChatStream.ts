@@ -22,7 +22,7 @@ import { consumeWorkspaceSwitchMarker } from '@/bridge/workspaceSwitch';
 import { subscribe } from '@/bridge/stream';
 import { EventType } from '@/bridge/events';
 import { safeInternalPath } from '@/utils/safeUrl';
-import { type ChatEvent, useChatStore } from '@/stores/chatStore';
+import { useChatStore } from '@/stores/chatStore';
 import { useUIStore } from '@/stores/uiStore';
 import { i18n } from '@/i18n';
 
@@ -79,7 +79,7 @@ export function useChatStream(onNavigate: (path: string) => void) {
             .finally(() => {
               if (!stillActive() || !alive) return;
               if (useChatStore.getState().messages.length === 0) return;
-              fetchTrajectory(500, sid).then((steps) => {
+              void fetchTrajectory(500, sid).then((steps) => {
                 if (steps.length && stillActive() && alive) {
                   useChatStore.getState().applyTrajectory(steps);
                 }
@@ -149,7 +149,7 @@ export function useChatStream(onNavigate: (path: string) => void) {
           message: i18n.t('chat:task.resumeFailed', { error }),
         });
       }
-      useChatStore.getState().dispatch(ev as ChatEvent);
+      useChatStore.getState().dispatch(ev);
     });
     useChatStore.getState().setConnected(true);
 

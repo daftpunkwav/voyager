@@ -72,7 +72,7 @@ function useNotesUiBridge() {
       const action = event.payload.action;
       const noteId = event.payload.note_id;
       if (action === 'index') {
-        navigate(routes.notes);
+        void navigate(routes.notes);
         return;
       }
       if (
@@ -83,7 +83,7 @@ function useNotesUiBridge() {
         !noteId.includes('/') &&
         !noteId.includes('\\')
       ) {
-        navigate(noteId === 'new' ? routes.note('new') : routes.note(noteId));
+        void navigate(noteId === 'new' ? routes.note('new') : routes.note(noteId));
       }
     });
 

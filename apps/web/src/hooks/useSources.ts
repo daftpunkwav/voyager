@@ -36,7 +36,7 @@ export interface SourceSummary {
   kind: 'repo' | 'doc' | 'web';
   title: string;
   subtitle: string;
-  status: 'importing' | 'parsing' | 'ready' | 'stored' | 'failed' | string;
+  status: string;
   progress: string;
   tags: string[];
   category: string;

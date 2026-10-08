@@ -43,7 +43,7 @@ export function useIndexStatus(projectId: string | undefined) {
       const { items } = await listCodeGraphIndexStatuses();
       const mine = items
         .filter((r) => r.project_id === projectId)
-        .sort((a, b) => Number(b.created_ts ?? 0) - Number(a.created_ts ?? 0));
+        .sort((a, b) => b.created_ts - a.created_ts);
       const row = mine[0];
       return {
         project_id: projectId,

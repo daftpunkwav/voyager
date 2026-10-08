@@ -34,14 +34,14 @@ export interface GitHubAccount {
 
 /** Raw list_starred_repos row (sources.modules.repo.github.list_starred). */
 export interface StarsListResult {
-  items: Array<{
+  items: {
     owner: string;
     name: string;
     url: string;
     description: string;
     stars: number;
     language: string;
-  }>;
+  }[];
   total: number;
 }
 
@@ -202,7 +202,7 @@ export interface SetProjectTagsResult {
 
 export interface ImportResult {
   queued: string[];
-  failed: Array<{ url: string; reason: string }>;
+  failed: { url: string; reason: string }[];
 }
 
 export interface IndexStatus {
@@ -220,18 +220,18 @@ export interface ImportAssistContext {
   mode: 'stars' | 'search' | 'urls';
   available_repo_keys?: string[];
   selected_repo_keys?: string[];
-  available_repos?: Array<{
+  available_repos?: {
     key: string;
     language: string | null;
     stars: number;
     already_imported: boolean;
     description: string | null;
-  }>;
-  imported_projects?: Array<{
+  }[];
+  imported_projects?: {
     name: string;
     language?: string | null;
     progress?: string;
     stars?: number;
     description?: string | null;
-  }>;
+  }[];
 }

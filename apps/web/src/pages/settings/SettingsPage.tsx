@@ -269,7 +269,11 @@ export function SettingsPage() {
     <div className="page-scaffold settings-page">
       <div className="settings-shell">
         <nav className="subnav" aria-label={t('nav.aria')}>
-          <button type="button" className="subnav-item subnav-back" onClick={() => navigate('/')}>
+          <button
+            type="button"
+            className="subnav-item subnav-back"
+            onClick={() => void navigate('/')}
+          >
             <span className="subnav-icon" aria-hidden>
               <SettingsIcons.back />
             </span>
@@ -368,7 +372,7 @@ export function SettingsPage() {
                         // "system") and the selected state is written back only on success.
                         // Must not go through updateSettings — it would pass {theme} into
                         // set_setting and misalign the parameters.
-                        changeTheme(th).catch((err) => {
+                        changeTheme(th).catch((err: unknown) => {
                           addToast({
                             type: 'error',
                             message: t('toast.themeSaveFailed', {
@@ -415,7 +419,7 @@ export function SettingsPage() {
                         // Sole locale write path, symmetric to the theme cards: persist via
                         // set_setting first; shell/localeBridge applies store + html[lang]
                         // + i18n only after success.
-                        changeLocale(item.id).catch((err) => {
+                        changeLocale(item.id).catch((err: unknown) => {
                           addToast({
                             type: 'error',
                             message: t('toast.localeSaveFailed', {
@@ -454,7 +458,7 @@ export function SettingsPage() {
                       // same capability the theme bridge syncs from). A failed save
                       // toasts but does not snap the slider back mid-drag.
                       setFontScale(v);
-                      void changeFontScale(v).catch((err) => {
+                      void changeFontScale(v).catch((err: unknown) => {
                         addToast({
                           type: 'error',
                           message: t('appearance.fontScale.saveFailed', {
@@ -655,7 +659,7 @@ export function SettingsPage() {
                 <button
                   type="button"
                   className="btn btn-primary"
-                  onClick={() => navigate('/system/health')}
+                  onClick={() => void navigate('/system/health')}
                 >
                   {t('health.open')}
                 </button>

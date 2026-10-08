@@ -209,7 +209,7 @@ export function LlmProviderDetail({
 
   const run = (fn: () => Promise<unknown>) => {
     setActionError(null);
-    return fn().catch((err) => {
+    return fn().catch((err: unknown) => {
       const e = err as { message?: string; hint?: string };
       setActionError(
         e.hint ? `${e.message}(${e.hint})` : (e.message ?? t('llm.provider.actionFailed'))
@@ -220,13 +220,13 @@ export function LlmProviderDetail({
   const commitName = () => {
     const name = nameDraft.trim();
     if (!name || name === provider.display_name) return;
-    run(() => onPatch({ display_name: name }));
+    void run(() => onPatch({ display_name: name }));
   };
 
   const commitBaseUrl = () => {
     const url = urlDraft.trim();
     if (!url || url === provider.base_url) return;
-    run(() => onPatch({ base_url: url }));
+    void run(() => onPatch({ base_url: url }));
   };
 
   const saveKeyAuto = async (value: string) => {
@@ -293,7 +293,12 @@ export function LlmProviderDetail({
         max_output_tokens: meta.max_output_tokens ?? profiles[model]?.max_output_tokens,
       };
     } else {
-      delete profiles[model];
+      const { [model]: _removedProfile, ...restProfiles } = profiles;
+      await callCapability('settings', 'set_setting', {
+        key: 'agent.context.model_profiles',
+        value: restProfiles,
+      });
+      return;
     }
     await callCapability('settings', 'set_setting', {
       key: 'agent.context.model_profiles',
@@ -452,7 +457,9 @@ export function LlmProviderDetail({
             aria-label={t('llm.provider.enableSwitchAria')}
             title={provider.enabled ? t('llm.provider.enabled') : t('llm.provider.disable')}
             className={`llm-switch ${provider.enabled ? 'is-on' : ''}`}
-            onClick={() => run(() => onPatch({ enabled: !provider.enabled }))}
+            onClick={() => {
+              void run(() => onPatch({ enabled: !provider.enabled }));
+            }}
           >
             <span className="llm-switch__knob" />
           </button>
@@ -489,12 +496,13 @@ export function LlmProviderDetail({
                 value: opt.value,
                 label: `${t(opt.labelKey)}(${opt.hint})`,
               }))}
-              onChange={(v) =>
-                v !== provider.api_format &&
-                run(() =>
-                  onPatch({ api_format: v as (typeof LLM_API_FORMAT_OPTIONS)[number]['value'] })
-                )
-              }
+              onChange={(v) => {
+                if (v !== provider.api_format) {
+                  void run(() =>
+                    onPatch({ api_format: v as (typeof LLM_API_FORMAT_OPTIONS)[number]['value'] })
+                  );
+                }
+              }}
               aria-label={t('llm.provider.apiFormat')}
             />
           </div>
@@ -584,7 +592,7 @@ export function LlmProviderDetail({
                 <li key={m} className={`llm-model-row ${enabled ? '' : 'is-disabled'}`}>
                   <div className="llm-model-row__main">
                     <span className="llm-model-row__name" title={m}>
-                      {meta?.name || m}
+                      {(meta?.name ?? '') || m}
                     </span>
                     {ctxBadge ? (
                       <span

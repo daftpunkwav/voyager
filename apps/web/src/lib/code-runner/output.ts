@@ -43,7 +43,7 @@ export function formatLogArgs(args: readonly unknown[]): string {
         value,
         (_key: string, nested: unknown) => {
           if (nested !== null && typeof nested === 'object') {
-            if (seen.indexOf(nested) !== -1) return '[Circular]';
+            if (seen.includes(nested)) return '[Circular]';
             seen.push(nested);
           }
           if (typeof nested === 'bigint') return `${nested.toString()}n`;

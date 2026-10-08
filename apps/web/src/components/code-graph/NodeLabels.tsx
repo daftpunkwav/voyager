@@ -113,12 +113,12 @@ function displayName(node: GraphNode): string {
   return shortenLabelName(raw);
 }
 
-type SpriteEntry = {
+interface SpriteEntry {
   node: GraphNode;
   sprite: THREE.Sprite;
   label: LabelTexture;
   priority: number;
-};
+}
 
 function NodeLabelSprite({
   node,
@@ -175,7 +175,7 @@ function LabelOcclusion({
   entriesRef,
   maxLabels,
 }: {
-  entriesRef: React.MutableRefObject<Map<number, SpriteEntry>>;
+  entriesRef: React.RefObject<Map<number, SpriteEntry>>;
   maxLabels: number;
 }) {
   const { camera, size } = useThree();

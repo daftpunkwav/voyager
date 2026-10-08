@@ -75,8 +75,8 @@ export function toggleFenceInDoc(
   from: number,
   to: number
 ): { from: number; to: number; next: string } {
-  let a = Math.max(0, Math.min(from, to));
-  let b = Math.min(doc.length, Math.max(from, to));
+  const a = Math.max(0, Math.min(from, to));
+  const b = Math.min(doc.length, Math.max(from, to));
   if (a === b) {
     const insert = '```\n\n```';
     return { from: a, to: b, next: doc.slice(0, a) + insert + doc.slice(b) };

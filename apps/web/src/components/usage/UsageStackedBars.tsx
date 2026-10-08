@@ -26,7 +26,7 @@ interface NormalizedDay {
   prompt_cached_tokens: number;
   prompt_uncached_tokens: number;
   completion_tokens: number;
-  by_model: Array<{ model: string; total_tokens: number }>;
+  by_model: { model: string; total_tokens: number }[];
 }
 
 function normalizeDays(usage: LlmUsageSummary): NormalizedDay[] {

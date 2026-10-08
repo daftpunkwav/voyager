@@ -182,7 +182,7 @@ export function ChatComposer({
         if (alive) setProviders(ps.filter((p) => p.enabled && p.has_api_key));
       })
       .catch(() => {}); // picker degrades to disabled; composing still works
-    const keys: Array<[string, (v: string) => void]> = [
+    const keys: [string, (v: string) => void][] = [
       [LLM_PROVIDER_KEY, setProviderId],
       [LLM_MODEL_KEY, setModel],
       [LLM_REASONING_EFFORT_KEY, setReasoning],

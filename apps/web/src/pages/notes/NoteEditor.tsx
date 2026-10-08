@@ -282,8 +282,11 @@ export function NoteEditor({
           markdown?: string;
           url?: string;
         } | null;
+        // Preserves the previous String(payload) output byte-for-byte: 'null' for
+        // a null payload, '[object Object]' for an object without usable fields
+        const stringified = payload === null ? 'null' : '[object Object]';
         const md =
-          payload?.markdown ?? (payload?.url ? `![](${payload.url})` : `![](${String(payload)})`);
+          payload?.markdown ?? (payload?.url ? `![](${payload.url})` : `![](${stringified})`);
         if (view) {
           view.dispatch(view.state.replaceSelection(`\n${md}\n`));
           view.focus();

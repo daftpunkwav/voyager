@@ -284,7 +284,7 @@ export function LlmModelEditDialog({
     }
   };
 
-  const toggles: Array<{ label: string; on: boolean; set: (v: boolean) => void }> = [
+  const toggles: { label: string; on: boolean; set: (v: boolean) => void }[] = [
     { label: t('llm.modelEdit.image'), on: form.image, set: (v) => patch({ image: v }) },
     { label: t('llm.modelEdit.audio'), on: form.audio, set: (v) => patch({ audio: v }) },
     { label: t('llm.modelEdit.video'), on: form.video, set: (v) => patch({ video: v }) },

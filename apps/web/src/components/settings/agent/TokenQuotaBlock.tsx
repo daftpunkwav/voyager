@@ -54,7 +54,7 @@ export function TokenQuotaBlock() {
       .then(() => {
         addToast({ type: 'success', message: t('quota.saved') });
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         addToast({
           type: 'error',
           message: t('quota.saveFailed', { message: extractErrorMessage(err) }),

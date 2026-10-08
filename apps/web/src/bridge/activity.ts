@@ -39,7 +39,7 @@ export async function initActivityReport(): Promise<void> {
     const item = await callCapability<{ value: boolean }>('settings', 'get_setting', {
       key: 'privacy.activity_report',
     });
-    enabled = item.value !== false;
+    enabled = item.value;
   } catch {
     enabled = true; // Unreadable defaults to on (reporting is opt-out by default)
   }
@@ -48,7 +48,7 @@ export async function initActivityReport(): Promise<void> {
 /** page_view: no throttling — fires on every route change. */
 export function reportPageView(page: string): void {
   if (!enabled) return;
-  reportActivity({ kind: 'page_view', page });
+  void reportActivity({ kind: 'page_view', page });
 }
 
 async function reportActivity(body: {

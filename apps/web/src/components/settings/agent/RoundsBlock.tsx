@@ -63,7 +63,7 @@ export function RoundsBlock() {
       .then(() => {
         addToast({ type: 'success', message: t('rounds.saved', { label }) });
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         addToast({
           type: 'error',
           message: t('rounds.saveFailed', { label, message: extractErrorMessage(err) }),

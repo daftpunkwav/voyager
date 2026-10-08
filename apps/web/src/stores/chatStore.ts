@@ -285,7 +285,7 @@ export function toTurnStep(ev: ChatEvent): TurnStep {
     typeof v === 'number' && Number.isFinite(v) ? v : undefined;
   const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
   const strList = (v: unknown): string[] | undefined =>
-    Array.isArray(v) && v.every((x) => typeof x === 'string') ? (v as string[]) : undefined;
+    Array.isArray(v) && v.every((x) => typeof x === 'string') ? v : undefined;
   return {
     seq: ev.seq,
     kind: String(p.kind ?? ''),
@@ -439,17 +439,20 @@ let systemSeq = 0;
 
 /** Evict over-cap cards, oldest settled (completed/failed) first so running
  *  progress always survives; only when every card is still running does the
- *  eviction fall through to the front of the order. Mutates `cards`. */
+ *  eviction fall through to the front of the order. Returns pruned copies;
+ *  the inputs are left untouched. */
 function pruneCards(
   cards: Record<string, ProgressCard>,
   order: string[]
 ): { cards: Record<string, ProgressCard>; order: string[] } {
   let excess = order.length - CARD_CAP;
   if (excess <= 0) return { cards, order };
+  let nextCards = cards;
   const nextOrder = [...order];
   for (let i = 0; i < nextOrder.length && excess > 0;) {
-    if (cards[nextOrder[i]]?.status !== 'running') {
-      delete cards[nextOrder[i]];
+    if (nextCards[nextOrder[i]]?.status !== 'running') {
+      const { [nextOrder[i]]: _removed, ...rest } = nextCards;
+      nextCards = rest;
       nextOrder.splice(i, 1);
       excess--;
     } else {
@@ -457,10 +460,14 @@ function pruneCards(
     }
   }
   while (excess > 0 && nextOrder.length > 0) {
-    delete cards[nextOrder.shift() as string];
+    const id = nextOrder.shift();
+    if (id !== undefined) {
+      const { [id]: _removed, ...rest } = nextCards;
+      nextCards = rest;
+    }
     excess--;
   }
-  return { cards, order: nextOrder };
+  return { cards: nextCards, order: nextOrder };
 }
 
 /** Caps for the per-run step logs (the subagent execution view's data source):
@@ -482,10 +489,12 @@ function pruneRunSteps(runSteps: Record<string, TurnStep[]>): Record<string, Tur
   const oldestFirst = [...ids].sort(
     (a, b) => (trimmed[a][0]?.seq ?? 0) - (trimmed[b][0]?.seq ?? 0)
   );
+  let result = trimmed;
   for (const id of oldestFirst.slice(0, ids.length - RUNS_CAP)) {
-    delete trimmed[id];
+    const { [id]: _removed, ...rest } = result;
+    result = rest;
   }
-  return trimmed;
+  return result;
 }
 
 /** Number() coercion that refuses NaN/Infinity: a malformed wire value falls
@@ -532,7 +541,7 @@ function historyToMessages(events: ChatEvent[]): ChatMessage[] {
     .filter((e) => e.type === EventType.USER_MESSAGE || e.type === EventType.AGENT_MESSAGE)
     .map((e) => ({
       seq: e.seq,
-      role: (e.type === EventType.USER_MESSAGE ? 'user' : 'agent') as ChatMessage['role'],
+      role: e.type === EventType.USER_MESSAGE ? 'user' : 'agent',
       content: String(e.payload?.content ?? ''),
       ts: e.ts,
       // Cast: the wire value is backend-controlled; unknown kinds render as
@@ -978,7 +987,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const prev = get().streaming;
         const same = prev !== null && prev.round === round;
         const roundTexts =
-          !same && prev && prev.text
+          !same && prev?.text
             ? [...get().roundTexts, { round: prev.round, text: prev.text }].slice(-20)
             : get().roundTexts;
         set({

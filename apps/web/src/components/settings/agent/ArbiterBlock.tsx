@@ -62,7 +62,7 @@ export function ArbiterBlock() {
         setArbiter(item.value ?? value);
         addToast({ type: 'success', message: t('arbiter.saved') });
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         setArbiter(prev);
         addToast({
           type: 'error',

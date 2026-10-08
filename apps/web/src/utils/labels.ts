@@ -18,10 +18,10 @@
  */
 
 import { i18n } from '@/i18n';
-import type { Category, ProjectProgress } from '@/api/types';
+import type { Category } from '@/api/types';
 
 /** Map a progress id to its overview:progress.* label; unknown ids render as-is. */
-export function progressLabel(p: ProjectProgress | string | undefined): string {
+export function progressLabel(p: string | undefined): string {
   if (!p) return '-';
   const key = `overview:progress.${p}`;
   return i18n.exists(key) ? i18n.t(key) : p;
@@ -70,7 +70,7 @@ export function categoryCssClass(
   }
   // Semantic keyword matching over API-provided names (Chinese + English);
   // intentionally not i18n-driven: this classifies content, it displays nothing.
-  const name = (categories?.find((c) => c.id === id)?.name || '').toLowerCase();
+  const name = (categories?.find((c) => c.id === id)?.name ?? '').toLowerCase();
   if (name.includes('前端') || name.includes('front')) return 'cat-frontend';
   if (name.includes('后端') || name.includes('back')) return 'cat-backend';
   if (name.includes('ai') || name.includes('ml') || name.includes('数据')) return 'cat-ai';

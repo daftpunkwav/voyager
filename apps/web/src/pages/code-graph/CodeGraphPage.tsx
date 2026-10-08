@@ -96,7 +96,7 @@ export function CodeGraphPage() {
   const refresh = useRefreshIndex(id, { onError: onIndexOpError('codeGraph:indexOp.refresh') });
   const delIndex = useDeleteIndex(id, { onError: onIndexOpError('codeGraph:indexOp.delete') });
 
-  const graphQ = useCodeGraph(id, { maxNodes: nodeBudget, enabled: Boolean(ready) });
+  const graphQ = useCodeGraph(id, { maxNodes: nodeBudget, enabled: ready });
 
   const projectQ = useQuery({
     queryKey: ['project', id],
@@ -117,7 +117,7 @@ export function CodeGraphPage() {
     if (!render) return null;
     let nodes: CodeGraphNode[] = render.nodes;
     if (nodeTypeFilter) {
-      nodes = nodes.filter((n) => nodeTypeFilter.has(n.kind || n.label));
+      nodes = nodes.filter((n) => nodeTypeFilter.has(n.kind ?? n.label));
     }
     if (showOnlyDead) nodes = nodes.filter((n) => n.status === 'dead');
     if (hideTests) nodes = nodes.filter((n) => n.status !== 'test');
@@ -126,13 +126,13 @@ export function CodeGraphPage() {
     if (colorByStatus) {
       nodes = nodes.map((n) => ({
         ...n,
-        color: colorForStatus(n.status || ''),
+        color: colorForStatus(n.status ?? ''),
       }));
     }
     const ids = new Set(nodes.map((n) => n.id));
     let edges = render.edges.filter((e) => ids.has(e.source) && ids.has(e.target));
     if (edgeTypeFilter) {
-      edges = edges.filter((e) => edgeTypeFilter.has(e.type || e.relation || ''));
+      edges = edges.filter((e) => edgeTypeFilter.has(e.type ?? e.relation ?? ''));
     }
     return applyL1Layout({ ...render, nodes, edges }, layoutMode);
   }, [
@@ -169,8 +169,8 @@ export function CodeGraphPage() {
     const matches = filtered.nodes.filter(
       (n) =>
         n.name.toLowerCase().includes(q) ||
-        (n.qualified_name || '').toLowerCase().includes(q) ||
-        (n.file_path || '').toLowerCase().includes(q)
+        (n.qualified_name ?? '').toLowerCase().includes(q) ||
+        (n.file_path ?? '').toLowerCase().includes(q)
     );
     const ids = new Set(matches.map((n) => n.id));
     setHighlightedIds(ids.size ? ids : null);
@@ -200,8 +200,8 @@ export function CodeGraphPage() {
       setCameraTarget(computeCameraTarget(filtered.nodes, nodeIds));
       const candidates = filtered.nodes.filter((n) => nodeIds.has(n.id));
       const prefer =
-        candidates.find((n) => (n.kind || n.label) === 'File') ||
-        candidates.find((n) => (n.file_path || '') === path) ||
+        candidates.find((n) => (n.kind ?? n.label) === 'File') ??
+        candidates.find((n) => (n.file_path ?? '') === path) ??
         candidates[0];
       if (prefer) selectNode(prefer);
     }
@@ -219,20 +219,22 @@ export function CodeGraphPage() {
     setCameraTarget(computeCameraTarget(filtered.nodes, new Set([node.id])));
   };
 
-  const projectName = projectQ.data?.name || id;
+  const projectName = projectQ.data?.name ?? id;
   const statusSlot = (
     <IndexStatusBar
       status={status}
       loading={statusQ.isLoading || trigger.isPending || refresh.isPending || delIndex.isPending}
       onIndex={() => trigger.mutate()}
       onRefresh={() => refresh.mutate()}
-      onDelete={async () => {
-        const name = projectQ.data?.name || id || t('codeGraph:delete.fallbackName');
-        if (
-          await confirmDialog({ message: t('codeGraph:delete.confirm', { name }), danger: true })
-        ) {
-          delIndex.mutate();
-        }
+      onDelete={() => {
+        void (async () => {
+          const name = projectQ.data?.name ?? id ?? t('codeGraph:delete.fallbackName');
+          if (
+            await confirmDialog({ message: t('codeGraph:delete.confirm', { name }), danger: true })
+          ) {
+            delIndex.mutate();
+          }
+        })();
       }}
       nodeBudget={nodeBudget}
       onBudgetChange={setNodeBudget}
@@ -263,7 +265,7 @@ export function CodeGraphPage() {
             }}
           >
             <h2 style={{ color: 'var(--error)' }}>{t('codeGraph:page.serviceUnavailable')}</h2>
-            <p>{(statusQ.error as Error)?.message || t('codeGraph:page.statusUnknown')}</p>
+            <p>{statusQ.error?.message || t('codeGraph:page.statusUnknown')}</p>
           </div>
         )}
 
@@ -272,7 +274,7 @@ export function CodeGraphPage() {
             <h2>{t('codeGraph:page.notBuiltTitle')}</h2>
             <p>
               {status?.status === 'CLONE_FAILED' || status?.status === 'INDEX_FAILED'
-                ? status.error || t('codeGraph:page.buildFailedFallback')
+                ? (status.error ?? '') || t('codeGraph:page.buildFailedFallback')
                 : status && ['QUEUED', 'CLONING', 'INDEXING'].includes(status.status)
                   ? t('codeGraph:page.processing', { status: status.status })
                   : t('codeGraph:page.notBuiltHint')}
@@ -295,7 +297,7 @@ export function CodeGraphPage() {
         {ready && graphQ.isError && (
           <div className="code-graph-empty glass-card glass-card--overview-inner">
             <h2>{t('codeGraph:page.loadFailedTitle')}</h2>
-            <p>{(graphQ.error as Error)?.message || t('codeGraph:page.layoutDataUnknown')}</p>
+            <p>{graphQ.error?.message || t('codeGraph:page.layoutDataUnknown')}</p>
           </div>
         )}
         {ready && filtered && (
@@ -323,8 +325,8 @@ export function CodeGraphPage() {
         {selectedNode && id && (
           <NodeDetailPanel
             node={selectedNode}
-            allNodes={filtered?.nodes || []}
-            allEdges={filtered?.edges || []}
+            allNodes={filtered?.nodes ?? []}
+            allEdges={filtered?.edges ?? []}
             projectId={id}
             onClose={() => selectNode(null)}
             onNavigate={onNodeClick}

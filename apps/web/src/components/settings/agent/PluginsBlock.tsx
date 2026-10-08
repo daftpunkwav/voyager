@@ -544,9 +544,10 @@ export function PluginsBlock() {
                         ? t('plugins.unapproveAria', { name: p.name })
                         : t('plugins.approveBundleAria', { name: p.name })
                     }
-                    onChange={(checked) =>
-                      checked ? void run('approve', p, { granularity: 'bundle' }) : onUnapprove(p)
-                    }
+                    onChange={(checked) => {
+                      if (checked) void run('approve', p, { granularity: 'bundle' });
+                      else void onUnapprove(p);
+                    }}
                   />
                   {!p.approved && (
                     <button

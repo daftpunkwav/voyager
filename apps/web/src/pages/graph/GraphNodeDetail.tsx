@@ -106,7 +106,7 @@ export function GraphNodeDetail({
               </div>
               <div className="detail-row">
                 <span className="muted">{t('graph:detail.category')}</span>
-                <strong>{node.category || '—'}</strong>
+                <strong>{(node.category ?? '') || '—'}</strong>
               </div>
               <div className="detail-row">
                 <span className="muted">{t('graph:detail.tags')}</span>

@@ -29,7 +29,7 @@ export function NetworkBlock() {
 
   useEffect(() => {
     let alive = true;
-    callCapability<SettingItem<string>>('settings', 'get_setting', { key: NETWORK_MODE_KEY })
+    callCapability<SettingItem>('settings', 'get_setting', { key: NETWORK_MODE_KEY })
       .then((item) => {
         if (alive) setNetMode(item.value ?? item.default ?? 'whitelist');
       })
@@ -51,14 +51,14 @@ export function NetworkBlock() {
   const saveNetworkMode = (mode: string) => {
     const prev = netMode;
     setNetMode(mode);
-    callCapability<SettingItem<string>>('settings', 'set_setting', {
+    callCapability<SettingItem>('settings', 'set_setting', {
       key: NETWORK_MODE_KEY,
       value: mode,
     })
       .then(() => {
         addToast({ type: 'success', message: t('network.modeSaved') });
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         setNetMode(prev);
         addToast({
           type: 'error',
@@ -85,7 +85,7 @@ export function NetworkBlock() {
         setDomainsDraft(lines.join('\n'));
         addToast({ type: 'success', message: t('network.domainsSaved', { count: lines.length }) });
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         addToast({
           type: 'error',
           message: t('network.domainsSaveFailed', { message: extractErrorMessage(err) }),

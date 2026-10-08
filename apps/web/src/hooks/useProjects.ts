@@ -102,7 +102,7 @@ export function useCategories() {
       // filter/edit UI keeps working (id === name)
       const rows = await listCategories();
       const names = Array.isArray(rows) ? rows : [];
-      return names.map((n) => ({ id: String(n), name: String(n), is_preset: false }));
+      return names.map((n) => ({ id: n, name: n, is_preset: false }));
     },
   });
 }
@@ -117,8 +117,7 @@ export function useTags() {
 export function useImportProjects() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (repos: Array<{ owner: string; repo: string; url: string }>) =>
-      importProjects(repos),
+    mutationFn: (repos: { owner: string; repo: string; url: string }[]) => importProjects(repos),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['projects'] });
       void invalidateOverviewQueries(qc);

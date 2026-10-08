@@ -61,13 +61,13 @@ function wrapMarksInChildren(parent: MdNode): void {
   const children = parent.children;
   if (!children?.length) return;
 
-  type Span = {
+  interface Span {
     kind: 'text' | 'atom';
     index: number;
     absStart: number;
     absEnd: number;
     value?: string;
-  };
+  }
   const spans: Span[] = [];
   let abs = 0;
   for (let i = 0; i < children.length; i += 1) {

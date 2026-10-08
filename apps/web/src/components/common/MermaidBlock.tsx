@@ -16,7 +16,7 @@ import { resolveTheme } from '@/shell/themeBridge';
 
 /** Only explicit ```mermaid fences qualify, so ordinary code is never routed into the SVG injection path */
 export function looksLikeMermaid(lang: string | null | undefined, _code?: string): boolean {
-  return (lang || '').toLowerCase() === 'mermaid';
+  return (lang ?? '').toLowerCase() === 'mermaid';
 }
 
 interface MermaidBlockProps {
@@ -45,7 +45,7 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
     setSvg(null);
     setFailed(false);
 
-    (async () => {
+    void (async () => {
       try {
         const mermaid = (await import('mermaid')).default;
         mermaid.initialize({
@@ -57,7 +57,7 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
         });
         const { svg: rendered } = await mermaid.render(`mmd-${reactId}`, code);
         const clean = DOMPurify.sanitize(rendered, SVG_PURIFY);
-        if (!clean || !clean.includes('<svg')) {
+        if (!clean?.includes('<svg')) {
           throw new Error('svg sanitized empty');
         }
         if (!cancelled) setSvg(clean);

@@ -105,7 +105,7 @@ export function formatWorkerError(err: unknown): string {
 
 /** Immediate handle for runs that never start (no Worker support, bad input). */
 function immediate(result: Omit<ExecutionResult, 'durationMs'>): ExecutionHandle {
-  return { done: Promise.resolve({ ...result, durationMs: 0 }), cancel() {} };
+  return { done: Promise.resolve({ ...result, durationMs: 0 }), cancel: () => undefined };
 }
 
 /** Execute JavaScript source in a sandboxed Blob worker. SSR-safe. */
@@ -159,7 +159,7 @@ export function runJavascript(
     settle?.({
       status: partial.status,
       output: out.text,
-      stderr: err?.text || undefined,
+      stderr: (err?.text ?? '') || undefined,
       error: partial.error,
       durationMs: Date.now() - startedAt,
       truncated: out.truncated || Boolean(err?.truncated),
@@ -198,7 +198,7 @@ export function runJavascript(
       status: data.ok ? 'ok' : 'error',
       output: typeof data.stdout === 'string' ? data.stdout : '',
       stderr: typeof data.stderr === 'string' && data.stderr ? data.stderr : undefined,
-      error: data.ok ? undefined : data.error || 'Execution failed.',
+      error: data.ok ? undefined : (data.error ?? '') || 'Execution failed.',
     });
   };
   worker.onerror = (event) => {

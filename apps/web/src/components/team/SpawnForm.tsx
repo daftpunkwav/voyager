@@ -54,7 +54,7 @@ export function SpawnForm() {
 
   useEffect(() => {
     let alive = true;
-    (async () => {
+    void (async () => {
       setDataLoading(true);
       try {
         const [personasArr, toolsArr, sub] = await Promise.all([

@@ -106,7 +106,7 @@ export function ProjectProgressCard({
           type="button"
           className="btn btn-primary btn-sm pd-scribe-tip__btn"
           disabled={noteGenerating}
-          onClick={() => void onGenerateNote()}
+          onClick={() => onGenerateNote()}
         >
           {noteGenerating ? t('sources:progress.generating') : t('sources:progress.generate')}
         </button>

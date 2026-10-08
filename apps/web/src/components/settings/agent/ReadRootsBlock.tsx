@@ -54,7 +54,7 @@ export function ReadRootsBlock() {
           setRootsDraft('');
           addToast({ type: 'success', message: t('readRoots.cleared') });
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           addToast({
             type: 'error',
             message: t('readRoots.saveFailed', { message: extractErrorMessage(err) }),
@@ -78,7 +78,7 @@ export function ReadRootsBlock() {
         setRootsDraft(lines.join('\n'));
         addToast({ type: 'success', message: t('readRoots.saved') });
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         addToast({
           type: 'error',
           message: t('readRoots.saveFailed', { message: extractErrorMessage(err) }),

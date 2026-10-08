@@ -88,7 +88,12 @@ export function DeliveryCard({
           {copied ? t('chat:msg.copied') : t('chat:msg.copy')}
         </button>
         {failed && delivery.run_id && onOpenRun ? (
-          <button type="button" onClick={() => onOpenRun(delivery.run_id as string)}>
+          <button
+            type="button"
+            onClick={() => {
+              if (delivery.run_id) onOpenRun(delivery.run_id);
+            }}
+          >
             {t('chat:delivery.openRun')}
           </button>
         ) : null}

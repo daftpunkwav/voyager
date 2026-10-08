@@ -7,7 +7,7 @@
 
 type DefsListener = () => void;
 
-const listeners: Set<DefsListener> = new Set();
+const listeners = new Set<DefsListener>();
 
 /** Subscribe to custom definition changes; returns an unsubscribe function. */
 export function onTeamDefsChanged(fn: DefsListener): () => void {

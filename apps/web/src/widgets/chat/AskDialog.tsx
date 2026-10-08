@@ -83,7 +83,7 @@ export function AskDialog() {
         question_id: question.questionId,
         value: raw,
       });
-      if (out.matched === false) {
+      if (!out.matched) {
         // The question no longer exists backend-side (expired and discarded): inform
         // the user and close normally so the conversation can continue
         useChatStore.getState().addSystem(t('chat:ask.expired'));

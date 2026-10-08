@@ -90,21 +90,19 @@ function loadSkulpt(): Promise<SkulptGlobal> {
   if (preloaded?.misceval && typeof preloaded.importMainWithBody === 'function') {
     return Promise.resolve(preloaded);
   }
-  if (!enginePromise) {
-    enginePromise = (async () => {
-      await loadScript(`${VENDOR_BASE}/skulpt.min.js`);
-      await loadScript(`${VENDOR_BASE}/skulpt-stdlib.js`);
-      const engine = window.Sk;
-      if (!engine?.misceval || !engine?.importMainWithBody) {
-        throw new Error('Skulpt engine failed to initialize.');
-      }
-      return engine;
-    })().catch((err: unknown) => {
-      // Allow a later retry after transient failures.
-      enginePromise = null;
-      throw err;
-    });
-  }
+  enginePromise ??= (async () => {
+    await loadScript(`${VENDOR_BASE}/skulpt.min.js`);
+    await loadScript(`${VENDOR_BASE}/skulpt-stdlib.js`);
+    const engine = window.Sk;
+    if (!engine?.misceval || !engine?.importMainWithBody) {
+      throw new Error('Skulpt engine failed to initialize.');
+    }
+    return engine;
+  })().catch((err: unknown) => {
+    // Allow a later retry after transient failures.
+    enginePromise = null;
+    throw err;
+  });
   return enginePromise;
 }
 
@@ -151,7 +149,7 @@ export function runPython(
         durationMs: 0,
         truncated: false,
       }),
-      cancel() {},
+      cancel: () => undefined,
     };
   }
 
@@ -204,7 +202,7 @@ export function runPython(
           if (!files || !(filename in files)) {
             throw new Error(`Module not available in the browser sandbox: ${filename}`);
           }
-          return files[filename] as string;
+          return files[filename];
         },
         execLimit: timeoutMs,
         __future__: engine.python3,

@@ -41,7 +41,7 @@ function InternalLink({ to, children }: { to: string; children: React.ReactNode 
       href={to}
       onClick={(e) => {
         e.preventDefault();
-        navigate(to);
+        void navigate(to);
       }}
     >
       {children}

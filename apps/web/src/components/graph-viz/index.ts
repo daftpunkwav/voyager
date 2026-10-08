@@ -11,11 +11,7 @@ export type { CameraTarget } from '@/components/code-graph/GraphScene';
 export { NodeCloud } from '@/components/code-graph/NodeCloud';
 export { EdgeLines } from '@/components/code-graph/EdgeLines';
 export { NodeLabels } from '@/components/code-graph/NodeLabels';
-export {
-  NodeTooltipContent,
-  NodeTooltipTracker,
-  NodeTooltip,
-} from '@/components/code-graph/NodeTooltip';
+export { NodeTooltipContent, NodeTooltipTracker } from '@/components/code-graph/NodeTooltip';
 export type {
   CodeGraphNode,
   CodeGraphEdge,

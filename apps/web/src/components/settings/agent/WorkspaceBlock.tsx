@@ -30,7 +30,7 @@ export function WorkspaceBlock() {
 
   useEffect(() => {
     let alive = true;
-    callCapability<SettingItem<string>>('settings', 'get_setting', { key: WORKDIR_KEY })
+    callCapability<SettingItem>('settings', 'get_setting', { key: WORKDIR_KEY })
       .then((item) => {
         if (alive) setWorkdir(item.value ?? item.default ?? '');
       })
@@ -58,7 +58,7 @@ export function WorkspaceBlock() {
         setWorkdir(workspace);
         addToast({ type: 'success', message: t('workspace.switched') });
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         addToast({
           type: 'error',
           message: t('workspace.switchFailed', { message: extractErrorMessage(err) }),
@@ -83,11 +83,11 @@ export function WorkspaceBlock() {
             style={{ maxWidth: 260 }}
             value={workdir}
             onChange={(e) => setWorkdir(e.target.value)}
-            onBlur={saveWorkdir}
+            onBlur={() => void saveWorkdir()}
             placeholder="workspace"
             aria-label={t('workspace.title')}
           />
-          <button type="button" className="btn btn-sm btn-ghost" onClick={saveWorkdir}>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={() => void saveWorkdir()}>
             {t('common.save')}
           </button>
         </div>

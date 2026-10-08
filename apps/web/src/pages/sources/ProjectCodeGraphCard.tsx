@@ -82,7 +82,7 @@ export function CodeGraphIndexCard({ projectId }: { projectId: string }) {
             color: 'var(--error)',
           }}
         >
-          [{status?.status}] {status?.error?.trim() || t('sources:graph.failedFallback')}
+          [{status?.status}] {(status?.error?.trim() ?? '') || t('sources:graph.failedFallback')}
         </div>
       )}
 
@@ -98,7 +98,7 @@ export function CodeGraphIndexCard({ projectId }: { projectId: string }) {
           }}
         >
           {t('sources:graph.unavailablePrefix')}
-          {(statusQ.error as Error)?.message || t('sources:checkBackend')}
+          {statusQ.error?.message || t('sources:checkBackend')}
         </div>
       )}
 
@@ -132,12 +132,14 @@ export function CodeGraphIndexCard({ projectId }: { projectId: string }) {
               className="btn btn-ghost btn-sm"
               disabled={isBusy || trigger.isPending || delIndex.isPending}
               style={{ height: 28, fontSize: 12, color: '#dc2626' }}
-              onClick={async () => {
-                if (
-                  await confirmDialog({ message: t('sources:graph.deleteConfirm'), danger: true })
-                ) {
-                  delIndex.mutate();
-                }
+              onClick={() => {
+                void (async () => {
+                  if (
+                    await confirmDialog({ message: t('sources:graph.deleteConfirm'), danger: true })
+                  ) {
+                    delIndex.mutate();
+                  }
+                })();
               }}
             >
               {t('sources:graph.opDelete')}

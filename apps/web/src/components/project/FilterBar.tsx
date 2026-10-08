@@ -46,7 +46,12 @@ export function FilterBar({ categories, tags, languages }: FilterBarProps) {
     return [];
   }, [languages]);
 
-  const hasActiveFilter = Boolean(categoryId || language || progress || tagId || localSearch);
+  const hasActiveFilter =
+    Boolean(categoryId) ||
+    Boolean(language) ||
+    Boolean(progress) ||
+    Boolean(tagId) ||
+    Boolean(localSearch);
 
   const categoryOptions = useMemo(
     () => [

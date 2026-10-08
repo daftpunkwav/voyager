@@ -26,14 +26,14 @@ import { ModalOverlay } from '@/components/common/ModalOverlay';
 import { confirmDialog } from '@/stores/uiStore';
 import { classifyErrorKind } from '@/utils/graphErrorKind';
 
-type IndexRow = {
+interface IndexRow {
   id: string;
   project_id: string;
   status: string;
   error?: string | null;
   error_kind?: string | null;
   engine_project?: string;
-};
+}
 
 type TabId = 'ready' | 'running' | 'failed';
 
@@ -135,7 +135,7 @@ export function GraphIndexProgressBar() {
       // The name map only needs repo resource nodes; request the backend cap
       // (2000) to cover as many projects as possible (l0_view only accepts kinds/limit).
       const res = (await getGraph({ limit: 2000 })) as {
-        nodes?: Array<{ name?: string; qualified_name?: string }>;
+        nodes?: { name?: string; qualified_name?: string }[];
       } | null;
       return res?.nodes || [];
     },

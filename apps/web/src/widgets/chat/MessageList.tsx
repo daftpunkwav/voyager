@@ -479,7 +479,7 @@ function MessageForkButton({ msg }: { msg: ChatMessage }) {
       const loaded = state.switchSession(newId);
       if (!loaded) await loadSessionTimeline(newId);
       await loadChatSessions();
-      navigate(routes.chat);
+      void navigate(routes.chat);
       addToast({ type: 'success', message: t('chat:msg.forked') });
     } catch (err) {
       addToast({ type: 'error', message: extractErrorMessage(err) });
@@ -578,7 +578,7 @@ function NoteArtifactCard({ artifact }: { artifact: NoteArtifact }) {
     setLoading(true);
     try {
       const row = await getNote(artifact.noteId);
-      setContent(String(row.content ?? ''));
+      setContent(row.content);
     } catch (err) {
       // NOT_FOUND = the note was deleted or purged; show a readable explanation instead of a bare uuid error
       const code = err instanceof ServiceError ? err.code : '';

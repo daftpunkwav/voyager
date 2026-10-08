@@ -27,7 +27,7 @@ export function ConductBlock() {
 
   useEffect(() => {
     let alive = true;
-    callCapability<SettingItem<string>>('settings', 'get_setting', { key: CONDUCT_KEY })
+    callCapability<SettingItem>('settings', 'get_setting', { key: CONDUCT_KEY })
       .then((item) => {
         if (!alive) return;
         const v = item.value ?? item.default ?? '';
@@ -46,7 +46,7 @@ export function ConductBlock() {
     if (saved === null) return;
     const next = conductDraft.slice(0, CONDUCT_MAX);
     if (next === saved) return;
-    callCapability<SettingItem<string>>('settings', 'set_setting', {
+    callCapability<SettingItem>('settings', 'set_setting', {
       key: CONDUCT_KEY,
       value: next,
     })
@@ -54,7 +54,7 @@ export function ConductBlock() {
         setSaved(next);
         addToast({ type: 'success', message: t('conduct.saved') });
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         addToast({
           type: 'error',
           message: t('conduct.saveFailed', { message: extractErrorMessage(err) }),

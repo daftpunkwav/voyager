@@ -64,7 +64,7 @@ export function ToolPermissions() {
         setTools(Array.isArray(roster) ? roster : []);
         setConfig(normalizeConfig(item.value ?? item.default));
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         if (alive) setLoadError(extractErrorMessage(err));
       });
     return () => {

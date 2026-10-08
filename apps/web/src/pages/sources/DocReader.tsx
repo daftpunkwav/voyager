@@ -158,25 +158,27 @@ export function DocReader() {
             type="button"
             className="icon-btn"
             aria-label={t('sources:doc.deleteAria')}
-            onClick={async () => {
-              if (
-                !(await confirmDialog({
-                  message: t('sources:doc.deleteConfirm', { title: doc.title }),
-                  danger: true,
-                }))
-              )
-                return;
-              removeDoc.mutate(doc.id, {
-                onSuccess: () => {
-                  addToast({ type: 'success', message: t('sources:doc.deleted') });
-                  navigate('/sources');
-                },
-                onError: (e) =>
-                  addToast({
-                    type: 'error',
-                    message: e instanceof Error ? e.message : t('sources:deleteFailed'),
-                  }),
-              });
+            onClick={() => {
+              void (async () => {
+                if (
+                  !(await confirmDialog({
+                    message: t('sources:doc.deleteConfirm', { title: doc.title }),
+                    danger: true,
+                  }))
+                )
+                  return;
+                removeDoc.mutate(doc.id, {
+                  onSuccess: () => {
+                    addToast({ type: 'success', message: t('sources:doc.deleted') });
+                    void navigate('/sources');
+                  },
+                  onError: (e) =>
+                    addToast({
+                      type: 'error',
+                      message: e instanceof Error ? e.message : t('sources:deleteFailed'),
+                    }),
+                });
+              })();
             }}
           >
             <svg
@@ -313,7 +315,7 @@ function PdfPane({ docId, fileUrl }: { docId: string; fileUrl: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const pdfjs = await import('pdfjs-dist');
         pdfjs.GlobalWorkerOptions.workerSrc = new URL(

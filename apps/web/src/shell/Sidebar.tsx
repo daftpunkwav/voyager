@@ -151,7 +151,7 @@ function SidebarSessions() {
   const handleSwitch = async (row: ChatSessionRow) => {
     if (busy) return;
     if (row.session_id === activeId) {
-      navigate(routes.chat);
+      void navigate(routes.chat);
       return;
     }
     setBusy(true);
@@ -159,7 +159,7 @@ function SidebarSessions() {
       await setActiveSession(row.session_id);
       const loaded = useChatStore.getState().switchSession(row.session_id);
       if (!loaded) await loadSessionTimeline(row.session_id);
-      navigate(routes.chat);
+      void navigate(routes.chat);
     } catch (err) {
       fail(err);
     } finally {

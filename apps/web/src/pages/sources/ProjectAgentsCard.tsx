@@ -50,7 +50,7 @@ export function ProjectAgentsCard({
             type="button"
             className={`pd-agent ${a.id === recommendedAgent ? 'recommended' : ''} ${activeAgent === a.id && active ? 'is-active' : ''}`}
             disabled={noteGenerating}
-            onClick={() => void onRunAgent(a.id as AgentId)}
+            onClick={() => onRunAgent(a.id as AgentId)}
           >
             <div className="pd-agent-body">
               <div className="pd-agent-icon" style={{ background: a.color }}>

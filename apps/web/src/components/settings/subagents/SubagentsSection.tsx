@@ -123,7 +123,7 @@ export function SubagentsSection() {
         allowed_tools: def.allowed_tools ?? undefined,
         max_rounds: def.max_rounds ?? undefined,
         max_tool_calls: def.max_tool_calls ?? undefined,
-        network_mode: def.network_mode || undefined,
+        network_mode: def.network_mode ?? undefined,
         readonly: def.readonly ?? false,
         enabled: !(def.enabled ?? true),
       });

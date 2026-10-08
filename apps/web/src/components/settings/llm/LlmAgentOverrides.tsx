@@ -112,17 +112,16 @@ export function LlmAgentOverrides({ providers }: LlmAgentOverridesProps) {
   const updateModelOverride = (agentId: string, patch: Partial<ModelOverride>) => {
     const current = modelOverrides[agentId] ?? { provider: '', model: '' };
     const next: ModelOverride = { ...current, ...patch };
-    const map: ModelOverrideMap = { ...modelOverrides };
-    if (!next.provider && !next.model) delete map[agentId];
-    else map[agentId] = next;
+    const { [agentId]: _removedModel, ...rest } = modelOverrides;
+    const map: ModelOverrideMap =
+      !next.provider && !next.model ? rest : { ...modelOverrides, [agentId]: next };
     setModelOverrides(map);
     void persist(AGENT_LLM_OVERRIDES_KEY, map);
   };
 
   const updateStyleOverride = (agentId: string, style: string) => {
-    const map: StyleOverrideMap = { ...styleOverrides };
-    if (!style) delete map[agentId];
-    else map[agentId] = style;
+    const { [agentId]: _removedStyle, ...rest } = styleOverrides;
+    const map: StyleOverrideMap = style ? { ...styleOverrides, [agentId]: style } : rest;
     setStyleOverrides(map);
     void persist(AGENT_STYLE_OVERRIDES_KEY, map);
   };
@@ -155,7 +154,7 @@ export function LlmAgentOverrides({ providers }: LlmAgentOverridesProps) {
                 enabledProviders.find((p) => p.id === override.provider) ?? fallbackProvider;
               const modelOptions = provider?.models?.length
                 ? provider.models
-                : ([firstEnabledModel(provider)].filter(Boolean) as string[]);
+                : [firstEnabledModel(provider)].filter(Boolean);
               // A stored provider that is gone or disabled would silently route
               // nowhere: keep it visible instead of masquerading as the default
               const storedProviderMissing =

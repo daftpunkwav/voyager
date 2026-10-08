@@ -1,31 +1,36 @@
 import js from '@eslint/js';
 import globals from 'globals';
-import tsParser from '@typescript-eslint/parser';
-import tsPlugin from '@typescript-eslint/eslint-plugin';
+import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
+import prettier from 'eslint-config-prettier';
 
-export default [
+export default tseslint.config(
   { ignores: ['dist/**', 'node_modules/**'] },
+  js.configs.recommended,
+  // Type-aware presets run on the whole tree; the parserOptions block below
+  // wires them to the workspace tsconfigs via projectService.
+  ...tseslint.configs.strictTypeChecked,
+  ...tseslint.configs.stylisticTypeChecked,
   {
     files: ['**/*.{ts,tsx}'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
       globals: globals.browser,
-      parser: tsParser,
+      parser: tseslint.parser,
       parserOptions: {
         ecmaFeatures: { jsx: true },
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
       },
     },
     plugins: {
-      '@typescript-eslint': tsPlugin,
+      '@typescript-eslint': tseslint.plugin,
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
     },
     rules: {
-      ...js.configs.recommended.rules,
-      ...tsPlugin.configs.recommended.rules,
       ...reactHooks.configs.recommended.rules,
       // React 19 automatic JSX runtime; type annotations may still reference the React namespace
       'no-undef': 'off',
@@ -60,7 +65,7 @@ export default [
       ],
       '@typescript-eslint/no-unused-vars': [
         'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
       ],
       'no-unused-vars': 'off',
       // §4.2.15: never use dangerouslySetInnerHTML directly; sanitize with DOMPurify first
@@ -72,8 +77,43 @@ export default [
             'dangerouslySetInnerHTML must be sanitized via DOMPurify.sanitize before rendering (MermaidBlock.tsx is the reference pattern).',
         },
       ],
+      // Arrow shorthand `() => doThing()` is idiomatic React and carries no behavior risk;
+      // the rule stays on for the shapes that matter (returning void where a value is expected,
+      // passing void where an argument is expected). ignoreVoidOperator pairs with `void expr`
+      // as the explicit fire-and-forget marker used by no-floating-promises fixes.
+      '@typescript-eslint/no-confusing-void-expression': [
+        'error',
+        { ignoreArrowShorthand: true, ignoreVoidOperator: true },
+      ],
+      // Runtime boundary defense: gateway/SSE payloads and the legacyApi any boundary mean
+      // declared types are not 100% truthful at runtime, so "always truthy/falsy" conditionals
+      // are intentional guards, not dead code. Revisit per-file as payloads gain real schemas.
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      // URL/query building interpolates numbers and regexes constantly; keep the rule focused
+      // on the dangerous shapes (objects, nullish, booleans).
+      '@typescript-eslint/restrict-template-expressions': [
+        'error',
+        { allowNumber: true, allowRegExp: true },
+      ],
+      // React noop props (`onChange={() => {}}`) are idiomatic; only function/method shapes must spell it out.
+      '@typescript-eslint/no-empty-function': ['error', { allow: ['arrowFunctions'] }],
+      // Gateway facades normalize untyped payloads (`Record<string, unknown>`) with explicit
+      // String()/Number() by design. `unknown ?? fallback` collapses to `{}`, so exempt the
+      // `{}` shape and unknown itself; stringifying real named interfaces stays flagged.
+      '@typescript-eslint/no-base-to-string': [
+        'error',
+        { checkUnknown: false, ignoredTypeNames: ['{}'] },
+      ],
+      // The bridge layer (legacyApi / upstream-migrated stores) is an explicit any boundary by design;
+      // no-unsafe-* fires on every legacy field access there and is re-enabled per-file as code migrates.
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
     },
   },
+  prettier,
   // Single data-facade entry point (non-page files): business code must not bypass @/api/client to import the implementation layer directly.
   // Note: in flat config a later block for the same rule overrides the earlier one, so this is split into two blocks by file set,
   // each holding the complete pattern set; the pages rules are in the next block (incl. cross-page import bans); the two file sets are disjoint.
@@ -205,6 +245,8 @@ export default [
   },
   // R3F / Three scene exemption zone:
   //   - code-graph / graph subdirectories mutate uniforms in place and use @ts-nocheck; layout algorithms use non-null assertions.
+  //   - Type-aware strict rules model upstream Three.js idioms (any leak-through, post-render mutation,
+  //     floating animation frames) as bugs, so the whole zone is a type-aware off-ramp.
   {
     files: ['src/components/code-graph/**/*.{ts,tsx}', 'src/components/graph/**/*.{ts,tsx}'],
     rules: {
@@ -218,6 +260,21 @@ export default [
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
       'react-hooks/immutability': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-floating-promises': 'off',
+      '@typescript-eslint/no-misused-promises': 'off',
+      '@typescript-eslint/no-unbound-method': 'off',
+      '@typescript-eslint/no-base-to-string': 'off',
+      '@typescript-eslint/restrict-template-expressions': 'off',
+      '@typescript-eslint/no-confusing-void-expression': 'off',
+      '@typescript-eslint/strict-boolean-expressions': 'off',
+      '@typescript-eslint/prefer-nullish-coalescing': 'off',
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      '@typescript-eslint/restrict-plus-operands': 'off',
     },
-  },
-];
+  }
+);

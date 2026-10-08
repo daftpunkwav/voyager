@@ -49,7 +49,7 @@ export function StyleBlock() {
         setStyle(item.value ?? value);
         addToast({ type: 'success', message: t('style.saved') });
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         setStyle(prev);
         addToast({
           type: 'error',

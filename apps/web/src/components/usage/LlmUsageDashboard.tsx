@@ -115,7 +115,7 @@ export function LlmUsageDashboard() {
         <div className="page-scaffold__state">
           <EmptyState
             title={t('usage:dashboard.unavailable')}
-            description={(error as Error | null)?.message || backendUnreachable()}
+            description={((error as Error | null)?.message ?? '') || backendUnreachable()}
             icon={EmptyStateIcons.usage}
             onRetry={() => void refetch()}
           />
@@ -169,7 +169,7 @@ export function LlmUsageDashboard() {
                     <li key={call.id}>
                       <span className="usage-recent-ts">{fmtTs(call.created_at)}</span>
                       <span className="usage-recent-model">
-                        {call.label ||
+                        {(call.label ?? '') ||
                           (call.provider && call.provider !== 'unknown'
                             ? `${call.provider}/${call.model}`
                             : call.model)}

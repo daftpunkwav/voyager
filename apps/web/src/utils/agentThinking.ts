@@ -27,14 +27,18 @@ export function isStatusLine(ln: string): boolean {
   if (!t) return true;
   if (/^\[(状态|执行|规划|规划完成|收口|纠正|阶段)\]/.test(t)) return true;
   if (/^执行\s*·/.test(t)) return true;
-  if (/^意图识别:/.test(t)) return true;
+  if (t.startsWith('意图识别:')) return true;
   if (/^意图路由\b/.test(t)) return true;
-  if (/^正在生成/.test(t)) return true;
-  if (/^（思路阶段无内容/.test(t)) return true;
+  if (t.startsWith('正在生成')) return true;
+  if (t.startsWith('（思路阶段无内容')) return true;
   if (/^\[中间推理\]\s*$/.test(t)) return true;
   // Legacy format: "Hub inferring (round 1/4 · plan_execute)"
-  if (/推理中/.test(t) && /第\s*\d+\s*\/\s*\d+\s*轮/.test(t)) return true;
-  if (/推理中/.test(t) && /plan_execute|react|tot|reflexion|direct/i.test(t) && t.length < 120) {
+  if (t.includes('推理中') && /第\s*\d+\s*\/\s*\d+\s*轮/.test(t)) return true;
+  if (
+    t.includes('推理中') &&
+    /plan_execute|react|tot|reflexion|direct/i.test(t) &&
+    t.length < 120
+  ) {
     return true;
   }
   if (/^第\s*\d+\s*\/\s*\d+\s*轮\b/.test(t)) return true;
@@ -64,7 +68,7 @@ export function partitionThinking(text: string): {
     }
     if (isStatusLine(ln)) {
       statusLines.push(ln.trim());
-    } else if (/^\[中间推理\]/.test(ln.trim())) {
+    } else if (ln.trim().startsWith('[中间推理]')) {
       const rest = ln.replace(/^\[中间推理\]\s*/, '').trim();
       if (rest) realParts.push(rest);
       else statusLines.push('[中间推理]');

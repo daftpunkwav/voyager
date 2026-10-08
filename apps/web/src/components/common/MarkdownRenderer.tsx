@@ -155,7 +155,7 @@ function MarkdownImage({ src, alt, title, openLightbox }: MarkdownImageProps) {
   if (inLink) return img;
   // No alt text: fall back to the file name so the control and the lightbox
   // dialog keep a non-empty accessible name.
-  const lightboxName = altText.trim() || resolved.split('/').pop() || 'image';
+  const lightboxName = altText.trim() || (resolved.split('/').pop() ?? '') || 'image';
   return (
     <button
       type="button"
@@ -269,7 +269,7 @@ function MarkdownRendererInner({
                     onClick={(e) => {
                       e.preventDefault();
                       if (onWikiLink) onWikiLink(target);
-                      else navigate(to);
+                      else void navigate(to);
                     }}
                   >
                     {children}
@@ -284,7 +284,7 @@ function MarkdownRendererInner({
                     href={internal}
                     onClick={(e) => {
                       e.preventDefault();
-                      navigate(internal);
+                      void navigate(internal);
                     }}
                   >
                     {children}

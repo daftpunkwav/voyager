@@ -87,7 +87,7 @@ export function AppPolicyBlock() {
         else setDeniedDraft(lines.join('\n'));
         addToast({ type: 'success', message: t('appPolicy.saved', { label: t(labelKey) }) });
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         addToast({
           type: 'error',
           message: t('appPolicy.saveFailed', {

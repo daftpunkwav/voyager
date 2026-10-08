@@ -112,14 +112,14 @@ export async function fetchRunSteps(runId: string): Promise<ChatEvent[]> {
   });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   const body = (await resp.json().catch(() => null)) as {
-    steps?: Array<Record<string, unknown>>;
+    steps?: Record<string, unknown>[];
   } | null;
   return (body?.steps ?? []).map((row) => ({
     seq: Number(row.seq ?? 0),
     type: 'agent.step',
     payload: (row.payload ?? {}) as Record<string, unknown>,
     ts: Number(row.ts ?? 0),
-  })) as ChatEvent[];
+  }));
 }
 
 /** One recorded raw LLM round (GET /api/chat/rawllm): the exact transcript

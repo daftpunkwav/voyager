@@ -70,13 +70,13 @@ export function ContextRing() {
           }),
         },
         ...(typeof status.estimate_tokens === 'number'
-          ? [{ k: t('chat:ctx.estimate'), v: `${formatCompactCount(status.estimate_tokens)}` }]
+          ? [{ k: t('chat:ctx.estimate'), v: formatCompactCount(status.estimate_tokens) }]
           : []),
         ...(typeof status.reported_tokens === 'number'
           ? [
               {
                 k: t('chat:ctx.reported'),
-                v: `${formatCompactCount(status.reported_tokens)}`,
+                v: formatCompactCount(status.reported_tokens),
               },
             ]
           : []),
@@ -84,7 +84,7 @@ export function ContextRing() {
           ? [
               {
                 k: t('chat:ctx.memory'),
-                v: `${formatCompactCount(status.memory_cards_tokens)}`,
+                v: formatCompactCount(status.memory_cards_tokens),
               },
             ]
           : []),

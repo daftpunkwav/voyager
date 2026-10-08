@@ -105,25 +105,27 @@ export function PageReader() {
             type="button"
             className="icon-btn"
             aria-label={t('sources:web.deleteAria')}
-            onClick={async () => {
-              if (
-                !(await confirmDialog({
-                  message: t('sources:web.deleteConfirm', { title: page.title }),
-                  danger: true,
-                }))
-              )
-                return;
-              removePage.mutate(page.id, {
-                onSuccess: () => {
-                  addToast({ type: 'success', message: t('sources:web.deleted') });
-                  navigate('/sources');
-                },
-                onError: (e) =>
-                  addToast({
-                    type: 'error',
-                    message: e instanceof Error ? e.message : t('sources:deleteFailed'),
-                  }),
-              });
+            onClick={() => {
+              void (async () => {
+                if (
+                  !(await confirmDialog({
+                    message: t('sources:web.deleteConfirm', { title: page.title }),
+                    danger: true,
+                  }))
+                )
+                  return;
+                removePage.mutate(page.id, {
+                  onSuccess: () => {
+                    addToast({ type: 'success', message: t('sources:web.deleted') });
+                    void navigate('/sources');
+                  },
+                  onError: (e) =>
+                    addToast({
+                      type: 'error',
+                      message: e instanceof Error ? e.message : t('sources:deleteFailed'),
+                    }),
+                });
+              })();
             }}
           >
             <svg

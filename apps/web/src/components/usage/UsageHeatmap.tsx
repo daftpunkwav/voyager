@@ -45,7 +45,7 @@ function normalizeHeatmap(raw: LlmUsageSummary['heatmap']): Map<string, number> 
 /** Lays the selected window out into GitHub-style week columns (7 rows x N
  *  weeks, Sunday-aligned). Days outside the window become null pads. */
 function buildWeekColumns(calls: Map<string, number>, days: number) {
-  if (days <= 0) return [] as Array<Array<HeatCell | null>>;
+  if (days <= 0) return [] as (HeatCell | null)[][];
 
   const today = new Date();
   today.setHours(12, 0, 0, 0);
@@ -56,9 +56,9 @@ function buildWeekColumns(calls: Map<string, number>, days: number) {
   const start = new Date(first);
   start.setDate(start.getDate() - start.getDay());
 
-  const columns: Array<Array<HeatCell | null>> = [];
+  const columns: (HeatCell | null)[][] = [];
   const cursor = new Date(start);
-  let col: Array<HeatCell | null> = [];
+  let col: (HeatCell | null)[] = [];
 
   while (cursor <= today) {
     const key = ymdLocal(cursor);

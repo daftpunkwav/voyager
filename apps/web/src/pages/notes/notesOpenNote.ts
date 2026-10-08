@@ -74,7 +74,7 @@ export function useNotesOpener(options: UseNotesOpenerOptions) {
           if (!(await flushRef.current())) return; // not persisted: do not interrupt the current draft
           if (cancelled) return;
           startEditing('new', i18n.t('notes:newNote'), '');
-          setNewProjectId(searchParams.get('project') || '');
+          setNewProjectId(searchParams.get('project') ?? '');
           lastPersistedRef.current = null;
           dirtyRef.current = false;
           setSaveState('unsaved');
@@ -101,7 +101,7 @@ export function useNotesOpener(options: UseNotesOpenerOptions) {
           type: 'error',
           message: err instanceof Error ? err.message : i18n.t('notes:openNote.failed'),
         });
-        if (!cancelled) navigate(routes.notes, { replace: true });
+        if (!cancelled) void navigate(routes.notes, { replace: true });
       } finally {
         if (seq === noteSeqRef.current) setOpening(false);
       }
@@ -127,7 +127,7 @@ export function useNotesOpener(options: UseNotesOpenerOptions) {
   /** List/workspace "new" action: resets the draft when already on ?note=new, otherwise navigates there carrying the project. */
   const handleNew = async () => {
     if (!(await flushRef.current())) return; // not persisted: do not reset the current edit
-    const project = searchParams.get('project') || sourceId || '';
+    const project = searchParams.get('project') ?? sourceId ?? '';
     if (noteQueryId(searchParams) === 'new') {
       startEditing('new', i18n.t('notes:newNote'), '');
       setNewProjectId(project);
@@ -137,7 +137,7 @@ export function useNotesOpener(options: UseNotesOpenerOptions) {
       setMeta({ pinned: false, archived: false });
       return;
     }
-    navigate(routes.note('new', project || undefined));
+    void navigate(routes.note('new', project || undefined));
   };
 
   return { opening, meta, setMeta, handleNew };
