@@ -90,6 +90,27 @@ export function DocReader() {
     );
   }
 
+  const confirmRemoveDoc = async () => {
+    if (
+      !(await confirmDialog({
+        message: t('sources:doc.deleteConfirm', { title: doc.title }),
+        danger: true,
+      }))
+    )
+      return;
+    removeDoc.mutate(doc.id, {
+      onSuccess: () => {
+        addToast({ type: 'success', message: t('sources:doc.deleted') });
+        void navigate('/sources');
+      },
+      onError: (e) =>
+        addToast({
+          type: 'error',
+          message: e instanceof Error ? e.message : t('sources:deleteFailed'),
+        }),
+    });
+  };
+
   return (
     <div className="doc-reader">
       <header className="doc-reader__head">
@@ -158,28 +179,7 @@ export function DocReader() {
             type="button"
             className="icon-btn"
             aria-label={t('sources:doc.deleteAria')}
-            onClick={() => {
-              void (async () => {
-                if (
-                  !(await confirmDialog({
-                    message: t('sources:doc.deleteConfirm', { title: doc.title }),
-                    danger: true,
-                  }))
-                )
-                  return;
-                removeDoc.mutate(doc.id, {
-                  onSuccess: () => {
-                    addToast({ type: 'success', message: t('sources:doc.deleted') });
-                    void navigate('/sources');
-                  },
-                  onError: (e) =>
-                    addToast({
-                      type: 'error',
-                      message: e instanceof Error ? e.message : t('sources:deleteFailed'),
-                    }),
-                });
-              })();
-            }}
+            onClick={() => void confirmRemoveDoc()}
           >
             <svg
               viewBox="0 0 24 24"

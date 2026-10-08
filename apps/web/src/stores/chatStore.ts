@@ -445,27 +445,22 @@ function pruneCards(
   cards: Record<string, ProgressCard>,
   order: string[]
 ): { cards: Record<string, ProgressCard>; order: string[] } {
-  let excess = order.length - CARD_CAP;
+  const excess = order.length - CARD_CAP;
   if (excess <= 0) return { cards, order };
-  let nextCards = cards;
-  const nextOrder = [...order];
-  for (let i = 0; i < nextOrder.length && excess > 0;) {
-    if (nextCards[nextOrder[i]]?.status !== 'running') {
-      const { [nextOrder[i]]: _removed, ...rest } = nextCards;
-      nextCards = rest;
-      nextOrder.splice(i, 1);
-      excess--;
-    } else {
-      i++;
-    }
+  const evicted = new Set<string>();
+  const nextOrder = order.filter((id) => {
+    if (evicted.size >= excess) return true;
+    if (cards[id]?.status === 'running') return true;
+    evicted.add(id);
+    return false;
+  });
+  while (evicted.size < excess && nextOrder.length > 0) {
+    evicted.add(nextOrder[0]);
+    nextOrder.splice(0, 1);
   }
-  while (excess > 0 && nextOrder.length > 0) {
-    const id = nextOrder.shift();
-    if (id !== undefined) {
-      const { [id]: _removed, ...rest } = nextCards;
-      nextCards = rest;
-    }
-    excess--;
+  const nextCards: Record<string, ProgressCard> = {};
+  for (const id of Object.keys(cards)) {
+    if (!evicted.has(id)) nextCards[id] = cards[id];
   }
   return { cards: nextCards, order: nextOrder };
 }

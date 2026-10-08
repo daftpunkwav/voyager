@@ -282,11 +282,14 @@ export function NoteEditor({
           markdown?: string;
           url?: string;
         } | null;
-        // Preserves the previous String(payload) output byte-for-byte: 'null' for
-        // a null payload, '[object Object]' for an object without usable fields
-        const stringified = payload === null ? 'null' : '[object Object]';
-        const md =
-          payload?.markdown ?? (payload?.url ? `![](${payload.url})` : `![](${stringified})`);
+        // Branch matrix keeps the legacy output byte-for-byte: markdown wins
+        // even when empty (the old ?? chain), then url, then '![](null)' for a
+        // null payload, '![]([object Object])' for an object without fields.
+        let md: string;
+        if (payload?.markdown != null) md = payload.markdown;
+        else if (payload?.url) md = `![](${payload.url})`;
+        else if (payload === null) md = '![](null)';
+        else md = '![]([object Object])';
         if (view) {
           view.dispatch(view.state.replaceSelection(`\n${md}\n`));
           view.focus();
