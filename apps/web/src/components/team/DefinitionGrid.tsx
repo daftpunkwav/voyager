@@ -83,9 +83,7 @@ export function DefinitionGrid() {
           title={t('team:def.loadFailed')}
           description={error}
           icon={EmptyStateIcons.warning}
-          onRetry={() => {
-            void load();
-          }}
+          onRetry={() => void load()}
         />
       </section>
     );

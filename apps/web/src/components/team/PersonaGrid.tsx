@@ -66,9 +66,7 @@ export function PersonaGrid() {
           title={t('team:persona.loadFailed')}
           description={error}
           icon={EmptyStateIcons.warning}
-          onRetry={() => {
-            void load();
-          }}
+          onRetry={() => void load()}
         />
       </section>
     );

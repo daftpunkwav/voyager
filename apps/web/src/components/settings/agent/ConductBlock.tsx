@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { callCapability } from '@/bridge/client';
 import { useUIStore } from '@/stores/uiStore';
-import { extractErrorMessage } from '@/utils/errors';
+import { errorToastPayload } from '@/utils/errors';
 import { CONDUCT_KEY, CONDUCT_MAX } from './constants';
 import type { SettingItem } from './types';
 
@@ -54,12 +54,7 @@ export function ConductBlock() {
         setSaved(next);
         addToast({ type: 'success', message: t('conduct.saved') });
       })
-      .catch((err: unknown) => {
-        addToast({
-          type: 'error',
-          message: t('conduct.saveFailed', { message: extractErrorMessage(err) }),
-        });
-      });
+      .catch((err: unknown) => addToast(errorToastPayload(t, 'conduct.saveFailed', err)));
   };
 
   return (

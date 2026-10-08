@@ -13,6 +13,8 @@
  * This module must not depend on UI-layer components.
  */
 
+import type { TFunction } from 'i18next';
+
 import { i18n } from '@/i18n';
 
 /** Legacy API error envelope: { error: { message } }.
@@ -52,4 +54,11 @@ export function extractErrorMessage(err: unknown): string {
     return err.message;
   }
   return i18n.t('errors:unknownRetry');
+}
+
+/** Error-toast payload for a failed call: `key` carries the context line,
+ *  extractErrorMessage appends the wire error. Callers pass the result to
+ *  addToast, keeping the toast dependency out of this module. */
+export function errorToastPayload(t: TFunction, key: string, err: unknown) {
+  return { type: 'error' as const, message: t(key, { message: extractErrorMessage(err) }) };
 }

@@ -17,7 +17,7 @@ import { WORKDIR_KEY } from '@/api/workspace';
 import { switchWorkspaceWithMarker } from '@/bridge/workspaceSwitch';
 import { callCapability } from '@/bridge/client';
 import { confirmDialog, useUIStore } from '@/stores/uiStore';
-import { extractErrorMessage } from '@/utils/errors';
+import { errorToastPayload } from '@/utils/errors';
 import type { SettingItem } from './types';
 
 /** Working directory (agent.workspace.dir): relative to the repo root; saving hot-switches the agent, no restart needed */
@@ -58,12 +58,7 @@ export function WorkspaceBlock() {
         setWorkdir(workspace);
         addToast({ type: 'success', message: t('workspace.switched') });
       })
-      .catch((err: unknown) => {
-        addToast({
-          type: 'error',
-          message: t('workspace.switchFailed', { message: extractErrorMessage(err) }),
-        });
-      });
+      .catch((err: unknown) => addToast(errorToastPayload(t, 'workspace.switchFailed', err)));
   };
 
   return (

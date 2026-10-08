@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { callCapability } from '@/bridge/client';
 import { useUIStore } from '@/stores/uiStore';
-import { extractErrorMessage } from '@/utils/errors';
+import { errorToastPayload } from '@/utils/errors';
 import { READ_ROOTS_KEY } from './constants';
 import { isAbsolutePath } from './fsPathUtils';
 import type { SettingItem } from './types';
@@ -54,12 +54,7 @@ export function ReadRootsBlock() {
           setRootsDraft('');
           addToast({ type: 'success', message: t('readRoots.cleared') });
         })
-        .catch((err: unknown) => {
-          addToast({
-            type: 'error',
-            message: t('readRoots.saveFailed', { message: extractErrorMessage(err) }),
-          });
-        });
+        .catch((err: unknown) => addToast(errorToastPayload(t, 'readRoots.saveFailed', err)));
       return;
     }
     const bad = lines.find((line) => !isAbsolutePath(line) || line.split(/[\\/]+/).includes('..'));
@@ -78,12 +73,7 @@ export function ReadRootsBlock() {
         setRootsDraft(lines.join('\n'));
         addToast({ type: 'success', message: t('readRoots.saved') });
       })
-      .catch((err: unknown) => {
-        addToast({
-          type: 'error',
-          message: t('readRoots.saveFailed', { message: extractErrorMessage(err) }),
-        });
-      });
+      .catch((err: unknown) => addToast(errorToastPayload(t, 'readRoots.saveFailed', err)));
   };
 
   return (
