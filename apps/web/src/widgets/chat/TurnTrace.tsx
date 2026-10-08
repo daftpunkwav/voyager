@@ -275,7 +275,7 @@ function StepRow({
 
 /** Tool/system rows of one round (rows stack over their fact sheets). */
 function RoundToolRows({ steps }: { steps: TurnStep[] }) {
-  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<number, boolean | undefined>>({});
   if (steps.length === 0) return null;
   return (
     <ul className="chat-trace__list">
@@ -284,7 +284,7 @@ function RoundToolRows({ steps }: { steps: TurnStep[] }) {
           key={s.seq}
           step={s}
           next={steps[i + 1]}
-          expanded={expanded[s.seq]}
+          expanded={expanded[s.seq] === true}
           onToggle={() => setExpanded((prev) => ({ ...prev, [s.seq]: !prev[s.seq] }))}
         />
       ))}

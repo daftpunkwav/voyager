@@ -127,7 +127,8 @@ export function useNotesOpener(options: UseNotesOpenerOptions) {
   /** List/workspace "new" action: resets the draft when already on ?note=new, otherwise navigates there carrying the project. */
   const handleNew = async () => {
     if (!(await flushRef.current())) return; // not persisted: do not reset the current edit
-    const project = searchParams.get('project') ?? sourceId ?? '';
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty ?project= must fall back to sourceId
+    const project = searchParams.get('project') || sourceId || '';
     if (noteQueryId(searchParams) === 'new') {
       startEditing('new', i18n.t('notes:newNote'), '');
       setNewProjectId(project);

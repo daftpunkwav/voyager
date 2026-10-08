@@ -36,10 +36,10 @@ export function activityReportEnabled(): boolean {
 
 export async function initActivityReport(): Promise<void> {
   try {
-    const item = await callCapability<{ value: boolean }>('settings', 'get_setting', {
+    const item = await callCapability<{ value?: boolean }>('settings', 'get_setting', {
       key: 'privacy.activity_report',
     });
-    enabled = item.value;
+    enabled = item.value !== false;
   } catch {
     enabled = true; // Unreadable defaults to on (reporting is opt-out by default)
   }

@@ -142,7 +142,7 @@ export function TrajectoryView() {
   const prevTurnSteps = useChatStore((s) => s.prevTurnSteps);
   const messages = useChatStore((s) => s.messages);
   const [query, setQuery] = useState('');
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean | undefined>>({});
   const [selected, setSelected] = useState<string | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
@@ -231,7 +231,7 @@ export function TrajectoryView() {
 
       <div className="chat-traj2__table" ref={tableRef}>
         {filtered.map((r) => {
-          const open = expanded[r.key];
+          const open = expanded[r.key] === true;
           return (
             <div
               key={r.key}
