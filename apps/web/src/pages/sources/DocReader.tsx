@@ -35,15 +35,43 @@ import { STORAGE, migrateKey } from '@/brand';
 
 migrateKey(STORAGE.pdfScale, STORAGE.legacy.pdfScale);
 
+/** Confirm-then-delete flow for a document: dialog, success toast + back to
+ *  the sources list, error toast with the wire message. */
+function useRemoveDocumentFlow() {
+  const { t } = useTranslation('sources');
+  const navigate = useNavigate();
+  const removeDoc = useRemoveDocument();
+  const addToast = useUIStore((s) => s.addToast);
+  return async (id: string, title: string) => {
+    if (
+      !(await confirmDialog({
+        message: t('sources:doc.deleteConfirm', { title }),
+        danger: true,
+      }))
+    )
+      return;
+    removeDoc.mutate(id, {
+      onSuccess: () => {
+        addToast({ type: 'success', message: t('sources:doc.deleted') });
+        void navigate('/sources');
+      },
+      onError: (e) =>
+        addToast({
+          type: 'error',
+          message: e instanceof Error ? e.message : t('sources:deleteFailed'),
+        }),
+    });
+  };
+}
+
 export function DocReader() {
   const { t } = useTranslation('sources');
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { data: doc, isLoading, isError, error, refetch } = useDocument(id);
   useDocumentEvents(id);
-  const removeDoc = useRemoveDocument();
   const setMeta = useSetDocumentMeta();
   const addToast = useUIStore((s) => s.addToast);
+  const confirmRemoveDoc = useRemoveDocumentFlow();
 
   // Feed the detail id / title to the page-awareness provider; the title is an empty string until it arrives (probe falls back to id)
   useEffect(() => {
@@ -89,27 +117,6 @@ export function DocReader() {
       </div>
     );
   }
-
-  const confirmRemoveDoc = async () => {
-    if (
-      !(await confirmDialog({
-        message: t('sources:doc.deleteConfirm', { title: doc.title }),
-        danger: true,
-      }))
-    )
-      return;
-    removeDoc.mutate(doc.id, {
-      onSuccess: () => {
-        addToast({ type: 'success', message: t('sources:doc.deleted') });
-        void navigate('/sources');
-      },
-      onError: (e) =>
-        addToast({
-          type: 'error',
-          message: e instanceof Error ? e.message : t('sources:deleteFailed'),
-        }),
-    });
-  };
 
   return (
     <div className="doc-reader">
@@ -179,7 +186,7 @@ export function DocReader() {
             type="button"
             className="icon-btn"
             aria-label={t('sources:doc.deleteAria')}
-            onClick={() => void confirmRemoveDoc()}
+            onClick={() => void confirmRemoveDoc(doc.id, doc.title)}
           >
             <svg
               viewBox="0 0 24 24"

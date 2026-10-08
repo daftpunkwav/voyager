@@ -437,32 +437,43 @@ const ARTIFACTS_CAP = 50;
 // equal an SSE-assigned positive seq.
 let systemSeq = 0;
 
-/** Evict over-cap cards, oldest settled (completed/failed) first so running
- *  progress always survives; only when every card is still running does the
- *  eviction fall through to the front of the order. Returns pruned copies;
- *  the inputs are left untouched. */
+/** Pick the over-cap ids to evict: settled (completed/failed) cards from the
+ *  front of the order until `excess` is met, so running progress always
+ *  survives; only when every card is still running does the eviction fall
+ *  through to the front regardless of status. */
+function evictOverage(
+  cards: Record<string, ProgressCard>,
+  order: string[],
+  excess: number
+): { evicted: Set<string>; remaining: string[] } {
+  const evicted = new Set<string>();
+  const remaining = order.filter((id) => {
+    if (evicted.size >= excess) return true;
+    if (cards[id]?.status === 'running') return true;
+    evicted.add(id);
+    return false;
+  });
+  while (evicted.size < excess && remaining.length > 0) {
+    evicted.add(remaining[0]);
+    remaining.splice(0, 1);
+  }
+  return { evicted, remaining };
+}
+
+/** Evict over-cap cards, oldest settled (completed/failed) first. Returns
+ *  pruned copies; the inputs are left untouched. */
 function pruneCards(
   cards: Record<string, ProgressCard>,
   order: string[]
 ): { cards: Record<string, ProgressCard>; order: string[] } {
   const excess = order.length - CARD_CAP;
   if (excess <= 0) return { cards, order };
-  const evicted = new Set<string>();
-  const nextOrder = order.filter((id) => {
-    if (evicted.size >= excess) return true;
-    if (cards[id]?.status === 'running') return true;
-    evicted.add(id);
-    return false;
-  });
-  while (evicted.size < excess && nextOrder.length > 0) {
-    evicted.add(nextOrder[0]);
-    nextOrder.splice(0, 1);
-  }
+  const { evicted, remaining } = evictOverage(cards, order, excess);
   const nextCards: Record<string, ProgressCard> = {};
   for (const id of Object.keys(cards)) {
     if (!evicted.has(id)) nextCards[id] = cards[id];
   }
-  return { cards: nextCards, order: nextOrder };
+  return { cards: nextCards, order: remaining };
 }
 
 /** Caps for the per-run step logs (the subagent execution view's data source):

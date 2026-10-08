@@ -20,14 +20,42 @@ import { safeHttpUrl } from '@/utils/safeUrl';
 import { TagEditor } from './TagEditor';
 import { rememberSourceDetail } from './provider';
 
+/** Confirm-then-delete flow for a clip: dialog, success toast + back to the
+ *  sources list, error toast with the wire message. */
+function useRemovePageFlow() {
+  const { t } = useTranslation('sources');
+  const navigate = useNavigate();
+  const removePage = useRemovePage();
+  const addToast = useUIStore((s) => s.addToast);
+  return async (id: string, title: string) => {
+    if (
+      !(await confirmDialog({
+        message: t('sources:web.deleteConfirm', { title }),
+        danger: true,
+      }))
+    )
+      return;
+    removePage.mutate(id, {
+      onSuccess: () => {
+        addToast({ type: 'success', message: t('sources:web.deleted') });
+        void navigate('/sources');
+      },
+      onError: (e) =>
+        addToast({
+          type: 'error',
+          message: e instanceof Error ? e.message : t('sources:deleteFailed'),
+        }),
+    });
+  };
+}
+
 export function PageReader() {
   const { t } = useTranslation('sources');
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { data: page, isLoading, isError, error, refetch } = useWebPage(id);
-  const removePage = useRemovePage();
   const setMeta = useSetPageMeta();
   const addToast = useUIStore((s) => s.addToast);
+  const confirmRemovePage = useRemovePageFlow();
 
   // Feed the detail id / title to the page-awareness provider; the title is an empty string until it arrives (probe falls back to id)
   useEffect(() => {
@@ -61,27 +89,6 @@ export function PageReader() {
   // Same trust boundary as every other external-data anchor in the app: the
   // scheme allowlist decides whether the original link renders at all
   const originalUrl = safeHttpUrl(page.url);
-
-  const confirmRemovePage = async () => {
-    if (
-      !(await confirmDialog({
-        message: t('sources:web.deleteConfirm', { title: page.title }),
-        danger: true,
-      }))
-    )
-      return;
-    removePage.mutate(page.id, {
-      onSuccess: () => {
-        addToast({ type: 'success', message: t('sources:web.deleted') });
-        void navigate('/sources');
-      },
-      onError: (e) =>
-        addToast({
-          type: 'error',
-          message: e instanceof Error ? e.message : t('sources:deleteFailed'),
-        }),
-    });
-  };
 
   return (
     <div className="page-reader">
@@ -126,7 +133,7 @@ export function PageReader() {
             type="button"
             className="icon-btn"
             aria-label={t('sources:web.deleteAria')}
-            onClick={() => void confirmRemovePage()}
+            onClick={() => void confirmRemovePage(page.id, page.title)}
           >
             <svg
               viewBox="0 0 24 24"
