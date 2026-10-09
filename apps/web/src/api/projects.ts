@@ -41,11 +41,11 @@ export async function importProjects(r: unknown): Promise<{
   errors: string[];
   summary: string;
 }> {
-  const repos = Array.isArray(r) ? (r as Array<{ url?: string }>) : [];
+  const repos = Array.isArray(r) ? (r as { url?: string }[]) : [];
   let ok = 0;
   const errors: string[] = [];
   for (const item of repos) {
-    const url = String(item?.url ?? '');
+    const url = item?.url ?? '';
     if (!url) {
       errors.push(i18n.t('sources:api.emptyUrl'));
       continue;
@@ -88,16 +88,18 @@ export async function listProjects(p?: ProjectListParams): Promise<PaginatedList
   let items = Array.isArray(rows) ? rows : [];
   const q = (p?.search ?? '').trim().toLowerCase();
   if (q) {
-    items = items.filter((it) =>
-      `${it.full_name ?? ''}${it.name ?? ''}${it.description ?? ''}`.toLowerCase().includes(q)
-    );
+    items = items.filter((it) => {
+      const fullName = String(it.full_name ?? '');
+      const name = String(it.name ?? '');
+      const description = String(it.description ?? '');
+      return `${fullName}${name}${description}`.toLowerCase().includes(q);
+    });
   }
   if (p?.language) items = items.filter((it) => it.language === p.language);
   if (p?.progress) items = items.filter((it) => it.progress === p.progress);
   if (p?.tag_id) {
-    items = items.filter(
-      (it) => Array.isArray(it.tags) && (it.tags as string[]).includes(p.tag_id as string)
-    );
+    const tagId = p.tag_id;
+    items = items.filter((it) => Array.isArray(it.tags) && (it.tags as string[]).includes(tagId));
   }
   const total = items.length;
   const page = Math.max(1, p?.page ?? 1);
@@ -183,13 +185,9 @@ export function setProjectTags(projectId: string, tags: string[]): Promise<unkno
  *  {owner,name,url,description,stars,language}; they are normalized onto the
  *  StarRepo vocabulary here so import dialogs never see the raw row keys. */
 export async function searchGithubRepos(query: string): Promise<StarRepo[]> {
-  const rows = await callCapability<Array<Record<string, unknown>>>(
-    'sources',
-    'search_remote_repos',
-    {
-      query,
-    }
-  );
+  const rows = await callCapability<Record<string, unknown>[]>('sources', 'search_remote_repos', {
+    query,
+  });
   const list = Array.isArray(rows) ? rows : [];
   return list.map((r) => {
     const owner = String(r.owner ?? '');

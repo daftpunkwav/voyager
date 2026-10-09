@@ -33,7 +33,7 @@ export function ToolsCatalog() {
       .then((items) => {
         if (alive) setTools(Array.isArray(items) ? items : []);
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         if (alive) setLoadError(extractErrorMessage(err));
       });
     return () => {
@@ -66,13 +66,12 @@ export function ToolsCatalog() {
       setDetails((prev) => ({ ...prev, [name]: 'loading' }));
       describeTool<ToolDetail>(name)
         .then((info) => setDetails((prev) => ({ ...prev, [name]: info })))
-        .catch((err) => {
+        .catch((err: unknown) => {
           // No cached detail: collapse the row so it does not sit on a
           // perpetual "loading" hint; re-expanding retries the fetch.
           setDetails((prev) => {
-            const next = { ...prev };
-            delete next[name];
-            return next;
+            const { [name]: _removed, ...rest } = prev;
+            return rest;
           });
           setExpanded((cur) => (cur === name ? null : cur));
           addToast({
@@ -96,7 +95,7 @@ export function ToolsCatalog() {
           setLoadError('');
           listTools<ToolItem>()
             .then((items) => setTools(Array.isArray(items) ? items : []))
-            .catch((err) => setLoadError(extractErrorMessage(err)));
+            .catch((err: unknown) => setLoadError(extractErrorMessage(err)));
         }}
       />
     );

@@ -63,9 +63,9 @@ export interface ProjectDetailPorts {
   /** L0 related projects (sorted by similarity, top 5) (graph domain) */
   related: { id: string; sim: number }[];
   /** Opens the notes page filtered by project (notes domain action) */
-  openProjectNotes(projectId: string): void;
+  openProjectNotes: (projectId: string) => void;
   /** Sends an analysis request to the main chat timeline (chat domain action) */
-  sendToChat(text: string): Promise<void>;
+  sendToChat: (text: string) => Promise<void>;
 }
 
 function welcomeAiLine(projectName: string): ProjectAiLine {
@@ -128,7 +128,7 @@ export function ProjectDetailPage({
   useEffect(() => {
     if (isError) {
       addToast({ type: 'error', message: t('sources:detail.projectMissing') });
-      navigate(routes.sources, { replace: true });
+      void navigate(routes.sources, { replace: true });
     }
   }, [isError, navigate, addToast, t]);
 
@@ -159,7 +159,7 @@ export function ProjectDetailPage({
 
   const recommendedAgent: AgentId = project?.progress === 'mastered' ? 'explainer' : 'recon';
   const { repo } = splitRepoName(project?.name ?? '');
-  const scribeName = repo || project?.name || '';
+  const scribeName = repo || (project?.name ?? '');
 
   /** Invokes the given expert agent to analyze the current project; the request goes to the main timeline, not a local fake stream. */
   const runAgent = async (agent: AgentId) => {
@@ -205,7 +205,7 @@ export function ProjectDetailPage({
     openProjectNotes(id);
   };
 
-  const readmeText = readmeData?.readme || project?.readme || '';
+  const readmeText = readmeData?.readme ?? project?.readme ?? '';
 
   const copyReadme = async () => {
     if (!readmeText) return;
@@ -245,7 +245,7 @@ export function ProjectDetailPage({
           project={project}
           recommendedAgent={recommendedAgent}
           noteGenerating={noteGenerating}
-          onRunAgent={runAgent}
+          onRunAgent={(agent) => void runAgent(agent)}
         />
 
         <ProjectProgressCard
@@ -253,7 +253,7 @@ export function ProjectDetailPage({
           scribeName={scribeName}
           noteGenerating={noteGenerating}
           onProgressChange={(progress) => updateProgress.mutate({ id: project.id, progress })}
-          onGenerateNote={handleGenerateNote}
+          onGenerateNote={() => void handleGenerateNote()}
         />
 
         <div className="pd-tabs" role="tablist">
@@ -288,7 +288,7 @@ export function ProjectDetailPage({
             readmeError={readmeError}
             fontSize={fontSize}
             onFontSizeChange={setFontSize}
-            onRefresh={refetchReadme}
+            onRefresh={() => void refetchReadme()}
             onCopy={copyReadme}
           />
         )}
@@ -330,7 +330,7 @@ export function ProjectDetailPage({
           activeAgent={activeAgent}
           active={tab === 'ai'}
           noteGenerating={noteGenerating}
-          onRunAgent={runAgent}
+          onRunAgent={(agent) => void runAgent(agent)}
         />
 
         {id ? <CodeGraphIndexCard projectId={id} /> : null}
@@ -350,7 +350,9 @@ export function ProjectDetailPage({
         message={t('sources:detail.deleteConfirm', { name: project.name })}
         danger
         onConfirm={() => {
-          deleteProject.mutate(project.id, { onSuccess: () => navigate(routes.sources) });
+          deleteProject.mutate(project.id, {
+            onSuccess: () => void navigate(routes.sources),
+          });
           setDeleteOpen(false);
         }}
         onCancel={() => setDeleteOpen(false)}

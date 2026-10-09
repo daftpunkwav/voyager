@@ -14,7 +14,7 @@ export function classifyErrorKind(kind: string | null | undefined, error?: strin
   if (kind === 'network') return i18n.t('graph:errorKind.network');
   if (kind === 'service') return i18n.t('graph:errorKind.service');
   if (kind === 'cancelled') return i18n.t('graph:errorKind.cancelled');
-  if (error && /取消/.test(error)) return i18n.t('graph:errorKind.cancelled');
+  if (error?.includes('取消')) return i18n.t('graph:errorKind.cancelled');
   if (error && /(timeout|network|连接|超时|dns|getaddrinfo)/i.test(error))
     return i18n.t('graph:errorKind.network');
   if (

@@ -30,7 +30,7 @@ export interface LlmUsageSummary {
     label?: string;
     total_tokens: number;
   };
-  by_model: Array<{
+  by_model: {
     model: string;
     label?: string;
     provider?: string;
@@ -42,8 +42,8 @@ export interface LlmUsageSummary {
     calls: number;
     /** Read-side converted cost (get_usage_stats attaches cost_usd only for priced models). */
     cost_usd?: number;
-  }>;
-  by_provider?: Array<{
+  }[];
+  by_provider?: {
     provider: string;
     input: number;
     output: number;
@@ -51,8 +51,8 @@ export interface LlmUsageSummary {
     calls: number;
     /** Read-side converted cost (get_usage_stats attaches cost_usd only for priced models). */
     cost_usd?: number;
-  }>;
-  by_day: Array<{
+  }[];
+  by_day: {
     date: string;
     input: number;
     output: number;
@@ -65,16 +65,16 @@ export interface LlmUsageSummary {
     calls: number;
     /** Read-side converted cost (get_usage_stats attaches cost_usd only for priced models). */
     cost_usd?: number;
-    by_model?: Array<{
+    by_model?: {
       model: string;
       input: number;
       output: number;
       total_tokens: number;
       calls: number;
-    }>;
-  }>;
-  heatmap?: Array<{ date: string; calls: number; intensity: number }>;
-  recent?: Array<{
+    }[];
+  }[];
+  heatmap?: { date: string; calls: number; intensity: number }[];
+  recent?: {
     id: string;
     created_at: string;
     label?: string;
@@ -87,5 +87,5 @@ export interface LlmUsageSummary {
     /** Output tokens spent on reasoning (thinking models only). */
     reasoning_tokens?: number;
     ok: boolean;
-  }>;
+  }[];
 }

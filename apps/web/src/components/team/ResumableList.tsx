@@ -139,7 +139,7 @@ export function ResumableList() {
           title={t('team:resumable.loadFailed')}
           description={error}
           icon={EmptyStateIcons.warning}
-          onRetry={load}
+          onRetry={() => void load()}
         />
       </section>
     );

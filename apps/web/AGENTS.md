@@ -30,6 +30,14 @@ not part of the gate.
   `src/bridge/`. Pages and components do not hand-roll `fetch` calls to
   endpoints outside these modules.
 - Shared TS/eslint config comes from `apps/config/` (`tsconfig.base.json`).
+- ESLint is type-aware (`typescript-eslint` strictTypeChecked +
+  stylisticTypeChecked, wired via `projectService`). Deliberate calibrations
+  to keep, not "fix": `no-unnecessary-condition` is off (gateway/SSE payloads
+  and the legacyApi any boundary mean declared types are not runtime truth,
+  so defensive conditionals are intentional); `no-base-to-string` exempts
+  unknown/`{}` (facade `String()`/`Number()` normalization is the sanctioned
+  shape); `no-confusing-void-expression` ignores arrow shorthand. Intentional
+  fire-and-forget promises are marked with `void`.
 
 ## i18n
 

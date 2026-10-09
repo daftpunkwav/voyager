@@ -69,7 +69,7 @@ export function ProjectHero({
           type="button"
           className="btn btn-primary"
           disabled={noteGenerating}
-          onClick={() => void onRunAgent(recommendedAgent)}
+          onClick={() => onRunAgent(recommendedAgent)}
         >
           <svg
             viewBox="0 0 24 24"

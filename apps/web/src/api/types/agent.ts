@@ -70,14 +70,14 @@ export interface AgentMessage {
   thinking?: string;
   tool_call?: ToolCallData;
   tool_calls?: ToolCallData[];
-  subagents?: Array<{
+  subagents?: {
     agentId: AgentId;
     task?: string;
     reason?: string;
     status: 'running' | 'ok' | 'question' | 'error';
     thinking?: string;
     output?: string;
-  }>;
+  }[];
   question?: AgentQuestion;
   question_answer?: QuestionAnswerRecord;
   agent_switch?: { from: string; to: string; reason?: string };

@@ -77,7 +77,7 @@ export function readToneAt(
   innerFrom: number
 ): { tone: NoteHlTone; innerStart: number } | null {
   const m = HL_TONE_AT.exec(text.slice(innerFrom));
-  if (!m || m.index !== 0) return null;
+  if (m?.index !== 0) return null;
   return { tone: m[1].toLowerCase() as NoteHlTone, innerStart: innerFrom + m[0].length };
 }
 
@@ -87,7 +87,7 @@ export function parseNoteHighlight(text: string): { tone: NoteHlTone; inner: str
   const body = text.slice(2, -2);
   if (body.includes('==')) return null;
   const m = HL_TONE_AT.exec(body);
-  if (m && m.index === 0) {
+  if (m?.index === 0) {
     return { tone: m[1].toLowerCase() as NoteHlTone, inner: body.slice(m[0].length) };
   }
   return { tone: 'warm', inner: body };

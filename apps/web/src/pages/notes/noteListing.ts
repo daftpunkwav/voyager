@@ -16,7 +16,7 @@ import type { NotesFilter, NotesSort } from './notePrefs';
 
 const PLACEHOLDER_TITLE = /^(新笔记|无标题|untitled|草稿)(\s|$)/i;
 
-type NoteListItem = {
+interface NoteListItem {
   title?: string;
   pinned?: boolean;
   updated_ts?: number;
@@ -27,11 +27,11 @@ type NoteListItem = {
   source_id?: string;
   excerpt?: string;
   content?: string;
-};
+}
 
 /** Placeholder titles; used to single out unnamed notes when an agent creates several in a row. */
 export function isPlaceholderTitle(title: string | undefined): boolean {
-  const t = (title || '').trim();
+  const t = (title ?? '').trim();
   if (!t) return true;
   return PLACEHOLDER_TITLE.test(t);
 }
@@ -44,12 +44,12 @@ export function startOfLocalDayMs(now = Date.now()): number {
 
 /** Backend list/get payloads use source_id; the legacy frontend field was project_id. */
 export function noteSourceId(n: { project_id?: string; source_id?: string }): string {
-  return n.project_id || n.source_id || '';
+  return n.project_id ?? n.source_id ?? '';
 }
 
 /** list_notes returns only excerpt, never content; content is only available from the full-text endpoint. */
 export function noteSnippet(n: { excerpt?: string; content?: string }): string {
-  return (n.excerpt || n.content || '').replace(/[#*`]/g, '').replace(/\s+/g, ' ').trim();
+  return (n.excerpt ?? n.content ?? '').replace(/[#*`]/g, '').replace(/\s+/g, ' ').trim();
 }
 
 function epochToMs(ts?: number, fallback?: string | number): number {
@@ -65,12 +65,12 @@ function epochToMs(ts?: number, fallback?: string | number): number {
   return 0;
 }
 
-type NoteTimestamps = {
+interface NoteTimestamps {
   updated_at?: string;
   updated_ts?: number;
   created_at?: string | number;
   created_ts?: number;
-};
+}
 
 /** Normalizes to milliseconds; backend updated_ts is usually epoch seconds while updated_at is ISO. */
 export function noteUpdatedMs(n: NoteTimestamps): number {
@@ -104,7 +104,7 @@ export function sortNotes<T extends NoteListItem>(notes: T[], sort: NotesSort): 
     if (pin !== 0) return pin;
     if (sort === 'title') {
       // Sort locale follows the UI language (zh-CN keeps pinyin ordering)
-      return (a.title || '').localeCompare(b.title || '', i18n.resolvedLanguage ?? 'zh-CN');
+      return (a.title ?? '').localeCompare(b.title ?? '', i18n.resolvedLanguage ?? 'zh-CN');
     }
     if (sort === 'created') {
       return noteCreatedMs(b) - noteCreatedMs(a);
@@ -132,13 +132,13 @@ export function applyNotesListing<T extends NoteListItem>(
   opts: NotesListingOpts<T>,
   now = Date.now()
 ): T[] {
-  const sourceId = opts.sourceId || '';
-  const q = (opts.query || '').trim().toLowerCase();
+  const sourceId = opts.sourceId ?? '';
+  const q = (opts.query ?? '').trim().toLowerCase();
   let out = notes;
   if (sourceId) out = out.filter((n) => noteSourceId(n) === sourceId);
   if (q) {
     out = out.filter((n) => {
-      const title = (n.title || '').toLowerCase();
+      const title = (n.title ?? '').toLowerCase();
       const snippet = noteSnippet(n).toLowerCase();
       const extra = (opts.extraText?.(n) ?? '').toLowerCase();
       return title.includes(q) || snippet.includes(q) || extra.includes(q);

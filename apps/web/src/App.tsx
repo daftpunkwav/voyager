@@ -35,7 +35,7 @@ function lazyNamed<P, K extends string>(
   return lazy(async () => {
     const mod = await loader();
     const Comp = mod[key];
-    if (!Comp) throw new Error(i18n.t('common:app.pageExportMissing', { key: String(key) }));
+    if (!Comp) throw new Error(i18n.t('common:app.pageExportMissing', { key }));
     return { default: Comp };
   });
 }
@@ -97,7 +97,9 @@ function ProjectDetailRoute() {
     return {
       notes,
       related,
-      openProjectNotes: (projectId: string) => navigate(`/notes?project=${projectId}`),
+      openProjectNotes: (projectId: string) => {
+        void navigate(`/notes?project=${projectId}`);
+      },
       sendToChat: sendUserTurn,
     };
   }, [notes, graphData, id, navigate]);

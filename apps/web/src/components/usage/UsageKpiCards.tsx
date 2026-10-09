@@ -37,9 +37,9 @@ export function UsageKpiCards({ usage }: UsageKpiCardsProps) {
   const totals = normalizeTotals(usage);
   const top = usage.top;
   const topLabel =
-    top?.label ||
-    (top ? `${top.provider ?? 'unknown'}/${top.model}` : null) ||
-    usage.by_model[0]?.label ||
+    (top?.label ?? '') ||
+    (top ? `${top.provider ?? 'unknown'}/${top.model}` : '') ||
+    (usage.by_model[0]?.label ?? '') ||
     usage.by_model[0]?.model ||
     '—';
   const topTokens = top?.total_tokens ?? usage.by_model[0]?.total_tokens;

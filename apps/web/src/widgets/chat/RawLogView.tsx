@@ -130,8 +130,8 @@ export function RawLogView() {
       .then((data) => {
         if (!cancelled) setPage(data);
       })
-      .catch((err: Error) => {
-        if (!cancelled) setError(err.message);
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       });
     return () => {
       cancelled = true;

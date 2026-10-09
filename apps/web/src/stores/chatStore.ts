@@ -285,7 +285,7 @@ export function toTurnStep(ev: ChatEvent): TurnStep {
     typeof v === 'number' && Number.isFinite(v) ? v : undefined;
   const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
   const strList = (v: unknown): string[] | undefined =>
-    Array.isArray(v) && v.every((x) => typeof x === 'string') ? (v as string[]) : undefined;
+    Array.isArray(v) && v.every((x) => typeof x === 'string') ? v : undefined;
   return {
     seq: ev.seq,
     kind: String(p.kind ?? ''),
@@ -437,30 +437,43 @@ const ARTIFACTS_CAP = 50;
 // equal an SSE-assigned positive seq.
 let systemSeq = 0;
 
-/** Evict over-cap cards, oldest settled (completed/failed) first so running
- *  progress always survives; only when every card is still running does the
- *  eviction fall through to the front of the order. Mutates `cards`. */
+/** Pick the over-cap ids to evict: settled (completed/failed) cards from the
+ *  front of the order until `excess` is met, so running progress always
+ *  survives; only when every card is still running does the eviction fall
+ *  through to the front regardless of status. */
+function evictOverage(
+  cards: Record<string, ProgressCard>,
+  order: string[],
+  excess: number
+): { evicted: Set<string>; remaining: string[] } {
+  const evicted = new Set<string>();
+  const remaining = order.filter((id) => {
+    if (evicted.size >= excess) return true;
+    if (cards[id]?.status === 'running') return true;
+    evicted.add(id);
+    return false;
+  });
+  while (evicted.size < excess && remaining.length > 0) {
+    evicted.add(remaining[0]);
+    remaining.splice(0, 1);
+  }
+  return { evicted, remaining };
+}
+
+/** Evict over-cap cards, oldest settled (completed/failed) first. Returns
+ *  pruned copies; the inputs are left untouched. */
 function pruneCards(
   cards: Record<string, ProgressCard>,
   order: string[]
 ): { cards: Record<string, ProgressCard>; order: string[] } {
-  let excess = order.length - CARD_CAP;
+  const excess = order.length - CARD_CAP;
   if (excess <= 0) return { cards, order };
-  const nextOrder = [...order];
-  for (let i = 0; i < nextOrder.length && excess > 0;) {
-    if (cards[nextOrder[i]]?.status !== 'running') {
-      delete cards[nextOrder[i]];
-      nextOrder.splice(i, 1);
-      excess--;
-    } else {
-      i++;
-    }
+  const { evicted, remaining } = evictOverage(cards, order, excess);
+  const nextCards: Record<string, ProgressCard> = {};
+  for (const id of Object.keys(cards)) {
+    if (!evicted.has(id)) nextCards[id] = cards[id];
   }
-  while (excess > 0 && nextOrder.length > 0) {
-    delete cards[nextOrder.shift() as string];
-    excess--;
-  }
-  return { cards, order: nextOrder };
+  return { cards: nextCards, order: remaining };
 }
 
 /** Caps for the per-run step logs (the subagent execution view's data source):
@@ -482,10 +495,12 @@ function pruneRunSteps(runSteps: Record<string, TurnStep[]>): Record<string, Tur
   const oldestFirst = [...ids].sort(
     (a, b) => (trimmed[a][0]?.seq ?? 0) - (trimmed[b][0]?.seq ?? 0)
   );
+  let result = trimmed;
   for (const id of oldestFirst.slice(0, ids.length - RUNS_CAP)) {
-    delete trimmed[id];
+    const { [id]: _removed, ...rest } = result;
+    result = rest;
   }
-  return trimmed;
+  return result;
 }
 
 /** Number() coercion that refuses NaN/Infinity: a malformed wire value falls
@@ -532,7 +547,7 @@ function historyToMessages(events: ChatEvent[]): ChatMessage[] {
     .filter((e) => e.type === EventType.USER_MESSAGE || e.type === EventType.AGENT_MESSAGE)
     .map((e) => ({
       seq: e.seq,
-      role: (e.type === EventType.USER_MESSAGE ? 'user' : 'agent') as ChatMessage['role'],
+      role: e.type === EventType.USER_MESSAGE ? 'user' : 'agent',
       content: String(e.payload?.content ?? ''),
       ts: e.ts,
       // Cast: the wire value is backend-controlled; unknown kinds render as
@@ -978,7 +993,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const prev = get().streaming;
         const same = prev !== null && prev.round === round;
         const roundTexts =
-          !same && prev && prev.text
+          !same && prev?.text
             ? [...get().roundTexts, { round: prev.round, text: prev.text }].slice(-20)
             : get().roundTexts;
         set({

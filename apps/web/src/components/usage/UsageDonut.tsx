@@ -50,7 +50,7 @@ export function UsageDonut({ usage }: UsageDonutProps) {
     const rows =
       mode === 'model'
         ? usage.by_model.map((r) => ({
-            key: r.label || r.model,
+            key: (r.label ?? '') || r.model,
             tokens: r.total_tokens,
           }))
         : (usage.by_provider ?? []).map((r) => ({

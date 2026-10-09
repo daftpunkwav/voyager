@@ -20,7 +20,7 @@ import { useChatStore } from '@/stores/chatStore';
 import { extractErrorMessage } from '@/utils/errors';
 
 /** Operation-type filter options; labels come from the activity:filter.* resources. */
-const KIND_OPTIONS: Array<{ value: string; key: string }> = [
+const KIND_OPTIONS: { value: string; key: string }[] = [
   { value: '', key: 'activity:filter.all' },
   { value: EventType.NOTE_CREATED, key: 'activity:filter.noteCreated' },
   { value: EventType.NOTE_EDITED, key: 'activity:filter.noteEdited' },
@@ -84,7 +84,7 @@ export function ActivityFeed({ kind, onKindChange, onLoaded }: ActivityFeedProps
     let alive = true;
     setLoading(true);
     setError(null);
-    (async () => {
+    void (async () => {
       try {
         const feed = await fetchActivityFeed(kind, session);
         if (!alive) return;
@@ -108,7 +108,7 @@ export function ActivityFeed({ kind, onKindChange, onLoaded }: ActivityFeedProps
 
   const sessionTitle = useMemo(() => {
     const byId = new Map(sessions.map((s) => [s.session_id, s.title] as const));
-    return (sid: string): string => byId.get(sid) || sid;
+    return (sid: string): string => (byId.get(sid) ?? '') || sid;
   }, [sessions]);
 
   return (

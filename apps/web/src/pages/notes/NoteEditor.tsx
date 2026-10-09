@@ -146,6 +146,17 @@ function applyDocChange(view: EditorView, next: string, selectFrom: number, sele
   view.focus();
 }
 
+/** Markdown insert for an addAsset result: the returned markdown wins even
+ *  when empty (matching the old ?? chain), then a url link; a null or
+ *  field-less payload degrades to the legacy String(payload) alt text
+ *  ('null' / '[object Object]'), byte-for-byte. */
+function assetMarkdown(payload: { markdown?: string; url?: string } | null): string {
+  if (payload?.markdown != null) return payload.markdown;
+  if (payload?.url) return `![](${payload.url})`;
+  if (payload === null) return '![](null)';
+  return '![]([object Object])';
+}
+
 function wrapSelection(view: EditorView | null, kind: InlineFormat) {
   if (!view) return;
   const { from, to } = view.state.selection.main;
@@ -282,8 +293,7 @@ export function NoteEditor({
           markdown?: string;
           url?: string;
         } | null;
-        const md =
-          payload?.markdown ?? (payload?.url ? `![](${payload.url})` : `![](${String(payload)})`);
+        const md = assetMarkdown(payload);
         if (view) {
           view.dispatch(view.state.replaceSelection(`\n${md}\n`));
           view.focus();

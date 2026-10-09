@@ -137,7 +137,7 @@ function emitSpans(
       continue;
     }
     const last = groups[groups.length - 1];
-    if (last && last.kind === 'text' && last.tone === s.tone) {
+    if (last?.kind === 'text' && last.tone === s.tone) {
       last.chunks.push(s);
     } else {
       groups.push({ kind: 'text', tone: s.tone, chunks: [s] });
@@ -162,9 +162,12 @@ function emitSpans(
         }
         return text;
       }
+      // Narrowed by the `if (!g.tone)` guard above; hoisted so the nested
+      // callback keeps the narrowed non-null tone without an assertion
+      const tone = g.tone;
       return text
         .split('\n')
-        .map((line) => wrapHighlightLine(line, g.tone as NoteHlTone))
+        .map((line) => wrapHighlightLine(line, tone))
         .join('\n');
     })
     .join('');
@@ -226,8 +229,8 @@ export function applyNoteHighlightInDoc(
   action: NoteHlAction
 ): string {
   const text = doc.replace(/\r\n/g, '\n');
-  let a = Math.max(0, Math.min(from, to));
-  let b = Math.min(text.length, Math.max(from, to));
+  const a = Math.max(0, Math.min(from, to));
+  const b = Math.min(text.length, Math.max(from, to));
   if (a === b) return text;
   const inlines = inlineCodeRanges(text, fenceRanges(text));
   if (inlines.some((r) => r.start <= a && b <= r.end)) return text;

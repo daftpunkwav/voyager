@@ -36,7 +36,7 @@ export function activityReportEnabled(): boolean {
 
 export async function initActivityReport(): Promise<void> {
   try {
-    const item = await callCapability<{ value: boolean }>('settings', 'get_setting', {
+    const item = await callCapability<{ value?: boolean }>('settings', 'get_setting', {
       key: 'privacy.activity_report',
     });
     enabled = item.value !== false;
@@ -48,7 +48,7 @@ export async function initActivityReport(): Promise<void> {
 /** page_view: no throttling — fires on every route change. */
 export function reportPageView(page: string): void {
   if (!enabled) return;
-  reportActivity({ kind: 'page_view', page });
+  void reportActivity({ kind: 'page_view', page });
 }
 
 async function reportActivity(body: {

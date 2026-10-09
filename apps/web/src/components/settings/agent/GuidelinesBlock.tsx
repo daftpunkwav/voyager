@@ -57,9 +57,8 @@ export function GuidelinesBlock() {
     const text = (guidelineDrafts[agentId] ?? '').slice(0, GUIDELINE_MAX);
     if (text === (saved[agentId] ?? '')) return;
     // merge: update only the active tab's persona id; empty string deletes the key; other keys (including unknown/custom ones) are preserved as-is
-    const next = { ...saved };
-    if (text) next[agentId] = text;
-    else delete next[agentId];
+    const { [agentId]: _removed, ...rest } = saved;
+    const next: Record<string, string> = text ? { ...saved, [agentId]: text } : rest;
     callCapability<SettingItem<Record<string, string>>>('settings', 'set_setting', {
       key: GUIDELINES_KEY,
       value: next,
@@ -73,7 +72,7 @@ export function GuidelinesBlock() {
           }),
         });
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         const name = AGENT_CATALOG.find((a) => a.id === agentId)?.name ?? agentId;
         addToast({
           type: 'error',

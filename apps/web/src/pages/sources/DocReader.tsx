@@ -15,35 +15,34 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   useDocument,
   useDocSection,
   useDocumentEvents,
-  useRemoveDocument,
   useSetDocumentMeta,
 } from '@/hooks/useSources';
 import { docFileUrl } from '@/api/sources';
-import { confirmDialog, useUIStore } from '@/stores/uiStore';
+import { useUIStore } from '@/stores/uiStore';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
 import { MarkdownRenderer } from '@/components/common/MarkdownRenderer';
 import { TagEditor } from './TagEditor';
 import { rememberSourceDetail } from './provider';
 import { STORAGE, migrateKey } from '@/brand';
+import { useRemoveDocumentFlow } from './readerRemoveFlows';
 
 migrateKey(STORAGE.pdfScale, STORAGE.legacy.pdfScale);
 
 export function DocReader() {
   const { t } = useTranslation('sources');
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { data: doc, isLoading, isError, error, refetch } = useDocument(id);
   useDocumentEvents(id);
-  const removeDoc = useRemoveDocument();
   const setMeta = useSetDocumentMeta();
   const addToast = useUIStore((s) => s.addToast);
+  const confirmRemoveDoc = useRemoveDocumentFlow();
 
   // Feed the detail id / title to the page-awareness provider; the title is an empty string until it arrives (probe falls back to id)
   useEffect(() => {
@@ -158,26 +157,7 @@ export function DocReader() {
             type="button"
             className="icon-btn"
             aria-label={t('sources:doc.deleteAria')}
-            onClick={async () => {
-              if (
-                !(await confirmDialog({
-                  message: t('sources:doc.deleteConfirm', { title: doc.title }),
-                  danger: true,
-                }))
-              )
-                return;
-              removeDoc.mutate(doc.id, {
-                onSuccess: () => {
-                  addToast({ type: 'success', message: t('sources:doc.deleted') });
-                  navigate('/sources');
-                },
-                onError: (e) =>
-                  addToast({
-                    type: 'error',
-                    message: e instanceof Error ? e.message : t('sources:deleteFailed'),
-                  }),
-              });
-            }}
+            onClick={() => void confirmRemoveDoc(doc.id, doc.title)}
           >
             <svg
               viewBox="0 0 24 24"
@@ -313,7 +293,7 @@ function PdfPane({ docId, fileUrl }: { docId: string; fileUrl: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const pdfjs = await import('pdfjs-dist');
         pdfjs.GlobalWorkerOptions.workerSrc = new URL(

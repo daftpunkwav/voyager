@@ -50,7 +50,7 @@ export async function uploadDocument(
   const { file_path, filename } = await uploadFile(file);
   return callCapability('sources', 'add_document', {
     file_path,
-    title: meta.title || filename,
+    title: (meta.title ?? '') || filename,
     tags: meta.tags,
     category: meta.category,
   });

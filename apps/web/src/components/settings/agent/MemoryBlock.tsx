@@ -33,7 +33,7 @@ export function MemoryBlock() {
   const reload = () =>
     getMemory<MemorySnapshot>()
       .then((snap) => setMem(snap))
-      .catch((err) => {
+      .catch((err: unknown) => {
         addToast({
           type: 'error',
           message: t('memory.refreshFailed', { message: extractErrorMessage(err) }),
@@ -47,7 +47,7 @@ export function MemoryBlock() {
         if (!alive) return;
         setMem(snap);
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         if (!alive) return;
         setMemLoadFailed(true);
         addToast({

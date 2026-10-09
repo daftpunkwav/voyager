@@ -47,7 +47,7 @@ export function firstEnabledModel(p: LlmProvider | null | undefined): string {
   const meta = p.models_meta ?? {};
   for (const m of p.models) {
     const fields = meta[m];
-    if (!fields || fields.enabled !== false) return m;
+    if (fields?.enabled !== false) return m;
   }
   return p.models[0] ?? '';
 }

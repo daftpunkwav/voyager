@@ -15,10 +15,7 @@ export const NOTES_QUOTE_MAX = 500;
 
 /** A word/sentence dragged-selected in the preview: whitespace collapsed and truncated. An empty string means no valid selection. */
 export function parseNotesQuote(raw: string | null | undefined): string {
-  return String(raw ?? '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, NOTES_QUOTE_MAX);
+  return (raw ?? '').replace(/\s+/g, ' ').trim().slice(0, NOTES_QUOTE_MAX);
 }
 
 let lastExplainQuote = '';
@@ -39,7 +36,7 @@ export function buildNoteExplainMessage(opts: {
 }): string {
   const quote = parseNotesQuote(opts.quote);
   const who = (opts.agentName || '').trim() || i18n.t('notes:explain.assistant');
-  const title = (opts.title || '').trim().slice(0, 80);
+  const title = (opts.title ?? '').trim().slice(0, 80);
   const where = title
     ? i18n.t('notes:explain.whereTitled', { title })
     : i18n.t('notes:explain.whereUntitled');

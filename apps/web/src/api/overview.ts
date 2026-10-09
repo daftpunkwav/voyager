@@ -111,7 +111,7 @@ export async function listOverviewRecentNotes(p?: { limit?: number }): Promise<R
   const nameById = new Map<string, string>();
   const repos = await Promise.allSettled([callCapability('sources', 'list_repos', {})]);
   if (repos[0].status === 'fulfilled' && Array.isArray(repos[0].value)) {
-    for (const r of repos[0].value as Array<Record<string, unknown>>) {
+    for (const r of repos[0].value as Record<string, unknown>[]) {
       nameById.set(String(r.id ?? ''), String(r.name ?? ''));
     }
   }
@@ -136,9 +136,10 @@ export interface ScoutIntroEvent {
   data: Record<string, unknown>;
 }
 
-// Empty-stream contract kept for future wiring (nothing is yielded until the
-// backend stream is connected), hence require-yield is disabled
-// eslint-disable-next-line require-yield
+// Empty-stream contract kept for future wiring (nothing is yielded or awaited
+// until the backend stream is connected), hence require-yield and require-await
+// are disabled.
+// eslint-disable-next-line require-yield, @typescript-eslint/require-await
 export async function* streamTrendingScoutIntro(): AsyncGenerator<ScoutIntroEvent> {
   return;
 }

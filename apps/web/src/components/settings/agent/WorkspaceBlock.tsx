@@ -17,7 +17,7 @@ import { WORKDIR_KEY } from '@/api/workspace';
 import { switchWorkspaceWithMarker } from '@/bridge/workspaceSwitch';
 import { callCapability } from '@/bridge/client';
 import { confirmDialog, useUIStore } from '@/stores/uiStore';
-import { extractErrorMessage } from '@/utils/errors';
+import { errorToastPayload } from '@/utils/errors';
 import type { SettingItem } from './types';
 
 /** Working directory (agent.workspace.dir): relative to the repo root; saving hot-switches the agent, no restart needed */
@@ -30,7 +30,7 @@ export function WorkspaceBlock() {
 
   useEffect(() => {
     let alive = true;
-    callCapability<SettingItem<string>>('settings', 'get_setting', { key: WORKDIR_KEY })
+    callCapability<SettingItem>('settings', 'get_setting', { key: WORKDIR_KEY })
       .then((item) => {
         if (alive) setWorkdir(item.value ?? item.default ?? '');
       })
@@ -58,12 +58,7 @@ export function WorkspaceBlock() {
         setWorkdir(workspace);
         addToast({ type: 'success', message: t('workspace.switched') });
       })
-      .catch((err) => {
-        addToast({
-          type: 'error',
-          message: t('workspace.switchFailed', { message: extractErrorMessage(err) }),
-        });
-      });
+      .catch((err: unknown) => addToast(errorToastPayload(t, 'workspace.switchFailed', err)));
   };
 
   return (
@@ -83,11 +78,11 @@ export function WorkspaceBlock() {
             style={{ maxWidth: 260 }}
             value={workdir}
             onChange={(e) => setWorkdir(e.target.value)}
-            onBlur={saveWorkdir}
+            onBlur={() => void saveWorkdir()}
             placeholder="workspace"
             aria-label={t('workspace.title')}
           />
-          <button type="button" className="btn btn-sm btn-ghost" onClick={saveWorkdir}>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={() => void saveWorkdir()}>
             {t('common.save')}
           </button>
         </div>

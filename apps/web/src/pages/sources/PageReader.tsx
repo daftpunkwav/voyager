@@ -9,25 +9,25 @@
  */
 
 import { useEffect } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useRemovePage, useSetPageMeta, useWebPage } from '@/hooks/useSources';
-import { confirmDialog, useUIStore } from '@/stores/uiStore';
+import { useSetPageMeta, useWebPage } from '@/hooks/useSources';
+import { useUIStore } from '@/stores/uiStore';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
 import { MarkdownRenderer } from '@/components/common/MarkdownRenderer';
 import { safeHttpUrl } from '@/utils/safeUrl';
 import { TagEditor } from './TagEditor';
 import { rememberSourceDetail } from './provider';
+import { useRemovePageFlow } from './readerRemoveFlows';
 
 export function PageReader() {
   const { t } = useTranslation('sources');
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { data: page, isLoading, isError, error, refetch } = useWebPage(id);
-  const removePage = useRemovePage();
   const setMeta = useSetPageMeta();
   const addToast = useUIStore((s) => s.addToast);
+  const confirmRemovePage = useRemovePageFlow();
 
   // Feed the detail id / title to the page-awareness provider; the title is an empty string until it arrives (probe falls back to id)
   useEffect(() => {
@@ -105,26 +105,7 @@ export function PageReader() {
             type="button"
             className="icon-btn"
             aria-label={t('sources:web.deleteAria')}
-            onClick={async () => {
-              if (
-                !(await confirmDialog({
-                  message: t('sources:web.deleteConfirm', { title: page.title }),
-                  danger: true,
-                }))
-              )
-                return;
-              removePage.mutate(page.id, {
-                onSuccess: () => {
-                  addToast({ type: 'success', message: t('sources:web.deleted') });
-                  navigate('/sources');
-                },
-                onError: (e) =>
-                  addToast({
-                    type: 'error',
-                    message: e instanceof Error ? e.message : t('sources:deleteFailed'),
-                  }),
-              });
-            }}
+            onClick={() => void confirmRemovePage(page.id, page.title)}
           >
             <svg
               viewBox="0 0 24 24"

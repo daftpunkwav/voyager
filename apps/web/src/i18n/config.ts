@@ -51,7 +51,7 @@ function matchLocale(tag: string): LocaleId | undefined {
 
 /** Resolve a user choice to the effective locale. 'system' follows navigator.languages,
  *  falling back to DEFAULT_LOCALE when nothing matches (or navigator is unavailable). */
-export function resolveLocale(requested: LocaleChoice | unknown): LocaleId {
+export function resolveLocale(requested: unknown): LocaleId {
   const choice = normalizeLocaleChoice(requested);
   if (choice !== 'system') return choice;
   if (typeof navigator === 'undefined') return DEFAULT_LOCALE;

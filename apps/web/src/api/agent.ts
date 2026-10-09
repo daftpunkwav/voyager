@@ -17,9 +17,9 @@
 
 import { callCapability, ServiceError } from '@/bridge/client';
 
-function asArray<T>(raw: T[] | { [k: string]: T[] | undefined }, key: string): T[] {
+function asArray<T>(raw: T[] | Record<string, T[] | undefined>, key: string): T[] {
   if (Array.isArray(raw)) return raw;
-  const nested = (raw as Record<string, T[] | undefined>)[key];
+  const nested = raw[key];
   return Array.isArray(nested) ? nested : [];
 }
 
@@ -83,7 +83,7 @@ export function describeTool<T = unknown>(name: string): Promise<T> {
   return callCapability<T>('agent', 'tools', { action: 'describe', name });
 }
 
-export function cancelRun(idOrName: string): Promise<{ cancelled?: string[] } | unknown> {
+export function cancelRun(idOrName: string): Promise<unknown> {
   return callCapability('agent', 'agent_instance', { action: 'cancel', id_or_name: idOrName });
 }
 
@@ -303,9 +303,9 @@ export function getContextStatus(sessionId = ''): Promise<ContextStatus> {
     // HTTP 200 (not a ServiceError envelope). Reject so callers' catch paths
     // hit their null fallbacks instead of reading undefined fields as NaN.
     if (raw && typeof raw === 'object' && 'error' in raw) {
-      throw new ServiceError('NOT_FOUND', String(raw.error));
+      throw new ServiceError('NOT_FOUND', raw.error);
     }
-    return raw as ContextStatus;
+    return raw;
   });
 }
 

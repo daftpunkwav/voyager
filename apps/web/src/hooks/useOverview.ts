@@ -19,7 +19,7 @@ import {
 import type { ActivityItem } from '@/api/types';
 
 /** Recommendation row (components consume id/name/project_id/description/reason/stars). */
-type RecommendRow = {
+interface RecommendRow {
   id: string;
   name: string;
   owner?: string | null;
@@ -27,7 +27,7 @@ type RecommendRow = {
   description?: string;
   reason?: string;
   stars?: number;
-};
+}
 
 /** Overview - personalized agent recommendations. */
 export function useRecommendedProjects(limit = 5) {
@@ -58,8 +58,6 @@ export function useActivities() {
   return useQuery({
     queryKey: ['activities'],
     queryFn: async () =>
-      (await listActivities()) as Array<
-        ActivityItem & { description?: string; created_at: string }
-      >,
+      (await listActivities()) as (ActivityItem & { description?: string; created_at: string })[],
   });
 }

@@ -61,7 +61,7 @@ export function useNotesAutoSave(options: { newProjectId: string }) {
     };
     callCapability<{ value?: number }>('settings', 'get_setting', { key: AUTOSAVE_KEY })
       .then((item) => {
-        if (alive && !eventApplied) apply(Number(item?.value ?? AUTOSAVE_DEFAULT_MS / 1000));
+        if (alive && !eventApplied) apply(item?.value ?? AUTOSAVE_DEFAULT_MS / 1000);
       })
       .catch(() => {
         // Settings unreadable (backend down): keep the default debounce
@@ -216,8 +216,7 @@ export function useNotesAutoSave(options: { newProjectId: string }) {
     const last = lastPersistedRef.current;
     if (
       isPersistedNoteId(editingNoteId) &&
-      last &&
-      last.id === editingNoteId &&
+      last?.id === editingNoteId &&
       last.title === editorTitle &&
       last.content === editorContent
     ) {
@@ -241,7 +240,6 @@ export function useNotesAutoSave(options: { newProjectId: string }) {
         );
       }
       e.preventDefault();
-      e.returnValue = '';
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => {

@@ -29,8 +29,8 @@ import { i18n } from '@/i18n';
  *  store row fields merged with their attrs JSON; edges are normalized to
  *  source/target from the store's src/dst columns. */
 export interface RawSubgraph {
-  nodes: Array<Record<string, unknown>>;
-  edges: Array<Record<string, unknown>>;
+  nodes: Record<string, unknown>[];
+  edges: Record<string, unknown>[];
   stats?: { node_count?: number; edge_count?: number; total_nodes?: number };
 }
 

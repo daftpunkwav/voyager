@@ -73,8 +73,8 @@ function compareRepos(a: StarRepo, b: StarRepo, sortBy: ImportSortBy): number {
     return an.localeCompare(bn, 'en');
   }
   if (sortBy === 'language') {
-    const al = (a.language || '\uffff').toLowerCase();
-    const bl = (b.language || '\uffff').toLowerCase();
+    const al = ((a.language ?? '') || '\uffff').toLowerCase();
+    const bl = ((b.language ?? '') || '\uffff').toLowerCase();
     const byLang = al.localeCompare(bl, 'en');
     if (byLang !== 0) return byLang;
     return (b.stars ?? 0) - (a.stars ?? 0);
@@ -93,7 +93,7 @@ export function filterAndSortStarRepos(
   const language = filters.language.trim();
   const filtered = items.filter((item) => {
     if (!matchesImportStatus(item, filters.importStatus)) return false;
-    if (language && (item.language || '') !== language) return false;
+    if (language && (item.language ?? '') !== language) return false;
     if (!matchesQuery(item, filters.query)) return false;
     return true;
   });

@@ -74,7 +74,7 @@ export function GraphPage() {
   const analyzeKinds = kindsFilter ? [...kindsFilter].sort() : ['repo', 'doc', 'web'];
 
   const filteredData = useMemo(() => {
-    let nodes = data?.nodes ?? [];
+    const nodes = data?.nodes ?? [];
     let edges = data?.edges ?? [];
     if (minSimilarity > 0) {
       edges = edges.filter((e) => e.similarity >= minSimilarity);
@@ -82,7 +82,7 @@ export function GraphPage() {
     const ids = new Set(nodes.map((n) => n.id));
     edges = edges.filter((e) => ids.has(e.source) && ids.has(e.target));
     if (edgeTypeFilter) {
-      edges = edges.filter((e) => (e.edge_type || 'related') === edgeTypeFilter);
+      edges = edges.filter((e) => (e.edge_type ?? 'related') === edgeTypeFilter);
     }
     return { nodes, edges };
   }, [data, minSimilarity, edgeTypeFilter]);
@@ -173,8 +173,9 @@ export function GraphPage() {
   const repoNodes = filteredData.nodes.filter((n) => !n.kind || n.kind === 'repo');
 
   // Navigation actions shared by the detail panel and the list (navigate is centralized in this page)
-  const openResource = (n: GraphNode) => navigate(routes.sourceOf(n.kind, n.resourceId ?? n.id));
-  const openCodeGraph = (n: GraphNode) => navigate(routes.codeGraph(n.resourceId ?? n.id));
+  const openResource = (n: GraphNode) =>
+    void navigate(routes.sourceOf(n.kind, n.resourceId ?? n.id));
+  const openCodeGraph = (n: GraphNode) => void navigate(routes.codeGraph(n.resourceId ?? n.id));
 
   const batchSlot = (
     <GraphBatchPanel
@@ -215,7 +216,7 @@ export function GraphPage() {
               cameraResetTick={cameraResetTick}
               onNodeClick={(n) => selectNode(n.id)}
               onNodeDoubleClick={(n) =>
-                navigate(
+                void navigate(
                   n.kind === 'doc' || n.kind === 'web'
                     ? routes.sourceOf(n.kind, n.resourceId ?? n.id)
                     : routes.codeGraph(n.resourceId ?? n.id)
@@ -242,7 +243,7 @@ export function GraphPage() {
               onSelectNode={selectNode}
               onOpenResource={openResource}
               onOpenCodeGraph={openCodeGraph}
-              onOpenRepo={(n) => navigate(routes.sourceRepo(n.resourceId ?? n.id))}
+              onOpenRepo={(n) => void navigate(routes.sourceRepo(n.resourceId ?? n.id))}
             />
           )}
 

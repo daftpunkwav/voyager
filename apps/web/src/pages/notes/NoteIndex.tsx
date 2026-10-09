@@ -211,7 +211,7 @@ export function NoteIndex({
     onPin,
     onToggleSelect: selecting ? toggleSelect : undefined,
     onMenu: setMenuId,
-    onArchive: (n: Note) => onArchive([n.id], !(n.archived || archived)),
+    onArchive: (n: Note) => onArchive([n.id], !((n.archived ?? false) || archived)),
     onExport: (n: Note) => onExport([n.id]),
     onDelete: (n: Note) => setPendingDelete([n.id]),
   };

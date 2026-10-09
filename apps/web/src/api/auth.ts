@@ -20,7 +20,11 @@ import { callCapability } from '@/bridge/client';
 import type { StarsListResult } from '@/api/types';
 
 /** Local single-user stub: GitHub authorization is token-based, so there are no account entities to list. */
-export type GitHubAccountRow = { id: string; username: string; pat_masked: string };
+export interface GitHubAccountRow {
+  id: string;
+  username: string;
+  pat_masked: string;
+}
 
 export function listGithubAccounts(): Promise<GitHubAccountRow[]> {
   return Promise.resolve([]);

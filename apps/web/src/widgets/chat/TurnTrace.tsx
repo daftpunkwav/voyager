@@ -52,7 +52,7 @@ type IconName =
 
 /** Keyword -> icon mapping for tool rows; first match wins, so broad write
  *  verbs come late and specific surfaces (web/graph/shell) come first. */
-const TOOL_ICON_RULES: Array<[RegExp, IconName]> = [
+const TOOL_ICON_RULES: [RegExp, IconName][] = [
   [/shell|exec/i, 'terminal'],
   [/page|url|web|clip/i, 'globe'],
   [/graph|node|subgraph|merge|relationship|link|tag|neighbor|backlink/i, 'graph'],
@@ -275,7 +275,7 @@ function StepRow({
 
 /** Tool/system rows of one round (rows stack over their fact sheets). */
 function RoundToolRows({ steps }: { steps: TurnStep[] }) {
-  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<number, boolean | undefined>>({});
   if (steps.length === 0) return null;
   return (
     <ul className="chat-trace__list">
@@ -284,7 +284,7 @@ function RoundToolRows({ steps }: { steps: TurnStep[] }) {
           key={s.seq}
           step={s}
           next={steps[i + 1]}
-          expanded={!!expanded[s.seq]}
+          expanded={expanded[s.seq] === true}
           onToggle={() => setExpanded((prev) => ({ ...prev, [s.seq]: !prev[s.seq] }))}
         />
       ))}
@@ -388,7 +388,7 @@ function buildBlocks(
   for (const s of steps) {
     if (s.kind === 'llm') {
       const text = roundTexts.find((r) => r.round === s.round)?.text ?? '';
-      const persisted = text || s.text || '';
+      const persisted = text || (s.text ?? '') || '';
       cur = emptyBlock({
         // seq in the key: resumed/merged trails can hold two round-1 markers
         key: `r${s.round ?? 'x'}-${s.seq}`,
@@ -458,7 +458,7 @@ function RoundBlockView({ block }: { block: RoundBlock }) {
   const llm = block.llm;
   // Live: the frozen round text; closed/refreshed: the persisted step text.
   // Hidden when it repeats the closing message verbatim (dup).
-  const bodyText = block.dup ? '' : block.text || llm?.text || '';
+  const bodyText = block.dup ? '' : (block.text ?? '') || (llm?.text ?? '') || '';
   const reasoning = block.reasoning;
 
   return (

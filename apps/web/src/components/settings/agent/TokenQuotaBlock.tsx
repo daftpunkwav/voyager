@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { callCapability } from '@/bridge/client';
 import { useUIStore } from '@/stores/uiStore';
-import { extractErrorMessage } from '@/utils/errors';
+import { errorToastPayload } from '@/utils/errors';
 import { DAILY_TOKENS_KEY, DAILY_TOKENS_MAX, numericDraft } from './constants';
 import type { SettingItem } from './types';
 
@@ -54,12 +54,7 @@ export function TokenQuotaBlock() {
       .then(() => {
         addToast({ type: 'success', message: t('quota.saved') });
       })
-      .catch((err) => {
-        addToast({
-          type: 'error',
-          message: t('quota.saveFailed', { message: extractErrorMessage(err) }),
-        });
-      });
+      .catch((err: unknown) => addToast(errorToastPayload(t, 'quota.saveFailed', err)));
   };
 
   return (

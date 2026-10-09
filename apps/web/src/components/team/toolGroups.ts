@@ -43,7 +43,7 @@ export function toolDomain(name: string): string | null {
 
 /** Group key for one tool: domain prefix wins over dimension. */
 export function toolGroupKey(tool: ToolItem): string {
-  return toolDomain(tool.name) ?? (tool.dimension || 'other');
+  return toolDomain(tool.name) ?? ((tool.dimension ?? '') || 'other');
 }
 
 /** Split the roster into ordered groups; tools keep their roster order inside a group. */

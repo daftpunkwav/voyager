@@ -39,7 +39,7 @@ const STATUS_COLORS: Record<string, string> = {
 export function colorForLabel(label: string): string {
   if (!label) return '#94a3b8';
   /* Case-insensitive match. */
-  const hit = LABEL_COLORS[label] || LABEL_COLORS[label[0]!.toUpperCase() + label.slice(1)];
+  const hit = LABEL_COLORS[label] || LABEL_COLORS[label[0].toUpperCase() + label.slice(1)];
   return hit || '#94a3b8';
 }
 
@@ -50,12 +50,12 @@ export function colorForStatus(status: string): string {
 /** Status color legend, shown when "color by status" is enabled in the sidebar.
  *  `label` carries a codeGraph:status.* i18n key; render sites translate it. */
 export const STATUS_LEGEND: { status: string; label: string; color: string }[] = [
-  { status: 'dead', label: 'codeGraph:status.dead', color: STATUS_COLORS.dead! },
-  { status: 'single', label: 'codeGraph:status.single', color: STATUS_COLORS.single! },
-  { status: 'entry', label: 'codeGraph:status.entry', color: STATUS_COLORS.entry! },
-  { status: 'test', label: 'codeGraph:status.test', color: STATUS_COLORS.test! },
-  { status: 'normal', label: 'codeGraph:status.normal', color: STATUS_COLORS.normal! },
-  { status: 'structural', label: 'codeGraph:status.structural', color: STATUS_COLORS.structural! },
+  { status: 'dead', label: 'codeGraph:status.dead', color: STATUS_COLORS.dead },
+  { status: 'single', label: 'codeGraph:status.single', color: STATUS_COLORS.single },
+  { status: 'entry', label: 'codeGraph:status.entry', color: STATUS_COLORS.entry },
+  { status: 'test', label: 'codeGraph:status.test', color: STATUS_COLORS.test },
+  { status: 'normal', label: 'codeGraph:status.normal', color: STATUS_COLORS.normal },
+  { status: 'structural', label: 'codeGraph:status.structural', color: STATUS_COLORS.structural },
 ];
 
 export const LABEL_COLOR_ENTRIES = Object.entries(LABEL_COLORS);

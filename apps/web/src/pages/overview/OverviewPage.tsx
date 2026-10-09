@@ -49,7 +49,7 @@ import type { LookTarget } from '@/components/agent/AgentAvatar';
 import type { ProjectProgress, TrendingPeriod, TrendingRepo } from '@/api/types';
 
 /** Progress rows reuse the overview:progress.* labels consumed by utils/labels.ts. */
-const PROGRESS_ROWS: Array<{ key: ProjectProgress; color: string }> = [
+const PROGRESS_ROWS: { key: ProjectProgress; color: string }[] = [
   { key: 'none', color: 'fill-none' },
   { key: 'learning', color: 'fill-learning' },
   { key: 'learned', color: 'fill-learned' },

@@ -35,18 +35,20 @@ function CodeCopyButton({ text }: { text: string }) {
       type="button"
       className="md-codeblock__btn"
       aria-label={t('common:markdown.copyCode')}
-      onClick={async (e) => {
+      onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          // Clear the previous timer on rapid clicks, otherwise the earlier reset would cut the second "copied" state short
-          if (timerRef.current != null) window.clearTimeout(timerRef.current);
-          timerRef.current = window.setTimeout(() => setCopied(false), COPIED_RESET_MS);
-        } catch {
-          /* Clipboard unavailable (insecure context): keep button state unchanged instead of faking success */
-        }
+        navigator.clipboard
+          .writeText(text)
+          .then(() => {
+            setCopied(true);
+            // Clear the previous timer on rapid clicks, otherwise the earlier reset would cut the second "copied" state short
+            if (timerRef.current != null) window.clearTimeout(timerRef.current);
+            timerRef.current = window.setTimeout(() => setCopied(false), COPIED_RESET_MS);
+          })
+          .catch(() => {
+            /* Clipboard unavailable (insecure context): keep button state unchanged instead of faking success */
+          });
       }}
     >
       {copied ? t('common:markdown.copied') : t('common:markdown.copy')}
@@ -216,28 +218,29 @@ export const MdCodeBlock = memo(function MdCodeBlock({
               </button>
             )}
           </div>
-          {result && (result.output || result.stderr || result.error) && (
-            <div className="md-codeblock__output-body">
-              {result.output && (
-                <pre className="md-codeblock__output-pre">
-                  <code>{result.output}</code>
-                </pre>
-              )}
-              {result.stderr && (
-                <pre className="md-codeblock__output-pre md-codeblock__output-pre--stderr">
-                  <code>{result.stderr}</code>
-                </pre>
-              )}
-              {result.error && (
-                <pre className="md-codeblock__output-pre md-codeblock__output-pre--error">
-                  <code>{result.error}</code>
-                </pre>
-              )}
-              {result.truncated && (
-                <p className="md-codeblock__output-note">{t('common:markdown.truncated')}</p>
-              )}
-            </div>
-          )}
+          {result &&
+            (Boolean(result.output) || Boolean(result.stderr) || Boolean(result.error)) && (
+              <div className="md-codeblock__output-body">
+                {result.output && (
+                  <pre className="md-codeblock__output-pre">
+                    <code>{result.output}</code>
+                  </pre>
+                )}
+                {result.stderr && (
+                  <pre className="md-codeblock__output-pre md-codeblock__output-pre--stderr">
+                    <code>{result.stderr}</code>
+                  </pre>
+                )}
+                {result.error && (
+                  <pre className="md-codeblock__output-pre md-codeblock__output-pre--error">
+                    <code>{result.error}</code>
+                  </pre>
+                )}
+                {result.truncated && (
+                  <p className="md-codeblock__output-note">{t('common:markdown.truncated')}</p>
+                )}
+              </div>
+            )}
         </div>
       )}
     </div>

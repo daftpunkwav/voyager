@@ -21,7 +21,7 @@ export function extractCodeLang(children: ReactNode): string | null {
   for (const child of Children.toArray(children)) {
     if (!isValidElement<{ className?: string }>(child)) continue;
     const cls = child.props.className ?? '';
-    const m = /\blanguage-([a-z0-9_+-]+)\b/i.exec(cls) || /\bhljs\s+([a-z0-9_+-]+)\b/i.exec(cls);
+    const m = /\blanguage-([a-z0-9_+-]+)\b/i.exec(cls) ?? /\bhljs\s+([a-z0-9_+-]+)\b/i.exec(cls);
     if (m?.[1] && m[1].toLowerCase() !== 'hljs') return m[1].toLowerCase();
   }
   return null;

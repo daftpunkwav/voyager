@@ -37,7 +37,7 @@ function colorForProject(n: GraphNode): string {
   return KIND_COLORS[(n.kind || '').toLowerCase()] ?? KIND_FALLBACK;
 }
 
-type Vec = {
+interface Vec {
   id: string;
   x: number;
   y: number;
@@ -48,9 +48,13 @@ type Vec = {
   clusterId: string;
   fineClusterId: string;
   stars: number;
-};
+}
 
-type WLink = { source: string; target: string; w: number };
+interface WLink {
+  source: string;
+  target: string;
+  w: number;
+}
 
 /** Target display-cluster count for hundred-scale graphs (the tree layer count uses the same heuristic). */
 export function targetDisplayClusters(n: number): number {
@@ -193,7 +197,7 @@ export function coarsenClustersForDisplay(
   let guard = 0;
   while (sz.size > Math.max(1, target) && guard < 400) {
     guard += 1;
-    const small = [...sz.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))[0]!;
+    const small = [...sz.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))[0];
     const cross = buildCross();
     let bestOther: string | null = null;
     let bestW = -1;
@@ -254,7 +258,7 @@ function sectorAngle(members: Vec[], node: Vec, links: WLink[]): number {
 }
 
 function localAngleBias(members: Vec[], links: WLink[], idx: number): number {
-  const node = members[idx]!;
+  const node = members[idx];
   if (!node) return 0;
   const neighborW = new Map<string, number>();
   for (const e of links) {
@@ -362,19 +366,19 @@ export function balanceTreeLayers(nodes: Vec[], links: WLink[]): Vec[][] {
   let guard = 0;
   while (guard < 120) {
     guard += 1;
-    chunks.sort((a, b) => a.length - b.length || a[0]!.id.localeCompare(b[0]!.id));
+    chunks.sort((a, b) => a.length - b.length || a[0].id.localeCompare(b[0].id));
     const small = chunks[0];
     if (!small || small.length >= minPer || chunks.length <= 3) break;
     let bestJ = 1;
     let bestW = -1;
     for (let j = 1; j < Math.min(chunks.length, 6); j += 1) {
-      const w = crossWeight(small, chunks[j]!);
+      const w = crossWeight(small, chunks[j]);
       if (w > bestW) {
         bestW = w;
         bestJ = j;
       }
     }
-    chunks[bestJ]!.push(...small);
+    chunks[bestJ].push(...small);
     chunks.splice(0, 1);
   }
 
@@ -386,7 +390,7 @@ export function balanceTreeLayers(nodes: Vec[], links: WLink[]): Vec[][] {
     chunks.push([...a, ...b]);
   }
 
-  return chunks.sort((a, b) => a.length - b.length || a[0]!.id.localeCompare(b[0]!.id));
+  return chunks.sort((a, b) => a.length - b.length || a[0].id.localeCompare(b[0].id));
 }
 
 export function forceLayout3d(nodes: Vec[], links: WLink[], iterations = 48) {
@@ -424,7 +428,7 @@ export function forceLayout3d(nodes: Vec[], links: WLink[], iterations = 48) {
     const c = centers.get(cid)!;
     const ranks = relativeRankHigh(members.map((m) => m.foundation));
     const sorted = members
-      .map((node, i) => ({ node, rank: ranks[i]! }))
+      .map((node, i) => ({ node, rank: ranks[i] }))
       .sort((a, b) => b.rank - a.rank || a.node.id.localeCompare(b.node.id));
     sorted.forEach((item, i) => {
       const { node, rank } = item;
@@ -452,8 +456,8 @@ export function forceLayout3d(nodes: Vec[], links: WLink[], iterations = 48) {
 
     for (let i = 0; i < n; i += 1) {
       for (let j = i + 1; j < n; j += 1) {
-        const a = nodes[i]!;
-        const b = nodes[j]!;
+        const a = nodes[i];
+        const b = nodes[j];
         const same = a.clusterId === b.clusterId;
         const dx = a.x - b.x;
         const dy = a.y - b.y;
@@ -474,8 +478,8 @@ export function forceLayout3d(nodes: Vec[], links: WLink[], iterations = 48) {
       const i = idx.get(e.source);
       const j = idx.get(e.target);
       if (i == null || j == null) continue;
-      const a = nodes[i]!;
-      const b = nodes[j]!;
+      const a = nodes[i];
+      const b = nodes[j];
       const same = a.clusterId === b.clusterId;
       const w = layoutEdgeWeight(e.w);
       const dx = b.x - a.x;
@@ -495,7 +499,7 @@ export function forceLayout3d(nodes: Vec[], links: WLink[], iterations = 48) {
     }
 
     for (let i = 0; i < n; i += 1) {
-      const node = nodes[i]!;
+      const node = nodes[i];
       const c = centers.get(node.clusterId)!;
       const pull = 0.005 + node.foundation * 0.012;
       fx[i] += (c.x - node.x) * pull;
@@ -524,20 +528,20 @@ export function treeLayout3d(nodes: Vec[], links: WLink[]) {
   let yCursor = 0;
   const centersY: number[] = [];
   layers.forEach((_, ci) => {
-    const R = radii[ci]!;
+    const R = radii[ci];
     if (ci === 0) yCursor = 0;
-    else yCursor -= (radii[ci - 1]! + R) * 0.33 + gap;
+    else yCursor -= (radii[ci - 1] + R) * 0.33 + gap;
     centersY.push(yCursor);
   });
 
   layers.forEach((members, ci) => {
     const layerId = `tree-L${ci}-n${members.length}`;
     for (const node of members) node.clusterId = layerId;
-    const R = radii[ci]!;
-    const cy = centersY[ci]!;
+    const R = radii[ci];
+    const cy = centersY[ci];
     const ranks = relativeRankHigh(members.map((m) => m.foundation));
     const sorted = members
-      .map((node, i) => ({ node, rank: ranks[i]! }))
+      .map((node, i) => ({ node, rank: ranks[i] }))
       .sort(
         (a, b) =>
           b.rank - a.rank ||
@@ -573,7 +577,7 @@ export function radialLayout3d(nodes: Vec[], links: WLink[]) {
     n >= 150 ? 95 + Math.sqrt(n) * 11 : n >= 80 ? 100 + Math.sqrt(n) * 14 : 110 + Math.sqrt(n) * 22;
 
   const hubRanks = relativeRankHigh(nodes.map((nd) => nd.hubness));
-  const byIdRank = new Map(nodes.map((nd, i) => [nd.id, hubRanks[i]!]));
+  const byIdRank = new Map(nodes.map((nd, i) => [nd.id, hubRanks[i]]));
 
   const clusters = [...new Set(nodes.map((nd) => nd.clusterId))].sort();
   const sector = (Math.PI * 2) / Math.max(1, clusters.length);

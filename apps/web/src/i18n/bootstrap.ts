@@ -123,8 +123,8 @@ export function initI18n(options: InitI18nOptions = {}): I18n {
   void i18next.use(initReactI18next).init({
     lng: resolveLocale(choice),
     fallbackLng: DEFAULT_LOCALE,
-    supportedLngs: SUPPORTED_LOCALES as unknown as string[],
-    ns: NAMESPACES as unknown as string[],
+    supportedLngs: SUPPORTED_LOCALES,
+    ns: NAMESPACES,
     defaultNS: DEFAULT_NS,
     resources,
     // Flat dotted keys ("appearance.locale.label") are matched literally;

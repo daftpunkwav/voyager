@@ -81,17 +81,17 @@ function buildFileTree(nodes: CodeGraphNode[]): DirNode {
     let cur = root;
     for (let i = 0; i < parts.length - 1; i += 1) {
       if (!parts[i]) continue;
-      let child = cur.children.get(parts[i]!);
+      let child = cur.children.get(parts[i]);
       if (!child) {
         const prefix = parts.slice(0, i + 1).join('/');
         child = {
-          name: parts[i]!,
+          name: parts[i],
           fullPath: prefix,
           children: new Map(),
           nodeIds: new Set(),
           directNodes: [],
         };
-        cur.children.set(parts[i]!, child);
+        cur.children.set(parts[i], child);
       }
       cur = child;
     }

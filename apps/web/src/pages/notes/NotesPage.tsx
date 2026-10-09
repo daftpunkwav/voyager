@@ -140,13 +140,13 @@ export function NotesPage() {
 
   const goIndex = useCallback(async () => {
     if (!(await flush())) return; // not persisted: stay in the workspace, the toast was raised by flush
-    navigate(routes.notes);
+    void navigate(routes.notes);
   }, [flush, navigate]);
 
   const openNote = useCallback(
     async (n: Note) => {
       if (!(await flush())) return; // not persisted: do not switch away and overwrite the current content
-      navigate(routes.note(n.id));
+      void navigate(routes.note(n.id));
     },
     [flush, navigate]
   );
@@ -188,7 +188,7 @@ export function NotesPage() {
       await patchMeta.mutateAsync({ id: editingNoteId, archived });
       setMeta((m) => ({ ...m, archived }));
       if (archived && (await flush())) {
-        navigate(routes.notes);
+        void navigate(routes.notes);
       }
     } catch (err) {
       addToast({

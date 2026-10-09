@@ -29,7 +29,7 @@ interface ProjectRelatedPanelProps {
 export function ProjectRelatedPanel({ related, projectMap }: ProjectRelatedPanelProps) {
   const { t } = useTranslation('sources');
   return (
-    <div className={`${GLASS_OUTER}`} style={{ padding: 16 }}>
+    <div className={GLASS_OUTER} style={{ padding: 16 }}>
       {related.length === 0 ? (
         <p className="muted" style={{ textAlign: 'center', padding: 24 }}>
           {t('sources:related.empty')}

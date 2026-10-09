@@ -71,7 +71,7 @@ export function StreamRenderer({
   const thinkingTrim = displayThinking.trim();
   const { realThinking } = partitionThinking(thinkingTrim);
   const hasRealThinking = Boolean(realThinking);
-  const hasBody = Boolean(rendered && rendered.trim());
+  const hasBody = Boolean(rendered?.trim());
   const thinkingLines = hasRealThinking ? realThinking.split('\n').filter(Boolean).length : 0;
 
   // Force collapse once body text exists; never auto-expand during streaming.
@@ -141,7 +141,7 @@ export function StreamRenderer({
                 // (zh-authored) thinking text, it is functional data, not display copy
                 /汇总|合并/.test(thinkingTrim)
                 ? t('agent:thinking.summarizing')
-                : /评估/.test(thinkingTrim)
+                : thinkingTrim.includes('评估')
                   ? t('agent:thinking.evaluating')
                   : t('agent:thinking.executing')}
           </p>

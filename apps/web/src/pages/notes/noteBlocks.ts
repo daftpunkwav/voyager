@@ -27,10 +27,10 @@ export function splitMarkdownBlocks(md: string): MarkdownBlock[] {
       continue;
     }
     const startLine = i + 1;
-    if (/^```/.test(line)) {
+    if (line.startsWith('```')) {
       const buf = [line];
       i += 1;
-      while (i < lines.length && !/^```/.test(lines[i])) {
+      while (i < lines.length && !lines[i].startsWith('```')) {
         buf.push(lines[i]);
         i += 1;
       }
@@ -61,10 +61,10 @@ export function splitMarkdownBlocks(md: string): MarkdownBlock[] {
         }
         if (
           /^\s*([-*+] |\d+\. |> |\s+\S)/.test(next) ||
-          /^```/.test(next) ||
+          next.startsWith('```') ||
           /^#{1,6}\s/.test(next)
         ) {
-          if (/^```/.test(next) || /^#{1,6}\s/.test(next)) break;
+          if (next.startsWith('```') || /^#{1,6}\s/.test(next)) break;
           buf.push(next);
           i += 1;
           continue;
@@ -74,10 +74,10 @@ export function splitMarkdownBlocks(md: string): MarkdownBlock[] {
       chunks.push({ source: buf.join('\n'), startLine });
       continue;
     }
-    if (/^\|/.test(line)) {
+    if (line.startsWith('|')) {
       const buf = [line];
       i += 1;
-      while (i < lines.length && /^\|/.test(lines[i])) {
+      while (i < lines.length && lines[i].startsWith('|')) {
         buf.push(lines[i]);
         i += 1;
       }
@@ -90,9 +90,9 @@ export function splitMarkdownBlocks(md: string): MarkdownBlock[] {
       i < lines.length &&
       lines[i].trim() !== '' &&
       !/^#{1,6}\s/.test(lines[i]) &&
-      !/^```/.test(lines[i]) &&
+      !lines[i].startsWith('```') &&
       !/^\s*([-*+] |\d+\. |> )/.test(lines[i]) &&
-      !/^\|/.test(lines[i])
+      !lines[i].startsWith('|')
     ) {
       buf.push(lines[i]);
       i += 1;

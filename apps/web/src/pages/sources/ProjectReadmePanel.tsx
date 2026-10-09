@@ -75,7 +75,7 @@ export function ProjectReadmePanel({
           className={`btn btn-sm ${GLASS_INNER}`}
           style={{ height: 28, marginLeft: 4 }}
           disabled={readmeLoading || readmeFetching}
-          onClick={() => void onRefresh()}
+          onClick={() => onRefresh()}
         >
           {readmeFetching ? t('sources:refreshing') : t('sources:readme.refresh')}
         </button>
@@ -99,11 +99,7 @@ export function ProjectReadmePanel({
             <p style={{ color: 'var(--text-400)', margin: '0 0 8px' }}>
               {readmeError ? t('sources:readme.loadFailed') : t('sources:readme.empty')}
             </p>
-            <button
-              type="button"
-              className="btn btn-sm btn-primary"
-              onClick={() => void onRefresh()}
-            >
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => onRefresh()}>
               {t('sources:readme.retry')}
             </button>
           </div>

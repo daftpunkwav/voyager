@@ -68,8 +68,8 @@ export function DynamicSettingsGroup({ modules, prefixes, exclude, titleKey }: G
   const excluded = new Set([...DYNAMIC_EXCLUDE_DEFAULTS, ...(exclude ?? [])]);
   const items = (settings ?? []).filter((item) => {
     if (excluded.has(item.key)) return false;
-    if (modules && modules.includes(item.module)) return true;
-    if (prefixes && prefixes.some((p) => item.key.startsWith(p))) return true;
+    if (modules?.includes(item.module)) return true;
+    if (prefixes?.some((p) => item.key.startsWith(p))) return true;
     return false;
   });
   // A filter that matches nothing renders nothing (the section may be
@@ -98,7 +98,7 @@ export function DynamicSettingsGroup({ modules, prefixes, exclude, titleKey }: G
 /** label: settings:auto.<key> when present, else the key's last segment. */
 function useRowLabel(key: string) {
   const { t } = useTranslation('settings');
-  const translated = t(`auto.${key}`, { defaultValue: '' }) as string;
+  const translated = t(`auto.${key}`, { defaultValue: '' });
   return translated || key.split('.').slice(-1)[0];
 }
 
@@ -122,7 +122,7 @@ function useSettingSave() {
         addToast({ type: 'success', message: t('auto.saved', { label }) });
         return reload();
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         addToast({
           type: 'error',
           message: t('auto.saveFailed', { label, message: extractErrorMessage(err) }),

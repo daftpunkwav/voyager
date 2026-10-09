@@ -82,6 +82,8 @@ export function describeError(code: string): ErrorCodeDesc {
 /** Build toast text as "[CODE] Title"; unknown codes prefer the caller-provided fallback. */
 export function formatErrorToast(code: string, fallbackMessage?: string): string {
   const suffix = knownSuffix(code);
-  const title = suffix ? i18n.t(`errors:${suffix}.title`) : fallbackMessage || fallbackDesc().title;
+  const title = suffix
+    ? i18n.t(`errors:${suffix}.title`)
+    : (fallbackMessage ?? '') || fallbackDesc().title;
   return `[${code}] ${title}`;
 }

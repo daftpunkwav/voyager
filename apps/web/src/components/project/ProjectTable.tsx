@@ -130,7 +130,9 @@ export function ProjectTable({
                 data-project-id={p.id}
                 data-testid={`project-row-${p.id}`}
                 className={isSelected ? 'is-selected' : undefined}
-                onClick={() => navigate(routes.sourceRepo(p.id))}
+                onClick={() => {
+                  void navigate(routes.sourceRepo(p.id));
+                }}
               >
                 <td className="col-check" onClick={(e) => e.stopPropagation()}>
                   <input
@@ -194,7 +196,9 @@ export function ProjectTable({
                     <button
                       type="button"
                       className="btn-scout"
-                      onClick={() => navigate(routes.sourceRepo(p.id))}
+                      onClick={() => {
+                        void navigate(routes.sourceRepo(p.id));
+                      }}
                     >
                       {t('sources:table.view')}
                     </button>

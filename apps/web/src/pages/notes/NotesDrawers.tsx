@@ -63,7 +63,7 @@ export function NotesDrawers({
             void deleteNote.mutateAsync(editingNoteId).then(
               () => {
                 addToast({ type: 'success', message: t('notes:delete.done') });
-                navigate(routes.notes);
+                void navigate(routes.notes);
               },
               (err: unknown) =>
                 addToast({

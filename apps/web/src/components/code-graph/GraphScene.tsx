@@ -211,7 +211,7 @@ export function GraphScene({
       <Canvas
         key={isDark ? 'graph-dark' : 'graph-light'}
         camera={{ position: [0, 0, 800], fov: 50, near: 0.1, far: 100000 }}
-        style={{ background: bg! }}
+        style={{ background: bg }}
         dpr={GRAPH_CANVAS_DPR}
         gl={{
           antialias: false,
@@ -230,25 +230,23 @@ export function GraphScene({
         />
 
         <EdgeLines
-          nodes={nodes as never}
-          edges={edges as never}
+          nodes={nodes}
+          edges={edges}
           highlightedIds={highlightedIds}
           brightness={display.edgeBrightness}
           isDark={isDark}
         />
         <NodeCloud
-          nodes={nodes as never}
+          nodes={nodes}
           highlightedIds={highlightedIds}
-          onHover={setHovered as never}
-          onClick={onNodeClick as never}
+          onHover={setHovered}
+          onClick={onNodeClick}
           boost={nodeBoost}
           isDark={isDark}
         />
-        {showLabels && (
-          <NodeLabels nodes={nodes as never} highlightedIds={highlightedIds} isDark={isDark} />
-        )}
+        {showLabels && <NodeLabels nodes={nodes} highlightedIds={highlightedIds} isDark={isDark} />}
 
-        {hovered && <NodeTooltipTracker node={hovered as never} tooltipRef={tooltipRef} />}
+        {hovered && <NodeTooltipTracker node={hovered} tooltipRef={tooltipRef} />}
 
         <CameraAnimator target={cameraTarget} controlsRef={controlsRef} />
         <IdleAutoRotate controlsRef={controlsRef} idleMs={idleRotateMs} />
@@ -295,7 +293,7 @@ export function computeCameraTarget(nodes: CodeGraphNode[], ids: Set<number>): C
     count = 0;
   for (const node of nodes) {
     const id = typeof node.id === 'string' ? Number(node.id) : node.id;
-    if (ids.has(id as number)) {
+    if (ids.has(id)) {
       cx += node.x;
       cy += node.y;
       cz += node.z;
@@ -309,7 +307,7 @@ export function computeCameraTarget(nodes: CodeGraphNode[], ids: Set<number>): C
   let maxDist = 0;
   for (const node of nodes) {
     const id = typeof node.id === 'string' ? Number(node.id) : node.id;
-    if (ids.has(id as number)) {
+    if (ids.has(id)) {
       const d = Math.sqrt((node.x - cx) ** 2 + (node.y - cy) ** 2 + (node.z - cz) ** 2);
       if (d > maxDist) maxDist = d;
     }

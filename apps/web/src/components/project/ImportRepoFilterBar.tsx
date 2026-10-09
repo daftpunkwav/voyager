@@ -41,13 +41,13 @@ export function ImportRepoFilterBar({
 }: ImportRepoFilterBarProps) {
   const { t } = useTranslation('sources');
 
-  const STATUS_OPTIONS: Array<{ value: ImportStatusFilter; label: string }> = [
+  const STATUS_OPTIONS: { value: ImportStatusFilter; label: string }[] = [
     { value: 'not_imported', label: t('sources:repoFilter.status.notImported') },
     { value: 'imported', label: t('sources:repoFilter.status.imported') },
     { value: 'all', label: t('sources:all') },
   ];
 
-  const SORT_OPTIONS: Array<{ value: ImportSortBy; label: string }> = [
+  const SORT_OPTIONS: { value: ImportSortBy; label: string }[] = [
     { value: 'stars', label: t('sources:repoFilter.sort.stars') },
     { value: 'name', label: t('sources:repoFilter.sort.name') },
     { value: 'language', label: t('sources:repoFilter.sort.language') },

@@ -162,7 +162,9 @@ function WorkspaceBrowser({
             <button
               type="button"
               className="ws-browser__chip"
-              onClick={() => enter(current.parent as string)}
+              onClick={() => {
+                if (current?.parent) enter(current.parent);
+              }}
             >
               <svg
                 viewBox="0 0 24 24"

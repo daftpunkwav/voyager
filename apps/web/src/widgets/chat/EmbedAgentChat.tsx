@@ -69,7 +69,7 @@ export function EmbedAgentChat({
 
   const buildPrompt = (text: string): string => {
     if (mode === 'graph') {
-      const node = graphNodeId || t('agent:embed.graphUnselected');
+      const node = (graphNodeId ?? '') || t('agent:embed.graphUnselected');
       return t('agent:embed.graphPrompt', { node, text });
     }
     const ctx = importContext ?? { mode: 'stars' as const };

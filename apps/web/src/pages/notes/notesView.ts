@@ -95,7 +95,7 @@ export interface NotesViewPatch {
   index?: boolean;
 }
 
-type UiPatch = {
+interface UiPatch {
   fontSize?: number;
   mode?: NotesMode;
   layout?: NotesLayout;
@@ -108,7 +108,7 @@ type UiPatch = {
   density?: NotesDensity;
   syncScroll?: boolean;
   tocWidth?: number;
-};
+}
 
 function cacheLocal(s: {
   fontSize: number;
@@ -224,7 +224,7 @@ export async function fetchNotesView(): Promise<NotesViewSnapshot> {
 }
 
 export async function setNotesView(args: NotesViewPatch): Promise<NotesViewSnapshot> {
-  return setNotesViewApi<NotesViewSnapshot>({ ...args } as Record<string, unknown>);
+  return setNotesViewApi<NotesViewSnapshot>({ ...args });
 }
 
 /** Writes back only the fields changed this time. Optimistic updates already land in the store; events / settings.changed re-align later. */

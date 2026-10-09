@@ -50,7 +50,7 @@ export function MemoryRetentionBlock() {
           message: n > 0 ? t('retention.savedDays', { days: n }) : t('retention.savedManaged'),
         });
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         addToast({
           type: 'error',
           message: t('retention.saveFailed', { message: extractErrorMessage(err) }),

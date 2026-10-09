@@ -113,11 +113,11 @@ export function parseNotesDensity(raw: string | null | undefined): NotesDensity 
 }
 
 export function parseNotesQuery(raw: string | null | undefined): string {
-  return String(raw ?? '').slice(0, QUERY_MAX);
+  return (raw ?? '').slice(0, QUERY_MAX);
 }
 
 export function parseNotesSourceId(raw: string | null | undefined): string {
-  const id = String(raw ?? '').trim();
+  const id = (raw ?? '').trim();
   if (!id || id.includes('/') || id.includes('\\') || id.includes('..')) return '';
   return id.slice(0, SOURCE_MAX);
 }

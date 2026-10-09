@@ -44,7 +44,7 @@ export function ChatPage() {
 
   const onNavigate = useCallback(
     (path: string) => {
-      navigate(path);
+      void navigate(path);
     },
     [navigate]
   );
@@ -98,7 +98,7 @@ export function ChatPage() {
               className="chat-input"
               running={thinking}
               onStop={() => void interruptInstance('chat')}
-              onManageModels={() => navigate('/settings?section=llm')}
+              onManageModels={() => void navigate('/settings?section=llm')}
               placeholder={
                 llmMissing
                   ? t('chat:composer.llmMissingPlaceholder')

@@ -118,7 +118,7 @@ export function InstanceList() {
           title={t('team:inst.loadFailed')}
           description={error}
           icon={EmptyStateIcons.warning}
-          onRetry={load}
+          onRetry={() => void load()}
         />
       </section>
     );

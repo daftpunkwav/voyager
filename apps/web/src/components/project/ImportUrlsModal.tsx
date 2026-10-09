@@ -124,7 +124,7 @@ export function ImportUrlsModal({ open, onClose }: ImportUrlsModalProps) {
 
   const clearSelection = () => setSelected(new Set());
 
-  const importRepos = async (repos: Array<{ owner: string; repo: string; url: string }>) => {
+  const importRepos = async (repos: { owner: string; repo: string; url: string }[]) => {
     if (repos.length === 0) {
       addToast({ type: 'warning', message: t('sources:importUrls.selectFirst') });
       return;

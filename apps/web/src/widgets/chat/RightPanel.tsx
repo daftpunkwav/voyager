@@ -162,7 +162,7 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
   const [runView, setRunView] = useState<RunningInstance | null>(null);
   // Runs that dropped out of the poll (terminal): kept briefly so a finished
   // teammate does not vanish mid-glance; failures stay a little longer.
-  const [settled, setSettled] = useState<Array<{ row: RunningInstance; at: number }>>([]);
+  const [settled, setSettled] = useState<{ row: RunningInstance; at: number }[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -205,7 +205,7 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
   // observable through this poll, so it degrades to the neutral "finished".
   useEffect(() => {
     setRunView((cur) =>
-      cur && cur.status === 'running' && !running.some((r) => r.id === cur.id)
+      cur?.status === 'running' && !running.some((r) => r.id === cur.id)
         ? { ...cur, status: 'finished' }
         : cur
     );
@@ -226,8 +226,7 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
     const failedRuns = new Set(
       useChatStore
         .getState()
-        .deliveries.filter((d) => d.status === 'failed' && d.run_id)
-        .map((d) => d.run_id as string)
+        .deliveries.flatMap((d) => (d.status === 'failed' && d.run_id ? [d.run_id] : []))
     );
     const nowMs = Date.now();
     setSettled((prev) => {
@@ -316,7 +315,7 @@ export function RightPanel({ taskCards }: { taskCards: ReactNode }) {
                 type="button"
                 className={`chat-side__member${busy ? ' chat-side__member--busy' : ''}${!busy && parked ? ' chat-side__member--settled' : ''}${failed ? ' chat-side__member--failed' : ''}`}
                 disabled={!run}
-                title={run?.goal || undefined}
+                title={(run?.goal ?? '') || undefined}
                 onClick={() => {
                   if (run && !isMain) setRunView(run);
                 }}
