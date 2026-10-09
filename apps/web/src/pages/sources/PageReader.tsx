@@ -9,45 +9,17 @@
  */
 
 import { useEffect } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useRemovePage, useSetPageMeta, useWebPage } from '@/hooks/useSources';
-import { confirmDialog, useUIStore } from '@/stores/uiStore';
+import { useSetPageMeta, useWebPage } from '@/hooks/useSources';
+import { useUIStore } from '@/stores/uiStore';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { EmptyState, EmptyStateIcons } from '@/components/common/EmptyState';
 import { MarkdownRenderer } from '@/components/common/MarkdownRenderer';
 import { safeHttpUrl } from '@/utils/safeUrl';
 import { TagEditor } from './TagEditor';
 import { rememberSourceDetail } from './provider';
-
-/** Confirm-then-delete flow for a clip: dialog, success toast + back to the
- *  sources list, error toast with the wire message. */
-function useRemovePageFlow() {
-  const { t } = useTranslation('sources');
-  const navigate = useNavigate();
-  const removePage = useRemovePage();
-  const addToast = useUIStore((s) => s.addToast);
-  return async (id: string, title: string) => {
-    if (
-      !(await confirmDialog({
-        message: t('sources:web.deleteConfirm', { title }),
-        danger: true,
-      }))
-    )
-      return;
-    removePage.mutate(id, {
-      onSuccess: () => {
-        addToast({ type: 'success', message: t('sources:web.deleted') });
-        void navigate('/sources');
-      },
-      onError: (e) =>
-        addToast({
-          type: 'error',
-          message: e instanceof Error ? e.message : t('sources:deleteFailed'),
-        }),
-    });
-  };
-}
+import { useRemovePageFlow } from './readerRemoveFlows';
 
 export function PageReader() {
   const { t } = useTranslation('sources');
