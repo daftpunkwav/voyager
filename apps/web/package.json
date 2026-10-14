@@ -37,7 +37,7 @@
     "dompurify": "^3.4.13",
     "github-slugger": "^2.0.0",
     "i18next": "^26.4.2",
-    "mermaid": "^12.1.0",
+    "mermaid": "^12.2.0",
     "pdfjs-dist": "^6.4.299",
     "react": "19.3.0",
     "react-dom": "19.3.0",
