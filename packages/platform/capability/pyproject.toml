@@ -6,8 +6,8 @@ requires-python = ">=3.14"
 dependencies = ["platform-contracts", "platform-actor"]
 
 [project.optional-dependencies]
-rest = ["fastapi>=0.104.0"]
-dev = ["pytest>=8.0.0", "pytest-asyncio>=0.23.0", "fastapi>=0.104.0", "httpx>=0.25.0"]
+rest = ["fastapi>=0.143.0"]
+dev = ["pytest>=8.0.0", "pytest-asyncio>=0.23.0", "fastapi>=0.143.0", "httpx>=0.25.0"]
 
 [build-system]
 requires = ["hatchling"]
