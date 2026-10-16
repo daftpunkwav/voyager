@@ -1,5 +1,17 @@
+import { expect } from 'vitest';
 import { configure } from '@testing-library/react';
-import '@testing-library/jest-dom/vitest';
+import * as jestDomMatchers from '@testing-library/jest-dom/matchers';
+
+// Register the matchers through the `/matchers` entry rather than
+// `@testing-library/jest-dom/vitest`. The latter starts with a bare
+// `import { expect } from 'vitest'`, which Node resolves relative to
+// <repo>/node_modules/@testing-library/jest-dom/dist — it only finds vitest
+// while npm hoists vitest to the repo root. A dependency bump that nests
+// vitest into apps/web/node_modules leaves jest-dom orphaned at the root and
+// every suite dies at load with "Cannot find package 'vitest'".
+// `/matchers` imports no vitest, and the `vitest` specifier below resolves
+// from this file's own workspace either way.
+expect.extend(jestDomMatchers);
 
 // NODE_ENV is pinned to 'development' in vite.config.ts (test.env): it must be
 // set before module resolution, or react resolves to its production build,
