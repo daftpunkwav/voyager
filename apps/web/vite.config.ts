@@ -19,6 +19,13 @@ const brand = JSON.parse(readFileSync(path.resolve(__dirname, '../../brand.json'
   storage: { uiStore: string; legacy: { uiStore: string } };
 };
 
+// The shipped policy (apps/web/index.html) allows no inline script. The dev
+// server relaxes that one directive: the React Fast Refresh preamble that
+// @vitejs/plugin-react injects into <head> is an inline <script type="module">.
+// The dev response header below carries the same relaxed directive.
+const CSP_SCRIPT_SRC = "script-src 'self' 'unsafe-eval' blob:;";
+const CSP_SCRIPT_SRC_DEV = "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:;";
+
 export default defineConfig({
   define: {
     __BRAND__: JSON.stringify(brand),
@@ -26,12 +33,14 @@ export default defineConfig({
   plugins: [
     {
       name: 'inject-brand',
-      transformIndexHtml(html) {
-        return html
+      transformIndexHtml(html, ctx) {
+        const branded = html
           .replaceAll('%PRODUCT_NAME%', brand.productName)
           .replaceAll('%PRODUCT_TAGLINE%', brand.productTagline)
           .replaceAll('%UI_STORE_KEY%', brand.storage.uiStore)
           .replaceAll('%UI_STORE_LEGACY_KEY%', brand.storage.legacy.uiStore);
+        // ctx.server is set while serving; the built output keeps the strict policy.
+        return ctx.server ? branded.replace(CSP_SCRIPT_SRC, CSP_SCRIPT_SRC_DEV) : branded;
       },
     },
     react(),
@@ -60,7 +69,7 @@ export default defineConfig({
     headers: {
       'Content-Security-Policy': [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:",
+        CSP_SCRIPT_SRC_DEV,
         "worker-src 'self' blob:",
         "style-src 'self' 'unsafe-inline'",
         "font-src 'self' data:",
