@@ -47,4 +47,4 @@ React 19(经根 `package.json` 的 `overrides` 精确钉版)、`react-router-dom
 
 ## 构建与开发
 
-`vite.config.ts` — 别名 `@` → `./src`;开发服务器 `127.0.0.1:5173`(`VITE_PORT`、`strictPort`);`/api` 与 `/health` 代理到 `VITE_API_TARGET`(默认 `http://127.0.0.1:8000`);品牌字符串从仓库根 `brand.json` 注入;pdf.js 资源复制到 `/pdfjs/`;three/mermaid/pdfjs/codemirror/d3 各拆 vendor chunk;开发 CSP 以响应头注入。`npm run build` = `tsc --noEmit && vite build` 产出到 `dist/`;`npm run preview` 服务构建产物。gateway 不服务 SPA;生产环境由外部静态服务器或反向代理承载。
+`vite.config.ts` — 别名 `@` → `./src`;开发服务器 `127.0.0.1:5173`(`VITE_PORT`、`strictPort`);`/api` 与 `/health` 代理到 `VITE_API_TARGET`(默认 `http://127.0.0.1:8000`);品牌字符串从仓库根 `brand.json` 注入;pdf.js 资源复制到 `/pdfjs/`;three/mermaid/pdfjs/codemirror/d3 各拆 vendor chunk;开发 CSP 以响应头注入,开发服务器会放宽产物 meta CSP 的 `script-src` 以容纳其注入的 React Fast Refresh 前导脚本。`npm run build` = `tsc --noEmit && vite build` 产出到 `dist/`;`npm run preview` 服务构建产物。gateway 不服务 SPA;生产环境由外部静态服务器或反向代理承载。

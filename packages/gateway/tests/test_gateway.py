@@ -491,10 +491,13 @@ class TestSecurityHeaders:
     def test_csp_and_nosniff_set_on_every_response(self, client) -> None:
         r = client.get("/health")
         csp = r.headers["Content-Security-Policy"]
-        # Runner requirements stay allowed; the injection defense remains the
-        # markdown sanitize allowlist (see rest.py _security_headers)
-        assert "script-src 'self' 'unsafe-eval' blob:" in csp
-        assert "worker-src 'self' blob:" in csp
+        # No inline script and no eval: the fenced-code runner executes in a
+        # worker of its own, so the API responses need neither (see rest.py
+        # _security_headers)
+        assert "script-src 'self'" in csp
+        assert "worker-src 'self'" in csp
+        assert "unsafe-eval" not in csp
+        assert "unsafe-inline" not in csp
         # Plugin content and document-base fallbacks are closed
         assert "object-src 'none'" in csp
         assert "base-uri 'self'" in csp
