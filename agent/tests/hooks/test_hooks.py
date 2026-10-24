@@ -8,6 +8,7 @@ import logging
 from types import SimpleNamespace
 
 from agent.hooks import HOOK_POINTS, HookLoader, HookRegistry
+from agent.hooks.loader import invalid_on_reason
 from agent.llm import FakeLLM, ToolCall
 from agent.main import build_agent
 from agent.policy import PolicyEngine
@@ -162,6 +163,30 @@ class TestLoaderOnValidation:
                 assert count == 0
                 assert hooks.registered() == {} and hooks.event_patterns == ()
         assert "must be a string" in caplog.text
+
+    def test_on_value_cannot_forge_log_lines(self, tmp_path, caplog) -> None:
+        """A crafted on value is reported on one line: the hook file cannot inject line breaks
+        into the log record that reports why it was skipped."""
+        with caplog.at_level(logging.WARNING, logger="agent.hooks.loader"):
+            hooks, count = self._load_file(tmp_path, {"on": {"k": "a\nb"}, "enabled": True})
+        assert count == 0
+        assert hooks.registered() == {} and hooks.event_patterns == ()
+        assert "must be a string" in caplog.text
+        assert all("\n" not in record.getMessage() for record in caplog.records)
+
+    def test_reason_is_always_a_single_line(self) -> None:
+        """The reason carries no line break whatever the rejected value looks like: it is
+        reported to the log and to the reload report, where a second line would read as a
+        separate entry."""
+
+        class MultilineRepr:
+            def __repr__(self) -> str:
+                return "a\nb"
+
+        reason = invalid_on_reason(MultilineRepr())
+        assert reason is not None
+        assert "\n" not in reason and "\r" not in reason
+        assert "must be a string" in reason
 
     def test_valid_wildcard_pattern_still_loads(self, tmp_path) -> None:
         """A name-qualified wildcard (note.*) is still a valid event pattern; only a bare "*" is refused."""

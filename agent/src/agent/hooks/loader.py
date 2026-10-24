@@ -29,7 +29,10 @@ def invalid_on_reason(on: object) -> str | None:
     load_file rejection and UserHookReloader.reload's skipped reporting so the two cannot drift.
     """
     if not isinstance(on, str):
-        return f"on must be a string, got {on!r}"
+        # The value comes from a hook file on disk: flatten it to a single line so a
+        # crafted file cannot forge extra log lines when the reason is reported.
+        safe = repr(on).replace("\r", "").replace("\n", "")
+        return f"on must be a string, got {safe}"
     if not on:
         return "on is empty or missing"
     if on == "*":
