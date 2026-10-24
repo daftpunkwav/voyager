@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   git hash-object docs/subsystems/gateway.md docs/subsystems/gateway.zh.md
-docs/subsystems/gateway.md: 0d376081193ef4b4f233d3c6fb49efa0decd4a90
-docs/subsystems/gateway.zh.md: 71a34fcfd04b45b6c343e3d4cbae379de8e0231a
+docs/subsystems/gateway.md: 619e7162b66c66d0e691b6e4069ec92c7f4e86f8
+docs/subsystems/gateway.zh.md: aaeb4659bd4bcdcb15dc52ec1410efbb7c842c96

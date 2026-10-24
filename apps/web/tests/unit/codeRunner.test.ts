@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { formatLogArgs, truncateText } from '@/lib/code-runner/output';
 import { getRunner, isRunnable, normalizeLanguageId } from '@/lib/code-runner/registry';
 import { buildWorkerSource, formatWorkerError } from '@/lib/code-runner/javascriptRunner';
-import { formatSkulptError } from '@/lib/code-runner/pythonRunner';
+import { buildPythonWorkerSource, formatSkulptError } from '@/lib/code-runner/pythonRunner';
 import { transpileTypeScript } from '@/lib/code-runner/typescriptRunner';
 
 describe('registry language mapping', () => {
@@ -91,6 +91,18 @@ describe('worker source and error formatting', () => {
     expect(formatWorkerError(err)).toContain('Error: boom');
     expect(formatWorkerError('plain')).toBe('plain');
     expect(formatWorkerError(null)).toBe('Unknown error');
+  });
+});
+
+describe('python worker driver', () => {
+  it('loads the vendored engine in the worker and reports the run back', () => {
+    const src = buildPythonWorkerSource();
+    expect(src).toContain("importScripts('/vendor/skulpt/skulpt.min.js')");
+    expect(src).toContain("importScripts('/vendor/skulpt/skulpt-stdlib.js')");
+    expect(src).toContain('importMainWithBody');
+    expect(src).toContain('postMessage');
+    // The engine never runs in the page: the driver only lives in the worker.
+    expect(src).not.toContain('document.');
   });
 });
 

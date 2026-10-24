@@ -10,7 +10,7 @@ Source: `packages/gateway/src/gateway/`
 
 `rest.py` — `create_app(mounts, db_path, bus, lifespan, issuer, quota, audit, rate_limit_per_minute=600, sse_max_connections=8, ..., uploads_workspace=None)`:
 
-- Security-header middleware: CSP mirroring the frontend's `index.html` meta CSP (`frame-ancestors 'none'`, `script-src 'self' 'unsafe-eval' blob:`, `worker-src 'self' blob:`), `X-Content-Type-Options: nosniff`.
+- Security-header middleware: CSP mirroring the frontend's `index.html` meta CSP (`frame-ancestors 'none'`, `script-src 'self'`, `worker-src 'self'`), `X-Content-Type-Options: nosniff`.
 - Actor middleware: `platform_actor.resolve_http_actor` resolves Bearer/cookie callers; unauthenticated loopback requests act as `LOCAL_USER`; unauthenticated non-loopback requests get 401.
 - Origin/Host guard middleware: the `Host` header must name this machine (loopback/private IP literals or the `localhost` family — the DNS-rebinding defense), and a browser-attached `Origin` must be a loopback origin (CSRF defense); violations get 403 `GATEWAY.FORBIDDEN`. Non-browser clients send no `Origin` and are unaffected.
 - `ServiceError` and `RequestValidationError` handlers render the `ErrorEnvelope` (`{error: {code, message, hint, trace_id}}`) — malformed typed query parameters land in the same envelope as every other client error.

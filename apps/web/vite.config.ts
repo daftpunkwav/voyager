@@ -19,12 +19,13 @@ const brand = JSON.parse(readFileSync(path.resolve(__dirname, '../../brand.json'
   storage: { uiStore: string; legacy: { uiStore: string } };
 };
 
-// The shipped policy (apps/web/index.html) allows no inline script. The dev
-// server relaxes that one directive: the React Fast Refresh preamble that
-// @vitejs/plugin-react injects into <head> is an inline <script type="module">.
-// The dev response header below carries the same relaxed directive.
-const CSP_SCRIPT_SRC = "script-src 'self' 'unsafe-eval' blob:;";
-const CSP_SCRIPT_SRC_DEV = "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:;";
+// The shipped policy (apps/web/index.html) allows no inline script and no
+// eval in the page. The dev server relaxes script-src for the React Fast
+// Refresh preamble it injects into <head> (an inline <script type="module">).
+// The dev response header below additionally allows eval, because the
+// code-runner worker takes its policy from that header.
+const CSP_SCRIPT_SRC = "script-src 'self';";
+const CSP_SCRIPT_SRC_DEV = "script-src 'self' 'unsafe-inline';";
 
 export default defineConfig({
   define: {
@@ -69,8 +70,8 @@ export default defineConfig({
     headers: {
       'Content-Security-Policy': [
         "default-src 'self'",
-        CSP_SCRIPT_SRC_DEV,
-        "worker-src 'self' blob:",
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+        "worker-src 'self'",
         "style-src 'self' 'unsafe-inline'",
         "font-src 'self' data:",
         "img-src 'self' data: https:",

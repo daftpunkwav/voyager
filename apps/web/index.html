@@ -23,13 +23,14 @@
     <!--
       Content Security Policy (§4.2 security):
       - default-src 'self'   resources are same-origin by default
-      - script-src 'self' 'unsafe-eval' blob:   no inline script runs: the
-        first-paint sync ships as /theme-init.js. 'unsafe-eval' + blob: are
-        required by the fenced code runner (skulpt compiles python via eval;
-        js/ts snippets run in a blob: worker via new Function). Injection stays
+      - script-src 'self'   no inline script and no eval in the page: the
+        first-paint sync ships as /theme-init.js, and the fenced code runner
+        executes in /code-runner-worker.js, a worker of its own whose policy
+        comes with its response rather than with the page. Injection stays
         guarded by the markdown sanitize allowlist, not by script-src.
         The dev server adds 'unsafe-inline' to this directive for the React
         Fast Refresh preamble it injects (see vite.config.ts).
+      - worker-src 'self'   the code-runner worker is served from the app
       - style-src 'self' 'unsafe-inline'   CSS allows inline (liquid-glass dynamic tokens); fonts are self-hosted via @fontsource-variable
       - font-src 'self' data:   self-hosted woff2 + embedded fonts
       - img-src 'self' data: https:   avatars/icons/external images
@@ -45,8 +46,8 @@
       http-equiv="Content-Security-Policy"
       content="
         default-src 'self';
-        script-src 'self' 'unsafe-eval' blob:;
-        worker-src 'self' blob:;
+        script-src 'self';
+        worker-src 'self';
         object-src 'none';
         style-src 'self' 'unsafe-inline';
         font-src 'self' data:;
