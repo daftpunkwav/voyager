@@ -7,45 +7,52 @@
  * configured brand storage keys.
  */
 (function () {
-  try {
+  /** Persisted UI store state, or null when nothing is stored yet. */
+  function readStoredState() {
     var script = document.currentScript;
-    var storeKey = script ? script.getAttribute('data-ui-store-key') : null;
-    var legacyStoreKey = script ? script.getAttribute('data-ui-store-legacy-key') : null;
-    var stored = storeKey ? localStorage.getItem(storeKey) : null;
-    if (!stored && legacyStoreKey) stored = localStorage.getItem(legacyStoreKey);
+    if (!script) return null;
+    var stored = localStorage.getItem(script.getAttribute('data-ui-store-key'));
+    if (!stored) {
+      stored = localStorage.getItem(script.getAttribute('data-ui-store-legacy-key'));
+    }
+    if (!stored) return null;
+    return JSON.parse(stored).state;
+  }
 
-    var theme = stored ? JSON.parse(stored).state?.theme : null;
+  /** 'dark' or 'light': the stored choice, or the system preference. */
+  function resolveTheme(state) {
+    var theme = state ? state.theme : null;
     if (theme === 'system' || !theme) {
       theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
-    document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+    return theme === 'dark' ? 'dark' : 'light';
+  }
 
-    // UI language first-paint sync: read the locale choice persisted by uiStore and set html[lang]
-    // (screen readers depend on it; for 'system'/missing, match via navigator with a zh-CN fallback, matching the backend SSOT default)
-    var state = stored ? JSON.parse(stored).state : null;
+  /** 'zh-CN', 'en', or the first browser language that matches. */
+  function resolveLocale(state) {
     var locale = state ? state.locale : null;
     if (locale !== 'zh-CN' && locale !== 'en' && locale !== 'system') {
-      locale = 'zh-CN';
+      return 'zh-CN';
     }
-    if (locale === 'system') {
-      var langs =
-        navigator.languages && navigator.languages.length
-          ? navigator.languages
-          : [navigator.language];
-      locale = 'zh-CN';
-      for (var i = 0; i < langs.length; i++) {
-        var tag = (langs[i] || '').toLowerCase();
-        if (tag.indexOf('en') === 0) {
-          locale = 'en';
-          break;
-        }
-        if (tag.indexOf('zh') === 0) {
-          locale = 'zh-CN';
-          break;
-        }
-      }
+    if (locale !== 'system') {
+      return locale;
     }
-    document.documentElement.setAttribute('lang', locale);
+    var langs =
+      navigator.languages && navigator.languages.length
+        ? navigator.languages
+        : [navigator.language];
+    for (var i = 0; i < langs.length; i++) {
+      var tag = (langs[i] || '').toLowerCase();
+      if (tag.indexOf('en') === 0) return 'en';
+      if (tag.indexOf('zh') === 0) return 'zh-CN';
+    }
+    return 'zh-CN';
+  }
+
+  try {
+    var state = readStoredState();
+    document.documentElement.setAttribute('data-theme', resolveTheme(state));
+    document.documentElement.setAttribute('lang', resolveLocale(state));
   } catch (e) {
     // keep the default light + zh-CN in private mode / when localStorage is unavailable
   }
