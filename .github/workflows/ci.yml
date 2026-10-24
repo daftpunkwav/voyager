@@ -116,8 +116,12 @@ jobs:
         with:
           enable-cache: true
 
+      # --locked: install exactly the resolved uv.lock versions and fail when the
+      # lockfile is out of date with pyproject.toml instead of silently
+      # re-resolving. --no-build: never run a source distribution build backend,
+      # so no package script executes during installation.
       - name: Install Python workspace
-        run: uv sync
+        run: uv sync --locked --no-build
 
       - name: ruff format/check
         run: npm run lint:py
@@ -148,8 +152,12 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
+      # --ignore-scripts: the lockfile pins every package version, and no
+      # dependency in this workspace needs a lifecycle script to build or to
+      # run (the browser binary is downloaded by an explicit step below), so
+      # package install scripts stay disabled.
       - name: Install Node workspace
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: tsc
         run: npm run typecheck:web
@@ -216,18 +224,23 @@ jobs:
           enable-cache: true
 
       - name: Install Node workspace
-        run: npm ci
+        run: npm ci --ignore-scripts
 
+      # The Playwright CLI comes from the installed workspace, so the browser
+      # build matches the version the lockfile pinned; npx would resolve and
+      # download a package on its own.
       - name: Install chromium
-        run: npx playwright install --with-deps chromium
+        run: node_modules/.bin/playwright install --with-deps chromium
+
+      # Same pinning as the gate job: the lockfile decides the versions and no
+      # package build script runs during installation.
+      - name: Install Python workspace
+        run: uv sync --locked --no-build
 
       # Backend on a fresh data dir (the runner has none, so uvicorn's
       # factory path just creates it); LLM calls fail by design and the
       # specs tolerate that. The wait loop prints the log when it never
       # turns healthy.
-      - name: Install Python workspace
-        run: uv sync
-
       - name: Start backend on :8000
         env:
           # Throwaway key material for the per-run scratch data dir only —
@@ -237,7 +250,7 @@ jobs:
           # checkov:skip=CKV_SECRET_6:scratch placeholder, not real key material
           SECRETS_ENCRYPTION_KEY: e2e-scratch-only-never-a-real-key
         run: |
-          uv run uvicorn host.assemble:build --factory --host 127.0.0.1 --port 8000 > backend.log 2>&1 &
+          uv run --locked --no-build uvicorn host.assemble:build --factory --host 127.0.0.1 --port 8000 > backend.log 2>&1 &
           for i in $(seq 1 60); do
             if curl -sf http://127.0.0.1:8000/health > /dev/null; then
               echo "backend healthy after ~$((i * 2))s"; exit 0
