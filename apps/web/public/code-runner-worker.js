@@ -43,6 +43,26 @@
     );
   }
 
+  /**
+   * Copy the native constructor's own static members onto the replacement, so
+   * a snippet still reads the documented constants (WebSocket.OPEN and the
+   * like) instead of finding them undefined.
+   */
+  function copyStaticMembers(replacement, native) {
+    var names = Object.getOwnPropertyNames(native);
+    for (var i = 0; i < names.length; i++) {
+      var name = names[i];
+      if (name === 'prototype' || name === 'length' || name === 'name') continue;
+      var descriptor = Object.getOwnPropertyDescriptor(native, name);
+      if (!descriptor) continue;
+      try {
+        Object.defineProperty(replacement, name, descriptor);
+      } catch (e) {
+        /* a member the runtime refuses to copy stays out */
+      }
+    }
+  }
+
   if (typeof self.fetch === 'function') {
     var nativeFetch = self.fetch;
     self.fetch = function (input, init) {
@@ -66,6 +86,7 @@
       return new NativeWebSocket(url, protocols);
     };
     self.WebSocket.prototype = NativeWebSocket.prototype;
+    copyStaticMembers(self.WebSocket, NativeWebSocket);
   }
 
   if (typeof self.EventSource === 'function') {
@@ -75,6 +96,7 @@
       return new NativeEventSource(url, init);
     };
     self.EventSource.prototype = NativeEventSource.prototype;
+    copyStaticMembers(self.EventSource, NativeEventSource);
   }
 
   // The driver loads the vendored engine from this origin, so the same limit
