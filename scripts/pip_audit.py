@@ -3,8 +3,9 @@
 pip-audit cannot run against a uv workspace directly (it rejects the
 multi-package layout), so the scan targets the lockfile resolution: `uv
 export` writes a flat requirements.txt (workspace members and the root
-project excluded) to a temp file, and pip-audit reads that. The audit tool
-itself runs via `uvx` -- ephemeral, no dev-group footprint. Exit code
+project excluded) to a temp file, and pip-audit reads that. The export
+reads the committed lockfile as it is, and the audit tool runs via `uvx`
+at an exact version -- ephemeral, no dev-group footprint. Exit code
 propagates: nonzero when a known vulnerability is found.
 
 Run: npm run audit:py
@@ -16,6 +17,9 @@ import subprocess  # nosec B404  # pip-audit invocation is the purpose of this s
 import sys
 import tempfile
 from pathlib import Path
+
+# Exact version of the audit tool. Nothing tracks it, so bump it deliberately.
+PIP_AUDIT_VERSION = "2.10.1"
 
 
 def main() -> int:
@@ -31,6 +35,7 @@ def main() -> int:
                 "--no-hashes",
                 "--no-emit-project",
                 "--no-emit-workspace",
+                "--locked",
                 "-o",
                 str(reqs),
             ],
@@ -39,7 +44,7 @@ def main() -> int:
         if export.returncode != 0:
             return export.returncode
         audit = subprocess.run(  # nosec B603 B607  # constant argv, dev script
-            ["uvx", "pip-audit", "-r", str(reqs)], check=False
+            ["uvx", f"pip-audit=={PIP_AUDIT_VERSION}", "-r", str(reqs)], check=False
         )
         return audit.returncode
     finally:

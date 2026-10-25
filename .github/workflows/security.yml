@@ -87,8 +87,8 @@ jobs:
         with:
           enable-cache: true
 
-      # uv export reads the lockfile and uvx fetches pip-audit ephemerally;
-      # no workspace sync required.
+      # uv export reads the committed lockfile as it is and uvx fetches the
+      # pinned audit tool ephemerally; no workspace sync required.
       - name: pip-audit
         run: npm run audit:py
 
