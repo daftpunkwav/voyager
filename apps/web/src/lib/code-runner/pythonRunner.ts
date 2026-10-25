@@ -23,15 +23,16 @@ import {
   type ExecutionResult,
 } from './types';
 
-/** Error shape the worker reports back; skulpt errors are plain objects. */
+/** Failure the worker reports back: a plain, clone-safe description. */
 interface PythonWorkerError {
   tp$name?: unknown;
-  args?: { v?: { v?: unknown }[] };
-  name?: unknown;
   message?: unknown;
 }
 
 const VENDOR_BASE = '/vendor/skulpt';
+
+/** Extra time the worker may spend loading the engine before a run gives up. */
+const ENGINE_LOAD_GRACE_MS = 5000;
 
 /** Cached worker promise: the engine loads once inside the worker. */
 let workerPromise: Promise<Worker> | null = null;
@@ -59,18 +60,36 @@ function loadEngine() {
   }
   return engine;
 }
+// Skulpt exceptions carry their type on a prototype and hold values that do not
+// survive structured cloning, so the worker reports a plain description of the
+// failure instead of the exception itself.
+function describeError(err) {
+  if (!err || typeof err !== 'object') {
+    return { tp$name: 'Error', message: String(err) };
+  }
+  var name = typeof err.tp$name === 'string' && err.tp$name ? err.tp$name : 'Error';
+  var detail = '';
+  try {
+    var first = err.args && err.args.v && err.args.v[0] && err.args.v[0].v;
+    if (typeof first === 'string') detail = first;
+  } catch (e) {
+    detail = '';
+  }
+  if (!detail && typeof err.message === 'string') detail = err.message;
+  return { tp$name: name, message: detail };
+}
 self.onmessage = async function (event) {
   var data = event.data || {};
   var source = typeof data.source === 'string' ? data.source : '';
-  var limit = typeof data.maxOutputChars === 'number' ? data.maxOutputChars : 0;
-  var budget = typeof data.timeoutMs === 'number' ? data.timeoutMs : 0;
+  var limit = typeof data.maxOutputChars === 'number' ? data.maxOutputChars : ${DEFAULT_MAX_OUTPUT_CHARS};
+  var budget = typeof data.timeoutMs === 'number' ? data.timeoutMs : ${DEFAULT_TIMEOUT_MS};
   var captured = '';
   try {
     var skulpt = loadEngine();
     skulpt.configure({
       output: function (text) {
         captured += text;
-        if (limit > 0 && captured.length > limit + 1024) captured = captured.slice(0, limit + 1024);
+        if (captured.length > limit + 1024) captured = captured.slice(0, limit + 1024);
       },
       read: function (filename) {
         var files = skulpt.builtinFiles && skulpt.builtinFiles.files;
@@ -87,10 +106,20 @@ self.onmessage = async function (event) {
     });
     self.postMessage({ ok: true, output: captured });
   } catch (err) {
-    self.postMessage({ ok: false, output: captured, error: err });
+    self.postMessage({ ok: false, output: captured, error: describeError(err) });
   }
 };
 `;
+}
+
+/** Drop a worker that cannot serve runs any more (crashed, or stuck loading). */
+function discardWorker(worker: Worker): void {
+  workerPromise = null;
+  try {
+    worker.terminate();
+  } catch {
+    /* already gone */
+  }
 }
 
 /** Load the runner worker once; rejects when it cannot be started. */
@@ -99,14 +128,7 @@ function loadWorker(): Promise<Worker> {
     .then(() => {
       const worker = createRunnerWorker(buildPythonWorkerSource());
       // A worker that dies cannot serve later runs; drop it so the next run starts fresh.
-      worker.addEventListener('error', () => {
-        workerPromise = null;
-        try {
-          worker.terminate();
-        } catch {
-          /* already gone */
-        }
-      });
+      worker.addEventListener('error', () => discardWorker(worker));
       return worker;
     })
     .catch((err: unknown) => {
@@ -159,28 +181,37 @@ function runInWorker(
   maxChars: number
 ): Promise<PythonRunOutcome> {
   return new Promise((resolve) => {
+    let settled = false;
+    const finish = (outcome: PythonRunOutcome) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      worker.removeEventListener('message', onMessage);
+      worker.removeEventListener('error', onError);
+      resolve(outcome);
+    };
     const onMessage = (event: MessageEvent) => {
-      cleanup();
       const data = (event.data ?? {}) as {
         output?: unknown;
         error?: unknown;
       };
-      resolve({
+      finish({
         output: typeof data.output === 'string' ? data.output : '',
         error: data.error as PythonWorkerError | undefined,
       });
     };
     const onError = (event: ErrorEvent) => {
-      cleanup();
-      resolve({
+      finish({
         output: '',
-        error: { name: 'Error', message: event.message || 'The Python worker failed.' },
+        error: { tp$name: 'Error', message: event.message || 'The Python worker failed.' },
       });
     };
-    const cleanup = () => {
-      worker.removeEventListener('message', onMessage);
-      worker.removeEventListener('error', onError);
-    };
+    // The engine load blocks the worker, so the run needs a deadline of its own:
+    // skulpt's execLimit bounds the execution, not the load.
+    const watchdog = setTimeout(() => {
+      discardWorker(worker);
+      finish({ output: '', error: { tp$name: 'TimeLimitError', message: '' } });
+    }, timeoutMs + ENGINE_LOAD_GRACE_MS);
     worker.addEventListener('message', onMessage);
     worker.addEventListener('error', onError);
     worker.postMessage({ source, timeoutMs, maxOutputChars: maxChars });
@@ -217,7 +248,7 @@ export function runPython(
     return {
       status: cancelled && partial.status !== 'unavailable' ? 'cancelled' : partial.status,
       output: out.text,
-      error: partial.error,
+      error: cancelled && partial.status !== 'unavailable' ? 'Execution cancelled.' : partial.error,
       durationMs: Date.now() - startedAt,
       truncated: out.truncated,
     };
@@ -250,11 +281,12 @@ export function runPython(
     }
     const message = formatSkulptError(outcome.error);
     const timedOut =
-      outcome.error.tp$name === 'TimeLimitError' || /TimeLimit|timed out/i.test(message);
+      outcome.error.tp$name === 'TimeLimitError' ||
+      /TimeLimit|timed out|run time limit/i.test(message);
     return settleResult({
       status: timedOut ? 'timeout' : 'error',
       output: outcome.output,
-      error: message,
+      error: timedOut ? `Execution timed out after ${timeoutMs} ms.` : message,
     });
   })();
   runTail = run.catch(() => {});
