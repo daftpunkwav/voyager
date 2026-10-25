@@ -1,19 +1,6 @@
 <!doctype html>
 <html lang="zh-CN" data-theme="light">
   <head>
-    <!--
-      Theme first-paint sync (§10.11):
-      before React hydrates, set data-theme from the localStorage-persisted theme or the system preference,
-      avoiding a first-paint flash in system mode.
-      The script lives in /theme-init.js (a classic script, so it still blocks parsing and runs
-      before the first paint) instead of an inline block, so the shipped policy needs no
-      'unsafe-inline'; the store keys travel with the script tag as data attributes.
-    -->
-    <script
-      src="/theme-init.js"
-      data-ui-store-key="%UI_STORE_KEY%"
-      data-ui-store-legacy-key="%UI_STORE_LEGACY_KEY%"
-    ></script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
@@ -57,6 +44,19 @@
         form-action 'self';
       "
     />
+    <!--
+      Theme first-paint sync (§10.11):
+      before React hydrates, set data-theme from the localStorage-persisted theme or the system preference,
+      avoiding a first-paint flash in system mode.
+      The script lives in /theme-init.js (a classic script, so it still blocks parsing and runs
+      before the first paint) instead of an inline block, so the shipped policy needs no
+      'unsafe-inline'; the store keys travel with the script tag as data attributes.
+    -->
+    <script
+      src="/theme-init.js"
+      data-ui-store-key="%UI_STORE_KEY%"
+      data-ui-store-legacy-key="%UI_STORE_LEGACY_KEY%"
+    ></script>
     <title>%PRODUCT_NAME%</title>
   </head>
   <body>
