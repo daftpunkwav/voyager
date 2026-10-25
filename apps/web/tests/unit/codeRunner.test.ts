@@ -9,8 +9,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import { formatLogArgs, truncateText } from '@/lib/code-runner/output';
 import { getRunner, isRunnable, normalizeLanguageId } from '@/lib/code-runner/registry';
-import { buildWorkerSource, formatWorkerError } from '@/lib/code-runner/javascriptRunner';
-import { buildPythonWorkerSource, formatSkulptError } from '@/lib/code-runner/pythonRunner';
+import {
+  buildWorkerSource,
+  formatWorkerError,
+  runJavascript,
+} from '@/lib/code-runner/javascriptRunner';
+import {
+  buildPythonWorkerSource,
+  formatSkulptError,
+  runPython,
+} from '@/lib/code-runner/pythonRunner';
 import { transpileTypeScript } from '@/lib/code-runner/typescriptRunner';
 
 describe('registry language mapping', () => {
@@ -170,6 +178,119 @@ describe('worker driver execution', () => {
     expect(seen.source).toBe('print(1)');
     // The failure is described, not passed through: the exception itself does not clone.
     expect(scope.messages[0]).toMatchObject({ ok: false, error: { tp$name: 'ValueError' } });
+  });
+});
+
+/**
+ * Stand-in for the worker the runners create: it installs the driver the page
+ * sends and forwards the driver's reports back, so the runner paths can run
+ * where there is no Worker implementation.
+ */
+function installFakeWorker(options?: { engine?: unknown }): { urls: string[] } {
+  const urls: string[] = [];
+  class FakeWorker {
+    onmessage: ((event: { data: unknown }) => void) | null = null;
+    onerror: ((event: { message: string }) => void) | null = null;
+    private scope: WorkerScope | null = null;
+    private readonly listeners = new Map<string, Set<(event: unknown) => void>>();
+
+    constructor(url: string) {
+      urls.push(url);
+    }
+
+    addEventListener(type: string, listener: (event: unknown) => void): void {
+      const set = this.listeners.get(type) ?? new Set();
+      set.add(listener);
+      this.listeners.set(type, set);
+    }
+
+    removeEventListener(type: string, listener: (event: unknown) => void): void {
+      this.listeners.get(type)?.delete(listener);
+    }
+
+    private emit(type: string, event: unknown): void {
+      for (const listener of this.listeners.get(type) ?? []) listener(event);
+    }
+
+    postMessage(message: unknown): void {
+      const data = (message ?? {}) as { driver?: string; source?: string };
+      if (typeof data.driver === 'string') {
+        const scope = createWorkerScope(data.driver);
+        if (options?.engine) scope.Sk = options.engine;
+        scope.postMessage = (report: unknown) => {
+          this.onmessage?.({ data: report });
+          this.emit('message', { data: report });
+        };
+        this.scope = scope;
+        return;
+      }
+      void this.scope?.onmessage?.({ data });
+    }
+
+    terminate(): void {}
+  }
+  vi.stubGlobal('Worker', FakeWorker);
+  return { urls };
+}
+
+/** Engine stand-in for the skulpt surface the Python driver drives. */
+function fakeSkulpt(): unknown {
+  let output: (text: string) => void = () => {};
+  return {
+    configure: (options: { output: (text: string) => void }) => {
+      output = options.output;
+    },
+    builtinFiles: { files: {} },
+    python3: {},
+    misceval: { asyncToPromise: async (fn: () => unknown) => fn() },
+    importMainWithBody: (_name: string, _dump: boolean, code: string) => {
+      if (code.includes('raise')) {
+        throw Object.assign(new Error('run failed'), { tp$name: 'ValueError' });
+      }
+      output('through the worker\n');
+    },
+  };
+}
+
+describe('runner execution', () => {
+  it('runs a JavaScript snippet in the worker and reports what it printed', async () => {
+    const { urls } = installFakeWorker();
+    try {
+      const handle = runJavascript("console.log('through the worker');");
+      const result = await handle.done;
+      expect(result.status).toBe('ok');
+      expect(result.output).toContain('through the worker');
+      expect(urls).toEqual(['/code-runner-worker.js']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('runs a Python snippet in the worker and reports what it printed', async () => {
+    const { urls } = installFakeWorker({ engine: fakeSkulpt() });
+    vi.stubGlobal('importScripts', () => {});
+    try {
+      const handle = runPython("print('through the worker')");
+      const result = await handle.done;
+      expect(result.status).toBe('ok');
+      expect(result.output).toContain('through the worker');
+      expect(urls).toEqual(['/code-runner-worker.js']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('reports a Python failure with the error the engine raised', async () => {
+    installFakeWorker({ engine: fakeSkulpt() });
+    vi.stubGlobal('importScripts', () => {});
+    try {
+      const handle = runPython('raise ValueError("run failed")');
+      const result = await handle.done;
+      expect(result.status).toBe('error');
+      expect(result.error).toContain('ValueError');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

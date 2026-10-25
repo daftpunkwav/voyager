@@ -493,9 +493,10 @@ class TestSecurityHeaders:
         csp = r.headers["Content-Security-Policy"]
         # No inline script and no eval: the fenced-code runner executes in a
         # worker of its own, so the API responses need neither (see rest.py
-        # _security_headers)
-        assert "script-src 'self'" in csp
-        assert "worker-src 'self'" in csp
+        # _security_headers). The directives are matched whole, so a relaxed
+        # variant (blob workers, unsafe-*) would not pass.
+        assert "script-src 'self';" in csp
+        assert "worker-src 'self';" in csp
         assert "unsafe-eval" not in csp
         assert "unsafe-inline" not in csp
         # Plugin content and document-base fallbacks are closed
