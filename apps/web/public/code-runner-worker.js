@@ -17,9 +17,19 @@
  * reads to a third party.
  */
 (function () {
+  // A WebSocket URL carries its own scheme, so the origin check maps it back
+  // to the page scheme the way the WebSocket standard does.
+  var PAGE_SCHEMES = { 'ws:': 'http:', 'wss:': 'https:' };
+
   function isSameOrigin(url) {
     try {
-      return new URL(url, self.location.href).origin === self.location.origin;
+      var target = new URL(url, self.location.href);
+      var targetScheme = PAGE_SCHEMES[target.protocol];
+      if (targetScheme) {
+        var pageScheme = PAGE_SCHEMES[self.location.protocol] || self.location.protocol;
+        return targetScheme === pageScheme && target.host === self.location.host;
+      }
+      return target.origin === self.location.origin;
     } catch (e) {
       return false;
     }
