@@ -6,7 +6,7 @@
  * themselves are browser-bound and covered by the component-level stubs.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { formatLogArgs, truncateText } from '@/lib/code-runner/output';
 import { getRunner, isRunnable, normalizeLanguageId } from '@/lib/code-runner/registry';
 import { buildWorkerSource, formatWorkerError } from '@/lib/code-runner/javascriptRunner';
@@ -103,6 +103,73 @@ describe('python worker driver', () => {
     expect(src).toContain('postMessage');
     // The engine never runs in the page: the driver only lives in the worker.
     expect(src).not.toContain('document.');
+  });
+});
+
+/** Stand-in for the worker global scope a driver runs in. */
+interface WorkerScope {
+  onmessage: ((event: { data: unknown }) => Promise<void>) | null;
+  postMessage: (message: unknown) => void;
+  messages: unknown[];
+  Sk?: unknown;
+}
+
+/** Install a driver source into a stand-in worker scope. */
+function createWorkerScope(driverSource: string): WorkerScope {
+  const scope: WorkerScope = {
+    onmessage: null,
+    postMessage: () => {},
+    messages: [],
+  };
+  scope.postMessage = (message: unknown) => {
+    scope.messages.push(message);
+  };
+  // The driver is a script that runs in the worker global scope.
+  const install = new Function('self', driverSource);
+  install(scope);
+  return scope;
+}
+
+describe('worker driver execution', () => {
+  it('runs the JavaScript driver and reports what the snippet printed', async () => {
+    const scope = createWorkerScope(buildWorkerSource());
+    expect(scope.onmessage).toBeTypeOf('function');
+    await scope.onmessage?.({ data: { source: "console.log('hello from the driver');" } });
+    expect(scope.messages).toHaveLength(1);
+    expect(scope.messages[0]).toMatchObject({
+      ok: true,
+      stdout: 'hello from the driver',
+    });
+  });
+
+  it('reports a failing snippet as an error instead of a result', async () => {
+    const scope = createWorkerScope(buildWorkerSource());
+    await scope.onmessage?.({ data: { source: "throw new Error('boom');" } });
+    expect(scope.messages[0]).toMatchObject({ ok: false });
+  });
+
+  it('runs the Python driver against the engine interface it expects', async () => {
+    const scope = createWorkerScope(buildPythonWorkerSource());
+    const seen: { source?: string; limit?: number } = {};
+    scope.Sk = {
+      configure: () => {},
+      builtinFiles: { files: {} },
+      python3: {},
+      misceval: { asyncToPromise: async (fn: () => unknown) => fn() },
+      importMainWithBody: (_name: string, _dump: boolean, code: string) => {
+        seen.source = code;
+        throw Object.assign(new Error('run failed'), { tp$name: 'ValueError' });
+      },
+    };
+    vi.stubGlobal('importScripts', () => {});
+    try {
+      await scope.onmessage?.({ data: { source: 'print(1)', maxOutputChars: 100 } });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(seen.source).toBe('print(1)');
+    // The failure is described, not passed through: the exception itself does not clone.
+    expect(scope.messages[0]).toMatchObject({ ok: false, error: { tp$name: 'ValueError' } });
   });
 });
 
