@@ -15,6 +15,17 @@ from agent.policy import PolicyEngine
 from agent.tools import AgentTool, Toolbelt
 
 
+class MultilineRepr:
+    """Rejected hook value whose representation carries a line break.
+
+    A JSON value never renders a raw line break (repr escapes it), so this stands
+    in for a value whose representation does.
+    """
+
+    def __repr__(self) -> str:
+        return "a\nb"
+
+
 def _belt(hooks: HookRegistry | None) -> Toolbelt:
     def echo(text: str = "") -> str:
         return f"echo:{text}"
@@ -164,11 +175,17 @@ class TestLoaderOnValidation:
                 assert hooks.registered() == {} and hooks.event_patterns == ()
         assert "must be a string" in caplog.text
 
-    def test_on_value_cannot_forge_log_lines(self, tmp_path, caplog) -> None:
-        """A crafted on value is reported on one line: the hook file cannot inject line breaks
-        into the log record that reports why it was skipped."""
+    def test_on_value_cannot_forge_log_lines(self, tmp_path, caplog, monkeypatch) -> None:
+        """A rejected hook is reported on one line: a value whose representation carries a line
+        break cannot turn one rejection into several log lines."""
+        # The JSON parser escapes line breaks, so the value that carries one is injected past
+        # the parser: the loader only ever sees the parsed object.
+        monkeypatch.setattr(
+            "agent.hooks.loader.read_hook_json",
+            lambda _path: {"on": MultilineRepr(), "enabled": True},
+        )
         with caplog.at_level(logging.WARNING, logger="agent.hooks.loader"):
-            hooks, count = self._load_file(tmp_path, {"on": {"k": "a\nb"}, "enabled": True})
+            hooks, count = self._load_file(tmp_path, {"on": "note.created", "enabled": True})
         assert count == 0
         assert hooks.registered() == {} and hooks.event_patterns == ()
         assert "must be a string" in caplog.text
@@ -178,11 +195,6 @@ class TestLoaderOnValidation:
         """The reason carries no line break whatever the rejected value looks like: it is
         reported to the log and to the reload report, where a second line would read as a
         separate entry."""
-
-        class MultilineRepr:
-            def __repr__(self) -> str:
-                return "a\nb"
-
         reason = invalid_on_reason(MultilineRepr())
         assert reason is not None
         assert "\n" not in reason and "\r" not in reason
