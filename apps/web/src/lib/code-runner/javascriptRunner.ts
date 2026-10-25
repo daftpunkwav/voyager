@@ -3,9 +3,10 @@
  * The snippet runs off the UI thread with a captured console; a main-thread
  * timer terminates the worker on timeout. User source travels via postMessage
  * (never interpolated into the worker template), and the worker performs no
- * imports, so it cannot pull remote code. Residual risk: the worker shares the
- * page origin and could fetch same-origin URLs; treat snippets as
- * semi-trusted, same as pasting them into devtools.
+ * imports, so it cannot pull remote code. The worker denies cross-origin
+ * requests (see public/code-runner-worker.js), so a snippet can read
+ * same-origin resources but cannot hand them to a third party; treat snippets
+ * as semi-trusted, same as pasting them into devtools.
  *
  * Module interop: snippets run inside `new Function`, so bare `import` /
  * `export` statements are syntax errors. The TypeScript runner lowers those
