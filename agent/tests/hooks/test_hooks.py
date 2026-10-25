@@ -8,10 +8,22 @@ import logging
 from types import SimpleNamespace
 
 from agent.hooks import HOOK_POINTS, HookLoader, HookRegistry
+from agent.hooks.loader import invalid_on_reason
 from agent.llm import FakeLLM, ToolCall
 from agent.main import build_agent
 from agent.policy import PolicyEngine
 from agent.tools import AgentTool, Toolbelt
+
+
+class MultilineRepr:
+    """Rejected hook value whose representation carries a line break.
+
+    A JSON value never renders a raw line break (repr escapes it), so this stands
+    in for a value whose representation does.
+    """
+
+    def __repr__(self) -> str:
+        return "a\nb"
 
 
 def _belt(hooks: HookRegistry | None) -> Toolbelt:
@@ -162,6 +174,31 @@ class TestLoaderOnValidation:
                 assert count == 0
                 assert hooks.registered() == {} and hooks.event_patterns == ()
         assert "must be a string" in caplog.text
+
+    def test_on_value_cannot_forge_log_lines(self, tmp_path, caplog, monkeypatch) -> None:
+        """A rejected hook is reported on one line: a value whose representation carries a line
+        break cannot turn one rejection into several log lines."""
+        # The JSON parser escapes line breaks, so the value that carries one is injected past
+        # the parser: the loader only ever sees the parsed object.
+        monkeypatch.setattr(
+            "agent.hooks.loader.read_hook_json",
+            lambda _path: {"on": MultilineRepr(), "enabled": True},
+        )
+        with caplog.at_level(logging.WARNING, logger="agent.hooks.loader"):
+            hooks, count = self._load_file(tmp_path, {"on": "note.created", "enabled": True})
+        assert count == 0
+        assert hooks.registered() == {} and hooks.event_patterns == ()
+        assert "must be a string" in caplog.text
+        assert all("\n" not in record.getMessage() for record in caplog.records)
+
+    def test_reason_is_always_a_single_line(self) -> None:
+        """The reason carries no line break whatever the rejected value looks like: it is
+        reported to the log and to the reload report, where a second line would read as a
+        separate entry."""
+        reason = invalid_on_reason(MultilineRepr())
+        assert reason is not None
+        assert "\n" not in reason and "\r" not in reason
+        assert "must be a string" in reason
 
     def test_valid_wildcard_pattern_still_loads(self, tmp_path) -> None:
         """A name-qualified wildcard (note.*) is still a valid event pattern; only a bare "*" is refused."""
