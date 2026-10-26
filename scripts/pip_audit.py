@@ -13,6 +13,13 @@ project itself: the audit tooling runs while the scan runs, so a
 vulnerability in it is reachable during the scan and has to be reported
 like a vulnerability in any other dependency.
 
+Both sets go into one audit run: the advisory database is queried once,
+so both sets are judged against the same snapshot and an advisory
+published between two runs cannot miss the set that was scanned first.
+pip-audit scans one version per package, so the two sets have to agree
+on the packages they share - a divergence fails the scan instead of
+leaving a version unscanned.
+
 The audit tool runs in a project of its own (tools/audit), which is
 excluded from the workspace: its environment holds the audit tool and the
 dependencies it pulls in, never the application dependencies and never
@@ -50,7 +57,6 @@ def main() -> int:
                 "export",
                 "--format",
                 "requirements-txt",
-                "--no-hashes",
                 "--no-emit-project",
                 "--no-emit-workspace",
                 "--locked",
@@ -75,7 +81,6 @@ def main() -> int:
                 AUDIT_GROUP,
                 "--format",
                 "requirements-txt",
-                "--no-hashes",
                 "--no-emit-project",
                 "--locked",
                 "-o",
@@ -88,10 +93,11 @@ def main() -> int:
 
         # The tool and its dependencies come from the audit project's
         # lockfile: the group installs exactly the versions that lockfile
-        # resolved, and nothing else. Both sets are scanned separately, so
-        # a package that both sets resolve never ends up pinned twice in
-        # one requirement file.
-        application_audit = subprocess.run(  # nosec B603 B607  # constant argv, dev script
+        # resolved, and nothing else. Both sets go into one run, so the
+        # advisory database is queried once. The exports carry the hashes
+        # of the lockfile, so the scan reads the pinned set as it is
+        # (--disable-pip): nothing is resolved while the scan runs.
+        audit = subprocess.run(  # nosec B603 B607  # constant argv, dev script
             [
                 "uv",
                 "run",
@@ -102,28 +108,15 @@ def main() -> int:
                 "--group",
                 AUDIT_GROUP,
                 "pip-audit",
+                "--disable-pip",
                 "-r",
                 str(application),
-            ],
-            check=False,
-        )
-        tooling_audit = subprocess.run(  # nosec B603 B607  # constant argv, dev script
-            [
-                "uv",
-                "run",
-                "--project",
-                AUDIT_PROJECT,
-                "--locked",
-                "--no-build",
-                "--group",
-                AUDIT_GROUP,
-                "pip-audit",
                 "-r",
                 str(tooling),
             ],
             check=False,
         )
-        return application_audit.returncode or tooling_audit.returncode
+        return audit.returncode
 
 
 if __name__ == "__main__":
