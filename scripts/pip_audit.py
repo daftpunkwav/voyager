@@ -107,7 +107,6 @@ def main() -> int:
                 AUDIT_PROJECT,
                 "--locked",
                 "--no-build",
-                "--no-build-isolation",
                 "--group",
                 AUDIT_GROUP,
                 "pip-audit",
