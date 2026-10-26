@@ -9,16 +9,18 @@ would leave the whole suite green. The policy is asserted here instead.
 
 import ast
 import json
+import tomllib
 from fnmatch import fnmatch
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[3]
 
 CI_WORKFLOW = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
 SECURITY_WORKFLOW = (ROOT / ".github/workflows/security.yml").read_text(encoding="utf-8")
 PACKAGE_JSON = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
-PYPROJECT = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-UV_LOCK = (ROOT / "uv.lock").read_text(encoding="utf-8")
+APP_PYPROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+APP_UV_LOCK = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
 AUDIT_SCRIPT = (ROOT / "scripts/pip_audit.py").read_text(encoding="utf-8")
 
 
@@ -57,6 +59,32 @@ def _triage_patterns(workflow: str) -> dict[str, str]:
     return patterns
 
 
+def _script_constants(script: str) -> dict[str, str]:
+    """The module level string constants of a script."""
+    constants: dict[str, str] = {}
+    for node in ast.parse(script).body:
+        if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Constant):
+            continue
+        if not isinstance(node.value.value, str):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                constants[target.id] = node.value.value
+    return constants
+
+
+def _element_text(element: ast.expr) -> str:
+    """The source text of one argv element.
+
+    A string literal is its content, every other expression is unparsed
+    (`str(reqs)`): two invocations are compared word by word, so the text
+    the script runs is what counts, not the value of a constant.
+    """
+    if isinstance(element, ast.Constant) and isinstance(element.value, str):
+        return element.value
+    return ast.unparse(element)
+
+
 def _uv_invocations(script: str, subcommand: str) -> list[list[str]]:
     """The argument vectors of the `uv <subcommand>` calls in the script.
 
@@ -75,14 +103,47 @@ def _uv_invocations(script: str, subcommand: str) -> list[list[str]]:
             continue
         if not node.args or not isinstance(node.args[0], ast.List):
             continue
-        argv = [
-            element.value
-            for element in node.args[0].elts
-            if isinstance(element, ast.Constant) and isinstance(element.value, str)
-        ]
+        argv = [_element_text(element) for element in node.args[0].elts]
         if len(argv) >= 2 and argv[0] == "uv" and argv[1] == subcommand:
             invocations.append(argv)
     return invocations
+
+
+def _flag_value(argv: list[str], flag: str) -> str | None:
+    """The word that follows a flag, or None when the flag is absent."""
+    for index, argument in enumerate(argv):
+        if argument == flag and index + 1 < len(argv):
+            return argv[index + 1]
+    return None
+
+
+def _audit_project() -> Path:
+    """The project the audit script runs the audit tool in.
+
+    The path comes from the script, so the policy is asserted on the
+    project that actually runs the tool.
+    """
+    runs = _uv_invocations(AUDIT_SCRIPT, "run")
+    assert runs, "the audit script no longer runs the audit tool"
+    project = _flag_value(runs[0], "--project")
+    assert project is not None, f"the audit tool no longer runs in its own project: {runs[0]}"
+    constants = _script_constants(AUDIT_SCRIPT)
+    return (ROOT / constants.get(project, project)).resolve()
+
+
+def _audit_manifest() -> dict[str, Any]:
+    """The manifest of the audit project."""
+    return tomllib.loads((_audit_project() / "pyproject.toml").read_text(encoding="utf-8"))
+
+
+def _audit_lock() -> dict[str, Any]:
+    """The committed lockfile of the audit project."""
+    return tomllib.loads((_audit_project() / "uv.lock").read_text(encoding="utf-8"))
+
+
+def _lock_packages(lock: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """The packages a lockfile resolves, name -> package entry."""
+    return {package["name"]: package for package in lock.get("package", [])}
 
 
 class TestLockedResolution:
@@ -135,11 +196,54 @@ class TestAuditTool:
             assert "pip-audit" in argv, argv
         assert "uvx" not in AUDIT_SCRIPT
 
+    def test_audit_tool_runs_in_an_isolated_project(self) -> None:
+        """The tool may not run in the root project: there the run would
+        install the application dependencies and the default dev group
+        next to it."""
+        runs = _uv_invocations(AUDIT_SCRIPT, "run")
+        assert runs, "the audit script no longer runs the audit tool"
+        for argv in runs:
+            assert _flag_value(argv, "--project") is not None, argv
+        project = _audit_project()
+        assert project != ROOT, project
+        # The audit project is excluded from the workspace, so it keeps its
+        # own lockfile instead of sharing the root one.
+        assert "tools/audit" in APP_PYPROJECT["tool"]["uv"]["workspace"]["exclude"]
+
     def test_audit_tool_is_covered_by_the_committed_lockfile(self) -> None:
-        assert 'name = "pip-audit"' in UV_LOCK
+        """The tool runs from the lockfile of its own project."""
+        assert "pip-audit" in _lock_packages(_audit_lock())
 
     def test_audit_tool_version_is_pinned_in_the_manifest(self) -> None:
-        assert "pip-audit==" in PYPROJECT
+        """The audit gate runs code, so the tool is pinned to an exact
+        version."""
+        pins = _audit_manifest()["dependency-groups"]["audit"]
+        assert any(pin.startswith("pip-audit==") for pin in pins), pins
+
+    def test_audit_tool_is_declared_in_the_audit_group(self) -> None:
+        """`uv run --group audit` finds the tool only in the audit group of
+        the project the script runs in, and the lockfile of that project
+        must resolve the group."""
+        manifest = _audit_manifest()
+        pins = manifest["dependency-groups"]["audit"]
+        matches = [pin for pin in pins if pin.startswith("pip-audit==")]
+        assert matches, f"the audit group declares no pinned audit tool: {pins}"
+        version = matches[0].removeprefix("pip-audit==")
+
+        packages = _lock_packages(_audit_lock())
+        assert "pip-audit" in packages, sorted(packages)
+        assert packages["pip-audit"]["version"] == version
+
+        # The locked group resolution names the same pin.
+        root = packages[manifest["project"]["name"]]
+        requires = root["metadata"]["requires-dev"]["audit"]
+        assert {"name": "pip-audit", "specifier": f"=={version}"} in requires, requires
+
+    def test_the_application_project_does_not_ship_the_audit_tool(self) -> None:
+        """The tool lives in its own project: the application lockfile must
+        not resolve it, or the audit run would install it next to the
+        application dependencies."""
+        assert "pip-audit" not in _lock_packages(APP_UV_LOCK)
 
 
 class TestHttpsOnlyDownloads:
