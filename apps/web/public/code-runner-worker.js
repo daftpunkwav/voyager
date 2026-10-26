@@ -63,6 +63,22 @@
     }
   }
 
+  /**
+   * Point the prototype at the replacement constructor: the native one stays
+   * reachable through `prototype.constructor`, and a snippet could use it to
+   * open a connection the guard refuses.
+   */
+  function guardNativeConstructor(prototype, replacement) {
+    var descriptor = Object.getOwnPropertyDescriptor(prototype, 'constructor');
+    if (!descriptor || !descriptor.configurable) return;
+    Object.defineProperty(prototype, 'constructor', {
+      value: replacement,
+      writable: descriptor.writable,
+      enumerable: descriptor.enumerable,
+      configurable: true,
+    });
+  }
+
   if (typeof self.fetch === 'function') {
     var nativeFetch = self.fetch;
     self.fetch = function (input, init) {
@@ -87,6 +103,7 @@
     };
     self.WebSocket.prototype = NativeWebSocket.prototype;
     copyStaticMembers(self.WebSocket, NativeWebSocket);
+    guardNativeConstructor(self.WebSocket.prototype, self.WebSocket);
   }
 
   if (typeof self.EventSource === 'function') {
@@ -97,6 +114,7 @@
     };
     self.EventSource.prototype = NativeEventSource.prototype;
     copyStaticMembers(self.EventSource, NativeEventSource);
+    guardNativeConstructor(self.EventSource.prototype, self.EventSource);
   }
 
   // The driver loads the vendored engine from this origin, so the same limit
