@@ -13,6 +13,11 @@
  * The scope is a V8 context, so the bootstrap, the driver and the vendored
  * engine share one global. A broken bootstrap therefore fails the tests
  * instead of passing behind a stand-in that installs the driver itself.
+ *
+ * The platform APIs sit on the prototype of the global, the way a browser
+ * worker carries them: the bootstrap has to take them away from the prototype
+ * as well as from the global, and the tests reach them through the same
+ * prototype chain the snippet would use.
  */
 
 import { readFileSync } from 'node:fs';
@@ -46,6 +51,16 @@ const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..',
 /** Makes the context global its own `self`, the way a worker global is. */
 const WORKER_GLOBAL_SETUP = 'globalThis.self = globalThis;';
 
+/**
+ * Puts the platform APIs on the prototype of the global, the way a browser
+ * worker carries them, and hands that prototype back.
+ */
+const WORKER_GLOBAL_SCOPE = `
+  var workerGlobalScope = Object.create(Object.prototype);
+  Object.setPrototypeOf(globalThis, workerGlobalScope);
+  workerGlobalScope;
+`;
+
 /** The bootstrap the app ships, read from the file that is served. */
 const BOOTSTRAP_SOURCE = readFileSync(
   path.join(appRoot, 'public', 'code-runner-worker.js'),
@@ -62,6 +77,14 @@ export interface SocketConstructor {
   prototype: { constructor: unknown };
 }
 
+/** A request the worker was allowed to make. */
+export interface WorkerFetch {
+  /** The URL the request went to. */
+  url: string;
+  /** The options the guard handed to the native fetch. */
+  init: Record<string, unknown>;
+}
+
 /** The worker global scope the bootstrap and the driver run in. */
 export interface WorkerScope {
   /** Worker location, as a worker global carries it. */
@@ -71,7 +94,7 @@ export interface WorkerScope {
   /** Blob constructor that carries the driver source. */
   Blob: new (parts: string[]) => { text(): string };
   /** Guarded fetch: cross-origin targets are refused. */
-  fetch: (input: unknown) => Promise<unknown>;
+  fetch: (input: unknown, init?: unknown) => Promise<unknown>;
   /** Guarded XMLHttpRequest: its open refuses cross-origin targets. */
   XMLHttpRequest: { prototype: { open(method: string, url: string): void } };
   /** Guarded WebSocket constructor. */
@@ -81,7 +104,7 @@ export interface WorkerScope {
   /** Guarded WebTransport constructor. */
   WebTransport: SocketConstructor;
   /** Guarded importScripts: cross-origin targets are refused. */
-  importScripts: (url: string) => void;
+  importScripts: (...urls: string[]) => void;
   /** Message handler the bootstrap and then the driver install. */
   onmessage: ((event: { data: unknown }) => unknown) | null;
   /** Reports the worker sends back to the page. */
@@ -110,12 +133,14 @@ export interface WorkerHarnessOptions {
 export interface WorkerHarness {
   /** The worker global scope the bootstrap and the driver run in. */
   readonly scope: WorkerScope;
+  /** The prototype the platform APIs sit on, the way a worker carries them. */
+  readonly prototype: Record<string, unknown>;
   /** Messages the worker posted back to the page. */
   readonly reports: unknown[];
   /** Scripts the worker was asked to import, in order. */
   readonly imports: string[];
   /** Requests the worker was allowed to make. */
-  readonly fetches: string[];
+  readonly fetches: WorkerFetch[];
   /** Requests the worker opened over XMLHttpRequest. */
   readonly xhrOpens: string[];
   /** Socket URLs the worker connected to. */
@@ -128,13 +153,18 @@ export interface WorkerHarness {
   onReport: (report: unknown) => void;
   /** Hand a page message to the worker and wait for its handler to settle. */
   deliver(message: unknown): Promise<void>;
+  /** Run an expression in the worker scope, the way a snippet sees it. */
+  evaluate(expression: string): unknown;
 }
 
 /** The URL a request target points at. */
 function targetUrl(target: unknown): string {
   if (typeof target === 'string') return target;
-  const url = (target as { url?: unknown } | null | undefined)?.url;
-  return typeof url === 'string' ? url : String(target);
+  if (!target) return String(target);
+  const record = target as { url?: unknown; href?: unknown } | null;
+  if (typeof record.href === 'string') return record.href;
+  if (typeof record.url === 'string') return record.url;
+  return String(target);
 }
 
 /**
@@ -146,7 +176,7 @@ function targetUrl(target: unknown): string {
 export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerHarness {
   const reports: unknown[] = [];
   const imports: string[] = [];
-  const fetches: string[] = [];
+  const fetches: WorkerFetch[] = [];
   const xhrOpens: string[] = [];
   const socketUrls: string[] = [];
   const eventSourceUrls: string[] = [];
@@ -223,6 +253,13 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
     }
   }
 
+  /** Nested worker stand-in: the bootstrap takes it away from the snippet. */
+  class HarnessNestedWorker {
+    constructor(url: string) {
+      transportUrls.push(url);
+    }
+  }
+
   const scope = {
     console,
     location: {
@@ -231,16 +268,7 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
       protocol,
       host: WORKER_HOST,
     },
-    URL: HarnessUrl,
     Blob: HarnessBlob,
-    fetch: (input: unknown): Promise<unknown> => {
-      fetches.push(targetUrl(input));
-      return Promise.resolve({ ok: true, status: 200 });
-    },
-    XMLHttpRequest: HarnessXhr,
-    WebSocket: HarnessWebSocket,
-    EventSource: HarnessEventSource,
-    WebTransport: HarnessWebTransport,
     postMessage: (report: unknown): void => {
       reports.push(report);
       onReport(report);
@@ -248,24 +276,46 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
   } as unknown as WorkerScope;
 
   const context = vm.createContext(scope);
-  scope.importScripts = (url: string): void => {
-    imports.push(url);
-    const source = driverSources.get(url);
-    if (source !== undefined) {
-      // The driver is the app's own generated source, never user input.
-      vm.runInContext(source, context); // NOSONAR
-      return;
+
+  // The platform APIs live on the prototype of the global, the way a browser
+  // worker carries them: the bootstrap has to take them away from there too.
+  const workerGlobalScope = vm.runInContext(WORKER_GLOBAL_SCOPE, context) as Record<
+    string,
+    unknown
+  >;
+  workerGlobalScope.URL = HarnessUrl;
+  workerGlobalScope.fetch = (input: unknown, init?: unknown): Promise<unknown> => {
+    fetches.push({
+      url: targetUrl(input),
+      init: (init ?? {}) as Record<string, unknown>,
+    });
+    return Promise.resolve({ ok: true, status: 200 });
+  };
+  workerGlobalScope.XMLHttpRequest = HarnessXhr;
+  workerGlobalScope.WebSocket = HarnessWebSocket;
+  workerGlobalScope.EventSource = HarnessEventSource;
+  workerGlobalScope.WebTransport = HarnessWebTransport;
+  workerGlobalScope.Worker = HarnessNestedWorker;
+  workerGlobalScope.importScripts = (...urls: string[]): void => {
+    for (const url of urls) {
+      imports.push(url);
+      const source = driverSources.get(url);
+      if (source !== undefined) {
+        // The driver is the app's own generated source, never user input.
+        vm.runInContext(source, context); // NOSONAR
+        continue;
+      }
+      if (url === SKULPT_ENGINE_URL) {
+        // The vendored script defines the engine on the worker scope.
+        scope.Sk = options.engine;
+        continue;
+      }
+      if (url === SKULPT_STDLIB_URL) {
+        // The standard library only extends the engine the first script defined.
+        continue;
+      }
+      throw new Error(`Unexpected importScripts target: ${url}`);
     }
-    if (url === SKULPT_ENGINE_URL) {
-      // The vendored script defines the engine on the worker scope.
-      scope.Sk = options.engine;
-      return;
-    }
-    if (url === SKULPT_STDLIB_URL) {
-      // The standard library only extends the engine the first script defined.
-      return;
-    }
-    throw new Error(`Unexpected importScripts target: ${url}`);
   };
 
   // A worker global is its own `self`, and the scripts it imports run in it.
@@ -274,6 +324,7 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
 
   return {
     scope,
+    prototype: workerGlobalScope,
     reports,
     imports,
     fetches,
@@ -293,6 +344,9 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
         throw new Error('The worker has no message handler.');
       }
       await handler({ data: message });
+    },
+    evaluate(expression: string): unknown {
+      return vm.runInContext(expression, context);
     },
   };
 }
@@ -315,8 +369,8 @@ export function installFakeWorker(options: WorkerHarnessOptions = {}): FakeWorke
   const harnesses: WorkerHarness[] = [];
 
   class FakeWorker {
-    onmessage: ((event: { data: unknown }) => void) | null = null;
-    onerror: ((event: { message: string }) => void) | null = null;
+    onmessage: ((event: { data: unknown }) => unknown) | null = null;
+    onerror: ((event: { message: string }) => unknown) | null = null;
     private readonly harness: WorkerHarness;
     private readonly listeners = new Map<string, Set<(event: unknown) => void>>();
 

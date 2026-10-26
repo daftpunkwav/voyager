@@ -6,12 +6,18 @@
  * The bootstrap installs the engine driver the page sends and holds the runner
  * to the page origin, so the tests run that file in a simulated worker scope:
  * a broken message handler or a missing origin guard has to fail them.
+ *
+ * The snippet shares the worker global, so the guards have to survive a
+ * snippet that tries to take them away. The tests reach the platform APIs
+ * through the same prototype chain a snippet would use.
  */
 
 import { describe, expect, it } from 'vitest';
 import {
   createWorkerHarness,
   SKULPT_ENGINE_URL,
+  SKULPT_STDLIB_URL,
+  WORKER_ORIGIN,
   WORKER_WS_ORIGIN,
   workerOrigin,
 } from './helpers/workerHarness';
@@ -20,6 +26,9 @@ import {
 const DRIVER_STUB = `self.onmessage = function (event) {
   self.postMessage({ ok: true, driver: 'installed' });
 };`;
+
+/** The worker global, as a snippet sees it. */
+type SnippetScope = Record<string, unknown>;
 
 describe('worker bootstrap', () => {
   it('installs the driver the page sends and runs it', async () => {
@@ -66,7 +75,7 @@ describe('worker bootstrap origin guard', () => {
     harness.scope.WebSocket(`${WORKER_WS_ORIGIN}/socket`);
     harness.scope.EventSource('/events');
     harness.scope.importScripts(SKULPT_ENGINE_URL);
-    expect(harness.fetches).toEqual(['/api/health']);
+    expect(harness.fetches).toEqual([{ url: '/api/health', init: { redirect: 'error' } }]);
     expect(harness.xhrOpens).toEqual(['/api/health']);
     expect(harness.socketUrls).toEqual([`${WORKER_WS_ORIGIN}/socket`]);
     expect(harness.eventSourceUrls).toEqual(['/events']);
@@ -112,6 +121,134 @@ describe('worker bootstrap origin guard', () => {
     expect(harness.scope.WebTransport.prototype.constructor).toBe(harness.scope.WebTransport);
     const socket = harness.scope.WebSocket.prototype.constructor as typeof harness.scope.WebSocket;
     expect(() => socket('ws://example.com/socket')).toThrow(/may only reach/);
+  });
+});
+
+describe('worker bootstrap request targets', () => {
+  it('refuses a cross-origin URL object', () => {
+    const harness = createWorkerHarness();
+    const target = new URL('https://example.com/data');
+    expect(() => harness.scope.fetch(target)).toThrow(/may only reach/);
+    expect(harness.fetches).toEqual([]);
+  });
+
+  it('refuses a cross-origin request object', () => {
+    const harness = createWorkerHarness();
+    const target = { url: 'https://example.com/data' };
+    expect(() => harness.scope.fetch(target)).toThrow(/may only reach/);
+    expect(harness.fetches).toEqual([]);
+  });
+
+  it('allows a same-origin URL object', async () => {
+    const harness = createWorkerHarness();
+    const target = `${WORKER_ORIGIN}/api/health`;
+    await harness.scope.fetch(new URL(target));
+    expect(harness.fetches).toEqual([{ url: target, init: { redirect: 'error' } }]);
+  });
+
+  it('refuses a target that carries no URL at all', () => {
+    const harness = createWorkerHarness();
+    expect(() => harness.scope.fetch({})).toThrow(/may only reach/);
+    expect(harness.fetches).toEqual([]);
+  });
+});
+
+describe('worker bootstrap redirect policy', () => {
+  it('follows no redirect', async () => {
+    const harness = createWorkerHarness();
+    await harness.scope.fetch('/api/health');
+    // A redirect leaves the origin and its target cannot be checked before the
+    // request is on the wire, so the guarded fetch refuses to follow one.
+    expect(harness.fetches).toEqual([{ url: '/api/health', init: { redirect: 'error' } }]);
+  });
+});
+
+describe('worker bootstrap script loads', () => {
+  it('loads every script importScripts is given', () => {
+    const harness = createWorkerHarness();
+    harness.scope.importScripts(SKULPT_ENGINE_URL, SKULPT_STDLIB_URL);
+    expect(harness.imports).toEqual([SKULPT_ENGINE_URL, SKULPT_STDLIB_URL]);
+  });
+
+  it('refuses a foreign script among same-origin ones', () => {
+    const harness = createWorkerHarness();
+    expect(() =>
+      harness.scope.importScripts(SKULPT_ENGINE_URL, 'https://example.com/engine.js')
+    ).toThrow(/may only reach/);
+    // The refused batch loads nothing: the check runs before the load.
+    expect(harness.imports).toEqual([]);
+  });
+});
+
+describe('worker bootstrap guard ownership', () => {
+  it('takes the native APIs off the prototype chain', () => {
+    const harness = createWorkerHarness();
+    const prototype = harness.prototype;
+    for (const name of [
+      'fetch',
+      'XMLHttpRequest',
+      'WebSocket',
+      'EventSource',
+      'WebTransport',
+      'importScripts',
+    ]) {
+      expect(prototype[name]).toBeUndefined();
+      expect(typeof (harness.scope as SnippetScope)[name]).toBe('function');
+    }
+  });
+
+  it('keeps the natives out of reach through the prototype chain', () => {
+    const harness = createWorkerHarness();
+    // The path a snippet takes to bypass the guard: the prototype of the
+    // worker global carries no native any more.
+    expect(harness.evaluate('typeof Object.getPrototypeOf(self).fetch')).toBe('undefined');
+    expect(harness.evaluate('typeof Object.getPrototypeOf(self).importScripts')).toBe('undefined');
+    expect(harness.evaluate('typeof Object.getPrototypeOf(self).WebSocket')).toBe('undefined');
+    expect(harness.evaluate('typeof Object.getPrototypeOf(self).Worker')).toBe('undefined');
+  });
+
+  it('offers no nested worker', () => {
+    const harness = createWorkerHarness();
+    expect((harness.scope as SnippetScope).Worker).toBeUndefined();
+  });
+
+  it('keeps a guarded API when a snippet tries to take it', () => {
+    const harness = createWorkerHarness();
+    const scope = harness.scope as SnippetScope;
+    const descriptor = Object.getOwnPropertyDescriptor(scope, 'fetch');
+    expect(descriptor?.writable).toBe(false);
+    expect(descriptor?.configurable).toBe(false);
+    // A snippet that deletes or replaces the guard gets nothing: the property
+    // is locked, and the native behind it is gone from the prototype chain.
+    expect(() => {
+      delete scope.fetch;
+    }).toThrow(TypeError);
+    expect(() => {
+      scope.fetch = () => 'replaced';
+    }).toThrow(TypeError);
+    expect(() => (scope.fetch as (input: string) => void)('https://example.com/data')).toThrow(
+      /may only reach/
+    );
+  });
+
+  it('locks the URL constructor the origin check reads', () => {
+    const harness = createWorkerHarness();
+    const scope = harness.scope as SnippetScope;
+    const descriptor = Object.getOwnPropertyDescriptor(scope, 'URL');
+    expect(descriptor?.writable).toBe(false);
+    expect(descriptor?.configurable).toBe(false);
+    // A constructor that reports every origin as its own must not be able to
+    // take the place of the one the check uses.
+    expect(() => {
+      scope.URL = class {
+        static parse(): unknown {
+          return { protocol: 'https:', origin: 'https://example.com', host: 'example.com' };
+        }
+      };
+    }).toThrow(TypeError);
+    expect(() => (scope.fetch as (input: string) => void)('https://example.com/data')).toThrow(
+      /may only reach/
+    );
   });
 });
 
