@@ -279,10 +279,9 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
 
   // The platform APIs live on the prototype of the global, the way a browser
   // worker carries them: the bootstrap has to take them away from there too.
-  const workerGlobalScope = vm.runInContext(WORKER_GLOBAL_SCOPE, context) as Record<
-    string,
-    unknown
-  >;
+  // The scope setup is the harness's own code, never user input.
+  const scopeSetup = vm.runInContext(WORKER_GLOBAL_SCOPE, context); // NOSONAR
+  const workerGlobalScope = scopeSetup as Record<string, unknown>;
   workerGlobalScope.URL = HarnessUrl;
   workerGlobalScope.fetch = (input: unknown, init?: unknown): Promise<unknown> => {
     fetches.push({
@@ -346,7 +345,8 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
       await handler({ data: message });
     },
     evaluate(expression: string): unknown {
-      return vm.runInContext(expression, context);
+      // The expression comes from a test, never from user input.
+      return vm.runInContext(expression, context); // NOSONAR
     },
   };
 }
