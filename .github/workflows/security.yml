@@ -87,10 +87,12 @@ jobs:
         with:
           enable-cache: true
 
-      # uv export reads the committed root lockfile as it is, and the audit
-      # tool runs from the lockfile of its own project (tools/audit), which
-      # holds nothing but the tool and its dependencies. Neither the scanned
-      # set nor the tool itself is resolved at run time.
+      # uv export reads the committed lockfiles as they are: the root one
+      # and the one of the audit project (tools/audit), whose locked set is
+      # scanned as well because the audit tooling runs during the scan.
+      # The tool itself runs from the lockfile of that project, which holds
+      # nothing but the tool and its dependencies. Neither the scanned sets
+      # nor the tool itself is resolved at run time.
       - name: pip-audit
         run: npm run audit:py
 
