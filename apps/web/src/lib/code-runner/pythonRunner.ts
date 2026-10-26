@@ -29,10 +29,24 @@ interface PythonWorkerError {
   message?: unknown;
 }
 
+/**
+ * What the worker was doing when it reported.
+ *
+ * `ready` is the engine reporting that it loaded, `engine` that it could not
+ * load, and `run` that the snippet itself failed. The engine load and the
+ * run are separate steps, so a failure in one is not a failure in the other.
+ */
+type PythonWorkerStage = 'ready' | 'engine' | 'run';
+
 const VENDOR_BASE = '/vendor/skulpt';
 
-/** Extra time the worker may spend loading the engine before a run gives up. */
-const ENGINE_LOAD_GRACE_MS = 5000;
+/**
+ * Deadline for the engine load alone.
+ *
+ * Loading the vendored engine is a network fetch of two scripts, so it gets
+ * its own budget; the execution budget starts when the engine reports ready.
+ */
+const ENGINE_LOAD_TIMEOUT_MS = 30000;
 
 /** Cached worker promise: the engine loads once inside the worker. */
 let workerPromise: Promise<Worker> | null = null;
@@ -84,8 +98,18 @@ self.onmessage = async function (event) {
   var limit = typeof data.maxOutputChars === 'number' ? data.maxOutputChars : ${DEFAULT_MAX_OUTPUT_CHARS};
   var budget = typeof data.timeoutMs === 'number' ? data.timeoutMs : ${DEFAULT_TIMEOUT_MS};
   var captured = '';
+  var skulpt;
   try {
-    var skulpt = loadEngine();
+    skulpt = loadEngine();
+  } catch (err) {
+    // The engine did not load, so no snippet ran. The runner is unavailable
+    // here, which is not the same failure as a snippet that raised.
+    self.postMessage({ ok: false, stage: 'engine', output: '', error: describeError(err) });
+    return;
+  }
+  // The engine is loaded: the page starts the execution budget now.
+  self.postMessage({ ok: true, stage: 'ready' });
+  try {
     skulpt.configure({
       output: function (text) {
         captured += text;
@@ -104,9 +128,9 @@ self.onmessage = async function (event) {
     await skulpt.misceval.asyncToPromise(function () {
       return skulpt.importMainWithBody('<stdin>', false, source, true);
     });
-    self.postMessage({ ok: true, output: captured });
+    self.postMessage({ ok: true, stage: 'run', output: captured });
   } catch (err) {
-    self.postMessage({ ok: false, output: captured, error: describeError(err) });
+    self.postMessage({ ok: false, stage: 'run', output: captured, error: describeError(err) });
   }
 };
 `;
@@ -167,10 +191,18 @@ export function formatSkulptError(err: unknown): string {
   }
 }
 
+/** The plain detail of a worker error, without the type prefix. */
+function errorDetail(error: PythonWorkerError | undefined): string {
+  const message = error?.message;
+  return typeof message === 'string' && message ? message : formatSkulptError(error);
+}
+
 /** One run in the worker: the captured output plus the error, if any. */
 interface PythonRunOutcome {
   output: string;
   error?: PythonWorkerError;
+  /** Which step the worker was in when it reported. */
+  stage: PythonWorkerStage;
 }
 
 /** Post one run to the worker and wait for its report. */
@@ -182,36 +214,63 @@ function runInWorker(
 ): Promise<PythonRunOutcome> {
   return new Promise((resolve) => {
     let settled = false;
+    let loadWatchdog: ReturnType<typeof setTimeout> | null = null;
+    let runWatchdog: ReturnType<typeof setTimeout> | null = null;
     const finish = (outcome: PythonRunOutcome) => {
       if (settled) return;
       settled = true;
-      clearTimeout(watchdog);
+      if (loadWatchdog) clearTimeout(loadWatchdog);
+      if (runWatchdog) clearTimeout(runWatchdog);
       worker.removeEventListener('message', onMessage);
       worker.removeEventListener('error', onError);
       resolve(outcome);
     };
     const onMessage = (event: MessageEvent) => {
       const data = (event.data ?? {}) as {
+        stage?: unknown;
         output?: unknown;
         error?: unknown;
       };
+      const stage: PythonWorkerStage =
+        data.stage === 'ready' || data.stage === 'engine' ? data.stage : 'run';
+      if (stage === 'ready') {
+        // The engine is loaded: the execution budget starts here, so a slow
+        // first load does not eat into the time the snippet gets.
+        if (loadWatchdog) clearTimeout(loadWatchdog);
+        loadWatchdog = null;
+        runWatchdog = setTimeout(() => {
+          discardWorker(worker);
+          finish({
+            output: '',
+            error: { tp$name: 'TimeLimitError', message: '' },
+            stage: 'run',
+          });
+        }, timeoutMs);
+        return;
+      }
       finish({
         output: typeof data.output === 'string' ? data.output : '',
         error: data.error as PythonWorkerError | undefined,
+        stage,
       });
     };
     const onError = (event: ErrorEvent) => {
       finish({
         output: '',
         error: { tp$name: 'Error', message: event.message || 'The Python worker failed.' },
+        stage: 'run',
       });
     };
-    // The engine load blocks the worker, so the run needs a deadline of its own:
+    // The engine load blocks the worker, so it gets a deadline of its own:
     // skulpt's execLimit bounds the execution, not the load.
-    const watchdog = setTimeout(() => {
+    loadWatchdog = setTimeout(() => {
       discardWorker(worker);
-      finish({ output: '', error: { tp$name: 'TimeLimitError', message: '' } });
-    }, timeoutMs + ENGINE_LOAD_GRACE_MS);
+      finish({
+        output: '',
+        error: { tp$name: 'EngineLoadTimeout', message: '' },
+        stage: 'engine',
+      });
+    }, ENGINE_LOAD_TIMEOUT_MS);
     worker.addEventListener('message', onMessage);
     worker.addEventListener('error', onError);
     worker.postMessage({ source, timeoutMs, maxOutputChars: maxChars });
@@ -276,6 +335,14 @@ export function runPython(
     }
 
     const outcome = await runInWorker(worker, source, timeoutMs, maxChars);
+    if (outcome.stage === 'engine') {
+      // The engine never loaded, so no snippet ran: the runner is unavailable.
+      return settleResult({
+        status: 'unavailable',
+        output: outcome.output,
+        error: `Python runner unavailable: ${errorDetail(outcome.error)}`,
+      });
+    }
     if (!outcome.error) {
       return settleResult({ status: 'ok', output: outcome.output });
     }
