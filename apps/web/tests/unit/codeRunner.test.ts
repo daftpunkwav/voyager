@@ -153,8 +153,12 @@ describe('worker driver execution', () => {
     const harness = createWorkerHarness({ engine });
     await harness.deliver({ driver: buildPythonWorkerSource() });
     await harness.deliver({ source: 'raise ValueError("run failed")' });
-    // The failure is described, not passed through: the exception itself does not clone.
-    expect(harness.reports[0]).toMatchObject({ ok: false, error: { tp$name: 'ValueError' } });
+    // The failure is described, not passed through: the exception itself does not
+    // clone, so the type and the message have to survive on their own.
+    expect(harness.reports[0]).toMatchObject({
+      ok: false,
+      error: { tp$name: 'ValueError', message: 'run failed' },
+    });
   });
 });
 
