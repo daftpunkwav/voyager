@@ -561,15 +561,19 @@ class TestAuditTool:
         assert Counter(scanned) == Counter(written), (scanned, written)
 
     def test_both_sets_are_scanned_by_one_run(self) -> None:
-        """Both sets are scanned by one invocation, and each exported set is
-        read exactly once. A second run would audit the sets separately; a
-        repeated path would leave one set unscanned."""
+        """The application resolution and the audit tooling set are both
+        exported, and one invocation reads both files exactly once. A second
+        run would audit the sets separately; dropping an export or repeating
+        a path would leave one set unscanned."""
         exports = _uv_invocations(AUDIT_SCRIPT, "export")
         runs = _uv_invocations(AUDIT_SCRIPT, "run")
-        assert exports, "the audit script no longer exports the resolution"
         assert len(runs) == 1, f"the audit scans in more than one run: {runs}"
+        application = [argv for argv in exports if _flag_value(argv, "--project") is None]
+        tooling = [argv for argv in exports if _flag_value(argv, "--project") is not None]
+        assert application, f"the application resolution is not exported: {exports}"
+        assert tooling, f"the audit tooling is not exported: {exports}"
         written: list[str] = []
-        for export in exports:
+        for export in application + tooling:
             path = _flag_value(export, "-o")
             assert path is not None, export
             written.append(path)
