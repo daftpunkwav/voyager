@@ -16,7 +16,9 @@ like a vulnerability in any other dependency.
 Both sets go into one pip-audit invocation: both requirement files are
 passed to the same run, so neither set can be left out by starting a
 second scan. pip-audit audits the pinned versions it is given; nothing is
-resolved while the scan reads them.
+resolved while the scan reads them. If the two lockfiles ever disagree on
+a shared package, pip-audit rejects the conflicting specs and the audit
+fails, rather than silently auditing only one of the two versions.
 
 The audit tool runs in a project of its own (tools/audit), which is
 excluded from the workspace: its environment holds the audit tool and the
