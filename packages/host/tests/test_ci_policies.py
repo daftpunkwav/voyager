@@ -9,10 +9,12 @@ would leave the whole suite green. The policy is asserted here instead.
 
 import ast
 import json
+import shlex
 import tomllib
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -22,6 +24,12 @@ PACKAGE_JSON = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
 APP_PYPROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 APP_UV_LOCK = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
 AUDIT_SCRIPT = (ROOT / "scripts/pip_audit.py").read_text(encoding="utf-8")
+
+# The client program of an HTTP request does not matter for the policy:
+# curl, wget and the httpie front ends all leave the machine.
+REQUEST_TOOLS = frozenset({"curl", "wget", "http", "https", "aria2c", "httpie"})
+# The hosts a workflow request may reach.
+LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 def _commands(workflow: str, needle: str) -> list[str]:
@@ -34,6 +42,27 @@ def _commands(workflow: str, needle: str) -> list[str]:
         if needle in stripped:
             found.append(stripped)
     return found
+
+
+def _argv(command: str) -> list[str]:
+    """The words of one shell command, comments removed.
+
+    A flag in a trailing comment is not an argument: `uv sync # --locked`
+    locks nothing, so the flags are read from the parsed words and not
+    from the raw text.
+    """
+    try:
+        return shlex.split(command, comments=True)
+    except ValueError as error:
+        raise AssertionError(f"unparsable shell command: {command!r} ({error})") from error
+
+
+def _flag_value(argv: list[str], flag: str) -> str | None:
+    """The word that follows a flag, or None when the flag is absent."""
+    for index, argument in enumerate(argv):
+        if argument == flag and index + 1 < len(argv):
+            return argv[index + 1]
+    return None
 
 
 def _matches(path: str, pattern: str) -> bool:
@@ -109,14 +138,6 @@ def _uv_invocations(script: str, subcommand: str) -> list[list[str]]:
     return invocations
 
 
-def _flag_value(argv: list[str], flag: str) -> str | None:
-    """The word that follows a flag, or None when the flag is absent."""
-    for index, argument in enumerate(argv):
-        if argument == flag and index + 1 < len(argv):
-            return argv[index + 1]
-    return None
-
-
 def _audit_project() -> Path:
     """The project the audit script runs the audit tool in.
 
@@ -146,6 +167,26 @@ def _lock_packages(lock: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {package["name"]: package for package in lock.get("package", [])}
 
 
+def _request_commands(workflow: str) -> list[tuple[str, list[str]]]:
+    """The HTTP request commands of a workflow and their target URLs.
+
+    The client program does not matter (curl, wget, http, ...): the policy
+    is about the host a request reaches, so every tool that can issue one
+    is inspected.
+    """
+    requests: list[tuple[str, list[str]]] = []
+    for line in workflow.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if not any(token.strip(";&|()") in REQUEST_TOOLS for token in stripped.split()):
+            continue
+        argv = _argv(stripped)
+        urls = [token for token in argv if token.startswith(("http://", "https://"))]
+        requests.append((stripped, urls))
+    return requests
+
+
 class TestLockedResolution:
     def test_python_installs_use_the_locked_versions(self) -> None:
         commands = _commands(CI_WORKFLOW, "uv sync") + _commands(CI_WORKFLOW, "uv run")
@@ -153,7 +194,7 @@ class TestLockedResolution:
         for command in commands:
             for invocation in command.split("&&"):
                 if "uv " in invocation:
-                    assert "--locked" in invocation, invocation
+                    assert "--locked" in _argv(invocation), invocation
 
     def test_npm_scripts_run_python_tools_from_the_locked_environment(self) -> None:
         scripts: dict[str, str] = PACKAGE_JSON["scripts"]
@@ -162,7 +203,7 @@ class TestLockedResolution:
         for name, script in callers.items():
             for invocation in script.split("&&"):
                 if "uv run" in invocation:
-                    assert "--locked" in invocation, f"{name}: {invocation}"
+                    assert "--locked" in _argv(invocation), f"{name}: {invocation}"
 
 
 class TestDisabledInstallScripts:
@@ -175,6 +216,35 @@ class TestDisabledInstallScripts:
     def test_playwright_comes_from_the_installed_workspace(self) -> None:
         assert "node_modules/.bin/playwright install" in CI_WORKFLOW
         assert not _commands(CI_WORKFLOW, "npx ")
+
+
+class TestNoSourceBuilds:
+    """A source distribution is built by its own build backend, so an
+    install may never build one: the backend of a third-party package
+    would run during the install."""
+
+    def test_workflow_installs_do_not_build_source_distributions(self) -> None:
+        commands = _commands(CI_WORKFLOW, "uv sync") + _commands(CI_WORKFLOW, "uv run")
+        assert commands, "the workflow no longer installs the Python workspace"
+        for command in commands:
+            for invocation in command.split("&&"):
+                if "uv " in invocation:
+                    assert "--no-build" in _argv(invocation), invocation
+
+    def test_npm_scripts_do_not_build_source_distributions(self) -> None:
+        scripts: dict[str, str] = PACKAGE_JSON["scripts"]
+        callers = {name: script for name, script in scripts.items() if "uv run" in script}
+        assert callers, "no npm script runs the Python tooling any more"
+        for name, script in callers.items():
+            for invocation in script.split("&&"):
+                if "uv run" in invocation:
+                    assert "--no-build" in _argv(invocation), f"{name}: {invocation}"
+
+    def test_the_audit_tool_runs_without_building_source_distributions(self) -> None:
+        runs = _uv_invocations(AUDIT_SCRIPT, "run")
+        assert runs, "the audit script no longer runs the audit tool"
+        for argv in runs:
+            assert "--no-build" in argv, argv
 
 
 class TestAuditTool:
@@ -195,6 +265,19 @@ class TestAuditTool:
             assert "--locked" in argv, argv
             assert "pip-audit" in argv, argv
         assert "uvx" not in AUDIT_SCRIPT
+
+    def test_audit_scans_the_exported_requirements(self) -> None:
+        """The exported set must be the scanned set: the export writes and
+        the audit reads the same file."""
+        exports = _uv_invocations(AUDIT_SCRIPT, "export")
+        runs = _uv_invocations(AUDIT_SCRIPT, "run")
+        assert exports, "the audit script no longer exports the resolution"
+        assert runs, "the audit script no longer runs the audit tool"
+        scanned = {_flag_value(run, "-r") for run in runs}
+        for export in exports:
+            written = _flag_value(export, "-o")
+            assert written is not None, export
+            assert written in scanned, (export, runs)
 
     def test_audit_tool_runs_in_an_isolated_project(self) -> None:
         """The tool may not run in the root project: there the run would
@@ -256,8 +339,16 @@ class TestHttpsOnlyDownloads:
             assert "--tlsv1.2" in command, command
 
     def test_workflow_requests_stay_on_the_local_host(self) -> None:
-        for command in _commands(CI_WORKFLOW, "curl "):
-            assert "127.0.0.1" in command or "localhost" in command, command
+        """Every request of the CI workflow must stay on the local host: the
+        release downloads of the security workflow are a separate concern
+        (test_release_downloads_pin_https_and_tls)."""
+        requests = _request_commands(CI_WORKFLOW)
+        assert requests, "the workflow no longer issues a request"
+        for command, urls in requests:
+            assert urls, f"request without a target URL: {command}"
+            for url in urls:
+                host = urlparse(url).hostname
+                assert host in LOCAL_HOSTS, f"{command} -> {url}"
 
 
 class TestChangedPathTriage:
