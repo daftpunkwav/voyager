@@ -44,7 +44,10 @@ def _commit(repo: Path, hooks: Path, message: str) -> None:
     """Commit the staged files with a fixed identity.
 
     The identity is passed on the command line, so the machine that runs
-    the test needs no git configuration of its own.
+    the test needs no git configuration of its own. Signing is disabled the
+    same way: a global `commit.gpgsign=true` without a usable key would
+    otherwise fail a fixture commit that has nothing to do with the code
+    under test.
     """
     subprocess.run(
         [
@@ -53,6 +56,8 @@ def _commit(repo: Path, hooks: Path, message: str) -> None:
             str(repo),
             "-c",
             f"core.hooksPath={hooks}",
+            "-c",
+            "commit.gpgsign=false",
             "-c",
             "user.name=Dependency Policy Test",
             "-c",

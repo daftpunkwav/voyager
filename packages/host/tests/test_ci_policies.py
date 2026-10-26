@@ -12,6 +12,7 @@ import json
 import re
 import shlex
 import tomllib
+from collections import Counter
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
@@ -26,27 +27,49 @@ APP_PYPROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-
 APP_UV_LOCK = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
 AUDIT_SCRIPT = (ROOT / "scripts/pip_audit.py").read_text(encoding="utf-8")
 
-# A URL in a workflow command, wherever it stands: the policy is about the
-# host a request reaches, not about the program that fetches it.
-URL_PATTERN = re.compile(r"https?://[^\s'\"`()<>\[\]{},;\\]+")
+# A URL in a workflow command, wherever it stands. The host may be a
+# bracketed IPv6 literal, which the pattern has to keep in one piece so the
+# parsed host is checked like any other; the policy is about the host a
+# request reaches, not about the program that fetches it.
+URL_PATTERN = re.compile(
+    r"https?://(?:\[[0-9A-Fa-f:.]+\][^\s'\"`()<>{},;\\\[\]]*|[^\s'\"`()<>{},;\\\[\]]+)"
+)
 # The hosts a workflow request may reach.
 LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
-# The npm scripts that run the Python tooling. Every one of them has to
-# reach the interpreter through `uv run`, so the locked environment
-# provides the tool and its dependencies.
-PYTHON_TOOLING_SCRIPTS = frozenset(
+# The npm scripts that run the Python tooling, mapped to the executable
+# their `uv run` invocation has to start. Every one of them reaches the
+# interpreter through `uv run`, so the locked environment provides the tool
+# and its dependencies; naming the executable keeps an echoed command from
+# counting as a run.
+PYTHON_TOOLING_SCRIPTS = {
+    "audit:py": "python",
+    "docs:i18n": "python",
+    "docs:links": "python",
+    "eval": "pytest",
+    "eval:update": "python",
+    "graph": "python",
+    "graph:check": "python",
+    "lint:imports": "lint-imports",
+    "lint:py": "ruff",
+    "test:py": "pytest",
+    "typecheck:py": "mypy",
+}
+# The `uv run` options that consume the following word, so the word is not
+# mistaken for the command uv runs.
+UV_RUN_VALUE_OPTIONS = frozenset(
     {
-        "audit:py",
-        "docs:i18n",
-        "docs:links",
-        "eval",
-        "eval:update",
-        "graph",
-        "graph:check",
-        "lint:imports",
-        "lint:py",
-        "test:py",
-        "typecheck:py",
+        "-p",
+        "--directory",
+        "--env-file",
+        "--extra",
+        "--group",
+        "--no-group",
+        "--only-group",
+        "--package",
+        "--project",
+        "--python",
+        "--with",
+        "--with-requirements",
     }
 )
 
@@ -125,18 +148,46 @@ def _uv_commands(command: str) -> list[list[str]]:
     return [argv for argv in _command_argvs(command) if argv and argv[0] == "uv"]
 
 
-def _assert_expected_python_tooling_scripts() -> None:
-    """Every expected Python-tooling script runs through `uv run`.
+def _uv_run_commands(command: str) -> list[list[str]]:
+    """The argument vectors of the `uv run` invocations of one shell command."""
+    return [argv for argv in _uv_commands(command) if argv[1:2] == ["run"]]
 
-    A script that calls the interpreter directly leaves the set of
-    scripts that run through uv, so the expected scripts are named
-    here: the policy holds only while every one of them is in the set.
+
+def _uv_run_program(argv: list[str]) -> str | None:
+    """The executable a `uv run` invocation starts.
+
+    uv runs its first positional argument after the options, so the options
+    are walked instead of searching the words: a tool named as an option
+    value is not the tool that runs.
+    """
+    index = 2
+    while index < len(argv):
+        argument = argv[index]
+        if argument.startswith("-"):
+            index += 2 if argument in UV_RUN_VALUE_OPTIONS else 1
+            continue
+        return argument
+    return None
+
+
+def _assert_expected_python_tooling_scripts() -> None:
+    """Every expected Python-tooling script runs its tool through `uv run`.
+
+    The scripts are parsed, not searched as text: an echoed command starts
+    no tool, so it does not count as a caller. The expected executable is
+    checked as well, so a caller that runs something else fails too.
     """
     scripts: dict[str, str] = PACKAGE_JSON["scripts"]
-    callers = {name for name, script in scripts.items() if "uv run" in script}
-    assert callers, "no npm script runs the Python tooling any more"
-    missing = sorted(PYTHON_TOOLING_SCRIPTS - callers)
-    assert not missing, f"the Python tooling scripts left the locked environment: {missing}"
+    missing: list[str] = []
+    wrong: list[str] = []
+    for name, program in PYTHON_TOOLING_SCRIPTS.items():
+        programs = [_uv_run_program(argv) for argv in _uv_run_commands(scripts.get(name, ""))]
+        if not programs:
+            missing.append(name)
+        elif program not in programs:
+            wrong.append(f"{name}: expected {program}, ran {programs}")
+    assert not missing, f"the Python tooling scripts left the locked environment: {sorted(missing)}"
+    assert not wrong, f"the Python tooling scripts run the wrong tool: {wrong}"
 
 
 def _flag_value(argv: list[str], flag: str) -> str | None:
@@ -342,8 +393,15 @@ class TestDisabledInstallScripts:
             assert "--ignore-scripts" in argv, command
 
     def test_playwright_comes_from_the_installed_workspace(self) -> None:
-        assert "node_modules/.bin/playwright install" in CI_WORKFLOW
-        assert not _commands(CI_WORKFLOW, "npx ")
+        """The step runs the workspace binary, not a word in an echo of it."""
+        commands = _commands(CI_WORKFLOW, "playwright install")
+        assert commands, "the workflow no longer installs the browser"
+        for command in commands:
+            argv = _argv(command)
+            assert argv[:2] == ["node_modules/.bin/playwright", "install"], command
+            assert "--with-deps" in argv, command
+            assert "chromium" in argv, command
+        assert not _commands(CI_WORKFLOW, "npx "), "the workflow resolves packages with npx"
 
 
 class TestNoSourceBuilds:
@@ -371,6 +429,50 @@ class TestNoSourceBuilds:
         assert runs, "the audit script no longer runs the audit tool"
         for argv in runs:
             assert "--no-build" in argv, argv
+
+
+class TestLockedBuildBackend:
+    """The editable workspace members are built on every install, so their
+    build backend runs as third-party code. It has to come from the
+    lockfile, not from a resolution performed while building."""
+
+    def test_the_build_backend_is_a_pinned_locked_dev_dependency(self) -> None:
+        """Every build requirement of every member is pinned exactly in the
+        dev group and resolved in the lockfile at that pin, so the backend
+        the installs run is a locked dependency."""
+        members = APP_PYPROJECT["tool"]["uv"]["workspace"]["members"]
+        dev_pins: dict[str, str] = {}
+        for requirement in APP_PYPROJECT["dependency-groups"]["dev"]:
+            name, separator, version = requirement.partition("==")
+            if separator:
+                dev_pins[name] = version
+        packages = _lock_packages(APP_UV_LOCK)
+        for member in members:
+            manifest = tomllib.loads((ROOT / member / "pyproject.toml").read_text(encoding="utf-8"))
+            requires = manifest["build-system"]["requires"]
+            assert requires, member
+            for requirement in requires:
+                match = re.match(r"[A-Za-z0-9][A-Za-z0-9._-]*", requirement)
+                assert match is not None, (member, requirement)
+                name = match.group(0)
+                assert name in dev_pins, f"{member} builds with an unpinned backend: {requirement}"
+                assert name in packages, f"{name} is not resolved in uv.lock"
+                assert packages[name]["version"] == dev_pins[name], (name, packages[name])
+
+    def test_every_install_runs_the_locked_build_backend(self) -> None:
+        """Build isolation resolves the backend from the index while
+        building, so every install disables it and builds with the locked
+        dependency instead."""
+        commands = _commands(CI_WORKFLOW, "uv sync") + _commands(CI_WORKFLOW, "uv run")
+        assert commands, "the workflow no longer installs the Python workspace"
+        for command in commands:
+            for argv in _uv_commands(command):
+                assert "--no-build-isolation" in argv, (command, argv)
+        for name, script in PACKAGE_JSON["scripts"].items():
+            for argv in _uv_commands(script):
+                assert "--no-build-isolation" in argv, f"{name}: {argv}"
+        for argv in _uv_invocations(AUDIT_SCRIPT, "run"):
+            assert "--no-build-isolation" in argv, argv
 
 
 class TestAuditTool:
@@ -404,27 +506,40 @@ class TestAuditTool:
             assert _selected_group(argv) == group, argv
 
     def test_audit_scans_the_exported_requirements(self) -> None:
-        """The exported set must be the scanned set: the export writes and
-        the audit reads the same file."""
+        """The exported sets must be the scanned sets: every export writes
+        its own file, and the audit reads each of them exactly once. A
+        shared output path would let the second export overwrite the first
+        and leave one set unscanned."""
         exports = _uv_invocations(AUDIT_SCRIPT, "export")
         runs = _uv_invocations(AUDIT_SCRIPT, "run")
         assert exports, "the audit script no longer exports the resolution"
         assert runs, "the audit script no longer runs the audit tool"
-        scanned = {value for run in runs for value in _flag_values(run, "-r")}
+        written: list[str] = []
         for export in exports:
-            written = _flag_value(export, "-o")
-            assert written is not None, export
-            assert written in scanned, (export, runs)
+            path = _flag_value(export, "-o")
+            assert path is not None, export
+            written.append(path)
+        assert len(set(written)) == len(written), f"the exports share one output path: {written}"
+        scanned = [value for run in runs for value in _flag_values(run, "-r")]
+        assert Counter(scanned) == Counter(written), (scanned, written)
 
     def test_both_sets_are_scanned_by_one_run(self) -> None:
         """One run means one advisory snapshot: an advisory published
-        between two runs cannot miss the set that was scanned first."""
+        between two runs cannot miss the set that was scanned first. A
+        set cannot be read twice either, or it would be the only set
+        judged."""
         exports = _uv_invocations(AUDIT_SCRIPT, "export")
         runs = _uv_invocations(AUDIT_SCRIPT, "run")
         assert exports, "the audit script no longer exports the resolution"
         assert len(runs) == 1, f"the audit scans in more than one run: {runs}"
+        written: list[str] = []
+        for export in exports:
+            path = _flag_value(export, "-o")
+            assert path is not None, export
+            written.append(path)
         scanned = _flag_values(runs[0], "-r")
-        assert len(scanned) == len(exports), (scanned, exports)
+        assert sorted(scanned) == sorted(written), (scanned, written)
+        assert len(set(scanned)) == len(scanned), f"the audit reads one set twice: {scanned}"
 
     def test_the_audit_resolves_nothing_at_run_time(self) -> None:
         """The pins of the lockfiles are the scanned set, so the scan may
@@ -472,6 +587,19 @@ class TestAuditTool:
         # The audit project is excluded from the workspace, so it keeps its
         # own lockfile instead of sharing the root one.
         assert "tools/audit" in APP_PYPROJECT["tool"]["uv"]["workspace"]["exclude"]
+
+    def test_audit_script_runs_in_the_isolated_project(self) -> None:
+        """`npm run audit:py` starts the script in the audit project: uv run
+        there never syncs the root project, so the job installs no
+        application dependency before the scan starts."""
+        runs = _uv_run_commands(PACKAGE_JSON["scripts"]["audit:py"])
+        assert runs, "audit:py no longer runs the audit script"
+        project = _audit_project()
+        constants = _script_constants(AUDIT_SCRIPT)
+        for argv in runs:
+            selected = _flag_value(argv, "--project")
+            assert selected is not None, argv
+            assert (ROOT / constants.get(selected, selected)).resolve() == project, argv
 
     def test_audit_tool_is_covered_by_the_committed_lockfile(self) -> None:
         """The tool runs from the lockfile of its own project."""
@@ -535,6 +663,23 @@ class TestHttpsOnlyDownloads:
         for command, url in urls:
             host = urlparse(url).hostname
             assert host in LOCAL_HOSTS, f"{command} -> {url}"
+
+    def test_ipv6_literal_urls_are_extracted(self) -> None:
+        """A bracketed IPv6 literal is a host like any other: the extraction
+        has to keep it in one piece, or the host check never sees it."""
+        workflow = (
+            "run: curl -sf 'https://[2001:4860:4860::1]/health'\n"
+            "run: curl -sf 'http://[::1]:8000/health'\n"
+        )
+        found = _workflow_urls(workflow)
+        assert [url for _, url in found] == [
+            "https://[2001:4860:4860::1]/health",
+            "http://[::1]:8000/health",
+        ]
+        external, loopback = (urlparse(url).hostname for _, url in found)
+        assert external == "2001:4860:4860::1"
+        assert external not in LOCAL_HOSTS
+        assert loopback in LOCAL_HOSTS
 
 
 class TestChangedPathTriage:
