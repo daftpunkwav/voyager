@@ -124,11 +124,12 @@ jobs:
       # --locked: install exactly the resolved uv.lock versions and fail when the
       # lockfile is out of date with pyproject.toml instead of silently
       # re-resolving. --no-build: never build a source distribution of a
-      # third-party dependency, so no third-party build script runs during
-      # installation. The workspace members stay editable installs, so their own
-      # build backend still runs — on this repository's own code.
+      # third-party dependency. --no-build-isolation: the editable workspace
+      # members still build, and their hatchling backend is a locked dev
+      # dependency, so the build runs it from the lockfile instead of
+      # resolving a backend from the index while building.
       - name: Install Python workspace
-        run: uv sync --locked --no-build
+        run: uv sync --locked --no-build --no-build-isolation
 
       - name: ruff format/check
         run: npm run lint:py
@@ -240,11 +241,11 @@ jobs:
         run: node_modules/.bin/playwright install --with-deps chromium
 
       # Same pinning as the gate job: the lockfile decides the versions and no
-      # third-party source distribution is built. The workspace members stay
-      # editable installs, so their own build backend still runs — on this
-      # repository's own code.
+      # third-party source distribution is built. The editable workspace
+      # members build with the locked hatchling backend
+      # (--no-build-isolation).
       - name: Install Python workspace
-        run: uv sync --locked --no-build
+        run: uv sync --locked --no-build --no-build-isolation
 
       # Backend on a fresh data dir (the runner has none, so uvicorn's
       # factory path just creates it); LLM calls fail by design and the
@@ -259,7 +260,7 @@ jobs:
           # checkov:skip=CKV_SECRET_6:scratch placeholder, not real key material
           SECRETS_ENCRYPTION_KEY: e2e-scratch-only-never-a-real-key
         run: |
-          uv run --locked --no-build uvicorn host.assemble:build --factory --host 127.0.0.1 --port 8000 > backend.log 2>&1 &
+          uv run --locked --no-build --no-build-isolation uvicorn host.assemble:build --factory --host 127.0.0.1 --port 8000 > backend.log 2>&1 &
           for i in $(seq 1 60); do
             if curl -sf http://127.0.0.1:8000/health > /dev/null; then
               echo "backend healthy after ~$((i * 2))s"; exit 0

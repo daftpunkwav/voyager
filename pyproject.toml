@@ -109,6 +109,12 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=7.1.0",
     "ruff>=0.17.1",
+    # The editable workspace members are built on every install, so the build
+    # backend runs as third-party code in CI. Pinned exactly and installed
+    # from this lockfile; the installs disable build isolation
+    # (--no-build-isolation), so the build runs this locked hatchling and
+    # never resolves a backend while building.
+    "hatchling==1.32.4",
 ]
 
 [tool.ruff]

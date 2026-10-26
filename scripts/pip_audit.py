@@ -23,8 +23,10 @@ leaving a version unscanned.
 The audit tool runs in a project of its own (tools/audit), which is
 excluded from the workspace: its environment holds the audit tool and the
 dependencies it pulls in, never the application dependencies and never
-the default dev group. The tool is pinned in that project's dependency
-group, so the project's own lockfile covers it and everything it pulls in.
+the default dev group. The script itself runs in that same project
+(`npm run audit:py` selects it), so the job never creates the application
+environment either. The tool is pinned in the project's dependency group,
+so the project's own lockfile covers it and everything it pulls in.
 Nothing is resolved at run time, and a compromised release cannot enter
 the scan. Exit code propagates: nonzero when a known vulnerability is
 found.
@@ -105,6 +107,7 @@ def main() -> int:
                 AUDIT_PROJECT,
                 "--locked",
                 "--no-build",
+                "--no-build-isolation",
                 "--group",
                 AUDIT_GROUP,
                 "pip-audit",
