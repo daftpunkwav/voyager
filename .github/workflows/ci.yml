@@ -118,8 +118,10 @@ jobs:
 
       # --locked: install exactly the resolved uv.lock versions and fail when the
       # lockfile is out of date with pyproject.toml instead of silently
-      # re-resolving. --no-build: never run a source distribution build backend,
-      # so no package script executes during installation.
+      # re-resolving. --no-build: never build a source distribution of a
+      # third-party dependency, so no third-party build script runs during
+      # installation. The workspace members stay editable installs, so their own
+      # build backend still runs — on this repository's own code.
       - name: Install Python workspace
         run: uv sync --locked --no-build
 
@@ -233,7 +235,9 @@ jobs:
         run: node_modules/.bin/playwright install --with-deps chromium
 
       # Same pinning as the gate job: the lockfile decides the versions and no
-      # package build script runs during installation.
+      # third-party source distribution is built. The workspace members stay
+      # editable installs, so their own build backend still runs — on this
+      # repository's own code.
       - name: Install Python workspace
         run: uv sync --locked --no-build
 
