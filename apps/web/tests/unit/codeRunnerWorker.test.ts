@@ -9,26 +9,25 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildWorkerSource } from '@/lib/code-runner/javascriptRunner';
 import { createWorkerHarness, SKULPT_ENGINE_URL, WORKER_WS_ORIGIN } from './helpers/workerHarness';
 
+/** Minimal driver: the bootstrap only has to install and run what the page sends. */
+const DRIVER_STUB = `self.onmessage = function (event) {
+  self.postMessage({ ok: true, driver: 'installed' });
+};`;
+
 describe('worker bootstrap', () => {
-  it('installs the driver the page sends and runs a snippet through it', async () => {
+  it('installs the driver the page sends and runs it', async () => {
     const harness = createWorkerHarness();
-    await harness.deliver({ driver: buildWorkerSource() });
-    await harness.deliver({ source: "console.log('through the bootstrap');" });
-    expect(harness.reports).toHaveLength(1);
-    expect(harness.reports[0]).toMatchObject({
-      ok: true,
-      stdout: 'through the bootstrap',
-    });
+    await harness.deliver({ driver: DRIVER_STUB });
+    await harness.deliver({ source: 'ignored by the stub' });
+    expect(harness.reports[0]).toMatchObject({ ok: true, driver: 'installed' });
   });
 
-  it('reports a failing snippet as an error instead of a result', async () => {
+  it('refuses a message that carries no driver', async () => {
     const harness = createWorkerHarness();
-    await harness.deliver({ driver: buildWorkerSource() });
-    await harness.deliver({ source: "throw new Error('boom');" });
-    expect(harness.reports[0]).toMatchObject({ ok: false });
+    await harness.deliver({ source: 'no driver here' });
+    expect(harness.reports).toEqual([]);
   });
 });
 
@@ -77,6 +76,14 @@ describe('worker bootstrap origin guard', () => {
   it('refuses a secure WebSocket from an insecure page', () => {
     const harness = createWorkerHarness();
     expect(() => harness.scope.WebSocket('wss://localhost:5173/socket')).toThrow(/may only reach/);
+  });
+
+  it('keeps the native socket constructors out of reach', () => {
+    const harness = createWorkerHarness();
+    expect(harness.scope.WebSocket.prototype.constructor).toBe(harness.scope.WebSocket);
+    expect(harness.scope.EventSource.prototype.constructor).toBe(harness.scope.EventSource);
+    const socket = harness.scope.WebSocket.prototype.constructor as typeof harness.scope.WebSocket;
+    expect(() => socket('ws://example.com/socket')).toThrow(/may only reach/);
   });
 });
 

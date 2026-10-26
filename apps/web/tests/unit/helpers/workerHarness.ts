@@ -41,6 +41,9 @@ export const SKULPT_STDLIB_URL = '/vendor/skulpt/skulpt-stdlib.js';
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
+/** Makes the context global its own `self`, the way a worker global is. */
+const WORKER_GLOBAL_SETUP = 'globalThis.self = globalThis;';
+
 /** The bootstrap the app ships, read from the file that is served. */
 const BOOTSTRAP_SOURCE = readFileSync(
   path.join(appRoot, 'public', 'code-runner-worker.js'),
@@ -54,6 +57,7 @@ export interface SocketConstructor {
   OPEN?: number;
   CLOSING?: number;
   CLOSED?: number;
+  prototype: { constructor: unknown };
 }
 
 /** The worker global scope the bootstrap and the driver run in. */
@@ -223,7 +227,8 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
     imports.push(url);
     const source = driverSources.get(url);
     if (source !== undefined) {
-      vm.runInContext(source, context);
+      // The driver is the app's own generated source, never user input.
+      vm.runInContext(source, context); // NOSONAR
       return;
     }
     if (url === SKULPT_ENGINE_URL) {
@@ -239,8 +244,8 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
   };
 
   // A worker global is its own `self`, and the scripts it imports run in it.
-  vm.runInContext('globalThis.self = globalThis;', context);
-  vm.runInContext(BOOTSTRAP_SOURCE, context);
+  // The evaluated source is the app's own shipped file, never user input.
+  vm.runInContext(`${WORKER_GLOBAL_SETUP}\n${BOOTSTRAP_SOURCE}`, context); // NOSONAR
 
   return {
     scope,
