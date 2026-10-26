@@ -117,6 +117,19 @@
     guardNativeConstructor(self.EventSource.prototype, self.EventSource);
   }
 
+  // A transport of its own: WebTransport opens a QUIC connection to the URL
+  // it is given, so it needs the same limit as the other transports.
+  if (typeof self.WebTransport === 'function') {
+    var NativeWebTransport = self.WebTransport;
+    self.WebTransport = function (url, options) {
+      guardTarget('WebTransport', url);
+      return new NativeWebTransport(url, options);
+    };
+    self.WebTransport.prototype = NativeWebTransport.prototype;
+    copyStaticMembers(self.WebTransport, NativeWebTransport);
+    guardNativeConstructor(self.WebTransport.prototype, self.WebTransport);
+  }
+
   // The driver loads the vendored engine from this origin, so the same limit
   // applies to the scripts it pulls in.
   var nativeImportScripts = self.importScripts;

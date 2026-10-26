@@ -24,14 +24,16 @@ import { vi } from 'vitest';
 /** Host the simulated worker is served from. */
 const WORKER_HOST = 'localhost:5173';
 
+/** Origin the simulated worker is served from, for the page scheme in use. */
+export function workerOrigin(secure: boolean): string {
+  return `${secure ? 'https' : 'http'}://${WORKER_HOST}`;
+}
+
 /** Origin the simulated worker is served from. */
-const WORKER_ORIGIN = `http://${WORKER_HOST}`;
+export const WORKER_ORIGIN = workerOrigin(false);
 
 /** WebSocket origin of the same host, the way a snippet reaches it. */
 export const WORKER_WS_ORIGIN = `ws://${WORKER_HOST}`;
-
-/** Location of the simulated worker script. */
-const WORKER_LOCATION = `${WORKER_ORIGIN}/code-runner-worker.js`;
 
 /** Vendored engine script the Python driver imports inside the worker. */
 export const SKULPT_ENGINE_URL = '/vendor/skulpt/skulpt.min.js';
@@ -76,6 +78,8 @@ export interface WorkerScope {
   WebSocket: SocketConstructor;
   /** Guarded EventSource constructor. */
   EventSource: SocketConstructor;
+  /** Guarded WebTransport constructor. */
+  WebTransport: SocketConstructor;
   /** Guarded importScripts: cross-origin targets are refused. */
   importScripts: (url: string) => void;
   /** Message handler the bootstrap and then the driver install. */
@@ -95,6 +99,11 @@ export interface WorkerHarnessOptions {
    * file does; it is absent before the import.
    */
   engine?: unknown;
+  /**
+   * Serve the worker from a secure origin. A WebTransport needs a secure
+   * context, so the guard for it is only observable there.
+   */
+  secure?: boolean;
 }
 
 /** A simulated worker scope with the shipped bootstrap already installed. */
@@ -113,6 +122,8 @@ export interface WorkerHarness {
   readonly socketUrls: string[];
   /** Event stream URLs the worker subscribed to. */
   readonly eventSourceUrls: string[];
+  /** Transport URLs the worker connected to. */
+  readonly transportUrls: string[];
   /** Called for every message the worker posts back to the page. */
   onReport: (report: unknown) => void;
   /** Hand a page message to the worker and wait for its handler to settle. */
@@ -139,10 +150,14 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
   const xhrOpens: string[] = [];
   const socketUrls: string[] = [];
   const eventSourceUrls: string[] = [];
+  const transportUrls: string[] = [];
   /** Driver sources handed out as blob URLs, keyed by the URL. */
   const driverSources = new Map<string, string>();
   let driverCounter = 0;
   let onReport: (report: unknown) => void = () => {};
+  const origin = workerOrigin(options.secure ?? false);
+  const protocol = options.secure ? 'https:' : 'http:';
+  const location = `${origin}/code-runner-worker.js`;
 
   /** Blob stand-in: the bootstrap only needs the text the driver carries. */
   class HarnessBlob {
@@ -158,7 +173,7 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
   /** URL stand-in: the platform URL plus blob URLs of the worker origin. */
   class HarnessUrl extends URL {
     static override createObjectURL(blob: Blob): string {
-      const url = `blob:${WORKER_ORIGIN}/__driver__${++driverCounter}`;
+      const url = `blob:${origin}/__driver__${++driverCounter}`;
       driverSources.set(url, (blob as unknown as HarnessBlob).text());
       return url;
     }
@@ -199,12 +214,21 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
     }
   }
 
+  /** WebTransport stand-in: the bootstrap guards its constructor. */
+  class HarnessWebTransport {
+    readonly url: string;
+    constructor(url: string) {
+      this.url = url;
+      transportUrls.push(url);
+    }
+  }
+
   const scope = {
     console,
     location: {
-      href: WORKER_LOCATION,
-      origin: WORKER_ORIGIN,
-      protocol: 'http:',
+      href: location,
+      origin,
+      protocol,
       host: WORKER_HOST,
     },
     URL: HarnessUrl,
@@ -216,6 +240,7 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
     XMLHttpRequest: HarnessXhr,
     WebSocket: HarnessWebSocket,
     EventSource: HarnessEventSource,
+    WebTransport: HarnessWebTransport,
     postMessage: (report: unknown): void => {
       reports.push(report);
       onReport(report);
@@ -255,6 +280,7 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
     xhrOpens,
     socketUrls,
     eventSourceUrls,
+    transportUrls,
     get onReport(): (report: unknown) => void {
       return onReport;
     },

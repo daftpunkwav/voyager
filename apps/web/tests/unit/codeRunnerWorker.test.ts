@@ -9,7 +9,12 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { createWorkerHarness, SKULPT_ENGINE_URL, WORKER_WS_ORIGIN } from './helpers/workerHarness';
+import {
+  createWorkerHarness,
+  SKULPT_ENGINE_URL,
+  WORKER_WS_ORIGIN,
+  workerOrigin,
+} from './helpers/workerHarness';
 
 /** Minimal driver: the bootstrap only has to install and run what the page sends. */
 const DRIVER_STUB = `self.onmessage = function (event) {
@@ -40,11 +45,18 @@ describe('worker bootstrap origin guard', () => {
     ).toThrow(/may only reach/);
     expect(() => harness.scope.WebSocket('https://example.com/socket')).toThrow(/may only reach/);
     expect(() => harness.scope.EventSource('https://example.com/stream')).toThrow(/may only reach/);
+    expect(() => harness.scope.WebTransport('https://example.com/transport')).toThrow(
+      /may only reach/
+    );
     expect(() => harness.scope.importScripts('https://example.com/engine.js')).toThrow(
       /may only reach/
     );
+    // Nothing reached the network: a refused target leaves no trace.
     expect(harness.fetches).toEqual([]);
     expect(harness.socketUrls).toEqual([]);
+    expect(harness.eventSourceUrls).toEqual([]);
+    expect(harness.transportUrls).toEqual([]);
+    expect(harness.imports).toEqual([]);
   });
 
   it('allows same-origin requests', async () => {
@@ -78,10 +90,26 @@ describe('worker bootstrap origin guard', () => {
     expect(() => harness.scope.WebSocket('wss://localhost:5173/socket')).toThrow(/may only reach/);
   });
 
+  it('refuses a WebTransport to another host', () => {
+    const harness = createWorkerHarness({ secure: true });
+    expect(() => harness.scope.WebTransport('https://example.com/transport')).toThrow(
+      /may only reach/
+    );
+    expect(harness.transportUrls).toEqual([]);
+  });
+
+  it('allows a WebTransport to the host the app is served from', () => {
+    const harness = createWorkerHarness({ secure: true });
+    const transport = `${workerOrigin(true)}/transport`;
+    expect(() => harness.scope.WebTransport(transport)).not.toThrow();
+    expect(harness.transportUrls).toEqual([transport]);
+  });
+
   it('keeps the native socket constructors out of reach', () => {
     const harness = createWorkerHarness();
     expect(harness.scope.WebSocket.prototype.constructor).toBe(harness.scope.WebSocket);
     expect(harness.scope.EventSource.prototype.constructor).toBe(harness.scope.EventSource);
+    expect(harness.scope.WebTransport.prototype.constructor).toBe(harness.scope.WebTransport);
     const socket = harness.scope.WebSocket.prototype.constructor as typeof harness.scope.WebSocket;
     expect(() => socket('ws://example.com/socket')).toThrow(/may only reach/);
   });
