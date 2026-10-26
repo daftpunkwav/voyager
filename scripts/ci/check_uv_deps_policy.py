@@ -10,6 +10,7 @@ lives in a project of its own, and a ban must hold for its lockfile too."""
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess  # nosec B404  # git invocation is the purpose of this check
 import sys
@@ -30,20 +31,27 @@ def lockfiles() -> list[Path]:
     The list comes from the git index, so a lockfile that was never
     committed cannot decide the verdict - and a lockfile that was committed
     always can, wherever in the tree it lives.
+
+    The listing is NUL-delimited and read as bytes: git quotes non-ASCII
+    paths in its default output, and a quoted path would no longer look like
+    a lockfile. The bytes are decoded the way a filesystem path is, so the
+    returned path is the one git knows.
     """
     listed = subprocess.run(  # nosec B603 B607  # constant argv, dev script
-        ["git", "-C", str(ROOT), "ls-files", "--full-name"],
+        ["git", "-C", str(ROOT), "ls-files", "--full-name", "-z"],
         check=False,
         capture_output=True,
-        text=True,
     )
     if listed.returncode != 0:
-        print(f"cannot list the committed files: {listed.stderr.strip()}", file=sys.stderr)
+        print(
+            f"cannot list the committed files: {listed.stderr.decode(errors='replace').strip()}",
+            file=sys.stderr,
+        )
         raise SystemExit(1)
     names = [
-        line
-        for line in listed.stdout.splitlines()
-        if line == "uv.lock" or line.endswith("/uv.lock")
+        name
+        for name in (os.fsdecode(entry) for entry in listed.stdout.split(b"\0"))
+        if name == "uv.lock" or name.endswith("/uv.lock")
     ]
     return [ROOT / name for name in sorted(names)]
 

@@ -90,6 +90,7 @@ def _repository(
     tmp_path: Path,
     root_packages: dict[str, str],
     nested_packages: dict[str, str],
+    nested_lockfile: str = NESTED_LOCKFILE,
 ) -> Path:
     """A git repository with a committed root and a committed nested lockfile.
 
@@ -102,10 +103,10 @@ def _repository(
     hooks.mkdir()
     _git(repo, hooks, "init")
     (repo / "uv.lock").write_text(_lockfile(root_packages), encoding="utf-8")
-    nested = repo / NESTED_LOCKFILE
+    nested = repo / nested_lockfile
     nested.parent.mkdir(parents=True)
     nested.write_text(_lockfile(nested_packages), encoding="utf-8")
-    _git(repo, hooks, "add", "--", "uv.lock", NESTED_LOCKFILE)
+    _git(repo, hooks, "add", "--", "uv.lock", nested_lockfile)
     _commit(repo, hooks, "commit the lockfiles")
     return repo
 
@@ -161,6 +162,23 @@ class TestCommittedLockfiles:
         found = module.lockfiles()
 
         assert set(found) == {repo / "uv.lock", repo / NESTED_LOCKFILE}
+
+    def test_a_non_ascii_directory_does_not_hide_a_lockfile(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Git quotes non-ASCII paths in its default listing, and a quoted
+        path does not end in `/uv.lock`: the discovery has to read the
+        NUL-delimited listing, or it silently skips the lockfile."""
+        nested = "tools/dépendances/uv.lock"
+        repo = _repository(tmp_path, {"root-package": "1.0.0"}, {"nested-package": "2.0.0"}, nested)
+        module = _check_module()
+        monkeypatch.setattr(module, "ROOT", repo)
+
+        found = module.lockfiles()
+
+        assert set(found) == {repo / "uv.lock", repo / nested}
 
     def test_a_ban_in_a_nested_lockfile_fails_the_check(
         self,
