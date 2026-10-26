@@ -86,6 +86,15 @@ platform-secrets = { workspace = true }
 platform-webguard = { workspace = true }
 
 [dependency-groups]
+# The audit tool runs from the locked environment (npm run audit:py), so its
+# transitive dependencies are covered by uv.lock instead of being resolved at
+# run time. A separate group keeps it out of the default install: only the
+# audit job needs it, and the exported requirement set stays unchanged.
+audit = [
+    # Exact version: the audit gate runs code, so a new release must be taken
+    # deliberately. The lockfile pins it either way.
+    "pip-audit==2.10.1",
+]
 dev = [
     # The scaffold member stays out of the production aggregate (host scan
     # skips underscore-prefixed directories, so _template is never
