@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
+import subprocess  # nosec B404  # git invocation is the purpose of this check
 import sys
 from pathlib import Path
 
@@ -31,7 +31,7 @@ def lockfiles() -> list[Path]:
     committed cannot decide the verdict - and a lockfile that was committed
     always can, wherever in the tree it lives.
     """
-    listed = subprocess.run(
+    listed = subprocess.run(  # nosec B603 B607  # constant argv, dev script
         ["git", "-C", str(ROOT), "ls-files", "--full-name"],
         check=False,
         capture_output=True,
