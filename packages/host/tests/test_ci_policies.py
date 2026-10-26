@@ -7,6 +7,7 @@ runtime suite observes them, so a change that dropped one of these guards
 would leave the whole suite green. The policy is asserted here instead.
 """
 
+import ast
 import json
 from fnmatch import fnmatch
 from pathlib import Path
@@ -56,6 +57,34 @@ def _triage_patterns(workflow: str) -> dict[str, str]:
     return patterns
 
 
+def _uv_invocations(script: str, subcommand: str) -> list[list[str]]:
+    """The argument vectors of the `uv <subcommand>` calls in the script.
+
+    The audit script calls `uv` twice: once to export the resolution and
+    once to run the audit tool. Every call is read on its own, so one
+    invocation cannot pass the check on the strength of the other.
+    """
+    invocations: list[list[str]] = []
+    for node in ast.walk(ast.parse(script)):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Attribute) or func.attr != "run":
+            continue
+        if not isinstance(func.value, ast.Name) or func.value.id != "subprocess":
+            continue
+        if not node.args or not isinstance(node.args[0], ast.List):
+            continue
+        argv = [
+            element.value
+            for element in node.args[0].elts
+            if isinstance(element, ast.Constant) and isinstance(element.value, str)
+        ]
+        if len(argv) >= 2 and argv[0] == "uv" and argv[1] == subcommand:
+            invocations.append(argv)
+    return invocations
+
+
 class TestLockedResolution:
     def test_python_installs_use_the_locked_versions(self) -> None:
         commands = _commands(CI_WORKFLOW, "uv sync") + _commands(CI_WORKFLOW, "uv run")
@@ -88,10 +117,23 @@ class TestDisabledInstallScripts:
 
 
 class TestAuditTool:
+    def test_audit_export_reads_the_committed_lockfile(self) -> None:
+        """The scanned requirements must be the committed resolution, so the
+        export may not re-resolve the dependencies it writes."""
+        exports = _uv_invocations(AUDIT_SCRIPT, "export")
+        assert exports, "the audit script no longer exports the resolution"
+        for argv in exports:
+            assert "--locked" in argv, argv
+
     def test_audit_tool_runs_from_the_locked_environment(self) -> None:
+        """The audit tool must come from the locked environment, so the run
+        may not re-resolve the tool and its dependencies."""
+        runs = _uv_invocations(AUDIT_SCRIPT, "run")
+        assert runs, "the audit script no longer runs the audit tool"
+        for argv in runs:
+            assert "--locked" in argv, argv
+            assert "pip-audit" in argv, argv
         assert "uvx" not in AUDIT_SCRIPT
-        assert '"--locked"' in AUDIT_SCRIPT
-        assert '"pip-audit"' in AUDIT_SCRIPT
 
     def test_audit_tool_is_covered_by_the_committed_lockfile(self) -> None:
         assert 'name = "pip-audit"' in UV_LOCK
