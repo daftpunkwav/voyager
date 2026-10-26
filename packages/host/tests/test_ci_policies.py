@@ -211,6 +211,45 @@ def _flag_values(argv: list[str], flag: str) -> list[str]:
     ]
 
 
+def _pins(requirements: list[str]) -> dict[str, str]:
+    """The exact pins of a requirement list, name -> pinned version.
+
+    Requirements without an exact pin are left out; `_exact_pins` asserts
+    that none are.
+    """
+    pins: dict[str, str] = {}
+    for requirement in requirements:
+        name, separator, version = requirement.partition("==")
+        if separator and version:
+            pins[name] = version
+    return pins
+
+
+def _exact_pins(requirements: list[str], scope: str) -> dict[str, str]:
+    """The exact pins of a requirement list where every entry has to pin."""
+    pins = _pins(requirements)
+    assert len(pins) == len(requirements), f"not an exact pin in the {scope}: {requirements}"
+    return pins
+
+
+def _requirement_name(requirement: str) -> str:
+    """The distribution name of a PEP 508 requirement string."""
+    match = re.match(r"[A-Za-z0-9][A-Za-z0-9._-]*", requirement)
+    assert match is not None, requirement
+    return match.group(0)
+
+
+def _workspace_build_requirements() -> list[str]:
+    """The build requirements every editable workspace member declares."""
+    requires: list[str] = []
+    for member in APP_PYPROJECT["tool"]["uv"]["workspace"]["members"]:
+        manifest = tomllib.loads((ROOT / member / "pyproject.toml").read_text(encoding="utf-8"))
+        member_requires = manifest["build-system"]["requires"]
+        assert member_requires, member
+        requires.extend(member_requires)
+    return requires
+
+
 def _matches(path: str, pattern: str) -> bool:
     """Whether a path matches one of the alternatives of a shell pattern list."""
     return any(fnmatch(path, alternative) for alternative in pattern.split("|"))
@@ -433,46 +472,44 @@ class TestNoSourceBuilds:
 
 class TestLockedBuildBackend:
     """The editable workspace members are built on every install, so their
-    build backend runs as third-party code. It has to come from the
-    lockfile, not from a resolution performed while building."""
+    build backend runs as third-party code. The backend has to be a locked
+    dependency, and the build environment has to be constrained to the
+    versions the lockfile records."""
 
     def test_the_build_backend_is_a_pinned_locked_dev_dependency(self) -> None:
-        """Every build requirement of every member is pinned exactly in the
-        dev group and resolved in the lockfile at that pin, so the backend
-        the installs run is a locked dependency."""
-        members = APP_PYPROJECT["tool"]["uv"]["workspace"]["members"]
-        dev_pins: dict[str, str] = {}
-        for requirement in APP_PYPROJECT["dependency-groups"]["dev"]:
-            name, separator, version = requirement.partition("==")
-            if separator:
-                dev_pins[name] = version
+        """The backend is a real dependency of this lockfile, so it is
+        installed from the lock (and scanned by the audit) like everything
+        else."""
+        dev_pins = _pins(APP_PYPROJECT["dependency-groups"]["dev"])
         packages = _lock_packages(APP_UV_LOCK)
-        for member in members:
-            manifest = tomllib.loads((ROOT / member / "pyproject.toml").read_text(encoding="utf-8"))
-            requires = manifest["build-system"]["requires"]
-            assert requires, member
-            for requirement in requires:
-                match = re.match(r"[A-Za-z0-9][A-Za-z0-9._-]*", requirement)
-                assert match is not None, (member, requirement)
-                name = match.group(0)
-                assert name in dev_pins, f"{member} builds with an unpinned backend: {requirement}"
-                assert name in packages, f"{name} is not resolved in uv.lock"
-                assert packages[name]["version"] == dev_pins[name], (name, packages[name])
+        for requirement in _workspace_build_requirements():
+            name = _requirement_name(requirement)
+            assert name in dev_pins, f"the backend is not a pinned dev dependency: {requirement}"
+            assert name in packages, f"{name} is not resolved in uv.lock"
+            assert packages[name]["version"] == dev_pins[name], (name, packages[name])
 
-    def test_every_install_runs_the_locked_build_backend(self) -> None:
-        """Build isolation resolves the backend from the index while
-        building, so every install disables it and builds with the locked
-        dependency instead."""
-        commands = _commands(CI_WORKFLOW, "uv sync") + _commands(CI_WORKFLOW, "uv run")
-        assert commands, "the workflow no longer installs the Python workspace"
-        for command in commands:
-            for argv in _uv_commands(command):
-                assert "--no-build-isolation" in argv, (command, argv)
-        for name, script in PACKAGE_JSON["scripts"].items():
-            for argv in _uv_commands(script):
-                assert "--no-build-isolation" in argv, f"{name}: {argv}"
-        for argv in _uv_invocations(AUDIT_SCRIPT, "run"):
-            assert "--no-build-isolation" in argv, argv
+    def test_the_build_environment_is_constrained_to_locked_versions(self) -> None:
+        """uv resolves the build requirements from the index while building,
+        so every one of them is constrained to the exact version the
+        lockfile resolves. The lockfile records the constraints, which makes
+        `--locked` reject a manifest that drifts from them."""
+        pins = _exact_pins(
+            APP_PYPROJECT["tool"]["uv"]["build-constraint-dependencies"],
+            "build constraints",
+        )
+        assert pins
+        packages = _lock_packages(APP_UV_LOCK)
+        for name, version in pins.items():
+            assert name in packages, f"{name} is not resolved in uv.lock"
+            assert packages[name]["version"] == version, (name, packages[name], version)
+        for requirement in _workspace_build_requirements():
+            assert _requirement_name(requirement) in pins, (
+                f"the build environment is not constrained for {requirement}"
+            )
+        recorded = APP_UV_LOCK["manifest"].get("build-constraints", [])
+        assert {(entry["name"], entry["specifier"]) for entry in recorded} == {
+            (name, f"=={version}") for name, version in pins.items()
+        }
 
 
 class TestAuditTool:
