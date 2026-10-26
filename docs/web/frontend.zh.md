@@ -47,4 +47,6 @@ React 19(经根 `package.json` 的 `overrides` 精确钉版)、`react-router-dom
 
 ## 构建与开发
 
-`vite.config.ts` — 别名 `@` → `./src`;开发服务器 `127.0.0.1:5173`(`VITE_PORT`、`strictPort`);`/api` 与 `/health` 代理到 `VITE_API_TARGET`(默认 `http://127.0.0.1:8000`);品牌字符串从仓库根 `brand.json` 注入;pdf.js 资源复制到 `/pdfjs/`;three/mermaid/pdfjs/codemirror/d3 各拆 vendor chunk;开发 CSP 以响应头注入,开发服务器会放宽产物 meta CSP 的 `script-src` 以容纳其注入的 React Fast Refresh 前导脚本。`npm run build` = `tsc --noEmit && vite build` 产出到 `dist/`;`npm run preview` 服务构建产物。gateway 不服务 SPA;生产环境由外部静态服务器或反向代理承载。
+`vite.config.ts` — 别名 `@` → `./src`;开发服务器 `127.0.0.1:5173`(`VITE_PORT`、`strictPort`);`/api` 与 `/health` 代理到 `VITE_API_TARGET`(默认 `http://127.0.0.1:8000`);品牌字符串从仓库根 `brand.json` 注入;pdf.js 资源复制到 `/pdfjs/`;three/mermaid/pdfjs/codemirror/d3 各拆 vendor chunk;响应策略由 `vite.config.ts` 的 `response-policies` 插件下发,开发服务器会放宽产物 meta CSP 的 `script-src` 以容纳其注入的 React Fast Refresh 前导脚本。`npm run build` = `tsc --noEmit && vite build` 产出到 `dist/`;`npm run preview` 服务构建产物。gateway 不服务 SPA;生产环境由外部静态服务器或反向代理承载。
+
+围栏代码运行器运行在 `public/code-runner-worker.js` 这个独立 worker 中,因此它取的是自身响应的策略,而不是页面策略。开发服务器与预览服务器为它下发 `apps/web/vite.config.ts` 中的 `WORKER_CSP` 策略;生产环境的静态服务器必须为 `/code-runner-worker.js` 下发同样的响应头。该策略拦下的是重定向到其它源的脚本加载与嵌套 worker,这两者都是 worker 内部的守卫拦不住的。

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import path from 'path';
@@ -22,11 +22,71 @@ const brand = JSON.parse(readFileSync(path.resolve(__dirname, '../../brand.json'
 // The shipped policy (apps/web/index.html) allows no inline script and no
 // eval in the page. The dev server relaxes script-src for the React Fast
 // Refresh preamble it injects into <head> (an inline <script type="module">).
-// The dev response header below additionally allows eval and blob scripts,
-// because the code-runner worker takes its policy from that header and
-// imports its driver from a blob.
 const CSP_SCRIPT_SRC = "script-src 'self';";
 const CSP_SCRIPT_SRC_DEV = "script-src 'self' 'unsafe-inline';";
+
+// The runner worker is served as its own script, so it takes the policy of
+// its own response rather than the page policy. That policy closes what the
+// guards inside the worker cannot stop: a script load that redirects to
+// another origin, and a nested worker.
+const RUNNER_WORKER_PATH = '/code-runner-worker.js';
+
+const WORKER_CSP = [
+  "default-src 'none'",
+  "script-src 'self' blob: 'unsafe-eval'",
+  "connect-src 'self'",
+  "worker-src 'none'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+].join('; ');
+
+// §4.2 dev injects the full CSP (incl. frame-ancestors, which meta does not
+// support); production injects it via gateway / reverse proxy response
+// headers.
+const DEV_PAGE_CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:",
+  "worker-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:",
+  "img-src 'self' data: https:",
+  "connect-src 'self' ws: wss: http://127.0.0.1:8000",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join('; ');
+
+/**
+ * Send the policy of every dev and preview response.
+ *
+ * The policy is set here rather than in `server.headers` because that option
+ * applies the page policy to every file it serves, which would overwrite the
+ * worker policy of the runner worker.
+ */
+function responsePolicies(): Plugin {
+  const middleware = (
+    req: { url?: string },
+    res: { setHeader: (name: string, value: string) => void },
+    next: () => void
+  ): void => {
+    const path = (req.url ?? '').split('?')[0];
+    res.setHeader(
+      'Content-Security-Policy',
+      path === RUNNER_WORKER_PATH ? WORKER_CSP : DEV_PAGE_CSP
+    );
+    next();
+  };
+  return {
+    name: 'response-policies',
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    },
+  };
+}
 
 export default defineConfig({
   define: {
@@ -45,6 +105,7 @@ export default defineConfig({
         return ctx.server ? branded.replace(CSP_SCRIPT_SRC, CSP_SCRIPT_SRC_DEV) : branded;
       },
     },
+    responsePolicies(),
     react(),
     viteStaticCopy({
       targets: [
@@ -66,22 +127,8 @@ export default defineConfig({
     host: '127.0.0.1',
     port: Number(process.env.VITE_PORT) || 5173,
     strictPort: true,
-    // §4.2 dev injects the full CSP (incl. frame-ancestors, which meta does not support);
-    // production injects it via gateway / reverse proxy response headers.
-    headers: {
-      'Content-Security-Policy': [
-        "default-src 'self'",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:",
-        "worker-src 'self'",
-        "style-src 'self' 'unsafe-inline'",
-        "font-src 'self' data:",
-        "img-src 'self' data: https:",
-        "connect-src 'self' ws: wss: http://127.0.0.1:8000",
-        "frame-ancestors 'none'",
-        "base-uri 'self'",
-        "form-action 'self'",
-      ].join('; '),
-    },
+    // The response policy comes from the response-policies plugin: the runner
+    // worker carries the policy of its own response, not the page policy.
     proxy: {
       // /health is not under the /api prefix; proxy it separately (the service badge bar and the status page depend on it)
       '/api': { target: BACKEND, changeOrigin: true },
