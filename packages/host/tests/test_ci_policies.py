@@ -561,10 +561,9 @@ class TestAuditTool:
         assert Counter(scanned) == Counter(written), (scanned, written)
 
     def test_both_sets_are_scanned_by_one_run(self) -> None:
-        """One run means one advisory snapshot: an advisory published
-        between two runs cannot miss the set that was scanned first. A
-        set cannot be read twice either, or it would be the only set
-        judged."""
+        """Both sets are scanned by one invocation, and each exported set is
+        read exactly once. A second run would audit the sets separately; a
+        repeated path would leave one set unscanned."""
         exports = _uv_invocations(AUDIT_SCRIPT, "export")
         runs = _uv_invocations(AUDIT_SCRIPT, "run")
         assert exports, "the audit script no longer exports the resolution"

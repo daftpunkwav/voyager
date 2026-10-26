@@ -13,12 +13,10 @@ project itself: the audit tooling runs while the scan runs, so a
 vulnerability in it is reachable during the scan and has to be reported
 like a vulnerability in any other dependency.
 
-Both sets go into one audit run: the advisory database is queried once,
-so both sets are judged against the same snapshot and an advisory
-published between two runs cannot miss the set that was scanned first.
-pip-audit scans one version per package, so the two sets have to agree
-on the packages they share - a divergence fails the scan instead of
-leaving a version unscanned.
+Both sets go into one pip-audit invocation: both requirement files are
+passed to the same run, so neither set can be left out by starting a
+second scan. pip-audit audits the pinned versions it is given; nothing is
+resolved while the scan reads them.
 
 The audit tool runs in a project of its own (tools/audit), which is
 excluded from the workspace: its environment holds the audit tool and the
@@ -95,10 +93,10 @@ def main() -> int:
 
         # The tool and its dependencies come from the audit project's
         # lockfile: the group installs exactly the versions that lockfile
-        # resolved, and nothing else. Both sets go into one run, so the
-        # advisory database is queried once. The exports carry the hashes
-        # of the lockfile, so the scan reads the pinned set as it is
-        # (--disable-pip): nothing is resolved while the scan runs.
+        # resolved, and nothing else. Both requirement files go into one
+        # run, so neither set can be left out between two scans. The exports
+        # carry the hashes of the lockfile, so the scan reads the pinned set
+        # as it is (--disable-pip): nothing is resolved while the scan runs.
         audit = subprocess.run(  # nosec B603 B607  # constant argv, dev script
             [
                 "uv",
