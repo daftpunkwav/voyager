@@ -9,6 +9,7 @@ would leave the whole suite green. The policy is asserted here instead.
 
 import ast
 import json
+import re
 import shlex
 import tomllib
 from fnmatch import fnmatch
@@ -25,9 +26,9 @@ APP_PYPROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-
 APP_UV_LOCK = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
 AUDIT_SCRIPT = (ROOT / "scripts/pip_audit.py").read_text(encoding="utf-8")
 
-# The client program of an HTTP request does not matter for the policy:
-# curl, wget and the httpie front ends all leave the machine.
-REQUEST_TOOLS = frozenset({"curl", "wget", "http", "https", "aria2c", "httpie"})
+# A URL in a workflow command, wherever it stands: the policy is about the
+# host a request reaches, not about the program that fetches it.
+URL_PATTERN = re.compile(r"https?://[^\s'\"`()<>\[\]{},;\\]+")
 # The hosts a workflow request may reach.
 LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 # The npm scripts that run the Python tooling. Every one of them has to
@@ -146,6 +147,19 @@ def _flag_value(argv: list[str], flag: str) -> str | None:
     return None
 
 
+def _flag_values(argv: list[str], flag: str) -> list[str]:
+    """The words that follow a flag, in the order they appear.
+
+    A flag may be given more than once (pip-audit reads several
+    requirement files), so every occurrence counts.
+    """
+    return [
+        argv[index + 1]
+        for index, argument in enumerate(argv)
+        if argument == flag and index + 1 < len(argv)
+    ]
+
+
 def _matches(path: str, pattern: str) -> bool:
     """Whether a path matches one of the alternatives of a shell pattern list."""
     return any(fnmatch(path, alternative) for alternative in pattern.split("|"))
@@ -226,12 +240,9 @@ def _audit_project() -> Path:
     The path comes from the script, so the policy is asserted on the
     project that actually runs the tool.
     """
-    runs = _uv_invocations(AUDIT_SCRIPT, "run")
-    assert runs, "the audit script no longer runs the audit tool"
-    project = _flag_value(runs[0], "--project")
-    assert project is not None, f"the audit tool no longer runs in its own project: {runs[0]}"
-    constants = _script_constants(AUDIT_SCRIPT)
-    return (ROOT / constants.get(project, project)).resolve()
+    project = _script_constants(AUDIT_SCRIPT).get("AUDIT_PROJECT")
+    assert project is not None, "the audit script no longer names the audit project"
+    return (ROOT / project).resolve()
 
 
 def _audit_manifest() -> dict[str, Any]:
@@ -271,24 +282,23 @@ def _lock_packages(lock: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {package["name"]: package for package in lock.get("package", [])}
 
 
-def _request_commands(workflow: str) -> list[tuple[str, list[str]]]:
-    """The HTTP request commands of a workflow and their target URLs.
+def _workflow_urls(workflow: str) -> list[tuple[str, str]]:
+    """The URLs a workflow names and the command that names them.
 
-    The client program does not matter (curl, wget, http, ...): the policy
-    is about the host a request reaches, so every tool that can issue one
-    is inspected.
+    The policy is about the URL, not the program that fetches it: a URL
+    in the code of a Python command leaves the machine just as a URL in a
+    curl command does, and a program outside any whitelist is no
+    exception. A trailing comment names no request, so it is left out.
     """
-    requests: list[tuple[str, list[str]]] = []
+    found: list[tuple[str, str]] = []
     for line in workflow.splitlines():
         stripped = line.strip()
         if stripped.startswith("#"):
             continue
-        if not any(token.strip(";&|()") in REQUEST_TOOLS for token in stripped.split()):
-            continue
-        argv = _argv(stripped)
-        urls = [token for token in argv if token.startswith(("http://", "https://"))]
-        requests.append((stripped, urls))
-    return requests
+        command = stripped.split(" #", 1)[0]
+        for url in URL_PATTERN.findall(command):
+            found.append((stripped, url))
+    return found
 
 
 class TestLockedResolution:
@@ -325,7 +335,11 @@ class TestDisabledInstallScripts:
         commands = _commands(CI_WORKFLOW, "npm ci")
         assert commands, "the workflow no longer installs the Node workspace"
         for command in commands:
-            assert "--ignore-scripts" in _argv(command), command
+            argv = _argv(command)
+            # The install has to be the command that runs, not a word in
+            # an echo of it.
+            assert argv[:2] == ["npm", "ci"], command
+            assert "--ignore-scripts" in argv, command
 
     def test_playwright_comes_from_the_installed_workspace(self) -> None:
         assert "node_modules/.bin/playwright install" in CI_WORKFLOW
@@ -396,11 +410,34 @@ class TestAuditTool:
         runs = _uv_invocations(AUDIT_SCRIPT, "run")
         assert exports, "the audit script no longer exports the resolution"
         assert runs, "the audit script no longer runs the audit tool"
-        scanned = {_flag_value(run, "-r") for run in runs}
+        scanned = {value for run in runs for value in _flag_values(run, "-r")}
         for export in exports:
             written = _flag_value(export, "-o")
             assert written is not None, export
             assert written in scanned, (export, runs)
+
+    def test_both_sets_are_scanned_by_one_run(self) -> None:
+        """One run means one advisory snapshot: an advisory published
+        between two runs cannot miss the set that was scanned first."""
+        exports = _uv_invocations(AUDIT_SCRIPT, "export")
+        runs = _uv_invocations(AUDIT_SCRIPT, "run")
+        assert exports, "the audit script no longer exports the resolution"
+        assert len(runs) == 1, f"the audit scans in more than one run: {runs}"
+        scanned = _flag_values(runs[0], "-r")
+        assert len(scanned) == len(exports), (scanned, exports)
+
+    def test_the_audit_resolves_nothing_at_run_time(self) -> None:
+        """The pins of the lockfiles are the scanned set, so the scan may
+        not resolve them again. The exports carry the hashes of the
+        lockfile, so the scan needs no resolution to read them."""
+        runs = _uv_invocations(AUDIT_SCRIPT, "run")
+        assert runs, "the audit script no longer runs the audit tool"
+        for argv in runs:
+            assert "--disable-pip" in argv, argv
+        exports = _uv_invocations(AUDIT_SCRIPT, "export")
+        assert exports, "the audit script no longer exports the resolution"
+        for export in exports:
+            assert "--no-hashes" not in export, export
 
     def test_the_audit_tooling_is_scanned_as_well(self) -> None:
         """The audit tooling runs while the scan runs, so a vulnerability in
@@ -421,13 +458,17 @@ class TestAuditTool:
     def test_audit_tool_runs_in_an_isolated_project(self) -> None:
         """The tool may not run in the root project: there the run would
         install the application dependencies and the default dev group
-        next to it."""
+        next to it. Every run has to select the isolated project, so a
+        second run cannot leave it."""
         runs = _uv_invocations(AUDIT_SCRIPT, "run")
         assert runs, "the audit script no longer runs the audit tool"
-        for argv in runs:
-            assert _flag_value(argv, "--project") is not None, argv
         project = _audit_project()
         assert project != ROOT, project
+        constants = _script_constants(AUDIT_SCRIPT)
+        for argv in runs:
+            selected = _flag_value(argv, "--project")
+            assert selected is not None, argv
+            assert (ROOT / constants.get(selected, selected)).resolve() == project, argv
         # The audit project is excluded from the workspace, so it keeps its
         # own lockfile instead of sharing the root one.
         assert "tools/audit" in APP_PYPROJECT["tool"]["uv"]["workspace"]["exclude"]
@@ -474,21 +515,26 @@ class TestHttpsOnlyDownloads:
         assert commands, "the security workflow no longer downloads the release"
         for command in commands:
             argv = _argv(command)
+            # The download has to be the command that runs, not a word in
+            # an echo of it.
+            assert argv[0] == "curl", command
             assert _flag_value(argv, "--proto") == "=https", command
             assert _flag_value(argv, "--proto-redir") == "=https", command
             assert "--tlsv1.2" in argv, command
+            # `--next` starts another transfer and drops the options of
+            # the previous one, so a transfer behind it would be
+            # unguarded.
+            assert "--next" not in argv, command
 
     def test_workflow_requests_stay_on_the_local_host(self) -> None:
-        """Every request of the CI workflow must stay on the local host: the
+        """Every URL the CI workflow names reaches a local host: the
         release downloads of the security workflow are a separate concern
         (test_release_downloads_pin_https_and_tls)."""
-        requests = _request_commands(CI_WORKFLOW)
-        assert requests, "the workflow no longer issues a request"
-        for command, urls in requests:
-            assert urls, f"request without a target URL: {command}"
-            for url in urls:
-                host = urlparse(url).hostname
-                assert host in LOCAL_HOSTS, f"{command} -> {url}"
+        urls = _workflow_urls(CI_WORKFLOW)
+        assert urls, "the workflow no longer names a URL"
+        for command, url in urls:
+            host = urlparse(url).hostname
+            assert host in LOCAL_HOSTS, f"{command} -> {url}"
 
 
 class TestChangedPathTriage:
