@@ -88,9 +88,11 @@ jobs:
           while IFS= read -r f; do
             # package.json counts as a Python change: it holds the npm scripts
             # that call the Python tooling, so a change to them belongs to the
-            # Python gate.
+            # Python gate. The audit project counts as one too: it holds the
+            # audit tool and its own lockfile, and the audit policy is
+            # asserted by the Python gate.
             case "$f" in
-              .github/*|agent/*|packages/*|scripts/*|package.json|pyproject.toml|uv.lock|import-linter.ini|.python-version)
+              .github/*|agent/*|packages/*|scripts/*|tools/audit/**|package.json|pyproject.toml|uv.lock|import-linter.ini|.python-version)
                 py=true ;;
             esac
             case "$f" in
