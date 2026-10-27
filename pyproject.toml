@@ -35,6 +35,22 @@ dependencies = [
     "platform-webguard",
 ]
 
+[tool.uv]
+# The editable workspace members are built on every install, so uv resolves
+# their PEP 660 build requirements from the index while installing. Constrain
+# that resolution to exact versions: the backend and everything it pulls in
+# run as third-party code, and they may only run the releases this lockfile
+# records.
+build-constraint-dependencies = [
+    "editables==0.6",
+    "hatchling==1.32.4",
+    "packaging==26.3",
+    "pathspec==1.1.1",
+    "pluggy==1.6.0",
+    "tomlkit==0.15.2",
+    "trove-classifiers==2026.9.21.13",
+]
+
 [tool.uv.workspace]
 # Three source roots (agent/ + packages/ here; apps/ is the npm workspace —
 # the layout is documented in docs/architecture.md). Every member is a real
@@ -61,6 +77,14 @@ members = [
     "packages/platform/health",
     "packages/platform/secrets",
     "packages/platform/webguard",
+]
+
+exclude = [
+    # The audit tool lives in its own project (tools/audit). A workspace
+    # member would share the root lockfile, and running the audit tool
+    # there would install the application dependencies and the default dev
+    # group next to it - the isolation the audit project exists for.
+    "tools/audit",
 ]
 
 [tool.uv.sources]
@@ -101,6 +125,12 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=7.1.0",
     "ruff>=0.17.1",
+    # The editable workspace members are built on every install, so the build
+    # backend and its own dependencies are part of the resolution this
+    # lockfile pins (and the audit scans): hatchling plus the PEP 660 helper
+    # uv installs into an editable build environment.
+    "hatchling==1.32.4",
+    "editables==0.6",
 ]
 
 [tool.ruff]
