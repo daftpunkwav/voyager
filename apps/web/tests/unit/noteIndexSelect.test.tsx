@@ -84,8 +84,9 @@ describe('notes home bulk selection', () => {
   it('picking any note immediately shows the selection info and actions', () => {
     renderIndex();
     fireEvent.click(screen.getByTestId('notes-select-btn'));
-    fireEvent.click(screen.getAllByTestId('note-item')[0]);
-    expect(screen.getAllByTestId('note-item')[0]).toHaveAttribute('aria-pressed', 'true');
+    const item = screen.getByRole('button', { name: '标题甲' });
+    fireEvent.click(item);
+    expect(item).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('notes-bulk-bar')).toHaveTextContent('已选 1 篇');
     expect(screen.getByTestId('notes-bulk-archive')).toBeTruthy();
     expect(screen.getByTestId('notes-bulk-export')).toBeTruthy();
@@ -97,7 +98,7 @@ describe('notes home bulk selection', () => {
     try {
       renderIndex();
       fireEvent.click(screen.getByTestId('notes-select-btn'));
-      fireEvent.click(screen.getAllByTestId('note-item')[0]);
+      fireEvent.click(screen.getByRole('button', { name: '标题甲' }));
       fireEvent.click(screen.getByTestId('notes-bulk-clear'));
       expect(screen.getByTestId('notes-bulk-bar').className).toMatch(/is-exit/);
       act(() => {

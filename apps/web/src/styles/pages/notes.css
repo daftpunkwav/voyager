@@ -715,10 +715,24 @@
 .note-row:active {
   transform: scale(0.995);
 }
-.note-row:focus-visible,
-.note-grid-card:focus-visible {
+/* The note item is a plain container; the open action is a stretched button
+   that covers it, so clicking the title, the snippet or the empty space still
+   opens the note while the pin and the item menu stay separate controls. */
+.note-item-open {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+/* The stretched button covers the padding box, so the ring is offset by the
+   item's 1px border to keep the same distance to the border box. */
+.note-item-open:focus-visible {
   outline: 2px solid var(--brand-500);
-  outline-offset: 2px;
+  outline-offset: 3px;
+  border-radius: inherit;
 }
 .note-row:hover,
 .note-row:focus-within,
@@ -792,6 +806,7 @@
   cursor: pointer;
 }
 .note-pin {
+  position: relative;
   transition:
     color var(--notes-tr-fast) var(--notes-ease),
     background var(--notes-tr-fast) var(--notes-ease),
@@ -1379,7 +1394,6 @@
   min-width: 0;
 }
 .note-grid-card .note-pin {
-  position: static;
   margin-left: auto;
 }
 .note-grid-card {
@@ -1511,9 +1525,15 @@
   position: relative;
   z-index: 1;
   flex-shrink: 0;
+  /* The meta row sits above the stretched open control (it owns the menu
+     stacking), so it lets pointer events through to the control underneath. */
+  pointer-events: none;
   transition:
     margin-top var(--notes-tr-slow) var(--notes-ease),
     padding-top var(--notes-tr-slow) var(--notes-ease);
+}
+.note-grid-card .meta .note-item-more {
+  pointer-events: auto;
 }
 
 /* Editor */
