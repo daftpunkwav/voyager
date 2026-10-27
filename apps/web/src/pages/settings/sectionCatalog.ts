@@ -15,6 +15,7 @@
  */
 
 import type { SettingsIcons } from '@/components/icons/SettingsIcons';
+import { PRODUCT_NAME } from '@/brand';
 
 /** A section of the settings page, addressable as ?section=<id>. */
 export type SettingsSection =
@@ -96,3 +97,39 @@ export const NAV_GROUPS: SettingsNavGroup[] = [
 export const NAV_SECTIONS: ReadonlySet<string> = new Set(
   NAV_GROUPS.flatMap((group) => group.items.map((item) => item.id))
 );
+
+/** The heading of a section: its key, the values it interpolates and the
+ *  variant of the shell it renders in. */
+export interface SettingsSectionMeta {
+  /** The heading key, resolved through the settings namespace at render time. */
+  titleKey: string;
+  /** The interpolation values of the heading, if it takes any. */
+  titleValues?: Record<string, string>;
+  /** The embedded variant renders the section without the card chrome. */
+  embedded?: boolean;
+}
+
+/** The heading and the shell variant of every section. */
+export const SECTION_META: Record<SettingsSection, SettingsSectionMeta> = {
+  general: { titleKey: 'general.title' },
+  appearance: { titleKey: 'appearance.title' },
+  llm: { titleKey: 'llm.title' },
+  agents: { titleKey: 'agents.title' },
+  behavior: { titleKey: 'behavior.title' },
+  execution: { titleKey: 'execution.title' },
+  memory: { titleKey: 'memory.title' },
+  agentLlm: { titleKey: 'llm.overrides.title' },
+  subagents: { titleKey: 'subagents.title' },
+  plugins: { titleKey: 'plugins.title' },
+  mcp: { titleKey: 'mcp.title' },
+  skills: { titleKey: 'skills.title' },
+  commands: { titleKey: 'commands.title' },
+  tools: { titleKey: 'tools.title' },
+  toolPerms: { titleKey: 'toolPerms.title' },
+  health: { titleKey: 'health.title' },
+  usage: { titleKey: 'usage.title', embedded: true },
+  activity: { titleKey: 'activity.title', embedded: true },
+  data: { titleKey: 'data.title' },
+  domains: { titleKey: 'domains.title' },
+  about: { titleKey: 'about.title', titleValues: { name: PRODUCT_NAME } },
+};

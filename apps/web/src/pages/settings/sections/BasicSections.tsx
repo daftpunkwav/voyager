@@ -1,18 +1,18 @@
 /**
  * @file BasicSections
- * @description The basic group of the settings page: the GitHub binding, the
- * appearance controls (theme, language, font scale) and the model config.
+ * @description The content of the basic group of the settings page: the
+ * GitHub binding and the appearance controls (theme, language, font scale).
  *
  * Responsibilities:
  * - Bind and unbind the GitHub account through the auth facade
  * - Write theme, language and font scale through their single write paths
- * - Compose the model configuration section
  *
  * Constraints:
  * - Every write goes through the capability facade or the api modules; this
  *   module must not call the backend directly.
  * - The appearance values persist first and the selection follows on success;
  *   a failed write toasts and leaves the selection untouched.
+ * - The heading and the card chrome belong to the section panel, not here.
  */
 
 import { useState } from 'react';
@@ -21,14 +21,13 @@ import { useTranslation } from 'react-i18next';
 import { setGithubToken, unbindGithub as unbindGithubAccount } from '@/api/auth';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { DynamicSettingsGroup } from '@/components/settings/dynamic/DynamicSettingsGroup';
-import { LlmSettingsSection } from '@/components/settings/LlmSettingsSection';
 import { useGithubAccounts } from '@/hooks/useGithub';
 import { useLocale } from '@/hooks/useLocale';
 import { useTheme } from '@/hooks/useTheme';
 import { useUIStore } from '@/stores/uiStore';
 import { extractErrorMessage } from '@/utils/errors';
 
-/** GitHub binding: the bound account and the token to bind a new one. */
+/** The GitHub binding: the bound account and the token to bind a new one. */
 export function GeneralSection() {
   const { t } = useTranslation('settings');
   const addToast = useUIStore((s) => s.addToast);
@@ -64,47 +63,44 @@ export function GeneralSection() {
 
   return (
     <>
-      <section className="settings-section glass-card glass-card--overview-outer">
-        <h2>{t('general.title')}</h2>
-        <section className="settings-group">
-          <div className="settings-group-label">GitHub</div>
-          {accounts.length > 0 && (
-            <ul className="settings-rows">
-              {accounts.map((a) => (
-                <li key={a.id} className="settings-row">
-                  <div className="gh-avatar">{a.username[0]?.toUpperCase()}</div>
-                  <div className="gh-meta">
-                    <div className="gh-handle">@{a.username}</div>
-                    <div className="gh-sub">{t('github.bound')}</div>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setUnbindId(a.id)}
-                  >
-                    {t('github.unbind')}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="form-row">
-            <label htmlFor="gh-pat">{t('github.patLabel')}</label>
-            <input
-              id="gh-pat"
-              className="field input"
-              type="password"
-              value={ghPat}
-              onChange={(e) => setGhPat(e.target.value)}
-              autoComplete="off"
-            />
-          </div>
-          <div className="settings-actions">
-            <button type="button" className="btn btn-primary" onClick={() => void bindGithub()}>
-              {t('github.saveAndBind')}
-            </button>
-          </div>
-        </section>
+      <section className="settings-group">
+        <div className="settings-group-label">GitHub</div>
+        {accounts.length > 0 && (
+          <ul className="settings-rows">
+            {accounts.map((a) => (
+              <li key={a.id} className="settings-row">
+                <div className="gh-avatar">{a.username[0]?.toUpperCase()}</div>
+                <div className="gh-meta">
+                  <div className="gh-handle">@{a.username}</div>
+                  <div className="gh-sub">{t('github.bound')}</div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setUnbindId(a.id)}
+                >
+                  {t('github.unbind')}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="form-row">
+          <label htmlFor="gh-pat">{t('github.patLabel')}</label>
+          <input
+            id="gh-pat"
+            className="field input"
+            type="password"
+            value={ghPat}
+            onChange={(e) => setGhPat(e.target.value)}
+            autoComplete="off"
+          />
+        </div>
+        <div className="settings-actions">
+          <button type="button" className="btn btn-primary" onClick={() => void bindGithub()}>
+            {t('github.saveAndBind')}
+          </button>
+        </div>
       </section>
 
       <ConfirmDialog
@@ -122,7 +118,7 @@ export function GeneralSection() {
   );
 }
 
-/** Appearance: theme, language and font scale. */
+/** The appearance controls: theme, language and font scale. */
 export function AppearanceSection() {
   const { t } = useTranslation('settings');
   const addToast = useUIStore((s) => s.addToast);
@@ -138,8 +134,7 @@ export function AppearanceSection() {
   ] as const;
 
   return (
-    <section className="settings-section glass-card glass-card--overview-outer">
-      <h2>{t('appearance.title')}</h2>
+    <>
       <section className="settings-group">
         <div className="settings-group-label">{t('appearance.theme.label')}</div>
         <div className="theme-cards">
@@ -260,18 +255,6 @@ export function AppearanceSection() {
       </section>
 
       <DynamicSettingsGroup modules={['appearance', 'privacy']} />
-    </section>
-  );
-}
-
-/** Model configuration: the provider rail plus the schema-driven llm rows. */
-export function LlmSection() {
-  const { t } = useTranslation('settings');
-  return (
-    <section className="settings-section glass-card glass-card--overview-outer">
-      <h2>{t('llm.title')}</h2>
-      <LlmSettingsSection />
-      <DynamicSettingsGroup modules={['llm']} titleKey="llm.dynamics" />
-    </section>
+    </>
   );
 }
