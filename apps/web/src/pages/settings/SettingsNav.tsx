@@ -17,7 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { SettingsIcons } from '@/components/icons/SettingsIcons';
 import { useLlmAvailable } from '@/hooks/useLlmAvailable';
 
-import { NAV_GROUPS, type SettingsSection } from './sectionCatalog';
+import { NAV_GROUPS, SECTIONS, type SettingsSection } from './sectionCatalog';
 
 interface SettingsNavProps {
   /** The section the page shows. */
@@ -46,21 +46,19 @@ export function SettingsNav({ section, onSelect }: SettingsNavProps) {
         <div key={group.labelKey} className="subnav-group">
           <div className="subnav-group-label">{t(group.labelKey)}</div>
           {group.items.map((item) => {
-            const Icon = SettingsIcons[item.icon];
+            const Icon = SettingsIcons[SECTIONS[item].icon];
             return (
               <button
-                key={item.id}
+                key={item}
                 type="button"
-                className={`subnav-item ${section === item.id ? 'active' : ''}`}
-                onClick={() => onSelect(item.id)}
+                className={`subnav-item ${section === item ? 'active' : ''}`}
+                onClick={() => onSelect(item)}
               >
                 <span className="subnav-icon" aria-hidden>
                   <Icon />
                 </span>
-                {t(`nav.${item.id}`)}
-                {item.id === 'llm' && llmAvailability === 'missing' && (
-                  <span className="dot-unset" />
-                )}
+                {t(`nav.${item}`)}
+                {item === 'llm' && llmAvailability === 'missing' && <span className="dot-unset" />}
               </button>
             );
           })}

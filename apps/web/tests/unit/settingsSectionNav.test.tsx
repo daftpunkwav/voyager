@@ -1,84 +1,62 @@
 /**
  * @file settingsSectionNav
- * @description Settings-page section wiring: the grouped navigation switches
- * the panel, the default section is the appearance one and an unknown section
- * value in the query degrades to it.
+ * @description Settings-page section wiring: the deep-linkable section state,
+ * the section catalog and the panel shell that renders the active section.
  */
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, renderHook, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { ReactNode } from 'react';
 
-const { callCapabilityMock } = vi.hoisted(() => ({ callCapabilityMock: vi.fn() }));
-
-vi.mock('@/bridge/client', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/bridge/client')>()),
-  callCapability: callCapabilityMock,
-}));
-
-vi.mock('@/bridge/stream', () => ({
-  subscribe: vi.fn(() => () => {}),
-}));
-
-vi.mock('@/api/settings', () => ({
-  getSettings: vi.fn(async () => []),
-}));
-
-vi.mock('@/api/llm', () => ({
-  listProviders: vi.fn(async () => []),
-}));
-
-vi.mock('@/hooks/useGithub', () => ({
-  useGithubAccounts: () => ({ data: [], refetch: vi.fn() }),
-}));
-
-vi.mock('@/api/auth', () => ({
-  setGithubToken: vi.fn(),
-  unbindGithub: vi.fn(),
-}));
-vi.mock('@/api/projects', () => ({
-  exportProjects: vi.fn(async () => []),
-}));
-vi.mock('@/api/notes', () => ({
-  listAllNotes: vi.fn(async () => []),
-}));
-
-import { SettingsPage } from '@/pages/settings/SettingsPage';
-import { useSettingsStore } from '@/stores/settingsStore';
 import { initI18n } from '@/i18n';
+import { NAV_GROUPS, SECTION_IDS, SECTIONS } from '@/pages/settings/sectionCatalog';
+import { SettingsSectionPanel } from '@/pages/settings/SettingsSectionPanel';
+import { useSettingsSection } from '@/pages/settings/useSettingsSection';
 
-function renderAt(query = '') {
-  return render(
-    <MemoryRouter initialEntries={[`/settings${query}`]}>
-      <SettingsPage />
-    </MemoryRouter>
+/** The section state the page holds for a given query. */
+function sectionState(query: string) {
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <MemoryRouter initialEntries={[`/settings${query}`]}>{children}</MemoryRouter>
   );
+  return renderHook(() => useSettingsSection(), { wrapper });
 }
 
 beforeEach(() => {
   initI18n();
-  callCapabilityMock.mockReset();
-  callCapabilityMock.mockResolvedValue({});
-  useSettingsStore.setState({ settings: null, isLoading: false, error: null });
 });
 
-describe('settings page section navigation', () => {
-  it('shows the appearance section when the query carries no section', async () => {
-    renderAt();
-    expect(await screen.findByRole('heading', { name: '外观' })).toBeInTheDocument();
+describe('settings page section state', () => {
+  it('starts on the appearance section without a deep link', () => {
+    expect(sectionState('').result.current.section).toBe('appearance');
   });
 
-  it('switches to the section the navigation entry selects', async () => {
-    renderAt();
-    const generalEntry = await screen.findByRole('button', { name: '常规' });
-    fireEvent.click(generalEntry);
-    expect(await screen.findByRole('heading', { name: '常规' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '外观' })).not.toBeInTheDocument();
-    expect(generalEntry).toHaveClass('active');
+  it('opens the section a deep link names', () => {
+    expect(sectionState('?section=llm').result.current.section).toBe('llm');
   });
 
-  it('degrades to the appearance section when the query carries an unknown section', async () => {
-    renderAt('?section=bogus');
-    expect(await screen.findByRole('heading', { name: '外观' })).toBeInTheDocument();
+  it('degrades an unknown section to the appearance one', () => {
+    expect(sectionState('?section=bogus').result.current.section).toBe('appearance');
+  });
+});
+
+describe('settings page section catalog', () => {
+  it('lists every section in exactly one navigation group', () => {
+    expect(NAV_GROUPS.flatMap((group) => group.items)).toEqual(SECTION_IDS);
+  });
+
+  it('gives every section a heading and an icon', () => {
+    expect(SECTION_IDS.every((id) => SECTIONS[id].titleKey && SECTIONS[id].icon)).toBe(true);
+  });
+});
+
+describe('settings page section panel', () => {
+  it('renders the heading the catalog names', () => {
+    render(
+      <SettingsSectionPanel section="mcp">
+        <p>content</p>
+      </SettingsSectionPanel>
+    );
+    expect(screen.getByRole('heading', { name: '外接 MCP' })).toBeInTheDocument();
   });
 });

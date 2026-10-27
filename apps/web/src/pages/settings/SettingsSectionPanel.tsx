@@ -15,7 +15,7 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { SECTION_META, type SettingsSection } from './sectionCatalog';
+import { SECTIONS, type SettingsSection } from './sectionCatalog';
 
 interface SettingsSectionPanelProps {
   /** The section the panel renders. */
@@ -26,7 +26,7 @@ interface SettingsSectionPanelProps {
 
 export function SettingsSectionPanel({ section, children }: SettingsSectionPanelProps) {
   const { t } = useTranslation('settings');
-  const meta = SECTION_META[section];
+  const meta = SECTIONS[section];
   return (
     <section
       className={
