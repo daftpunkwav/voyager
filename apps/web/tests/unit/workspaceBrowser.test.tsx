@@ -76,6 +76,15 @@ describe('WorkspaceBrowser', () => {
     expect(pickDirectoryMock).toHaveBeenLastCalledWith('/projects');
   });
 
+  it('joins the child path without repeating the trailing separator', async () => {
+    pickDirectoryMock.mockResolvedValue({ ...ROOT_LISTING, path: '/srv//' });
+    render(<WorkspaceBrowser onPick={vi.fn()} onClose={vi.fn()} />);
+
+    fireEvent.click(await screen.findByText('projects'));
+
+    await waitFor(() => expect(pickDirectoryMock).toHaveBeenLastCalledWith('/srv/projects'));
+  });
+
   it('walks up to the parent folder and jumps to the home folder', async () => {
     pickDirectoryMock.mockResolvedValue(NESTED_LISTING);
     render(<WorkspaceBrowser onPick={vi.fn()} onClose={vi.fn()} />);

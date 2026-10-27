@@ -23,6 +23,19 @@ export interface WorkspaceDirectoryListProps {
   onEnter: (path: string) => void;
 }
 
+/**
+ * Drop the trailing path separators so a child path can be appended. The
+ * scan is linear in the path length; a trailing-separator pattern would
+ * backtrack over the whole path instead.
+ */
+function trimTrailingSeparators(path: string): string {
+  let end = path.length;
+  while (end > 0 && (path[end - 1] === '/' || path[end - 1] === '\\')) {
+    end -= 1;
+  }
+  return path.slice(0, end);
+}
+
 /** Directory rows of the current listing. */
 export function WorkspaceDirectoryList({ current, onEnter }: WorkspaceDirectoryListProps) {
   const { t } = useTranslation('chat');
@@ -39,7 +52,7 @@ export function WorkspaceDirectoryList({ current, onEnter }: WorkspaceDirectoryL
           className="ws-browser__row"
           onClick={() => {
             const next = current?.path
-              ? `${current.path.replace(/[\\/]+$/, '')}/${e.name}`
+              ? `${trimTrailingSeparators(current.path)}/${e.name}`
               : e.name;
             onEnter(next);
           }}
