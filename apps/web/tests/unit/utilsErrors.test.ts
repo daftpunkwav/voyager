@@ -1,13 +1,18 @@
 /**
  * @file utilsErrors
  * @description Pins the error-shape contract (utils/errors.ts): legacy
- * envelope detection, message extraction branches, and the unified
- * backend-unreachable copy.
+ * envelope detection, message extraction branches, the unified
+ * backend-unreachable copy, and the error-toast payload built from them.
  */
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initI18n, i18n } from '@/i18n';
-import { backendUnreachable, isApiError, extractErrorMessage } from '@/utils/errors';
+import {
+  backendUnreachable,
+  isApiError,
+  extractErrorMessage,
+  errorToastPayload,
+} from '@/utils/errors';
 
 beforeAll(() => {
   initI18n();
@@ -59,5 +64,25 @@ describe('utils/errors backendUnreachable', () => {
     await i18n.changeLanguage('en');
     expect(backendUnreachable()).toBe(i18n.t('errors:backendUnreachable'));
     await i18n.changeLanguage('zh-CN');
+  });
+});
+
+describe('utils/errors errorToastPayload', () => {
+  it('builds an error toast whose message is the i18n context line with the extracted error interpolated', () => {
+    const t = i18n.getFixedT('zh-CN', 'settings');
+    const payload = errorToastPayload(t, 'readRoots.saveFailed', new Error('磁盘只读'));
+
+    expect(payload.type).toBe('error');
+    expect(payload.message).toBe(i18n.t('settings:readRoots.saveFailed', { message: '磁盘只读' }));
+    expect(payload.message).toContain('磁盘只读');
+  });
+
+  it('interpolates the message extracted from a non-Error rejection', () => {
+    const t = i18n.getFixedT('zh-CN', 'settings');
+    const payload = errorToastPayload(t, 'readRoots.saveFailed', {
+      error: { message: '后端拒绝' },
+    });
+
+    expect(payload.message).toBe(i18n.t('settings:readRoots.saveFailed', { message: '后端拒绝' }));
   });
 });
