@@ -6,20 +6,19 @@
  * error and a jump into the run's execution view).
  *
  * Responsibilities:
- * - Render one agent.delivery row (done/failed variants)
- * - Collapse long content behind an expander; copy the full text
- * - Surface the run pointer for the agents-panel drill-in
+ * - Render the head of one agent.delivery row (done/failed variants)
+ * - Hand the body and the actions to their own modules
+ *
+ * The body and the action handlers live in the delivery/ submodules, so this
+ * card stays the head plus composition.
  */
 
-import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AgentCharacterHead } from '@/components/agent/avatars/AgentCharacterHead';
 import { personaDisplayName } from '@/constants/personas';
-import { ChatMarkdown } from '@/widgets/chat/ChatMarkdown';
 import type { Delivery } from '@/stores/chatStore';
-
-/** Characters at which the body folds (roughly a screenful of prose). */
-const FOLD_CHARS = 900;
+import { DeliveryCardActions, useDeliveryCardActions } from './delivery/DeliveryCardActions';
+import { DeliveryCardBody } from './delivery/DeliveryCardBody';
 
 export function DeliveryCard({
   delivery,
@@ -29,26 +28,9 @@ export function DeliveryCard({
   onOpenRun?: (runId: string) => void;
 }) {
   const { t } = useTranslation('chat');
-  const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
   const failed = delivery.status === 'failed';
   const name = personaDisplayName(delivery.member || delivery.name) || delivery.name;
-  const body = failed ? (delivery.error ?? '') : delivery.content;
-  const long = body.length > FOLD_CHARS;
-  const shown = useMemo(
-    () => (long && !open ? `${body.slice(0, FOLD_CHARS)}…` : body),
-    [body, long, open]
-  );
-
-  const onCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(body);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1200);
-    } catch {
-      /* clipboard unavailable: the copy button simply stays inert */
-    }
-  };
+  const actions = useDeliveryCardActions(delivery);
 
   return (
     <article className={`delivery-card${failed ? ' delivery-card--failed' : ''}`}>
@@ -71,33 +53,8 @@ export function DeliveryCard({
           </span>
         ) : null}
       </div>
-      {failed ? (
-        <div className="delivery-card__error">{body}</div>
-      ) : (
-        <div className="delivery-card__body chat-md">
-          <ChatMarkdown content={shown} />
-        </div>
-      )}
-      <div className="delivery-card__actions">
-        {long ? (
-          <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>
-            {open ? t('chat:delivery.collapse') : t('chat:delivery.expand')}
-          </button>
-        ) : null}
-        <button type="button" onClick={() => void onCopy()}>
-          {copied ? t('chat:msg.copied') : t('chat:msg.copy')}
-        </button>
-        {failed && delivery.run_id && onOpenRun ? (
-          <button
-            type="button"
-            onClick={() => {
-              if (delivery.run_id) onOpenRun(delivery.run_id);
-            }}
-          >
-            {t('chat:delivery.openRun')}
-          </button>
-        ) : null}
-      </div>
+      <DeliveryCardBody delivery={delivery} open={actions.open} />
+      <DeliveryCardActions delivery={delivery} actions={actions} onOpenRun={onOpenRun} />
     </article>
   );
 }
