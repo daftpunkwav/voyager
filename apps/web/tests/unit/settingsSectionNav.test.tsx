@@ -4,8 +4,8 @@
  * the section catalog and the panel shell that renders the active section.
  */
 
-import { render, renderHook, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { act, render, renderHook, screen } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ReactNode } from 'react';
 
@@ -14,16 +14,29 @@ import { NAV_GROUPS, SECTION_IDS, SECTIONS } from '@/pages/settings/sectionCatal
 import { SettingsSectionPanel } from '@/pages/settings/SettingsSectionPanel';
 import { useSettingsSection } from '@/pages/settings/useSettingsSection';
 
+/** The query the router currently holds. */
+let currentSearch = '';
+
+/** Records the router's query so the section state can be checked against it. */
+function QueryProbe() {
+  currentSearch = useLocation().search;
+  return null;
+}
+
 /** The section state the page holds for a given query. */
 function sectionState(query: string) {
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <MemoryRouter initialEntries={[`/settings${query}`]}>{children}</MemoryRouter>
+    <MemoryRouter initialEntries={[`/settings${query}`]}>
+      <QueryProbe />
+      {children}
+    </MemoryRouter>
   );
   return renderHook(() => useSettingsSection(), { wrapper });
 }
 
 beforeEach(() => {
   initI18n();
+  currentSearch = '';
 });
 
 describe('settings page section state', () => {
@@ -37,6 +50,20 @@ describe('settings page section state', () => {
 
   it('degrades an unknown section to the appearance one', () => {
     expect(sectionState('?section=bogus').result.current.section).toBe('appearance');
+  });
+
+  it('records the picked section in the query', () => {
+    const { result } = sectionState('');
+    act(() => result.current.setSection('memory'));
+    expect(result.current.section).toBe('memory');
+    expect(currentSearch).toBe('?section=memory');
+  });
+
+  it('drops the query when the picked section is the default one', () => {
+    const { result } = sectionState('?section=memory');
+    act(() => result.current.setSection('appearance'));
+    expect(result.current.section).toBe('appearance');
+    expect(currentSearch).toBe('');
   });
 });
 
