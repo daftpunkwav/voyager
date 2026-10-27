@@ -9,7 +9,9 @@
  * - Resolve which resident teammate (or the generic list) owns a run
  *
  * Constraints:
- * - This module must not depend on UI-layer components.
+ * - This module must not depend on UI-layer components at runtime: the run
+ *   dialog's reference shape is taken as a type only, so the import is erased
+ *   at compile time and carries no component code into this module.
  */
 
 import { AGENT_CATALOG } from '@/constants/agentCatalog';
