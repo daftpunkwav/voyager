@@ -39,11 +39,14 @@ jobs:
       # using it failed the whole workflow with a startup_failure. The
       # binary comes from the official release instead, checksum-verified.
       # No automation covers this URL; bump the version deliberately.
+      # --proto/--proto-redir keep the download and every redirect it follows on
+      # HTTPS (a redirect must never downgrade the transport), and --tlsv1.2
+      # pins the minimum TLS version.
       - name: Install gitleaks
         run: |
           V=8.30.1
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${V}/gitleaks_${V}_linux_x64.tar.gz" -o /tmp/gitleaks.tgz
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${V}/gitleaks_${V}_checksums.txt" -o /tmp/checksums.txt
+          curl -sSfL --proto '=https' --proto-redir '=https' --tlsv1.2 "https://github.com/gitleaks/gitleaks/releases/download/v${V}/gitleaks_${V}_linux_x64.tar.gz" -o /tmp/gitleaks.tgz
+          curl -sSfL --proto '=https' --proto-redir '=https' --tlsv1.2 "https://github.com/gitleaks/gitleaks/releases/download/v${V}/gitleaks_${V}_checksums.txt" -o /tmp/checksums.txt
           grep "gitleaks_${V}_linux_x64.tar.gz" /tmp/checksums.txt | sed "s|gitleaks_${V}_linux_x64.tar.gz|/tmp/gitleaks.tgz|" | sha256sum -c -
           tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
           /tmp/gitleaks version
@@ -84,8 +87,12 @@ jobs:
         with:
           enable-cache: true
 
-      # uv export reads the lockfile and uvx fetches pip-audit ephemerally;
-      # no workspace sync required.
+      # uv export reads the committed lockfiles as they are: the root one
+      # and the one of the audit project (tools/audit), whose locked set is
+      # scanned as well because the audit tooling runs during the scan.
+      # The tool itself runs from the lockfile of that project, which holds
+      # nothing but the tool and its dependencies. Neither the scanned sets
+      # nor the tool itself is resolved at run time.
       - name: pip-audit
         run: npm run audit:py
 
