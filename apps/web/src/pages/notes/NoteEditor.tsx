@@ -36,6 +36,7 @@ import { useNoteStore } from '@/stores/noteStore';
 import { useUIStore } from '@/stores/uiStore';
 import { uploadFile } from '@/bridge/client';
 import { addAsset } from '@/api/notes';
+import { assetMarkdown, type AssetPayload } from './assetMarkdown';
 import {
   applyNoteHighlightInDoc,
   diffReplace,
@@ -144,17 +145,6 @@ function applyDocChange(view: EditorView, next: string, selectFrom: number, sele
     scrollIntoView: true,
   });
   view.focus();
-}
-
-/** Markdown insert for an addAsset result: the returned markdown wins even
- *  when empty (matching the old ?? chain), then a url link; a null or
- *  field-less payload degrades to the legacy String(payload) alt text
- *  ('null' / '[object Object]'), byte-for-byte. */
-function assetMarkdown(payload: { markdown?: string; url?: string } | null): string {
-  if (payload?.markdown != null) return payload.markdown;
-  if (payload?.url) return `![](${payload.url})`;
-  if (payload === null) return '![](null)';
-  return '![]([object Object])';
 }
 
 function wrapSelection(view: EditorView | null, kind: InlineFormat) {
@@ -289,10 +279,7 @@ export function NoteEditor({
       for (const file of allowed) {
         const { file_path, filename } = await uploadFile(file);
         // api/notes.addAsset returns the business payload directly
-        const payload = (await addAsset(file_path, filename)) as {
-          markdown?: string;
-          url?: string;
-        } | null;
+        const payload = (await addAsset(file_path, filename)) as AssetPayload | null;
         const md = assetMarkdown(payload);
         if (view) {
           view.dispatch(view.state.replaceSelection(`\n${md}\n`));
