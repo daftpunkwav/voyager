@@ -1114,11 +1114,10 @@ class TestChatPaging:
         """After the replay reaches the tail, events published live on the bus
         are delivered to the open subscription (the queue path, not the log
         replay path)."""
-        from gateway.chat import _SSE_IDLE_PING_S, _stream_events
+        from gateway.chat import _stream_events
         from platform_eventbus import EventBus, EventLog
 
-        monkeypatch.setattr("gateway.chat._SSE_IDLE_PING_S", 0.2)
-        assert _SSE_IDLE_PING_S  # referenced for clarity; the patch drives the idle timeout
+        monkeypatch.setattr("gateway.chat._SSE_IDLE_PING_S", 0.05)
 
         async def scenario() -> tuple[int, str]:
             event_log = EventLog(tmp_path / "sse-live.db")
@@ -1127,12 +1126,17 @@ class TestChatPaging:
             agen = _stream_events(
                 bus, start_seq=0, types=("agent.message",), wanted=lambda _e: True
             )
-            pending = asyncio.ensure_future(agen.__anext__())
-            await asyncio.sleep(0.05)  # let the generator reach its queue wait
+            # The empty-log keep-alive marker is the handshake: it can only be
+            # yielded once the catch-up replay is done and the generator waits
+            # on the subscription, so the publish below can only arrive via the
+            # live queue path (and a slow log append cannot turn the delivery
+            # assertion into a race).
+            idle = await asyncio.wait_for(agen.__anext__(), timeout=2)
+            assert idle is None
             await bus.publish(
                 Event(type=DomainEvent.AGENT_MESSAGE, actor=agent, payload={"content": "live"})
             )
-            item = await asyncio.wait_for(pending, timeout=2)
+            item = await asyncio.wait_for(agen.__anext__(), timeout=2)
             assert item is not None
             seq, event = item
             assert seq and event.type == "agent.message"
