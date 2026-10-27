@@ -1,53 +1,6 @@
 <!doctype html>
 <html lang="zh-CN" data-theme="light">
   <head>
-    <!--
-      Theme first-paint sync (§10.11):
-      before React hydrates, set data-theme from the localStorage-persisted theme or the system preference,
-      avoiding a first-paint flash in system mode.
-    -->
-    <script>
-      (function () {
-        try {
-          var stored =
-            localStorage.getItem('%UI_STORE_KEY%') || localStorage.getItem('%UI_STORE_LEGACY_KEY%');
-          var theme = stored ? JSON.parse(stored).state?.theme : null;
-          if (theme === 'system' || !theme) {
-            theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-          }
-          document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
-
-          // UI language first-paint sync: read the locale choice persisted by uiStore and set html[lang]
-          // (screen readers depend on it; for 'system'/missing, match via navigator with a zh-CN fallback, matching the backend SSOT default)
-          var state = stored ? JSON.parse(stored).state : null;
-          var locale = state ? state.locale : null;
-          if (locale !== 'zh-CN' && locale !== 'en' && locale !== 'system') {
-            locale = 'zh-CN';
-          }
-          if (locale === 'system') {
-            var langs =
-              navigator.languages && navigator.languages.length
-                ? navigator.languages
-                : [navigator.language];
-            locale = 'zh-CN';
-            for (var i = 0; i < langs.length; i++) {
-              var tag = (langs[i] || '').toLowerCase();
-              if (tag.indexOf('en') === 0) {
-                locale = 'en';
-                break;
-              }
-              if (tag.indexOf('zh') === 0) {
-                locale = 'zh-CN';
-                break;
-              }
-            }
-          }
-          document.documentElement.setAttribute('lang', locale);
-        } catch (e) {
-          // keep the default light + zh-CN in private mode / when localStorage is unavailable
-        }
-      })();
-    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
@@ -57,11 +10,14 @@
     <!--
       Content Security Policy (§4.2 security):
       - default-src 'self'   resources are same-origin by default
-      - script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:   Vite dev needs
-        unsafe-inline (HMR); 'unsafe-eval' + blob: are required by the fenced
-        code runner (skulpt compiles python via eval; js/ts snippets run in a
-        blob: worker via new Function). Injection stays guarded by the
-        markdown sanitize allowlist, not by script-src.
+      - script-src 'self'   no inline script and no eval in the page: the
+        first-paint sync ships as /theme-init.js, and the fenced code runner
+        executes in /code-runner-worker.js, a worker of its own whose policy
+        comes with its response rather than with the page. Injection stays
+        guarded by the markdown sanitize allowlist, not by script-src.
+        The dev server adds 'unsafe-inline' to this directive for the React
+        Fast Refresh preamble it injects (see vite.config.ts).
+      - worker-src 'self'   the code-runner worker is served from the app
       - style-src 'self' 'unsafe-inline'   CSS allows inline (liquid-glass dynamic tokens); fonts are self-hosted via @fontsource-variable
       - font-src 'self' data:   self-hosted woff2 + embedded fonts
       - img-src 'self' data: https:   avatars/icons/external images
@@ -77,8 +33,8 @@
       http-equiv="Content-Security-Policy"
       content="
         default-src 'self';
-        script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:;
-        worker-src 'self' blob:;
+        script-src 'self';
+        worker-src 'self';
         object-src 'none';
         style-src 'self' 'unsafe-inline';
         font-src 'self' data:;
@@ -88,6 +44,19 @@
         form-action 'self';
       "
     />
+    <!--
+      Theme first-paint sync (§10.11):
+      before React hydrates, set data-theme from the localStorage-persisted theme or the system preference,
+      avoiding a first-paint flash in system mode.
+      The script lives in /theme-init.js (a classic script, so it still blocks parsing and runs
+      before the first paint) instead of an inline block, so the shipped policy needs no
+      'unsafe-inline'; the store keys travel with the script tag as data attributes.
+    -->
+    <script
+      src="/theme-init.js"
+      data-ui-store-key="%UI_STORE_KEY%"
+      data-ui-store-legacy-key="%UI_STORE_LEGACY_KEY%"
+    ></script>
     <title>%PRODUCT_NAME%</title>
   </head>
   <body>

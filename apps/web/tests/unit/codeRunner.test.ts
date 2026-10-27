@@ -2,16 +2,29 @@
  * @file codeRunner
  * @description Unit coverage for the fenced-code execution library: registry
  * language mapping, output shaping helpers, TypeScript transpile outcomes,
- * skulpt error formatting and the worker driver source shape. Engine runs
- * themselves are browser-bound and covered by the component-level stubs.
+ * skulpt error formatting and the driver sources the worker installs. The
+ * drivers run in a simulated worker scope (see helpers/workerHarness.ts), so
+ * the engine runs themselves are covered here rather than in the browser.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { formatLogArgs, truncateText } from '@/lib/code-runner/output';
 import { getRunner, isRunnable, normalizeLanguageId } from '@/lib/code-runner/registry';
-import { buildWorkerSource, formatWorkerError } from '@/lib/code-runner/javascriptRunner';
-import { formatSkulptError } from '@/lib/code-runner/pythonRunner';
+import {
+  buildWorkerSource,
+  formatWorkerError,
+  runJavascript,
+} from '@/lib/code-runner/javascriptRunner';
+import { buildPythonWorkerSource, formatSkulptError } from '@/lib/code-runner/pythonRunner';
 import { transpileTypeScript } from '@/lib/code-runner/typescriptRunner';
+import {
+  createWorkerHarness,
+  installFakeWorker,
+  SKULPT_ENGINE_URL,
+  SKULPT_STDLIB_URL,
+  workerUrl,
+  type WorkerHarness,
+} from './helpers/workerHarness';
 
 describe('registry language mapping', () => {
   it('normalizes case, whitespace and aliases', () => {
@@ -91,6 +104,206 @@ describe('worker source and error formatting', () => {
     expect(formatWorkerError(err)).toContain('Error: boom');
     expect(formatWorkerError('plain')).toBe('plain');
     expect(formatWorkerError(null)).toBe('Unknown error');
+  });
+});
+
+describe('python worker driver', () => {
+  it('loads the vendored engine in the worker and reports the run back', () => {
+    const src = buildPythonWorkerSource();
+    expect(src).toContain("importScripts('/vendor/skulpt/skulpt.min.js')");
+    expect(src).toContain("importScripts('/vendor/skulpt/skulpt-stdlib.js')");
+    expect(src).toContain('importMainWithBody');
+    expect(src).toContain('postMessage');
+    // The engine never runs in the page: the driver only lives in the worker.
+    expect(src).not.toContain('document.');
+  });
+
+  it('separates the engine load from the run in what it reports', () => {
+    const src = buildPythonWorkerSource();
+    expect(src).toContain("stage: 'ready'");
+    expect(src).toContain("stage: 'engine'");
+    expect(src).toContain("stage: 'run'");
+  });
+});
+
+describe('worker driver execution', () => {
+  it('runs the JavaScript driver and reports what the snippet printed', async () => {
+    const harness = createWorkerHarness();
+    await harness.deliver({ driver: buildWorkerSource() });
+    await harness.deliver({ source: "console.log('hello from the driver');" });
+    expect(harness.reports).toHaveLength(1);
+    expect(harness.reports[0]).toMatchObject({
+      ok: true,
+      stdout: 'hello from the driver',
+    });
+  });
+
+  it('reports a failing snippet as an error instead of a result', async () => {
+    const harness = createWorkerHarness();
+    await harness.deliver({ driver: buildWorkerSource() });
+    await harness.deliver({ source: "throw new Error('boom');" });
+    expect(harness.reports[0]).toMatchObject({ ok: false });
+  });
+
+  it('loads the Python engine from the vendored scripts and runs the snippet', async () => {
+    const { engine, sources } = fakeSkulpt();
+    const harness = createWorkerHarness({ engine });
+    await harness.deliver({ driver: buildPythonWorkerSource() });
+    await harness.deliver({ source: 'print(1)', maxOutputChars: 100 });
+    // The engine is only there because the driver imported the vendored scripts.
+    expect(harness.imports).toContain(workerUrl(SKULPT_ENGINE_URL));
+    expect(harness.imports).toContain(workerUrl(SKULPT_STDLIB_URL));
+    expect(sources).toEqual(['print(1)']);
+    expect(stageReport(harness, 'ready')).toMatchObject({ ok: true });
+    expect(stageReport(harness, 'run')).toMatchObject({ ok: true, output: 'through the worker\n' });
+  });
+
+  it('reports a failing Python run with the error the engine raised', async () => {
+    const { engine } = fakeSkulpt();
+    const harness = createWorkerHarness({ engine });
+    await harness.deliver({ driver: buildPythonWorkerSource() });
+    await harness.deliver({ source: 'raise ValueError("run failed")' });
+    // The failure is described, not passed through: the exception itself does not
+    // clone, so the type and the message have to survive on their own.
+    expect(stageReport(harness, 'run')).toMatchObject({
+      ok: false,
+      error: { tp$name: 'ValueError', message: 'run failed' },
+    });
+  });
+
+  it('reports an engine that did not load apart from a snippet failure', async () => {
+    const harness = createWorkerHarness({ engine: {} });
+    await harness.deliver({ driver: buildPythonWorkerSource() });
+    await harness.deliver({ source: 'print(1)' });
+    expect(stageReport(harness, 'engine')).toMatchObject({
+      ok: false,
+      error: { message: 'Skulpt engine failed to initialize.' },
+    });
+    expect(stageReport(harness, 'run')).toBeUndefined();
+  });
+});
+
+/** The report the worker sent for one stage of the run. */
+function stageReport(harness: WorkerHarness, stage: string): unknown {
+  return harness.reports.find((report) => (report as { stage?: unknown }).stage === stage);
+}
+
+/** Engine stand-in for the skulpt surface the Python driver drives. */
+function fakeSkulpt(): { engine: unknown; sources: string[] } {
+  const sources: string[] = [];
+  let output: (text: string) => void = () => {};
+  const engine = {
+    configure: (options: { output: (text: string) => void }) => {
+      output = options.output;
+    },
+    builtinFiles: { files: {} },
+    python3: {},
+    misceval: { asyncToPromise: async (fn: () => unknown) => fn() },
+    importMainWithBody: (_name: string, _dump: boolean, code: string) => {
+      sources.push(code);
+      if (code.includes('raise')) {
+        throw Object.assign(new Error('run failed'), { tp$name: 'ValueError' });
+      }
+      output('through the worker\n');
+    },
+  };
+  return { engine, sources };
+}
+
+/** Engine stand-in whose run never finishes, so the watchdog has to settle it. */
+function stallingSkulpt(): { engine: unknown } {
+  const engine = {
+    configure: () => {},
+    builtinFiles: { files: {} },
+    python3: {},
+    misceval: { asyncToPromise: async (fn: () => unknown) => fn() },
+    importMainWithBody: () => new Promise<never>(() => {}),
+  };
+  return { engine };
+}
+
+/**
+ * Load a fresh copy of the Python runner: it keeps its worker between runs,
+ * so a test needs a runner that starts without one.
+ */
+async function loadPythonRunner(): Promise<typeof import('@/lib/code-runner/pythonRunner')> {
+  vi.resetModules();
+  return import('@/lib/code-runner/pythonRunner');
+}
+
+describe('runner execution', () => {
+  it('runs a JavaScript snippet in the worker and reports what it printed', async () => {
+    const { urls } = installFakeWorker();
+    try {
+      const handle = runJavascript("console.log('through the worker');");
+      const result = await handle.done;
+      expect(result.status).toBe('ok');
+      expect(result.output).toBe('through the worker');
+      expect(result.error).toBeUndefined();
+      expect(urls).toEqual(['/code-runner-worker.js']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('runs a Python snippet in the worker and reports what it printed', async () => {
+    const { runPython } = await loadPythonRunner();
+    const { engine } = fakeSkulpt();
+    const { urls, harnesses } = installFakeWorker({ engine });
+    try {
+      const handle = runPython("print('through the worker')");
+      const result = await handle.done;
+      expect(result.status).toBe('ok');
+      expect(result.output).toBe('through the worker\n');
+      expect(result.error).toBeUndefined();
+      expect(urls).toEqual(['/code-runner-worker.js']);
+      // The engine is only there because the driver imported the vendored scripts.
+      expect(harnesses.at(0)?.imports).toContain(workerUrl(SKULPT_ENGINE_URL));
+      expect(harnesses.at(0)?.imports).toContain(workerUrl(SKULPT_STDLIB_URL));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('reports a Python failure with the error the engine raised', async () => {
+    const { runPython } = await loadPythonRunner();
+    const { engine } = fakeSkulpt();
+    installFakeWorker({ engine });
+    try {
+      const handle = runPython('raise ValueError("run failed")');
+      const result = await handle.done;
+      expect(result.status).toBe('error');
+      expect(result.error).toBe('ValueError: run failed');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('reports an engine that did not load as an unavailable runner', async () => {
+    const { runPython } = await loadPythonRunner();
+    installFakeWorker({ engine: {} });
+    try {
+      const handle = runPython('print(1)');
+      const result = await handle.done;
+      expect(result.status).toBe('unavailable');
+      expect(result.error).toBe('Python runner unavailable: Skulpt engine failed to initialize.');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('settles a run that never finishes as a timeout', async () => {
+    const { runPython } = await loadPythonRunner();
+    const { engine } = stallingSkulpt();
+    installFakeWorker({ engine });
+    try {
+      const handle = runPython('while True:\n    pass\n', { timeoutMs: 1000 });
+      const result = await handle.done;
+      expect(result.status).toBe('timeout');
+      expect(result.error).toBe('Execution timed out after 1000 ms.');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

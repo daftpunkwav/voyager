@@ -487,18 +487,46 @@ class TestRateLimit:
             assert r.json()["error"]["code"] == "GATEWAY.RATE_LIMITED"
 
 
+# The complete policy the gateway ships (see rest.py _security_headers).
+# Comparing the whole directive set — not a subset of substrings — is what
+# makes a relaxed script source (e.g. "script-src-elem https:" or
+# "script-src 'self' https:") fail the test instead of slipping through.
+EXPECTED_CSP_DIRECTIVES: dict[str, set[str]] = {
+    "default-src": {"'self'"},
+    "script-src": {"'self'"},
+    "worker-src": {"'self'"},
+    "object-src": {"'none'"},
+    "base-uri": {"'self'"},
+    "frame-ancestors": {"'none'"},
+}
+
+
+def _csp_directives(csp: str) -> dict[str, set[str]]:
+    """Parse a CSP header into ``{directive: sources}``.
+
+    Whitespace and directive order carry no meaning in the policy, so the
+    comparison is made on the parsed set; an added, dropped or relaxed
+    directive still changes it.
+    """
+    directives: dict[str, set[str]] = {}
+    for chunk in csp.split(";"):
+        parts = chunk.split()
+        if parts:
+            directives[parts[0]] = set(parts[1:])
+    return directives
+
+
 class TestSecurityHeaders:
     def test_csp_and_nosniff_set_on_every_response(self, client) -> None:
         r = client.get("/health")
         csp = r.headers["Content-Security-Policy"]
-        # Runner requirements stay allowed; the injection defense remains the
-        # markdown sanitize allowlist (see rest.py _security_headers)
-        assert "script-src 'self' 'unsafe-eval' blob:" in csp
-        assert "worker-src 'self' blob:" in csp
-        # Plugin content and document-base fallbacks are closed
-        assert "object-src 'none'" in csp
-        assert "base-uri 'self'" in csp
-        assert "frame-ancestors 'none'" in csp
+        # No inline script and no eval: the fenced-code runner executes in a
+        # worker of its own, so the API responses need neither (see rest.py
+        # _security_headers). Plugin content and document-base fallbacks are
+        # closed. The whole policy is asserted directive by directive, so a
+        # variant that widens a script source beyond 'self' (blob workers,
+        # unsafe-*, an added script-src-elem) cannot pass.
+        assert _csp_directives(csp) == EXPECTED_CSP_DIRECTIVES
         assert r.headers["X-Content-Type-Options"] == "nosniff"
 
 

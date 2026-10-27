@@ -1,11 +1,12 @@
 /**
- * @file JavaScript snippet execution inside a Blob Web Worker.
+ * @file JavaScript snippet execution inside a Web Worker.
  * The snippet runs off the UI thread with a captured console; a main-thread
  * timer terminates the worker on timeout. User source travels via postMessage
  * (never interpolated into the worker template), and the worker performs no
- * imports, so it cannot pull remote code. Residual risk: the worker shares the
- * page origin and could fetch same-origin URLs; treat snippets as
- * semi-trusted, same as pasting them into devtools.
+ * imports, so it cannot pull remote code. The worker denies cross-origin
+ * requests (see public/code-runner-worker.js), so a snippet can read
+ * same-origin resources but cannot hand them to a third party; treat snippets
+ * as semi-trusted, same as pasting them into devtools.
  *
  * Module interop: snippets run inside `new Function`, so bare `import` /
  * `export` statements are syntax errors. The TypeScript runner lowers those
@@ -13,9 +14,13 @@
  * `exports` shims plus a `require` that throws a guidance error. The
  * snippet is always the entry point, so `require.main === module` is true
  * and Node-idiom self-tests run their bodies instead of being skipped.
+ *
+ * The worker is loaded from a URL (see runnerWorker.ts), so it carries its own
+ * Content Security Policy and the page policy does not allow 'unsafe-eval'.
  */
 
 import { formatLogArgs, truncateText } from './output';
+import { createRunnerWorker } from './runnerWorker';
 import {
   DEFAULT_MAX_OUTPUT_CHARS,
   DEFAULT_TIMEOUT_MS,
@@ -134,7 +139,6 @@ export function runJavascript(
   const startedAt = Date.now();
   let worker: Worker | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let url: string | null = null;
   let finished = false;
 
   const finish = (partial: Omit<ExecutionResult, 'durationMs' | 'truncated'>) => {
@@ -145,13 +149,6 @@ export function runJavascript(
       worker?.terminate();
     } catch {
       /* already gone */
-    }
-    if (url) {
-      try {
-        URL.revokeObjectURL(url);
-      } catch {
-        /* ignore */
-      }
     }
     worker = null;
     const out = truncateText(partial.output, maxChars);
@@ -167,9 +164,7 @@ export function runJavascript(
   };
 
   try {
-    const blob = new Blob([buildWorkerSource()], { type: 'text/javascript' });
-    url = URL.createObjectURL(blob);
-    worker = new Worker(url);
+    worker = createRunnerWorker(buildWorkerSource());
   } catch (err) {
     return immediate({
       status: 'unavailable',

@@ -126,15 +126,14 @@ def create_app(
     @app.middleware("http")
     async def _security_headers(request: Request, call_next):
         response = await call_next(request)
-        # Mirrors the index.html meta CSP: 'unsafe-eval' + blob: are required
-        # by the fenced-code runner (skulpt eval; js/ts snippets in a blob
-        # worker). Injection stays guarded by the markdown sanitize allowlist.
-        # object-src 'none' + base-uri 'self' cost the runner nothing (no
-        # object/embed/base usage) and close the plugin/document-base fallbacks.
+        # Mirrors the index.html meta CSP: no inline script and no eval, the
+        # fenced-code runner executes in a worker of its own. The gateway
+        # serves API payloads, so it needs neither. object-src 'none' +
+        # base-uri 'self' close the plugin/document-base fallbacks.
         response.headers.setdefault(
             "Content-Security-Policy",
             "frame-ancestors 'none'; default-src 'self'; "
-            "script-src 'self' 'unsafe-eval' blob:; worker-src 'self' blob:; "
+            "script-src 'self'; worker-src 'self'; "
             "object-src 'none'; base-uri 'self'",
         )
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
