@@ -523,13 +523,12 @@ function RateBar({ subject, onDone }: { subject: string; onDone: () => void }) {
   };
   return (
     <div className="chat-rate">
-      <span className="chat-rate__stars" role="radiogroup" aria-label={t('chat:rate.title')}>
+      <span className="chat-rate__stars" role="group" aria-label={t('chat:rate.title')}>
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
             type="button"
-            role="radio"
-            aria-checked={score === n}
+            aria-pressed={n <= score}
             aria-label={t('chat:rate.star', { n })}
             className={n <= score ? 'is-on' : ''}
             onClick={() => setScore(n)}

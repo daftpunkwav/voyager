@@ -1659,6 +1659,19 @@
   color: var(--brand-700);
   font-weight: 600;
 }
+/* The chip is a plain container; the variant name is the control that promotes
+   it to default, the × button stays a separate control next to it. */
+.llm-variant-chip__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
 .llm-variant-chip__default {
   font-size: 10px;
   font-weight: 700;
