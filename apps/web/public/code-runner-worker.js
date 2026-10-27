@@ -22,6 +22,8 @@
  *   passing the check.
  * - The globals the checks read are captured before the snippet runs, so a
  *   snippet cannot report a foreign origin as the worker's own.
+ * - Every guarded request resolves its target once and hands the native API
+ *   only the URL the check accepted, so the native cannot resolve another one.
  * - The worker offers no nested worker: a child worker would carry no policy
  *   of its own.
  *
@@ -63,27 +65,41 @@
     return null;
   }
 
-  function isSameOrigin(url) {
-    if (typeof url !== 'string') return false;
-    try {
-      var target = new NativeURL(url, WORKER_HREF);
-      var targetScheme = PAGE_SCHEMES[target.protocol];
-      if (targetScheme) {
-        var pageScheme = PAGE_SCHEMES[WORKER_PROTOCOL] || WORKER_PROTOCOL;
-        return targetScheme === pageScheme && target.host === WORKER_HOST;
-      }
-      return target.origin === WORKER_ORIGIN;
-    } catch (e) {
-      return false;
+  function isSameOrigin(target) {
+    var targetScheme = PAGE_SCHEMES[target.protocol];
+    if (targetScheme) {
+      var pageScheme = PAGE_SCHEMES[WORKER_PROTOCOL] || WORKER_PROTOCOL;
+      return targetScheme === pageScheme && target.host === WORKER_HOST;
     }
+    return target.origin === WORKER_ORIGIN;
   }
 
-  function guardTarget(what, target) {
-    var url = targetUrl(target);
-    if (url !== null && isSameOrigin(url)) return;
-    throw new NativeError(
+  function blocked(what) {
+    return new NativeError(
       'The code runner may only reach ' + WORKER_ORIGIN + ' (' + what + ' blocked).'
     );
+  }
+
+  /**
+   * Refuse a target outside the worker origin, and return the absolute URL the
+   * check resolved.
+   *
+   * Callers hand that URL to the native API, so the native cannot resolve a
+   * different target than the one the guard checked. The native APIs convert a
+   * non-string target with `toString()`, while the guard reads `href` or `url`,
+   * so handing them the target itself would let a snippet go elsewhere.
+   */
+  function guardTarget(what, target) {
+    var url = targetUrl(target);
+    if (url !== null) {
+      try {
+        var resolved = new NativeURL(url, WORKER_HREF);
+        if (isSameOrigin(resolved)) return resolved.href;
+      } catch (e) {
+        /* a target that does not resolve to a URL is refused below */
+      }
+    }
+    throw blocked(what);
   }
 
   /**
@@ -167,13 +183,22 @@
 
   if (typeof self.fetch === 'function') {
     var nativeFetch = self.fetch;
+    var NativeRequest = self.Request;
+    var requestUrl = NativeObject.getOwnPropertyDescriptor(NativeRequest.prototype, 'url').get;
     hideNative('fetch');
     lockGlobal('fetch', function (input, init) {
+      // A target has to name its own URL. The native conversion would turn any
+      // other object into a URL the guard cannot read beforehand, so refuse it.
       guardTarget('fetch', input);
+      // The native Request does the same conversion the native fetch does, so
+      // the URL checked here is the URL that goes on the wire. The native fetch
+      // then receives that Request instead of the caller's target.
       // A redirect leaves the origin, and its target cannot be checked before
       // the request is on the wire, so the guarded fetch follows none.
       var options = NativeObject.assign({}, init || {}, { redirect: 'error' });
-      return nativeFetch.call(self, input, options);
+      var request = new NativeRequest(input, options);
+      guardTarget('fetch', requestUrl.call(request));
+      return nativeFetch.call(self, request);
     });
   }
 
@@ -181,8 +206,10 @@
     var NativeXhr = self.XMLHttpRequest;
     var nativeOpen = NativeXhr.prototype.open;
     NativeXhr.prototype.open = function (method, url) {
-      guardTarget('XMLHttpRequest', url);
-      return nativeOpen.apply(this, arguments);
+      var args = [];
+      for (var i = 0; i < arguments.length; i++) args.push(arguments[i]);
+      args[1] = guardTarget('XMLHttpRequest', url);
+      return nativeOpen.apply(this, args);
     };
     hideNative('XMLHttpRequest');
     lockGlobal('XMLHttpRequest', NativeXhr);
@@ -192,8 +219,8 @@
     var NativeWebSocket = self.WebSocket;
     hideNative('WebSocket');
     lockGlobal('WebSocket', function (url, protocols) {
-      guardTarget('WebSocket', url);
-      return new NativeWebSocket(url, protocols);
+      var target = guardTarget('WebSocket', url);
+      return new NativeWebSocket(target, protocols);
     });
     self.WebSocket.prototype = NativeWebSocket.prototype;
     copyStaticMembers(self.WebSocket, NativeWebSocket);
@@ -204,8 +231,8 @@
     var NativeEventSource = self.EventSource;
     hideNative('EventSource');
     lockGlobal('EventSource', function (url, init) {
-      guardTarget('EventSource', url);
-      return new NativeEventSource(url, init);
+      var target = guardTarget('EventSource', url);
+      return new NativeEventSource(target, init);
     });
     self.EventSource.prototype = NativeEventSource.prototype;
     copyStaticMembers(self.EventSource, NativeEventSource);
@@ -218,8 +245,8 @@
     var NativeWebTransport = self.WebTransport;
     hideNative('WebTransport');
     lockGlobal('WebTransport', function (url, options) {
-      guardTarget('WebTransport', url);
-      return new NativeWebTransport(url, options);
+      var target = guardTarget('WebTransport', url);
+      return new NativeWebTransport(target, options);
     });
     self.WebTransport.prototype = NativeWebTransport.prototype;
     copyStaticMembers(self.WebTransport, NativeWebTransport);
@@ -232,9 +259,9 @@
   var nativeImportScripts = self.importScripts;
   hideNative('importScripts');
   lockGlobal('importScripts', function () {
-    var urls = arguments;
-    for (var i = 0; i < urls.length; i++) {
-      guardTarget('importScripts', urls[i]);
+    var urls = [];
+    for (var i = 0; i < arguments.length; i++) {
+      urls.push(guardTarget('importScripts', arguments[i]));
     }
     return nativeImportScripts.apply(self, urls);
   });

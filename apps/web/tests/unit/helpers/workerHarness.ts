@@ -17,7 +17,10 @@
  * The platform APIs sit on the prototype of the global, the way a browser
  * worker carries them: the bootstrap has to take them away from the prototype
  * as well as from the global, and the tests reach them through the same
- * prototype chain the snippet would use.
+ * prototype chain the snippet would use. They resolve a URL argument the way
+ * the native API does (string conversion, then the worker URL as the base), so
+ * a test that hands one a target the native would read differently shows up as
+ * the URL the native would use.
  */
 
 import { readFileSync } from 'node:fs';
@@ -67,9 +70,14 @@ const BOOTSTRAP_SOURCE = readFileSync(
   'utf8'
 );
 
+/** Absolute URL of a worker-relative path, as the native APIs resolve it. */
+export function workerUrl(path: string, secure = false): string {
+  return new URL(path, `${workerOrigin(secure)}/code-runner-worker.js`).href;
+}
+
 /** Socket constructor as the bootstrap leaves it. */
 export interface SocketConstructor {
-  (url: string, protocols?: string | string[]): unknown;
+  (url: unknown, protocols?: string | string[]): unknown;
   CONNECTING?: number;
   OPEN?: number;
   CLOSING?: number;
@@ -79,10 +87,10 @@ export interface SocketConstructor {
 
 /** A request the worker was allowed to make. */
 export interface WorkerFetch {
-  /** The URL the request went to. */
+  /** The URL the native fetch would send the request to. */
   url: string;
-  /** The options the guard handed to the native fetch. */
-  init: Record<string, unknown>;
+  /** The redirect mode the guarded fetch fixed on the request. */
+  redirect: string;
 }
 
 /** The worker global scope the bootstrap and the driver run in. */
@@ -96,7 +104,7 @@ export interface WorkerScope {
   /** Guarded fetch: cross-origin targets are refused. */
   fetch: (input: unknown, init?: unknown) => Promise<unknown>;
   /** Guarded XMLHttpRequest: its open refuses cross-origin targets. */
-  XMLHttpRequest: { prototype: { open(method: string, url: string): void } };
+  XMLHttpRequest: { prototype: { open(method: string, url: unknown): void } };
   /** Guarded WebSocket constructor. */
   WebSocket: SocketConstructor;
   /** Guarded EventSource constructor. */
@@ -104,7 +112,7 @@ export interface WorkerScope {
   /** Guarded WebTransport constructor. */
   WebTransport: SocketConstructor;
   /** Guarded importScripts: cross-origin targets are refused. */
-  importScripts: (...urls: string[]) => void;
+  importScripts: (...urls: unknown[]) => void;
   /** Message handler the bootstrap and then the driver install. */
   onmessage: ((event: { data: unknown }) => unknown) | null;
   /** Reports the worker sends back to the page. */
@@ -157,16 +165,6 @@ export interface WorkerHarness {
   evaluate(expression: string): unknown;
 }
 
-/** The URL a request target points at. */
-function targetUrl(target: unknown): string {
-  if (typeof target === 'string') return target;
-  if (!target) return String(target);
-  const record = target as { url?: unknown; href?: unknown } | null;
-  if (typeof record.href === 'string') return record.href;
-  if (typeof record.url === 'string') return record.url;
-  return String(target);
-}
-
 /**
  * Create a worker scope with the shipped bootstrap installed.
  *
@@ -188,6 +186,14 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
   const origin = workerOrigin(options.secure ?? false);
   const protocol = options.secure ? 'https:' : 'http:';
   const location = `${origin}/code-runner-worker.js`;
+  const engineUrl = new URL(SKULPT_ENGINE_URL, location).href;
+  const stdlibUrl = new URL(SKULPT_STDLIB_URL, location).href;
+
+  /**
+   * The URL a native API resolves the target to: string conversion, then the
+   * worker URL as the base.
+   */
+  const resolveUrl = (target: unknown): string => new URL(String(target), location).href;
 
   /** Blob stand-in: the bootstrap only needs the text the driver carries. */
   class HarnessBlob {
@@ -212,10 +218,32 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
     }
   }
 
+  /**
+   * Request stand-in: the guarded fetch builds one and the native fetch reads
+   * its URL, so the harness carries the same accessor on the prototype.
+   */
+  class HarnessRequest {
+    private readonly requestUrl: string;
+    readonly redirect: string;
+    constructor(input: unknown, init: { redirect?: string } = {}) {
+      if (input instanceof HarnessRequest) {
+        this.requestUrl = input.url;
+        this.redirect = init.redirect ?? input.redirect;
+      } else {
+        this.requestUrl = resolveUrl(input);
+        this.redirect = init.redirect ?? 'follow';
+      }
+    }
+    /** The URL the native Request exposes through its prototype accessor. */
+    get url(): string {
+      return this.requestUrl;
+    }
+  }
+
   /** XMLHttpRequest stand-in: the bootstrap guards its open method. */
   class HarnessXhr {
-    open(_method: string, url: string): void {
-      xhrOpens.push(url);
+    open(_method: string, url: unknown): void {
+      xhrOpens.push(resolveUrl(url));
     }
   }
 
@@ -226,9 +254,9 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
     static readonly CLOSING = 2;
     static readonly CLOSED = 3;
     readonly url: string;
-    constructor(url: string) {
-      this.url = url;
-      socketUrls.push(url);
+    constructor(url: unknown) {
+      this.url = resolveUrl(url);
+      socketUrls.push(this.url);
     }
   }
 
@@ -238,25 +266,25 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
     static readonly OPEN = 1;
     static readonly CLOSED = 2;
     readonly url: string;
-    constructor(url: string) {
-      this.url = url;
-      eventSourceUrls.push(url);
+    constructor(url: unknown) {
+      this.url = resolveUrl(url);
+      eventSourceUrls.push(this.url);
     }
   }
 
   /** WebTransport stand-in: the bootstrap guards its constructor. */
   class HarnessWebTransport {
     readonly url: string;
-    constructor(url: string) {
-      this.url = url;
-      transportUrls.push(url);
+    constructor(url: unknown) {
+      this.url = resolveUrl(url);
+      transportUrls.push(this.url);
     }
   }
 
   /** Nested worker stand-in: the bootstrap takes it away from the snippet. */
   class HarnessNestedWorker {
-    constructor(url: string) {
-      transportUrls.push(url);
+    constructor(url: unknown) {
+      transportUrls.push(resolveUrl(url));
     }
   }
 
@@ -283,11 +311,10 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
   const scopeSetup = vm.runInContext(WORKER_GLOBAL_SCOPE, context); // NOSONAR
   const workerGlobalScope = scopeSetup as Record<string, unknown>;
   workerGlobalScope.URL = HarnessUrl;
-  workerGlobalScope.fetch = (input: unknown, init?: unknown): Promise<unknown> => {
-    fetches.push({
-      url: targetUrl(input),
-      init: (init ?? {}) as Record<string, unknown>,
-    });
+  workerGlobalScope.Request = HarnessRequest;
+  workerGlobalScope.fetch = (input: unknown, init?: { redirect?: string }): Promise<unknown> => {
+    const request = new HarnessRequest(input, init ?? {});
+    fetches.push({ url: request.url, redirect: request.redirect });
     return Promise.resolve({ ok: true, status: 200 });
   };
   workerGlobalScope.XMLHttpRequest = HarnessXhr;
@@ -295,8 +322,9 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
   workerGlobalScope.EventSource = HarnessEventSource;
   workerGlobalScope.WebTransport = HarnessWebTransport;
   workerGlobalScope.Worker = HarnessNestedWorker;
-  workerGlobalScope.importScripts = (...urls: string[]): void => {
-    for (const url of urls) {
+  workerGlobalScope.importScripts = (...urls: unknown[]): void => {
+    for (const target of urls) {
+      const url = resolveUrl(target);
       imports.push(url);
       const source = driverSources.get(url);
       if (source !== undefined) {
@@ -304,12 +332,12 @@ export function createWorkerHarness(options: WorkerHarnessOptions = {}): WorkerH
         vm.runInContext(source, context); // NOSONAR
         continue;
       }
-      if (url === SKULPT_ENGINE_URL) {
+      if (url === engineUrl) {
         // The vendored script defines the engine on the worker scope.
         scope.Sk = options.engine;
         continue;
       }
-      if (url === SKULPT_STDLIB_URL) {
+      if (url === stdlibUrl) {
         // The standard library only extends the engine the first script defined.
         continue;
       }

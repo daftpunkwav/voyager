@@ -22,6 +22,7 @@ import {
   installFakeWorker,
   SKULPT_ENGINE_URL,
   SKULPT_STDLIB_URL,
+  workerUrl,
   type WorkerHarness,
 } from './helpers/workerHarness';
 
@@ -150,8 +151,8 @@ describe('worker driver execution', () => {
     await harness.deliver({ driver: buildPythonWorkerSource() });
     await harness.deliver({ source: 'print(1)', maxOutputChars: 100 });
     // The engine is only there because the driver imported the vendored scripts.
-    expect(harness.imports).toContain(SKULPT_ENGINE_URL);
-    expect(harness.imports).toContain(SKULPT_STDLIB_URL);
+    expect(harness.imports).toContain(workerUrl(SKULPT_ENGINE_URL));
+    expect(harness.imports).toContain(workerUrl(SKULPT_STDLIB_URL));
     expect(sources).toEqual(['print(1)']);
     expect(stageReport(harness, 'ready')).toMatchObject({ ok: true });
     expect(stageReport(harness, 'run')).toMatchObject({ ok: true, output: 'through the worker\n' });
@@ -257,8 +258,8 @@ describe('runner execution', () => {
       expect(result.error).toBeUndefined();
       expect(urls).toEqual(['/code-runner-worker.js']);
       // The engine is only there because the driver imported the vendored scripts.
-      expect(harnesses.at(0)?.imports).toContain(SKULPT_ENGINE_URL);
-      expect(harnesses.at(0)?.imports).toContain(SKULPT_STDLIB_URL);
+      expect(harnesses.at(0)?.imports).toContain(workerUrl(SKULPT_ENGINE_URL));
+      expect(harnesses.at(0)?.imports).toContain(workerUrl(SKULPT_STDLIB_URL));
     } finally {
       vi.unstubAllGlobals();
     }

@@ -20,6 +20,7 @@ import {
   WORKER_ORIGIN,
   WORKER_WS_ORIGIN,
   workerOrigin,
+  workerUrl,
 } from './helpers/workerHarness';
 
 /** Minimal driver: the bootstrap only has to install and run what the page sends. */
@@ -75,11 +76,11 @@ describe('worker bootstrap origin guard', () => {
     harness.scope.WebSocket(`${WORKER_WS_ORIGIN}/socket`);
     harness.scope.EventSource('/events');
     harness.scope.importScripts(SKULPT_ENGINE_URL);
-    expect(harness.fetches).toEqual([{ url: '/api/health', init: { redirect: 'error' } }]);
-    expect(harness.xhrOpens).toEqual(['/api/health']);
+    expect(harness.fetches).toEqual([{ url: workerUrl('/api/health'), redirect: 'error' }]);
+    expect(harness.xhrOpens).toEqual([workerUrl('/api/health')]);
     expect(harness.socketUrls).toEqual([`${WORKER_WS_ORIGIN}/socket`]);
-    expect(harness.eventSourceUrls).toEqual(['/events']);
-    expect(harness.imports).toEqual([SKULPT_ENGINE_URL]);
+    expect(harness.eventSourceUrls).toEqual([workerUrl('/events')]);
+    expect(harness.imports).toEqual([workerUrl(SKULPT_ENGINE_URL)]);
   });
 
   it('allows a WebSocket to the host the app is served from', () => {
@@ -143,7 +144,7 @@ describe('worker bootstrap request targets', () => {
     const harness = createWorkerHarness();
     const target = `${WORKER_ORIGIN}/api/health`;
     await harness.scope.fetch(new URL(target));
-    expect(harness.fetches).toEqual([{ url: target, init: { redirect: 'error' } }]);
+    expect(harness.fetches).toEqual([{ url: target, redirect: 'error' }]);
   });
 
   it('refuses a target that carries no URL at all', () => {
@@ -153,13 +154,75 @@ describe('worker bootstrap request targets', () => {
   });
 });
 
+describe('worker bootstrap target resolution', () => {
+  it('refuses a fetch target whose native URL is another origin', () => {
+    const harness = createWorkerHarness();
+    const target = { href: '/api/health', toString: () => 'https://example.com/data' };
+    expect(() => harness.scope.fetch(target)).toThrow(/may only reach/);
+    expect(harness.fetches).toEqual([]);
+  });
+
+  it('refuses a fetch target whose url reads same-origin but stringifies elsewhere', () => {
+    const harness = createWorkerHarness();
+    const target = { url: '/api/health', toString: () => 'https://example.com/data' };
+    expect(() => harness.scope.fetch(target)).toThrow(/may only reach/);
+    expect(harness.fetches).toEqual([]);
+  });
+
+  it('fetches the same-origin request the guard built', async () => {
+    const harness = createWorkerHarness();
+    // The request comes from the worker scope, the way a snippet builds one.
+    await harness.scope.fetch(harness.evaluate('new Request("/api/health")'));
+    expect(harness.fetches).toEqual([{ url: workerUrl('/api/health'), redirect: 'error' }]);
+  });
+
+  it('sends XMLHttpRequest the URL it checked', () => {
+    const harness = createWorkerHarness();
+    const target = { href: '/api/health', toString: () => 'https://example.com/data' };
+    harness.scope.XMLHttpRequest.prototype.open.call({}, 'GET', target);
+    expect(harness.xhrOpens).toEqual([workerUrl('/api/health')]);
+  });
+
+  it('sends WebSocket the URL it checked', () => {
+    const harness = createWorkerHarness();
+    const target = {
+      href: `${WORKER_WS_ORIGIN}/socket`,
+      toString: () => 'ws://example.com/socket',
+    };
+    harness.scope.WebSocket(target);
+    expect(harness.socketUrls).toEqual([`${WORKER_WS_ORIGIN}/socket`]);
+  });
+
+  it('sends EventSource the URL it checked', () => {
+    const harness = createWorkerHarness();
+    const target = { href: '/events', toString: () => 'https://example.com/stream' };
+    harness.scope.EventSource(target);
+    expect(harness.eventSourceUrls).toEqual([workerUrl('/events')]);
+  });
+
+  it('sends WebTransport the URL it checked', () => {
+    const harness = createWorkerHarness({ secure: true });
+    const transport = `${workerOrigin(true)}/transport`;
+    const target = { href: transport, toString: () => 'https://example.com/transport' };
+    harness.scope.WebTransport(target);
+    expect(harness.transportUrls).toEqual([transport]);
+  });
+
+  it('loads the script importScripts checked', () => {
+    const harness = createWorkerHarness();
+    const target = { href: SKULPT_ENGINE_URL, toString: () => 'https://example.com/engine.js' };
+    harness.scope.importScripts(target);
+    expect(harness.imports).toEqual([workerUrl(SKULPT_ENGINE_URL)]);
+  });
+});
+
 describe('worker bootstrap redirect policy', () => {
   it('follows no redirect', async () => {
     const harness = createWorkerHarness();
     await harness.scope.fetch('/api/health');
     // A redirect leaves the origin and its target cannot be checked before the
     // request is on the wire, so the guarded fetch refuses to follow one.
-    expect(harness.fetches).toEqual([{ url: '/api/health', init: { redirect: 'error' } }]);
+    expect(harness.fetches).toEqual([{ url: workerUrl('/api/health'), redirect: 'error' }]);
   });
 });
 
@@ -167,7 +230,7 @@ describe('worker bootstrap script loads', () => {
   it('loads every script importScripts is given', () => {
     const harness = createWorkerHarness();
     harness.scope.importScripts(SKULPT_ENGINE_URL, SKULPT_STDLIB_URL);
-    expect(harness.imports).toEqual([SKULPT_ENGINE_URL, SKULPT_STDLIB_URL]);
+    expect(harness.imports).toEqual([workerUrl(SKULPT_ENGINE_URL), workerUrl(SKULPT_STDLIB_URL)]);
   });
 
   it('refuses a foreign script among same-origin ones', () => {
