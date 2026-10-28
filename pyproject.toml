@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "AI-driven open source project learning platform (monorepo root)"
 requires-python = ">=3.14"
 dependencies = [
-    "fastapi>=0.146.0",
+    "fastapi>=0.162.0",
     "uvicorn>=0.54.0",
     "httpx>=0.27.0",
     "pypdfium2>=5.14.0",
@@ -122,9 +122,9 @@ dev = [
     "import-linter>=2.0",
     "mypy>=1.13",
     "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.0",
+    "pytest-asyncio>=1.4.1",
     "pytest-cov>=7.1.0",
-    "ruff>=0.17.1",
+    "ruff>=0.17.2",
     # The editable workspace members are built on every install, so the build
     # backend and its own dependencies are part of the resolution this
     # lockfile pins (and the audit scans): hatchling plus the PEP 660 helper
