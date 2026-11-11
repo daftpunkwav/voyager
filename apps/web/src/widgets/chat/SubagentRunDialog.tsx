@@ -17,7 +17,8 @@ import { useChatStore } from '@/stores/chatStore';
 import { formatDurationSec } from '@/utils/trajectory';
 
 /** Minimal shape of a list_subagents.running entry: the contract the panel's
- *  polled list (RightPanel.RunningInstance) extends with its own filter fields. */
+ *  polled list (rightpanel/runInstances.RunningInstance) extends with its own
+ *  filter fields. */
 export interface SubagentRunRef {
   id: string;
   run_id?: string;

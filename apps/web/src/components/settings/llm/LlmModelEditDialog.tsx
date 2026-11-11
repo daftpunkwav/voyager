@@ -446,31 +446,25 @@ export function LlmModelEditDialog({
                   {splitList(form.variants).map((v) => {
                     const isDefault = form.defaultVariant === v;
                     return (
-                      <span
-                        key={v}
-                        className={`llm-variant-chip ${isDefault ? 'is-default' : ''}`}
-                        role="button"
-                        tabIndex={0}
-                        title={t('llm.modelEdit.setDefaultVariant')}
-                        onClick={() => patch({ defaultVariant: v })}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') patch({ defaultVariant: v });
-                        }}
-                      >
-                        {v}
-                        {isDefault ? (
-                          <span className="llm-variant-chip__default">
-                            {t('llm.modelEdit.defaultBadge')}
-                          </span>
-                        ) : null}
+                      <span key={v} className={`llm-variant-chip ${isDefault ? 'is-default' : ''}`}>
+                        <button
+                          type="button"
+                          className="llm-variant-chip__label"
+                          title={t('llm.modelEdit.setDefaultVariant')}
+                          onClick={() => patch({ defaultVariant: v })}
+                        >
+                          {v}
+                          {isDefault ? (
+                            <span className="llm-variant-chip__default">
+                              {t('llm.modelEdit.defaultBadge')}
+                            </span>
+                          ) : null}
+                        </button>
                         <button
                           type="button"
                           className="llm-variant-chip__remove"
                           aria-label={t('llm.modelEdit.removeVariant', { variant: v })}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeVariant(v);
-                          }}
+                          onClick={() => removeVariant(v)}
                         >
                           ×
                         </button>
