@@ -131,25 +131,48 @@ function FilesPane({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <div
-      className={`import-drop ${dragging ? 'is-drag' : ''}`}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setDragging(true);
-      }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setDragging(false);
-        void upload(e.dataTransfer.files);
-      }}
-      onClick={() => inputRef.current?.click()}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click();
-      }}
-    >
+    <>
+      <div
+        className={`import-drop ${dragging ? 'is-drag' : ''}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          void upload(e.dataTransfer.files);
+        }}
+        onClick={() => inputRef.current?.click()}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click();
+        }}
+      >
+        <div className="import-drop__icon" aria-hidden>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            width={40}
+            height={40}
+            aria-hidden="true"
+          >
+            <path d="M12 16V4M6 10l6-6 6 6" />
+            <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+          </svg>
+        </div>
+        <p className="import-drop__title">
+          {busy ? t('sources:import.dropBusy') : t('sources:import.dropTitle')}
+        </p>
+        <p className="import-drop__hint">{t('sources:import.dropHint')}</p>
+      </div>
+      {/* The picker input stays outside the dropzone button: the dropzone only
+          triggers it programmatically, so nesting a file control inside a
+          role="button" surface would composite two interactive elements. */}
       <input
         ref={inputRef}
         type="file"
@@ -161,25 +184,7 @@ function FilesPane({ onDone }: { onDone: () => void }) {
           e.target.value = '';
         }}
       />
-      <div className="import-drop__icon" aria-hidden>
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          width={40}
-          height={40}
-          aria-hidden="true"
-        >
-          <path d="M12 16V4M6 10l6-6 6 6" />
-          <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
-        </svg>
-      </div>
-      <p className="import-drop__title">
-        {busy ? t('sources:import.dropBusy') : t('sources:import.dropTitle')}
-      </p>
-      <p className="import-drop__hint">{t('sources:import.dropHint')}</p>
-    </div>
+    </>
   );
 }
 
