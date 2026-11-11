@@ -25,6 +25,7 @@ vi.mock('@/api/client', () => ({ getApi: getApiMock }));
 
 import { ReadRootsBlock } from '@/components/settings/agent/ReadRootsBlock';
 import { useUIStore } from '@/stores/uiStore';
+import { i18n } from '@/i18n';
 
 const SNAPSHOT = {
   profile: { summary: '', items: [] },
@@ -167,5 +168,35 @@ describe('read-only extra directories (phase-54)', () => {
     await waitFor(() =>
       expect(useUIStore.getState().toasts.some((t) => t.type === 'success')).toBe(true)
     );
+  });
+
+  it('a failed save raises an error toast with the wire error, and no success toast', async () => {
+    callCapabilityMock.mockImplementation(
+      (domain: string, name: string, args: Record<string, unknown>) =>
+        name === 'set_setting' ? Promise.reject(new Error('磁盘只读')) : backend(domain, name, args)
+    );
+
+    render(
+      <>
+        <ReadRootsBlock />
+      </>
+    );
+    await waitDraft('D:\\docs\n/home/me/papers');
+
+    const box = screen.getByLabelText('只读附加目录') as HTMLTextAreaElement;
+    fireEvent.change(box, { target: { value: '/tmp/a' } });
+    fireEvent.blur(box);
+
+    await waitFor(() =>
+      expect(useUIStore.getState().toasts.some((t) => t.type === 'error')).toBe(true)
+    );
+    const toasts = useUIStore.getState().toasts;
+    const errorToast = toasts.find((t) => t.type === 'error');
+    expect(errorToast?.message).toBe(
+      i18n.t('settings:readRoots.saveFailed', { message: '磁盘只读' })
+    );
+    expect(errorToast?.message).toContain('磁盘只读');
+    // The success path is untouched by the failure
+    expect(toasts.some((t) => t.type === 'success')).toBe(false);
   });
 });

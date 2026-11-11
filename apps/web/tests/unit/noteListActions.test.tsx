@@ -98,7 +98,7 @@ describe('note list item actions', () => {
       />
     );
     expect(screen.queryByRole('checkbox')).toBeNull();
-    fireEvent.click(screen.getByTestId('note-item'));
+    fireEvent.click(screen.getByRole('button', { name: '标题甲' }));
     expect(onToggleSelect).toHaveBeenCalledWith('n1');
     expect(onSelect).not.toHaveBeenCalled();
   });
@@ -117,7 +117,7 @@ describe('note list item actions', () => {
         onDelete={vi.fn()}
       />
     );
-    fireEvent.click(screen.getByTestId('note-item'));
+    fireEvent.click(screen.getByRole('button', { name: '标题甲' }));
     expect(onToggleSelect).toHaveBeenCalledWith('n1');
     expect(onSelect).not.toHaveBeenCalled();
   });
