@@ -10,7 +10,7 @@
  * - Keep keyboard and outside-click dismissal of open menus
  */
 
-import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react';
+import { useEffect, useRef, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Note } from '@/api/types';
 import { noteSnippet, noteSourceId, noteUpdatedLabel } from './noteListing';
@@ -187,12 +187,6 @@ export function NoteList({
         const archived = Boolean(n.archived) || archivedView;
         const checked = Boolean(selectedIds?.has(n.id));
         const title = n.title || t('notes:untitled');
-        const onKey = (e: KeyboardEvent) => {
-          if (e.key !== 'Enter' && e.key !== ' ') return;
-          e.preventDefault();
-          if (selecting && onToggleSelect) onToggleSelect(n.id);
-          else onSelect(n);
-        };
         const openOrToggle = () => {
           if (selecting && onToggleSelect) onToggleSelect(n.id);
           else onSelect(n);
@@ -213,16 +207,14 @@ export function NoteList({
 
         if (variant === 'card') {
           return (
-            <div
-              key={n.id}
-              role="button"
-              tabIndex={0}
-              data-testid="note-item"
-              className={itemClass}
-              aria-pressed={selecting ? checked : undefined}
-              onClick={openOrToggle}
-              onKeyDown={onKey}
-            >
+            <div key={n.id} data-testid="note-item" className={itemClass}>
+              <button
+                type="button"
+                className="note-item-open"
+                aria-label={title}
+                aria-pressed={selecting ? checked : undefined}
+                onClick={openOrToggle}
+              />
               <div className="note-card-head">
                 {projectLabel ? (
                   <span className="project-tag">{projectLabel}</span>
@@ -245,16 +237,14 @@ export function NoteList({
           );
         }
         return (
-          <div
-            key={n.id}
-            role="button"
-            tabIndex={0}
-            data-testid="note-item"
-            className={itemClass}
-            aria-pressed={selecting ? checked : undefined}
-            onClick={openOrToggle}
-            onKeyDown={onKey}
-          >
+          <div key={n.id} data-testid="note-item" className={itemClass}>
+            <button
+              type="button"
+              className="note-item-open"
+              aria-label={title}
+              aria-pressed={selecting ? checked : undefined}
+              onClick={openOrToggle}
+            />
             {onPin ? (
               <PinButton pinned={pinned} onClick={() => onPin(n, !pinned)} />
             ) : (
