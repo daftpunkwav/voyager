@@ -461,8 +461,12 @@ function evictOverage(
 }
 
 /** Evict over-cap cards, oldest settled (completed/failed) first. Returns
- *  pruned copies; the inputs are left untouched. */
-function pruneCards(
+ *  pruned copies; the inputs are left untouched.
+ *
+ *  Exported for the cap unit tests: the dispatch path always hands this
+ *  function copies of the store state, so the "fresh copies, inputs
+ *  untouched" contract is only observable from the outside. */
+export function pruneCards(
   cards: Record<string, ProgressCard>,
   order: string[]
 ): { cards: Record<string, ProgressCard>; order: string[] } {

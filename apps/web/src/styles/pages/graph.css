@@ -1476,6 +1476,21 @@
   border-color: var(--brand-500);
   background: color-mix(in srgb, var(--brand-500) 6%, var(--bg-elevated));
 }
+/* The row is a plain container; the node summary is the control that selects
+   it, the "code graph" entry is a second control beside it. */
+.graph-list-item__main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
 .graph-list-avatar {
   width: 32px;
   height: 32px;
@@ -1520,7 +1535,9 @@
   flex-shrink: 0;
   cursor: pointer;
   padding: 4px 6px;
+  border: 0;
   border-radius: 4px;
+  background: none;
 }
 .graph-list-action:hover {
   background: color-mix(in srgb, var(--brand-500) 10%, transparent);
