@@ -93,6 +93,47 @@ def _scratchpad_lock(pad_file: Path) -> Iterator[None]:
                 _release_lock(handle)
 
 
+def _append_locked(pad_file: Path, note: str) -> str:
+    """Append ``note`` with the pad lock already held; OSError propagates.
+
+    The previous content is inspected only to size the append and pick the
+    separator; the file is extended in place instead of being round-tripped
+    through a read-modify-write rewrite.
+    """
+    existing = ""
+    if pad_file.exists():
+        # raw bytes, because read_text would hide CRLF behind universal
+        # newlines while the file keeps them on disk
+        raw = pad_file.read_bytes()
+        existing = raw.decode("utf-8", errors="replace")
+    if "\r" in existing:
+        # a pad created outside this tool may carry CRLF bytes; normalize
+        # once so the file stays on a single line-ending convention
+        existing = _normalize_lf(existing)
+        with pad_file.open("r+b") as rewrite:
+            rewrite.write(existing.encode("utf-8"))
+            rewrite.truncate()
+    needs_separator = bool(existing) and not existing.endswith("\n")
+    appended = ("\n\n" if needs_separator else "") + note
+    if len(existing) + len(appended) > _MAX_SCRATCHPAD_CHARS:
+        return f"[参数错误] 追加后演草纸总长度将超过限制 ({_MAX_SCRATCHPAD_CHARS} 字符)。"
+    start_size = pad_file.stat().st_size if pad_file.exists() else 0
+    try:
+        with pad_file.open("a", encoding="utf-8", newline="\n") as pad:
+            pad.write(appended)
+            pad.flush()
+    except OSError:
+        # a partial buffered write may have landed; restore the pre-append
+        # size so a retry cannot leave fragments behind
+        try:
+            with pad_file.open("r+b") as repair:
+                repair.truncate(start_size)
+        except OSError:
+            pass
+        raise
+    return f"[演草纸已追加] 当前共 {len(existing) + len(appended)} 字符"
+
+
 def scratchpad_tool(workspace: str | Path) -> AgentTool:
     ws = Path(workspace)
     pad_file = ws / ".scratchpad.md"
@@ -135,43 +176,12 @@ def scratchpad_tool(workspace: str | Path) -> AgentTool:
             note = _normalize_lf(content)
             try:
                 pad_file.parent.mkdir(parents=True, exist_ok=True)
-                # Hold the lock across the whole read → limit check → append so
+                # hold the lock across the whole read → limit check → append so
                 # concurrent writers always see the latest pad: no skipped
-                # separator and no overshoot past the limit. Inspect the
-                # previous content only to size the append and pick the
-                # separator; the file is extended in place instead of being
-                # round-tripped through a read-modify-write rewrite.
+                # separator and no overshoot past the limit
                 with _scratchpad_lock(pad_file):
-                    existing = ""
-                    if pad_file.exists():
-                        # raw bytes, because read_text would hide CRLF behind
-                        # universal newlines while the file keeps them on disk
-                        raw = pad_file.read_bytes()
-                        existing = raw.decode("utf-8", errors="replace")
-                    if "\r" in existing:
-                        # a pad created outside this tool may carry CRLF bytes;
-                        # normalize once so the file stays on a single convention
-                        existing = _normalize_lf(existing)
-                        pad_file.write_text(existing, encoding="utf-8", newline="\n")
-                    needs_separator = bool(existing) and not existing.endswith("\n")
-                    appended = ("\n\n" if needs_separator else "") + note
-                    if len(existing) + len(appended) > _MAX_SCRATCHPAD_CHARS:
-                        return f"[参数错误] 追加后演草纸总长度将超过限制 ({_MAX_SCRATCHPAD_CHARS} 字符)。"
-                    start_size = pad_file.stat().st_size if pad_file.exists() else 0
-                    try:
-                        with pad_file.open("a", encoding="utf-8", newline="\n") as pad:
-                            pad.write(appended)
-                            pad.flush()
-                    except OSError:
-                        # a partial buffered write may have landed; restore the
-                        # pre-append size so a retry cannot leave fragments behind
-                        try:
-                            with pad_file.open("r+b") as repair:
-                                repair.truncate(start_size)
-                        except OSError:
-                            pass
-                        raise
-                return f"[演草纸已追加] 当前共 {len(existing) + len(appended)} 字符"
+                    result = _append_locked(pad_file, note)
+                return result
             except _ScratchpadBusy:
                 return "[演草纸忙] 演草纸正被另一进程占用，请稍后重试"
             except OSError as exc:
