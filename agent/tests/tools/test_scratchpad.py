@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -53,6 +54,33 @@ class TestScratchpad:
 
         # the pad must be untouched by a rejected append
         assert tool.handler(action="read") == existing
+
+    def test_append_writes_lf_line_endings(self, workspace: Path) -> None:
+        tool = scratchpad_tool(workspace)
+        tool.handler(action="write", content="第一段\n")
+        tool.handler(action="append", content="第二段\n")
+
+        raw = (workspace / ".scratchpad.md").read_bytes()
+        # every writer keeps the pad on LF so appends never mix line-ending conventions
+        assert b"\r" not in raw
+        assert raw.endswith("第二段\n".encode())
+
+    def test_append_serializes_concurrent_writers(self, workspace: Path) -> None:
+        tool = scratchpad_tool(workspace)
+        tool.handler(action="write", content="第一行")
+
+        def append_note(note: str) -> str:
+            return tool.handler(action="append", content=note)
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(append_note, [f"笔记 {i}" for i in range(4)]))
+
+        assert all("[演草纸已追加]" in res for res in results)
+        final = tool.handler(action="read")
+        # every note lands with a blank-line separator, in any order
+        blocks = final.split("\n\n")
+        assert blocks[0] == "第一行"
+        assert sorted(blocks[1:]) == sorted(f"笔记 {i}" for i in range(4))
 
     def test_append_empty_content(self, workspace: Path) -> None:
         tool = scratchpad_tool(workspace)
