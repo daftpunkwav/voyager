@@ -13,7 +13,8 @@
     "react-dom": "19.3.1",
     "postcss": {
       "nanoid": "^3.3.18"
-    }
+    },
+    "minimatch": "^11.0.1"
   },
   "scripts": {
     "dev:web": "npm run dev -w web",
