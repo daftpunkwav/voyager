@@ -247,6 +247,24 @@ class TestScratchpad:
         # the fragment left by the partial write must not survive
         assert tool.handler(action="read") == "已有"
 
+    def test_write_failure_keeps_pad_and_cleans_temp(
+        self, workspace: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        tool = scratchpad_tool(workspace)
+        tool.handler(action="write", content="已有内容")
+
+        def broken_replace(src: object, dst: object, *args: object, **kwargs: object) -> None:
+            raise OSError(5, "simulated replace failure")
+
+        monkeypatch.setattr(scratchpad_module.os, "replace", broken_replace)
+        res = tool.handler(action="write", content="新内容")
+        monkeypatch.undo()
+
+        assert "写入失败" in res
+        # the pad is untouched and the temp file did not survive the failure
+        assert tool.handler(action="read") == "已有内容"
+        assert not list(workspace.glob("*.norm"))
+
     def test_clear_absent_pad_is_success(self, tmp_path: Path) -> None:
         missing_ws = tmp_path / "not-created"
         tool = scratchpad_tool(missing_ws)
