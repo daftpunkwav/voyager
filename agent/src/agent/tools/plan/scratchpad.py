@@ -163,6 +163,11 @@ def _atomic_replace(pad_file: Path, content: str) -> None:
     with ``os.replace`` — resolving a symlinked pad to its target so the link
     itself stays intact. A failed attempt removes the temp file and leaves
     the pad untouched.
+
+    Trust note: resolving the pad means a symlinked pad redirects writes to
+    its target, wherever it points. That is intentional — the workspace is a
+    trusted single-user harness and the agent already holds broader write
+    powers — not an oversight to be hardened later.
     """
     target = pad_file.resolve()
     try:
@@ -217,8 +222,14 @@ def _append_locked(pad_file: Path, note: str) -> str:
         _atomic_replace(pad_file, existing)
     start_size = pad_file.stat().st_size if pad_file.exists() else 0
     try:
-        with pad_file.open("a", encoding="utf-8", newline="\n") as pad:
-            pad.write(appended)
+        # encode before opening (binary append): a lone surrogate in the note
+        # must surface as a clean failure, not escape as UnicodeEncodeError
+        data = appended.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise OSError("pad content cannot be encoded as UTF-8") from exc
+    try:
+        with pad_file.open("ab") as pad:
+            pad.write(data)
             pad.flush()
     except OSError as exc:
         # a partial buffered write may have landed; restore the pre-append

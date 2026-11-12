@@ -198,7 +198,7 @@ class TestScratchpad:
         assert first is not second
         assert first is scratchpad_module._process_lock_for(tmp_path / "a" / ".scratchpad.md")
 
-    def test_read_and_clear_report_busy_and_leave_pad_intact(
+    def test_read_write_clear_report_busy_and_leave_pad_intact(
         self, workspace: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         tool = scratchpad_tool(workspace)
@@ -209,15 +209,26 @@ class TestScratchpad:
 
         try:
             read_res = tool.handler(action="read")
+            write_res = tool.handler(action="write", content="替换内容")
             clear_res = tool.handler(action="clear")
         finally:
             scratchpad_module._release_lock(lock_handle)
             lock_handle.close()
 
         assert "演草纸忙" in read_res
+        assert "演草纸忙" in write_res
         assert "演草纸忙" in clear_res
-        # neither the blocked read nor the blocked clear changed the pad
+        # none of the blocked mutations changed the pad
         assert tool.handler(action="read") == "已有内容"
+
+    def test_append_rejects_unencodable_content(self, workspace: Path) -> None:
+        tool = scratchpad_tool(workspace)
+        tool.handler(action="write", content="已有")
+
+        res = tool.handler(action="append", content="\ud800坏代理")
+
+        assert "追加失败" in res
+        assert tool.handler(action="read") == "已有"
 
     def test_read_degrades_to_unlocked_when_sidecar_unwritable(self, workspace: Path) -> None:
         tool = scratchpad_tool(workspace)
@@ -261,10 +272,10 @@ class TestScratchpad:
 
         def failing_open(self: Path, mode: str = "r", *args: Any, **kwargs: Any) -> Any:
             handle = real_open(self, mode, *args, **kwargs)
-            if mode == "a" and self.name == ".scratchpad.md":
+            if mode == "ab" and self.name == ".scratchpad.md":
                 original_write = handle.write
 
-                def broken_write(data: str) -> int:
+                def broken_write(data: bytes) -> int:
                     original_write(data[:2])  # a fragment lands, then the FS fails
                     raise OSError(28, "simulated ENOSPC")
 
