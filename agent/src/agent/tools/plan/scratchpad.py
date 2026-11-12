@@ -90,18 +90,26 @@ def _normalize_lf(text: str) -> str:
 
 
 def _process_lock_for(pad_file: Path) -> threading.Lock:
-    """Return the in-process lock guarding this pad."""
-    return _PAD_LOCKS.setdefault(str(pad_file), threading.Lock())
+    """Return the in-process lock guarding this pad.
+
+    Keyed by the resolved path, so a symlinked pad and its target share one
+    lock identity.
+    """
+    return _PAD_LOCKS.setdefault(str(pad_file.resolve()), threading.Lock())
 
 
 def _acquire_file_lock(pad_file: Path, required: bool, deadline: float) -> IO[bytes] | None:
     """Open the sidecar and take the cross-process lock, bounded by ``deadline``.
 
+    The sidecar sits beside the resolved pad target so access through a
+    symlink and access through the target serialize on the same lock.
+
     Returns ``None`` only when ``required`` is false and the sidecar cannot be
     opened (read-only workspace); the caller then runs its critical section
     unlocked.
     """
-    lock_file = pad_file.with_name(pad_file.name + ".lock")
+    target = pad_file.resolve()
+    lock_file = target.with_name(target.name + ".lock")
     handle: IO[bytes]
     try:
         handle = lock_file.open("a+b")
@@ -157,11 +165,17 @@ def _atomic_replace(pad_file: Path, content: str) -> None:
     the pad untouched.
     """
     target = pad_file.resolve()
+    try:
+        data = content.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        # decide before creating anything: an unpaired surrogate must not
+        # leave a temp file behind
+        raise OSError("pad content cannot be encoded as UTF-8") from exc
     fd, temp_name = tempfile.mkstemp(dir=target.parent, prefix=f"{pad_file.name}.", suffix=".norm")
     temp_file = Path(temp_name)
     try:
         with os.fdopen(fd, "wb") as temp:
-            temp.write(content.encode("utf-8"))
+            temp.write(data)
         try:
             os.chmod(temp_file, target.stat().st_mode)
         except OSError:

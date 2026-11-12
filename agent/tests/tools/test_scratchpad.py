@@ -26,6 +26,15 @@ def workspace(tmp_path: Path) -> Path:
     return ws
 
 
+def fail_replace(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make os.replace fail so atomic-swap error paths can be exercised."""
+
+    def broken_replace(src: object, dst: object, *args: object, **kwargs: object) -> None:
+        raise OSError(5, "simulated replace failure")
+
+    monkeypatch.setattr(scratchpad_module.os, "replace", broken_replace)
+
+
 def force_overlap(monkeypatch: pytest.MonkeyPatch, parties: int) -> dict[str, int]:
     """Make concurrent handlers meet at the lock entrance before proceeding.
 
@@ -219,6 +228,29 @@ class TestScratchpad:
 
         assert tool.handler(action="read") == "已有内容"
 
+    def test_symlink_pad_and_target_share_lock_identity(self, workspace: Path) -> None:
+        target = workspace / "real-pad.md"
+        target.write_text("通过目标\n", encoding="utf-8")
+        link = workspace / ".scratchpad.md"
+        try:
+            link.symlink_to(target)
+        except OSError:
+            pytest.skip("symlink creation unavailable on this platform")
+
+        tool = scratchpad_tool(workspace)
+        append_res = tool.handler(action="append", content="通过链接")
+        assert "[演草纸已追加]" in append_res
+
+        # both access paths resolve to one lock identity, and the note lands
+        # in the linked target rather than replacing the link
+        assert scratchpad_module._process_lock_for(link) is scratchpad_module._process_lock_for(
+            target
+        )
+        assert link.is_symlink()
+        final = target.read_text(encoding="utf-8")
+        assert "通过目标" in final
+        assert "通过链接" in final
+
     def test_append_rolls_back_fragment_on_write_failure(
         self, workspace: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -252,17 +284,29 @@ class TestScratchpad:
     ) -> None:
         tool = scratchpad_tool(workspace)
         tool.handler(action="write", content="已有内容")
+        fail_replace(monkeypatch)
 
-        def broken_replace(src: object, dst: object, *args: object, **kwargs: object) -> None:
-            raise OSError(5, "simulated replace failure")
-
-        monkeypatch.setattr(scratchpad_module.os, "replace", broken_replace)
         res = tool.handler(action="write", content="新内容")
         monkeypatch.undo()
 
         assert "写入失败" in res
         # the pad is untouched and the temp file did not survive the failure
         assert tool.handler(action="read") == "已有内容"
+        assert not list(workspace.glob("*.norm"))
+
+    def test_append_normalization_failure_keeps_pad(
+        self, workspace: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        tool = scratchpad_tool(workspace)
+        (workspace / ".scratchpad.md").write_bytes("旧\r\n内容".encode())
+        fail_replace(monkeypatch)
+
+        res = tool.handler(action="append", content="新笔记")
+        monkeypatch.undo()
+
+        assert "追加失败" in res
+        # the untouched pad keeps its original CRLF bytes
+        assert (workspace / ".scratchpad.md").read_bytes() == "旧\r\n内容".encode()
         assert not list(workspace.glob("*.norm"))
 
     def test_clear_absent_pad_is_success(self, tmp_path: Path) -> None:
