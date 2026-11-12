@@ -14,6 +14,7 @@ Responsibilities:
 
 from __future__ import annotations
 
+import os
 import sys
 import threading
 import time
@@ -26,13 +27,13 @@ from agent.tools.core.base import AgentTool
 
 _MAX_SCRATCHPAD_CHARS = 500_000
 
-#: How long a caller waits for the cross-process pad lock before surfacing an
-#: explicit busy result instead of hanging the tool call indefinitely.
+#: How long a caller waits for the pad locks (in-process and cross-process)
+#: before surfacing an explicit busy result instead of hanging the tool call.
 _LOCK_TIMEOUT_SECONDS = 30.0
 
-#: Serializes scratchpad mutations across threads in this process; the file
-#: lock inside ``_scratchpad_lock`` covers the cross-process case.
-_PAD_LOCK = threading.Lock()
+#: One in-process lock per pad path, so unrelated workspaces never queue
+#: behind each other (dict.setdefault is atomic under the GIL).
+_PAD_LOCKS: dict[str, threading.Lock] = {}
 
 
 class _ScratchpadBusy(RuntimeError):
@@ -40,13 +41,18 @@ class _ScratchpadBusy(RuntimeError):
 
 
 if sys.platform == "win32":
+    import errno
     import msvcrt
 
     def _try_lock(handle: IO[bytes]) -> bool:
         handle.seek(0)
         try:
             msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-        except OSError:
+        except OSError as exc:
+            # _locking surfaces a held region (and permission problems) as
+            # EACCES; every other errno is a real filesystem error
+            if exc.errno != errno.EACCES:
+                raise
             return False
         return True
 
@@ -54,12 +60,17 @@ if sys.platform == "win32":
         handle.seek(0)
         msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
 else:
+    import errno
     import fcntl
 
     def _try_lock(handle: IO[bytes]) -> bool:
         try:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
+        except OSError as exc:
+            # contention surfaces as EWOULDBLOCK/EAGAIN; EACCES covers the
+            # NFS-style variants — anything else is a real filesystem error
+            if exc.errno not in (errno.EACCES, errno.EAGAIN):
+                raise
             return False
         return True
 
@@ -72,25 +83,65 @@ def _normalize_lf(text: str) -> str:
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
+def _process_lock_for(pad_file: Path) -> threading.Lock:
+    """Return the in-process lock guarding this pad."""
+    return _PAD_LOCKS.setdefault(str(pad_file), threading.Lock())
+
+
 @contextmanager
-def _scratchpad_lock(pad_file: Path) -> Iterator[None]:
+def _scratchpad_lock(pad_file: Path, *, required: bool = True) -> Iterator[None]:
     """Serialize the read-limit-append critical section across threads and processes.
 
     Acquisition is bounded: a stalled holder surfaces as ``_ScratchpadBusy``
-    after the deadline instead of hanging the tool call forever.
+    after the deadline instead of hanging the tool call forever. With
+    ``required=False`` (reads), a lock sidecar that cannot be opened or locked
+    degrades to an unlocked critical section so a read-only workspace stays
+    readable.
     """
-    with _PAD_LOCK:
-        lock_file = pad_file.with_name(pad_file.name + ".lock")
-        with lock_file.open("a+b") as handle:
-            deadline = time.monotonic() + _LOCK_TIMEOUT_SECONDS
+    pad_lock = _process_lock_for(pad_file)
+    deadline = time.monotonic() + _LOCK_TIMEOUT_SECONDS
+    if not pad_lock.acquire(timeout=_LOCK_TIMEOUT_SECONDS):
+        raise _ScratchpadBusy("pad lock held in this process")
+    handle: IO[bytes] | None = None
+    locked = False
+    try:
+        try:
+            lock_file = pad_file.with_name(pad_file.name + ".lock")
+            handle = lock_file.open("a+b")
+        except OSError:
+            if required:
+                raise
+            handle = None  # a read on a workspace we cannot lock: degrade
+        if handle is None:
+            yield
+        else:
             while not _try_lock(handle):
                 if time.monotonic() >= deadline:
                     raise _ScratchpadBusy("pad lock held elsewhere")
                 time.sleep(0.05)
-            try:
-                yield
-            finally:
+            locked = True
+            yield
+    finally:
+        if handle is not None:
+            if locked:
                 _release_lock(handle)
+            handle.close()
+        pad_lock.release()
+
+
+def _replace_with_normalized(pad_file: Path, normalized: str) -> None:
+    """Swap the pad for its LF-normalized twin atomically (temp write + replace)."""
+    temp_file = pad_file.with_name(pad_file.name + ".norm")
+    try:
+        with temp_file.open("wb") as temp:
+            temp.write(normalized.encode("utf-8"))
+        os.replace(temp_file, pad_file)
+    except OSError:
+        try:
+            temp_file.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def _append_locked(pad_file: Path, note: str) -> str:
@@ -106,17 +157,19 @@ def _append_locked(pad_file: Path, note: str) -> str:
         # newlines while the file keeps them on disk
         raw = pad_file.read_bytes()
         existing = raw.decode("utf-8", errors="replace")
-    if "\r" in existing:
+    has_crlf = "\r" in existing
+    if has_crlf:
         # a pad created outside this tool may carry CRLF bytes; normalize
         # once so the file stays on a single line-ending convention
         existing = _normalize_lf(existing)
-        with pad_file.open("r+b") as rewrite:
-            rewrite.write(existing.encode("utf-8"))
-            rewrite.truncate()
     needs_separator = bool(existing) and not existing.endswith("\n")
     appended = ("\n\n" if needs_separator else "") + note
     if len(existing) + len(appended) > _MAX_SCRATCHPAD_CHARS:
+        # decided before any disk change, so a rejected append — including a
+        # CRLF normalization that is still pending — leaves the pad untouched
         return f"[参数错误] 追加后演草纸总长度将超过限制 ({_MAX_SCRATCHPAD_CHARS} 字符)。"
+    if has_crlf:
+        _replace_with_normalized(pad_file, existing)
     start_size = pad_file.stat().st_size if pad_file.exists() else 0
     try:
         with pad_file.open("a", encoding="utf-8", newline="\n") as pad:
@@ -145,8 +198,9 @@ def scratchpad_tool(workspace: str | Path) -> AgentTool:
                 return "(演草纸当前为空)"
             try:
                 # Reads take the lock too, so they never observe a pad
-                # truncated mid-way by a concurrent write or clear.
-                with _scratchpad_lock(pad_file):
+                # truncated mid-way by a concurrent write or clear; a
+                # read-only workspace degrades to an unlocked read.
+                with _scratchpad_lock(pad_file, required=False):
                     text = pad_file.read_text(encoding="utf-8", errors="replace")
                 return text if text.strip() else "(演草纸当前为空)"
             except _ScratchpadBusy:

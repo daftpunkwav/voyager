@@ -108,6 +108,8 @@ class TestScratchpad:
         expected = "旧\n内容\n\n新行\n二"
         assert (workspace / ".scratchpad.md").read_bytes() == expected.encode()
         assert tool.handler(action="read") == expected
+        # the normalization temp file must not survive the replace
+        assert not (workspace / ".scratchpad.md.norm").exists()
 
     def test_append_serializes_concurrent_writers(
         self, workspace: Path, monkeypatch: pytest.MonkeyPatch
@@ -146,6 +148,31 @@ class TestScratchpad:
             lock_handle.close()
 
         assert "演草纸忙" in res
+        # the timed-out append must not have touched the pad
+        assert tool.handler(action="read") == "已有内容"
+
+    def test_same_process_contention_respects_deadline(
+        self, workspace: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(scratchpad_module, "_LOCK_TIMEOUT_SECONDS", 0.1)
+        tool = scratchpad_tool(workspace)
+        tool.handler(action="write", content="已有内容")
+        pad_lock = scratchpad_module._process_lock_for(workspace / ".scratchpad.md")
+        assert pad_lock.acquire()
+
+        try:
+            res = tool.handler(action="append", content="新笔记")
+        finally:
+            pad_lock.release()
+
+        assert "演草纸忙" in res
+        assert tool.handler(action="read") == "已有内容"
+
+    def test_process_locks_are_per_workspace(self, tmp_path: Path) -> None:
+        first = scratchpad_module._process_lock_for(tmp_path / "a" / ".scratchpad.md")
+        second = scratchpad_module._process_lock_for(tmp_path / "b" / ".scratchpad.md")
+        assert first is not second
+        assert first is scratchpad_module._process_lock_for(tmp_path / "a" / ".scratchpad.md")
 
     def test_append_rolls_back_fragment_on_write_failure(
         self, workspace: Path, monkeypatch: pytest.MonkeyPatch
