@@ -10,12 +10,20 @@ Responsibilities:
 - Append new notes or step deductions to scratchpad (`append`).
 - Clear scratchpad (`clear`).
 - Enforce size boundaries to prevent runaway context exhaustion.
+
+Concurrency: all mutations run inside a per-pad lock (in-process + cross-process
+file lock) with a bounded deadline that surfaces an explicit busy result. Writes
+that replace pad contents go through a unique temporary file and an atomic
+``os.replace``; appends extend the file in place and roll back to the pre-append
+size when the buffered write fails.
 """
 
 from __future__ import annotations
 
+import errno
 import os
 import sys
+import tempfile
 import threading
 import time
 from collections.abc import Iterator
@@ -41,7 +49,6 @@ class _ScratchpadBusy(RuntimeError):
 
 
 if sys.platform == "win32":
-    import errno
     import msvcrt
 
     def _try_lock(handle: IO[bytes]) -> bool:
@@ -60,7 +67,6 @@ if sys.platform == "win32":
         handle.seek(0)
         msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
 else:
-    import errno
     import fcntl
 
     def _try_lock(handle: IO[bytes]) -> bool:
@@ -103,11 +109,14 @@ def _acquire_file_lock(pad_file: Path, required: bool, deadline: float) -> IO[by
         if required:
             raise
         return None  # a read on a workspace we cannot lock: degrade
-    while not _try_lock(handle):
-        if time.monotonic() >= deadline:
-            handle.close()
-            raise _ScratchpadBusy("pad lock held elsewhere")
-        time.sleep(0.05)
+    try:
+        while not _try_lock(handle):
+            if time.monotonic() >= deadline:
+                raise _ScratchpadBusy("pad lock held elsewhere")
+            time.sleep(0.05)
+    except BaseException:
+        handle.close()
+        raise
     return handle
 
 
@@ -117,32 +126,47 @@ def _scratchpad_lock(pad_file: Path, *, required: bool = True) -> Iterator[None]
 
     Acquisition is bounded: a stalled holder surfaces as ``_ScratchpadBusy``
     after the deadline instead of hanging the tool call forever. With
-    ``required=False`` (reads), a lock sidecar that cannot be opened or locked
-    degrades to an unlocked critical section so a read-only workspace stays
-    readable.
+    ``required=False`` (reads), a lock sidecar that cannot be opened degrades
+    to an unlocked critical section so a read-only workspace stays readable.
     """
     pad_lock = _process_lock_for(pad_file)
     deadline = time.monotonic() + _LOCK_TIMEOUT_SECONDS
     if not pad_lock.acquire(timeout=_LOCK_TIMEOUT_SECONDS):
         raise _ScratchpadBusy("pad lock held in this process")
-    handle: IO[bytes] | None = None
     try:
         handle = _acquire_file_lock(pad_file, required, deadline)
-        yield
+        try:
+            yield
+        finally:
+            if handle is not None:
+                try:
+                    _release_lock(handle)
+                finally:
+                    handle.close()
     finally:
-        if handle is not None:
-            _release_lock(handle)
-            handle.close()
         pad_lock.release()
 
 
-def _replace_with_normalized(pad_file: Path, normalized: str) -> None:
-    """Swap the pad for its LF-normalized twin atomically (temp write + replace)."""
-    temp_file = pad_file.with_name(pad_file.name + ".norm")
+def _atomic_replace(pad_file: Path, content: str) -> None:
+    """Replace the pad's contents with ``content`` atomically.
+
+    The replacement is written to a unique, exclusively-created temp file in
+    the pad's directory, chmod'd to the current pad's mode, and swapped in
+    with ``os.replace`` — resolving a symlinked pad to its target so the link
+    itself stays intact. A failed attempt removes the temp file and leaves
+    the pad untouched.
+    """
+    target = pad_file.resolve()
+    fd, temp_name = tempfile.mkstemp(dir=target.parent, prefix=f"{pad_file.name}.", suffix=".norm")
+    temp_file = Path(temp_name)
     try:
-        with temp_file.open("wb") as temp:
-            temp.write(normalized.encode("utf-8"))
-        os.replace(temp_file, pad_file)
+        with os.fdopen(fd, "wb") as temp:
+            temp.write(content.encode("utf-8"))
+        try:
+            os.chmod(temp_file, target.stat().st_mode)
+        except OSError:
+            pass  # keep the temp's restrictive defaults when the mode is unavailable
+        os.replace(temp_file, target)
     except OSError:
         try:
             temp_file.unlink()
@@ -176,20 +200,21 @@ def _append_locked(pad_file: Path, note: str) -> str:
         # CRLF normalization that is still pending — leaves the pad untouched
         return f"[参数错误] 追加后演草纸总长度将超过限制 ({_MAX_SCRATCHPAD_CHARS} 字符)。"
     if has_crlf:
-        _replace_with_normalized(pad_file, existing)
+        _atomic_replace(pad_file, existing)
     start_size = pad_file.stat().st_size if pad_file.exists() else 0
     try:
         with pad_file.open("a", encoding="utf-8", newline="\n") as pad:
             pad.write(appended)
             pad.flush()
-    except OSError:
+    except OSError as exc:
         # a partial buffered write may have landed; restore the pre-append
         # size so a retry cannot leave fragments behind
         try:
             with pad_file.open("r+b") as repair:
                 repair.truncate(start_size)
         except OSError:
-            pass
+            # report the residue instead of silently leaving fragments behind
+            raise OSError("rollback failed, the pad may hold a partial note") from exc
         raise
     return f"[演草纸已追加] 当前共 {len(existing) + len(appended)} 字符"
 
@@ -222,9 +247,10 @@ def scratchpad_tool(workspace: str | Path) -> AgentTool:
             try:
                 pad_file.parent.mkdir(parents=True, exist_ok=True)
                 # A full rewrite lands normalized LF bytes on every platform,
-                # so later appends never mix line-ending conventions.
+                # swapped in atomically so an interrupted write never truncates
+                # the previous notes.
                 with _scratchpad_lock(pad_file):
-                    pad_file.write_text(text_to_write, encoding="utf-8", newline="\n")
+                    _atomic_replace(pad_file, text_to_write)
                 return f"[演草纸已更新] 当前共 {len(text_to_write)} 字符"
             except _ScratchpadBusy:
                 return "[演草纸忙] 演草纸正被另一进程占用，请稍后重试"
