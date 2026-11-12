@@ -88,6 +88,29 @@ def _process_lock_for(pad_file: Path) -> threading.Lock:
     return _PAD_LOCKS.setdefault(str(pad_file), threading.Lock())
 
 
+def _acquire_file_lock(pad_file: Path, required: bool, deadline: float) -> IO[bytes] | None:
+    """Open the sidecar and take the cross-process lock, bounded by ``deadline``.
+
+    Returns ``None`` only when ``required`` is false and the sidecar cannot be
+    opened (read-only workspace); the caller then runs its critical section
+    unlocked.
+    """
+    lock_file = pad_file.with_name(pad_file.name + ".lock")
+    handle: IO[bytes]
+    try:
+        handle = lock_file.open("a+b")
+    except OSError:
+        if required:
+            raise
+        return None  # a read on a workspace we cannot lock: degrade
+    while not _try_lock(handle):
+        if time.monotonic() >= deadline:
+            handle.close()
+            raise _ScratchpadBusy("pad lock held elsewhere")
+        time.sleep(0.05)
+    return handle
+
+
 @contextmanager
 def _scratchpad_lock(pad_file: Path, *, required: bool = True) -> Iterator[None]:
     """Serialize the read-limit-append critical section across threads and processes.
@@ -103,28 +126,12 @@ def _scratchpad_lock(pad_file: Path, *, required: bool = True) -> Iterator[None]
     if not pad_lock.acquire(timeout=_LOCK_TIMEOUT_SECONDS):
         raise _ScratchpadBusy("pad lock held in this process")
     handle: IO[bytes] | None = None
-    locked = False
     try:
-        try:
-            lock_file = pad_file.with_name(pad_file.name + ".lock")
-            handle = lock_file.open("a+b")
-        except OSError:
-            if required:
-                raise
-            handle = None  # a read on a workspace we cannot lock: degrade
-        if handle is None:
-            yield
-        else:
-            while not _try_lock(handle):
-                if time.monotonic() >= deadline:
-                    raise _ScratchpadBusy("pad lock held elsewhere")
-                time.sleep(0.05)
-            locked = True
-            yield
+        handle = _acquire_file_lock(pad_file, required, deadline)
+        yield
     finally:
         if handle is not None:
-            if locked:
-                _release_lock(handle)
+            _release_lock(handle)
             handle.close()
         pad_lock.release()
 
