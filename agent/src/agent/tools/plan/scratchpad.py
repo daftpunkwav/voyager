@@ -52,17 +52,23 @@ def scratchpad_tool(workspace: str | Path) -> AgentTool:
                 return "[演草纸未变动] 追加内容为空"
             try:
                 pad_file.parent.mkdir(parents=True, exist_ok=True)
-                existing = ""
+                # Inspect the previous content only to size the append and pick
+                # the separator; the file is extended in place instead of being
+                # round-tripped through a read-modify-write rewrite.
+                existing_len = 0
+                needs_separator = False
                 if pad_file.exists():
                     existing = pad_file.read_text(encoding="utf-8", errors="replace")
-                delimiter = "\n\n" if existing and not existing.endswith("\n") else ""
-                new_text = existing + delimiter + content
-                if len(new_text) > _MAX_SCRATCHPAD_CHARS:
+                    existing_len = len(existing)
+                    needs_separator = bool(existing) and not existing.endswith("\n")
+                appended = ("\n\n" if needs_separator else "") + content
+                if existing_len + len(appended) > _MAX_SCRATCHPAD_CHARS:
                     return (
                         f"[参数错误] 追加后演草纸总长度将超过限制 ({_MAX_SCRATCHPAD_CHARS} 字符)。"
                     )
-                pad_file.write_text(new_text, encoding="utf-8")
-                return f"[演草纸已追加] 当前共 {len(new_text)} 字符"
+                with pad_file.open("a", encoding="utf-8") as pad:
+                    pad.write(appended)
+                return f"[演草纸已追加] 当前共 {existing_len + len(appended)} 字符"
             except OSError as exc:
                 return f"[追加失败] 无法追加到演草纸: {exc}"
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from agent.tools.plan.scratchpad import scratchpad_tool
+from agent.tools.plan.scratchpad import _MAX_SCRATCHPAD_CHARS, scratchpad_tool
 
 
 @pytest.fixture()
@@ -39,6 +39,20 @@ class TestScratchpad:
         read_res = tool.handler(action="read")
         assert "初始想法" in read_res
         assert "补充思路" in read_res
+        # a pad not ending in a newline gets the blank-line separator
+        assert read_res == "初始想法\n\n补充思路"
+
+    def test_append_crossing_limit_is_rejected(self, workspace: Path) -> None:
+        tool = scratchpad_tool(workspace)
+        existing = "记" * (_MAX_SCRATCHPAD_CHARS - 10)
+        tool.handler(action="write", content=existing)
+
+        append_res = tool.handler(action="append", content="补" * 20)
+        assert "[参数错误]" in append_res
+        assert "超过限制" in append_res
+
+        # the pad must be untouched by a rejected append
+        assert tool.handler(action="read") == existing
 
     def test_append_empty_content(self, workspace: Path) -> None:
         tool = scratchpad_tool(workspace)
