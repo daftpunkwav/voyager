@@ -17,6 +17,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { type RoundText, type TurnStep, useChatStore } from '@/stores/chatStore';
 import { formatDurationSec } from '@/utils/trajectory';
 import { StepDetail } from '@/widgets/chat/StepDetail';
@@ -27,10 +28,7 @@ import { ChatMarkdown } from '@/widgets/chat/ChatMarkdown';
  *  unknown capabilities fall back to the bare capability name with underscores
  *  spaced out. The raw domain__capability name stays internal on purpose: it is
  *  the namespace separator the activation/allow-list mechanics parse. */
-export function toolLabel(
-  name: string,
-  t: (key: string, opts?: Record<string, unknown>) => string
-): string {
+export function toolLabel(name: string, t: TFunction<'chat'>): string {
   const idx = name.indexOf('__');
   const cap = idx >= 0 ? name.slice(idx + 2) : name;
   return t(`chat:tool.${cap}`, { defaultValue: cap.replace(/_/g, ' ') });
@@ -210,7 +208,7 @@ function stepSeconds(step: TurnStep, next?: TurnStep): number | null {
 function stepDuration(
   step: TurnStep,
   next: TurnStep | undefined,
-  t: (k: string, o?: Record<string, unknown>) => string
+  t: TFunction<'chat'>
 ): string | null {
   const gap = stepSeconds(step, next);
   if (gap !== null) return formatDurationSec(gap, t);
@@ -218,7 +216,7 @@ function stepDuration(
 }
 
 /** "思考 N 次 · 工具 M 次" for the collapsed summary (systems are ops, not thought). */
-function groupSummary(steps: TurnStep[], t: (k: string, o?: Record<string, unknown>) => string) {
+function groupSummary(steps: TurnStep[], t: TFunction<'chat'>) {
   const think = steps.filter((s) => s.kind === 'llm').length;
   const tools = steps.filter((s) => s.kind === 'tool').length;
   const parts: string[] = [];

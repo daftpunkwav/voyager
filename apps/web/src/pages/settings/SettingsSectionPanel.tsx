@@ -35,7 +35,7 @@ export function SettingsSectionPanel({ section, children }: SettingsSectionPanel
           : 'settings-section glass-card glass-card--overview-outer'
       }
     >
-      <h2>{t(meta.titleKey, meta.titleValues)}</h2>
+      <h2>{t(meta.titleKey, meta.titleValues ?? {})}</h2>
       {children}
     </section>
   );
