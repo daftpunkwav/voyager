@@ -11,6 +11,8 @@
  * This module must not depend on UI-layer components or stores (only types).
  */
 
+import type { TFunction } from 'i18next';
+
 import type { ChatMessage, TurnStep, TurnTrail } from '@/stores/chatStore';
 
 export interface GroupedTrails {
@@ -110,10 +112,7 @@ export function formatCompactCount(n: number): string {
 
 /** Seconds -> localized duration reusing the proc.* keys (shared by the
  *  timeline and the trajectory view so the two never drift). */
-export function formatDurationSec(
-  sec: number,
-  t: (k: string, o?: Record<string, unknown>) => string
-): string {
+export function formatDurationSec(sec: number, t: TFunction<'chat'>): string {
   if (sec < 60) return t('chat:proc.seconds', { n: sec });
   const m = Math.floor(sec / 60);
   const rest = sec % 60;

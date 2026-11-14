@@ -12,6 +12,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { toolLabel } from '@/widgets/chat/TurnTrace';
 import { StepDetail } from '@/widgets/chat/StepDetail';
 import { type ChatMessage, type TurnTrail, useChatStore, type TurnStep } from '@/stores/chatStore';
@@ -53,7 +54,7 @@ function buildRows(
   messages: ChatMessage[],
   trails: TurnTrail[],
   liveSteps: TurnStep[],
-  t: (k: string, o?: Record<string, unknown>) => string
+  t: TFunction<'chat'>
 ): TrajRow[] {
   const trailBySeq = new Map(trails.map((tr) => [tr.msgSeq, tr]));
   const rows: TrajRow[] = [];
